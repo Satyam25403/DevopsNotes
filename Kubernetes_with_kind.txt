@@ -357,7 +357,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: first-cluster
 
 nodes:
-  - role: control-plane
+  - role: control-plane             =>one node has unique ports; hence give different containerPorts if u need to configure within a node
     extraPortMappings:
       - containerPort: 30080
         hostPort: 30080
@@ -365,8 +365,14 @@ nodes:
       - containerPort: 30081
         hostPort: 30081
         protocol: TCP
-
-kind create cluster --config cluster-config.yaml
+  - role: worker
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30082
+        protocol: TCP
+(u can repeat those three lines to expose more specific nodeports of ur choice like above in control plane node:u can do this for more nodes as well)
+but keep in mind u need to mention unique port numbers for hostPort accross all nodes(since u cant have two services running on one port)
+kind create cluster --name <clustername> --config cluster-config.yaml
 
 
 =>create deployment and service in same file=>
@@ -411,10 +417,27 @@ kubectl apply -f dep.yaml
 kubectl get pods
 kubectl get service
 
-curl http://localhost:30080				=>will send response now
+curl http://localhost:30080	or 30082			=>will send response now
 will now dont require any port forwarding
 
-		=======================================LOADBALANCER========================================
+		=======================================LOADBALANCER=========================================
+
+needs a managed cloud service we cant test locally=>cloud control manager required
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-lb
+spec:
+  type: LoadBalancer
+  selector:
+    app: nginx
+  ports:
+    - port: 80
+
+we dont specify any other ports except this(because we expose loadbalancer on default http(80) or https(443) port)
+we use loadbalancers since exposing our websites port is not recommended...hence we let requests come from 80 or 443 
+via http or https and lb handle the rest of things
 
 
 
