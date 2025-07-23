@@ -1,0 +1,382 @@
+==========================================================================
+kind create cluster --name=first-cluster
+
+kubectl get nodes		(list nodes in a cluster)
+
+
+Creating a Multi-Node Kind Cluster=>kind-config.yaml
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: first-cluster
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+
+kind create cluster --config kind-config.yaml(the above yaml u wrote)
+kind create cluster --name <nameofcluster> --config kind-config.yaml(to name the cluster at runtime)
+
+docker ps=> list the container(kindest/node)d
+
+When you run docker ps, you're seeing a container like:kindest/node
+This is Kind's bootstrap container, not a Kubernetes pod. It's the actual Docker container that simulates a Kubernetes node — a whole node, including kubelet, container runtime, etc. Think of it as the VM that runs Kubernetes, not a pod inside Kubernetes.
+- The kindest/node container is outside Kubernetes — it hosts the cluster. So Kubernetes doesn’t “see” it as a pod.
+- Docker’s kindest/node container is the stage and the lighting — it enables the show to happen.
+- Kubernetes pods are the actors performing scenes. When the stage is built, there are no actors until you cast them — that is, deploy pods.
+so it does not gets listed when u do kubectl get pods
+
+
+once created....we can get inside it
+
+docker exec -it <containeridofkindest/node> sh
+
+switch to bash terminal using
+#bash
+
+cd /etc/Kubernetes/manifests	then ls=> shows all the Kubernetes components
+
+
+on windows=>
+kind get clusters  : to see all clusters
+
+to see ur current cluster:
+kubectl config current-context
+
+to switch between clusters:(kind is a default prefix u need to give)
+kubectl config use-context kind-<clustername_to_switchto>
+
+
+deleting a cluster:
+kind delete cluster --name <clusteruwanttodelete>
+
+
+
+
+
+=====================================================PODS==========================================================
+
+once u have a cluster......u can create pods=> make sure kind or minikube is active
+
+IMPERATIVE WAY:
+create a pod:
+kubectl run --image=<imagename:nginx> <podname>
+
+kubectl get pods	=>list the running pods
+kubectl logs <podname>  => see static logs of specific pod
+kubectl logs -f <podname>    => see dynamic(realtime) logs of specific pod
+kubect describe pod <podname>	=> to see metadata of pod
+kubectl get pod <podname> -o yaml/json  =>to see yaml/json of running pod
+
+
+DECLARATIVE WAY USING YAML:
+call it pod.yaml(four top level fields:apiVersion,Kind,metadata,spec)
+apiVersion: v1
+kind: Pod
+metadata:
+	name: nginx-pod2
+	labels:
+		env: test
+spec:
+	containers:
+		-name: nginx-container
+		 image: nginx:latest
+
+
+kubectl create -f pod.yaml	=>to create a pod from a yaml file
+kubectl apply -f <filename>.yaml	=>to save and apply changes to a yaml file(service or pod or deployment etc)
+
+
+virtually run pod/any k8s object use dry run:
+kubectl run <name> --image=<imagename:nginx> --dry-run=client 
+
+(optionally u can extract yaml out of it):
+kubectl run <name> --image=<imagename:nginx> --dry-run=client -o yaml > <newfile>.yaml
+
+u can create a pod/anything out of yaml extracted using dry-run....(to any k8s object) by apply/create command
+
+to edit yaml of running pod:
+kubectl edit pod <podname>
+
+or can edit yaml file using any text editor(vi/vim/nano) and then apply changes
+
+kubectl get pods --show-labels		=>to list pod labels
+kubectl get pods -o wide
+
+
+to go inside a running pod:
+kubectl exec -it <podname> -- bash/sh(your terminal)
+
+delete a pod:
+kubectl delete pod <podname/id>
+
+
+========================================================DEPLOYMENT===========================================================
+
+Deployment:a replica placement strategy for pods (using replica-set)=> how many pods should be available..etc(automatically ensures that desired number of pods are always there)
+rolling update: update pods one at a time(ensuring availability even at updation time)
+
+
+create a deployment:(specifying no of pods we require)
+kubectl create deployment <deploymentname> --image=nginx --replicas=3
+
+see the deployment:
+kubectl get deployment
+
+describe the deployment(metadata) and the scaling-history:
+kubectl describe deployment <deploymentname>
+
+delete a deployment:
+kubectl delete deployment <deploymentname>
+
+
+scale an existing deployment:
+kubectl scale deployment <deploymentname> --replicas=3
+
+edit a deployment:
+kubectl edit deployment <deploymentname> => thereafter u can make desired changes to the yaml it displays and as soon as we save...changes will be applied
+
+generate a yaml using dry run:
+kubectl create deployment <deploymentname> --image=<imagename> --dry-run=client -o yaml > <filename>.yaml
+
+
+what field does what? need a quick check?(a reference)
+kubectl explain deployment/pod/service...or any other Kubernetes object
+
+in case any pod goes down=how it creates new pods?=> from template in spec.template. field
+
+rollout updates:one pod at a time=> existing containers will be there till new pods are getting ready...as soon as new ones are ready=> old ones will be deleted and required number of new pods will be there in deployment(ensuring 0 downtime)
+kubectl rollout restart deployment <deploymentname>
+
+to see rollout history:
+kubectl rollout history deployment
+
+rollback the changes(undo the rollout):
+kubectl rollout undo deployment <deploymentname>
+
+
+EXAMPLE USE CASE=>
+suppose we are running our pods =>image: nginx let(1.15)
+we did significant changes(in spec.template field) like changing image etc=> let we changed it to version 1.16 using command
+kubectl set image deployment/<deploymentname> nginx=nginx:1.16
+
+we will see pods running with 1.16 version of nginx when we do=> kubectl get pods
+
+then rollback
+kubectl rollout undo deployment <deploymentname>
+kubectl get pods
+kubectl describe pod <podname>	=> u will see pod is running older version of nginx(1.15)
+
+
+=============================================================SERVICE==================================================================
+
+service: how we expose pods to end users?Service is the object which cares of it
+handles pod-pod , user-pod interactions
+
+1.)clusterIp:internally access a service
+2.)nodePort:external access but only on a specific port
+3.)loadBalancer:expose it on an endpoint=>redirect requests to pods
+4.)externalName:points a service to custom domain(maps a kubernetes service to external dns name)
+
+
+nodePort: important ports
+user(Browser)  --  (nodePort)service(servicePort/Port)  --  (targetPort)frontendservice(container)ex:nginx-Port:80
+nodePort: where user will be served 
+servicePort/Port: port mapping with container. Port on the service will act as virtual load balancer to internal pods
+targetPort: through which container interacts. 
+
+
+
+		===================================CLUSTERIP========================================
+
+has only two ports; only talks to pods inside the cluster until explicitly portforwarding done=>
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+	app:nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+
+to apply this: kubectl apply -f filename.yaml
+kubectl get deploy --watch		=> to watch pods coming up in realtime
+kubectl get pods -o wide		=> you will see complete data along with endpoints where u can access
+
+try curl:
+curl localhost:80		=>wont see any response
+
+but u can do port forwarding temporarily for a pod(if pod is exposed on a port ex:80 as above) using:
+say u created deployment using above deployment.yaml file...then=>
+kubectl port-forward pod/<podname> 8080:80		(using explicit proxy/portforwarding)
+you can hit localhost:8080 now to access the container
+
+create a service of type clusterIp for the deployment so that other components/users can access the pods:
+kubectl expose deployment <deploymentname> --port=80
+service will expose port 80 inside the cluster=>i.e. traffic coming to service on port:80 will be forwarded to the 
+pod's container port(usually denoted by --target-port=somePort)
+
+ex:by default when u dont specify service type while exposing deployment=>clusterIp type is created by default; u can explicitly specify --type:NodePort if u want so
+kubectl expose deployment <deploymentname> --port=80 --target-port=80 
+
+service assigns a clusterip (internal to the cluster):not accessible from outside unless portforwarding done
+port: service's virtual port inside the cluster(service listens on this port)
+target-port: pod's port to which request will be forwarded to
+
+kubectl get service
+kubectl describe service <servicename>
+now ; frontend=>service  and  backend=>pods
+
+incase u use minikube:
+minikube service list
+minikube service <servicename> --url
+
+		=========================================NODEPORT============================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-nodeport
+spec:
+  selector:
+    app: nginx
+  ports:
+  - protocol: TCP
+    port: 80						=>service listens on this
+	nodePort: 30080					=>users hit here(service accessed externally)
+	targetPort: 80					=>traffic redirected to this port on the pods
+  type: NodePort
+
+kubectl apply -f service.yaml	=>create/update service file
+kubectl get service
+kubectl describe service <servicename>
+kubectl get ep 				=>get the endpoints where it is exposed
+kubectl delete service <servicename>		=>delete the service
+
+
+NOTE:(which pods to attach....how the service knows?) Service finds and attaches itself to running pods by matching the field
+In service yaml
+spec:
+	selector:
+		app:sample1					<-checks this
+
+matches with pod yaml
+metadata:
+	labels:
+		app:sample1					<-should matches
+
+
+since we are using kind we need to do port forwarding here also to see the result(kind environment drawback)
+
+if we were using minikube......we wouldnt need to have done it to see output
+minikube service <servicename>
+
+
+### *1. Why Port-Forward is Needed in Kind*
+
+* In Kind, each Kubernetes node is just a *Docker container* running on a private Docker network (e.g., 172.18.0.x).
+* NodePorts (e.g., 30080) are exposed *inside that node container*, not on your host (localhost) by default.
+* Unless you configure extraPortMappings in your Kind cluster config, your host can’t directly access NodePorts.
+
+---
+
+### *2. Port-Forward for ClusterIP*
+
+* *ClusterIP Services* are internal-only — they have no NodePort or external IP.
+* To reach them from your host, you must always do:
+
+kubectl port-forward service/<name> 8080:80
+
+* This tunnels traffic *through the Kubernetes API server* to the Pod(s):
+Host (localhost:8080) 
+   → API Server 
+      → kube-proxy 
+         → ClusterIP (10.x.x.x:80)
+            → Pod IP (10.244.x.x:targetPort)
+* *No direct Pod or node access*; everything is proxied.
+
+---
+
+### *3. Port-Forward for NodePort*
+
+* Normally, NodePort makes a Service reachable via NodeIP:NodePort.
+* In Kind, NodeIP is the *container’s IP* (like 172.18.0.2), not localhost.
+  If you don’t map ports to the host, you can’t directly curl it.
+* Using port-forward here:
+
+bash
+kubectl port-forward service/<name> 8080:80
+
+
+* Even though it’s a NodePort, this still *bypasses NodePort* and just forwards like ClusterIP.
+
+Traffic flow is the same as ClusterIP because port-forward:
+
+* Does not care whether the Service is NodePort, ClusterIP, or LoadBalancer.
+* Always tunnels via the API server.
+
+---
+
+### *Key Behaviour Difference*
+
+* *ClusterIP: Always internal; port-forward is the *only way without reconfiguring Kind.
+* *NodePort*: Meant to be accessible via NodeIP:NodePort, but in Kind you can’t reach it from the host unless:
+	* You use the *node container IP* (not localhost), or
+	* Add extraPortMappings to make localhost:30080 work, or
+	* Skip NodePort entirely and just port-forward (which is simpler).
+
+---
+
+### *Why You Might Use NodePort in Kind Anyway*
+
+* If you configure extraPortMappings when creating your Kind cluster, NodePort can work like Minikube (localhost:30080) without port-forward.
+* Otherwise, NodePort behaves like ClusterIP because port-forward bypasses the NodePort mechanism.
+
+PRFERRED SOLUTION:
+see how to configure extraPortMappings when creating your Kind cluster...why this works?
+Kind runs nodes in Docker containers. 
+By default, NodePort binds to the container, not your local host. 
+ExtraPortMappings solves this by wiring the container’s port to your laptop's network stack, making the service accessible from localhost.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
