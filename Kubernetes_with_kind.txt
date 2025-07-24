@@ -1,4 +1,4 @@
-==========================================================================
+===================================================CLUSTER====================================================
 kind create cluster --name=first-cluster
 
 kubectl get nodes		(list nodes in a cluster)
@@ -185,6 +185,8 @@ servicePort/Port: port mapping with container. Port on the service will act as v
 targetPort: through which container interacts. 
 
 
+to get yaml of specific service:
+kubectl get service <servicename> -o yaml
 
 		===================================CLUSTERIP========================================
 
@@ -246,6 +248,10 @@ minikube service <servicename> --url
 
 		=========================================NODEPORT============================================
 
+expose a nodeport service if u have a deployment yaml:
+kubectl expose deployment <deploymentname> --type=NodePort --port=30080
+
+
 apiVersion: v1
 kind: Service
 metadata:
@@ -255,10 +261,18 @@ spec:
     app: nginx
   ports:
   - protocol: TCP
-    port: 80						=>service listens on this
-	nodePort: 30080					=>users hit here(service accessed externally)
-	targetPort: 80					=>traffic redirected to this port on the pods
+    port: 80						=>Port that Service listens on (internally)
+	nodePort: 30080					=>users hit here(Exposed on the cluster nodes for external users)
+	targetPort: 80					=>traffic redirected to this port on the pods(Actual port on Pod/container where app runs)
   type: NodePort
+
+[External User]
+    ⬇
+http://<NodeIP>:30080   => nodePort
+    ⬇
+Service receives on port 80   => port( set this to 80: assuming for http)
+    ⬇
+Pod container handles on 80   => targetPort
 
 kubectl apply -f service.yaml	=>create/update service file
 kubectl get service
@@ -441,15 +455,64 @@ via http or https and lb handle the rest of things
 
 
 
+=============================================================ENV VARIABLES=====================================================================
 
+Env variables: way in which we inject our variables into the code
+suppose there is a manifest(file) containing the env variables in key value pairs=> we then inject them into our application code
+we are not just injecting them into code...we are injecting them into the running container
 
+let there is a deployment yaml=>generated from this
+kubectl create deploy nginxdeploy --image=nginx:latest --replicas=3 --dry-run=client -o yaml >deployment.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: nginxdeploy
+  name: nginxdeploy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginxdeploy
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: nginxdeploy
+    spec:
+      containers:
+      - image: nginx:latest
+        name: nginx
+        env:
+        - name: APP_NAME
+          value: "kubernetes-101"        =>key value pairs
+        - name: PORT
+          value: "3000"
+        ports:
+        - containerPort: 3000
 
+environment variables are exposed at the container level hence given inside the container field
+inspect the position of env field...also they are stored as key value pairs
+suppose in a node server process.env.PORT gets its value from the dockerimage file while creating it...or from here ... from the
+env fields
+Say you have a Node.js app that uses:
+const port = process.env.PORT || 3000; like these u used some env vars in ur server
 
+Now inside the running container:
+- process.env.PORT will return 3000.
+- process.env.APP_NAME will return "kubernetes-101".
 
+if u use the above deployment=>expose it as nodeport service/write a service.yaml and expose as nodeport=>u will see the env vars being used at the endpoints u will hit
+ex:localhost:30080 =>u can see hello from server:{kubernetes-101} on port {3000}
 
-
-
-
+you can exec into running pods=>
+kubectl get pods
+kubectl exec -it <podname> -- sh    (or)
+kubectl exec -it <podname> -- printenv        (execute printenv command inside the container without opening terminal)
+once u r inside container=>
+printenv            ->to print environment variables
 
 
 
