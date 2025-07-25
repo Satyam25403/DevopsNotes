@@ -579,13 +579,17 @@ spec:
               configMapKeyRef:
                 name: sample-cm1
                 key: LAST_NAME
-          - name: SERVER_NAME
+          - name: SERVER_NAME                 =>name of env variable (this will be used in the code ex:as process.env.SERVER_NAME)
             valueFrom:
               configMapKeyRef:
                 name: sample-cm2
-                key: SERVER_NAME
+                key: SERVER_NAME              =>key u specified in configmapyaml
           ports:
           - containerPort: 3000
+
+kubectl apply -f deployment.yaml
+kubectl get pods
+kubectl exec -it <podname> -- printenv
 
 NOTE: This strategy makes shared environment variables easily manageable across multiple deployment manifests.
 Instead of hardcoding values in each manifest, simply reference the required keys from relevant ConfigMaps.
@@ -594,6 +598,48 @@ This centralizes management and boosts reusability.
 
 NOTE: you can map env variables from different configmaps inside same deployment manifest as shown in above example
 we took vars from sample-cm1 and sample-cm2
+
+there is a problem with this too...we created configmap to dont need to specify env vars....but here increasing env vars 
+will cause a problem...we need to repeat 4 lines for each env var...what could be a simpler alternative?
+
+delete the previously applied deployment
+kubectl delete deployment <deploymentname>
+kubectl get deployment
+
+so there is same deployment yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: nginxdeploy
+  name: nginxdeploy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginxdeploy
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: nginxdeploy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          envFrom:                    =>note the field is changed here
+          - configMapRef:
+            name: sample-cm1          =>instead of referencing each variable as in prev case...we give ref of entire configmap(its name)
+          ports:
+          - containerPort: 3000
+        
+kubectl apply -f deployment.yaml
+kubectl get pods
+kubectl exec -it <podname> -- printenv
+
+=========================================================SECRETS===================================================================
 
 
 
