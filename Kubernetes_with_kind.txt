@@ -486,10 +486,10 @@ spec:
       - image: nginx:latest
         name: nginx
         env:
-        - name: APP_NAME
-          value: "kubernetes-101"        =>key value pairs
-        - name: PORT
-          value: "3000"
+          - name: APP_NAME
+            value: "kubernetes-101"        =>key value pairs
+          - name: PORT
+            value: "3000"
         ports:
         - containerPort: 3000
 
@@ -515,6 +515,85 @@ once u r inside container=>
 printenv            ->to print environment variables
 
 
+=================================================CONFIG MAP============================================================
+
+Implementing environmental variables more effectively: The kubernetes way
+why we need? let us say we have 100s of env vars and let they are to be shared accross different manifests ex: app-deployment, frontend-deployment, backend-deployment
+
+using env vars we need to specify them in all the deployment yamls/manifests=>better way would be
+create one kubernetes configmap object containing all the env vars and =>map it with multiple deployments ...app-deployment,backend-deployment etc.
+u can expose it to container as well in addition to mapping with deployment manifests
+
+create config-map using command:
+kubectl create configmap(or)cm --from-literal=FIRST_NAME=piyush --from-literal=LAST_NAME=sachdeva
+kubectl get configmap/cm
+kubectl describe configmap <configmapname>        =>shows the env vars
+
+
+using manifest:
+kubectl create configmap(or)cm --from-literal=FIRST_NAME=piyush --from-literal=LAST_NAME=sachdeva
+--dry-run=client -o yaml > cm.yaml
+cm.yaml=>
+apiVersion: v1
+data:
+  FIRST_NAME: piyush
+  LAST_NAME: sachdeva
+Kind: configmap
+metadata:
+  creationTimestamp: null
+  name: sample-cm1
+
+we provide the reference of this configmap inside the deployment manifest
+
+there is a deployment.yaml:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: nginxdeploy
+  name: nginxdeploy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginxdeploy
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: nginxdeploy
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          env:
+          - name: FIRST_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: sample-cm1
+                key: FIRST_NAME
+          - name: LAST_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: sample-cm1
+                key: LAST_NAME
+          - name: SERVER_NAME
+            valueFrom:
+              configMapKeyRef:
+                name: sample-cm2
+                key: SERVER_NAME
+          ports:
+          - containerPort: 3000
+
+NOTE: This strategy makes shared environment variables easily manageable across multiple deployment manifests.
+Instead of hardcoding values in each manifest, simply reference the required keys from relevant ConfigMaps.
+This centralizes management and boosts reusability.
+
+
+NOTE: you can map env variables from different configmaps inside same deployment manifest as shown in above example
+we took vars from sample-cm1 and sample-cm2
 
 
 
