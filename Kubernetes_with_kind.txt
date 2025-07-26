@@ -732,8 +732,41 @@ Schedule based autoscaling:(like cron jobs)
 Metrics Server:kubelet collects nodelevel metrics, pod metrics, container runtime etc and all those are passed to metrics server=>exposes them to API server with help of metrics API
 some metrics: CPU, memory=>for scaling decisions, for realtime monitoring=>kubectl top
 
+==================================================RESOURCE: REQUESTS AND LIMITS=================================================================
 
+OOM: Out of memory=>when memory utilization(ex:of a pod) crosses the available amount of memory(ex: in a node)
+if not handled properly it can pre-empt the existing pods/workloads and kill the whole node...if it goes on aquiring the memory
 
+in case of cpu:if crossed, cpu throttling may happen and can show performance issues
+
+there is a pod.yaml
+apiVersion: v1
+Kind: Pod
+metadata:
+  name: stress-test
+spec:
+  containers:
+  - image: polinux/stress
+    name: stress-test
+    command: ["stress"]
+    resources:
+      requests:
+        cpu: "1"
+        memory: "50Mi"                =>request this initially
+      limits:
+        cpu: "1"
+        memory: "300Mi"               =>go upto this but not beyond
+    args: ["--cpu","1","--vm","1","--vm-bytes","350M","--timeout","10s"]
+
+NOTE: in yaml u specified requests and limits...but in command u r overriding the request to 350M>limit(300M)
+
+kubectl apply -f pod.yaml
+kubectl get pods
+kubectl describe pod <podname>            =>u can see the reason as OOMKilled(since u crossed the limit)=>kubernetes killed it
+
+if u try --vm-bytes=<withinlimit> in the command and apply it        =>no issues
+
+====================================================================================================================================================
 
 
   
