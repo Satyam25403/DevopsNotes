@@ -713,25 +713,6 @@ kubectl get pods
 NOTE: if docker-secret not provided for pulling a private repo image: we'll end up getting ErrImagePull
 NOTE: also a common way to give references to secrets is mount that secret as volume
 
-=========================================================HPA AND VPA======================================================================
-
-Horizontal Pod Autoscaler=>object in k8s...based on some metrics and set thresholds...it scales the pods(existing pods are kept as is)
-hence existing users(traffic) arent effected in HPA (not disruptive in nature=>hence widely used)
-two types:when u scale based on workload(pods)=>HPA
-          when u scale Infra(nodes)=>Cluster AutoScaler
-
-Veritcal Pod AutoScaler=>upgrade to a bigger pod(more cpu and memory) and delete the prev pods=>traffic needs redirection(disruptive)
-type: based on workloads(pods)=>VPA
-      Infra(nodes)=>NodeAutoProvisioning(comes with managed cloud providers)
-
-some scaling metrics: number of messages in kafka queue, number of concurrent connections to website/database which maynot be natively tracked=>all are events
-Event based autoscaling:KEDA(3rd party tool)
-Schedule based autoscaling:(like cron jobs)
-
-
-Metrics Server:kubelet collects nodelevel metrics, pod metrics, container runtime etc and all those are passed to metrics server=>exposes them to API server with help of metrics API
-some metrics: CPU, memory=>for scaling decisions, for realtime monitoring=>kubectl top
-
 ==================================================RESOURCE: REQUESTS AND LIMITS=================================================================
 
 OOM: Out of memory=>when memory utilization(ex:of a pod) crosses the available amount of memory(ex: in a node)
@@ -766,12 +747,168 @@ kubectl describe pod <podname>            =>u can see the reason as OOMKilled(si
 
 if u try --vm-bytes=<withinlimit> in the command and apply it        =>no issues
 
-====================================================================================================================================================
+
+=========================================================HPA AND VPA======================================================================
+
+Horizontal Pod Autoscaler=>object in k8s...based on some metrics and set thresholds...it scales the pods(existing pods are kept as is)
+hence existing users(traffic) arent effected in HPA (not disruptive in nature=>hence widely used)
+two types:when u scale based on workload(pods)=>HPA
+          when u scale Infra(nodes)=>Cluster AutoScaler
+
+Veritcal Pod AutoScaler=>upgrade to a bigger pod(more cpu and memory) and delete the prev pods=>traffic needs redirection(disruptive)
+type: based on workloads(pods)=>VPA
+      Infra(nodes)=>NodeAutoProvisioning(comes with managed cloud providers)
+
+some scaling metrics: number of messages in kafka queue, number of concurrent connections to website/database which maynot be natively tracked=>all are events
+Event based autoscaling:KEDA(3rd party tool)
+Schedule based autoscaling:(like cron jobs)
 
 
-  
+Metrics Server:kubelet collects nodelevel metrics, pod metrics, container runtime etc and all those are passed to metrics server=>exposes them to API server with help of metrics API
+some metrics: CPU, memory=>for scaling decisions, for realtime monitoring=>kubectl top
 
 
+    =======================================HPA DEMO====================================================
+there is a pod.yaml
+apiVersion: v1
+Kind: Pod
+metadata:
+  name: hello-app
+  labels:
+    app: deploy-nginx
+spec:
+  containers:
+  - image: piyushsachdeva/my-private-repo:latest
+    name: hello-app
+    resources:
+      requests:
+        cpu: "200m"               =>0.2 core  
+      limits:
+        cpu: "500m"               =>0.5 core     
+    ports:
+    - containerPort: 3000
+    args: ["--cpu","1","--vm","1","--vm-bytes","350M","--timeout","10s"]
+  imagePullSecrets:
+    - name: docker-secret
+
+kubectl apply -f pod.yaml
+kubectl get pods
+kubectl apply
+kubectl apply -f service.yaml           =>nodeport type nginx service u created to access on port 30080
+NOTE: note that the selector and targetPort in service must match the label and port in pod 
+kubectl get service
+kubectl get ep
+
+(since u r trying nodeport on kind...configure this at cluster creation time to avoid need of portforwarding)
+curl http://localhost:<NodeAccessPort> will expose the service
+
+if using minikube:minikube service <servicename>    =>accessible on 30080
+or do port forwarding(create a tunnel)=>
+kubectl port-forward svc/svc-nginx 8080:80      =>expose the service on 80 onto an internal port 8080
+
+
+once u have service accessible: enable metrics server=>
+
+in minikube =>just enable it
+minikube addons enable metrics-server
+verify using=>
+kubectl top nodes
+kubectl top pods
+
+if using kind (github repo...download yaml and apply it)=>
+https://github.com/kubernetes-sigs/metrics-server
+- download the metrics-server.yaml file from the deploy/kubernetes directory and apply to ur cluster
+
+kubectl apply -f metrics-server.yaml
+
+- Patch for insecure TLS (needed in local dev sometimes):
+- If your cluster doesn’t have proper certs, you might need to update the deployment:
+kubectl edit deployment metrics-server -n kube-system
+- Then add this flag to the container args:
+- --kubelet-insecure-tls
+
+example deployment:
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-server
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      k8s-app: metrics-server
+  template:
+    metadata:
+      labels:
+        k8s-app: metrics-server
+    spec:
+      containers:
+      - name: metrics-server
+        image: registry.k8s.io/metrics-server/metrics-server:v0.6.2
+        args:
+        - --cert-dir=/tmp
+        - --secure-port=4443
+        - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+        - --kubelet-insecure-tls
+        ports:
+        - containerPort: 4443
+          name: https
+          protocol: TCP
+
+- --kubelet-insecure-tls: Skips TLS verification for Kubelet certificates. Useful in local clusters like Kind or Minikube where certs may not be signed by a trusted CA.
+since it's a local dev environment, kubelets might use self-signed or missing certs.
+- Make sure this deployment is applied in the kube-system namespace.
+🔧 Why It Matters
+If you apply the Metrics Server YAML without specifying a namespace, it might end up in the default namespace, which could cause issues:
+- It won't connect correctly to the kubelet.
+- You might not see metrics when using kubectl top.
+
+kubectl apply -f metrics-server.yaml -n kube-system
+
+- Restart the deployment if needed(delete and apply manually)/rollout(without downtime):
+kubectl rollout restart deployment metrics-server -n kube-system
+
+kubectl get pods -n kube-system | grep metrics-server
+
+
+
+once metrics server enabled (final checks and proceed):
+kubectl get pods -A | grep metrics-server
+kubectl top node
+kubectl get pod
+kubectl get pod -A --sort-by=cpu  (for all pods)
+
+now : one pod runs in the set environment=>good to go=>create deployment to experiment with scaling
+
+apiVersion: apps/v1
+Kind: Deployment
+metadata:
+  name: deploy-nginx
+  labels:
+    app: deploy-nginx
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: deploy-nginx
+  containers:
+  - image: piyushsachdeva/my-private-repo:latest
+    name: hello-app
+    resources:
+      requests:
+        cpu: 200m              =>0.2 core  
+      limits:
+        cpu: 500m              =>0.5 core     
+    ports:
+    - containerPort: 3000
+  imagePullSecrets:
+    - name: docker-secret
+
+kubectl delete pod hello-app    (delete the tested pod)
+kubectl apply -f deployment.yaml
+kubectl get pods
+kubectl get service             (service should attach itself to the above pods)
+kubectl describe service <servicename>
 
 
 
