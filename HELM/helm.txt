@@ -1,38 +1,191 @@
-similar to windows: choco, mac: brew, ubuntu: apt, redhat: yum and all package managers
+===============================================INTRO AND LOCAL SETUP=================================================
+as we move into production, we realize managing a kubernetes cluster is not an easy task
+we need a framework which sits on top of kubernetes and with minimal effort, lets us to manage the cluster
 
-HELM: package manager for kubernetes
+there can be lot of yamls we need to interact with while using kubernetes. HELM chart provides a very high abstraction with which u can run a minimal command
+which internally communicates with kubernetes cluster producing same results but more effeciently
 
-why we need it?
-let us say we need to install ARGOCD(let a cicd tool)
-1.traditional way=>download binaries=>follow instructions
-2.if we install it as pod kubernetes=>we need to manage seprate deployment, service, role/binding, policies, namespace
-and all other yamls manually
+- using Kubernetes alone: You manually create, maintain, and version multiple .yaml files. Even small changes mean editing multiple places and applying each file with kubectl.
+- Helm: You wrap all those YAMLs into a chart (i.e. a reusable, version-controlled package), and control everything with simple Helm commands.
+
+let us suppose we have 3 yaml files normally which we write in kubernetes(let their values be as is hardcoded...as we move forward we replace them with references):
+
+manually run kubectl commands:
+kubectl apply -f deployment.yaml
+kubectl apply -f service.yaml
+kubectl apply -f ingress.yaml
+
+helm replacement of above commands(deployment of container):
+helm install mp-app ./my-chart
+
+manually run kubectl commands:
+kubectl delete -f deployment.yaml
+kubectl delete -f service.yaml
+kubectl delete -f ingress.yaml
+
+helm replacement of above commands(deletion of container):
+helm uninstall mp-app
 
 
-SOLUTION: HELM=>bundles all these together whatever we specified above...deployment, service, policies etc => collectively called as HELM CHART
-the chart is stored on helm REPOSITORY...artifacts.io   -> central repo for charts
-when we need to install the package...we pull chart from repo and create a RELEASE(running instance) out of it
+📦 Helm Chart Structure (Simplified)
+When you run:
+helm create my-chart
+You get:
+my-chart/
+├── Chart.yaml             # Metadata
+├── values.yaml            # Config values
+└── templates/
+    ├── deployment.yaml    # Parameterized
+    ├── service.yaml
+    ├── ingress.yaml
+    └── _helpers.tpl       # Label/name functions
 
-charts are reusable -> single chart into multiple environments
-each time we deploy a chart -> a new release is created
+install microk8s for a kubernetes cluster which u need as a prerequisite for experimenting with helm or if u have kind or minikube...u r good to go
+
+Method1=>
+🎉 Helm works perfectly fine with Kind (Kubernetes IN Docker)
+✅ Helm Compatibility with Kind
+- Kind creates a local Kubernetes cluster using Docker containers.
+- Helm interacts with the Kubernetes API server using the same kubeconfig that kubectl uses
+
+Method=>2
+If you ever switch to MicroK8s later, you can enable Helm with:
+microk8s enable helm
+then install kubectl and configure .kubeconfig
+1. Install MicroK8s
+On Ubuntu/Debian:
+sudo snap install microk8s --classic
+
+2. Add Your User to MicroK8s Group
+sudo usermod -a -G microk8s $USER
+sudo chown -f -R $USER ~/.kube
+
+Then log out and back in, or run:
+newgrp microk8s
+
+3. Enable Helm in MicroK8s
+microk8s enable helm
+
+Optionally, enable other add-ons:
+microk8s enable dns storage ingress dashboard
+
+4. Configure kubeconfig Access (Optional but handy)
+If you want to use regular kubectl and Helm instead of microk8s kubectl:
+mkdir -p $HOME/.kubeconfig
+cd $HOME/.kubeconfig
+microk8s config > config
+export KUBECONFIG=$HOME/.kubeconfig/config
+
+Now your regular kubectl and helm commands work seamlessly with MicroK8s.
 
 
 
-DEMO in kodekloud playground:
+
+once cluster is setup:
+kubectl get all --all-namespaces
+
+install the helm chart:
+curl -L https://git.io/get_helm.sh | bash -s -- --version v3.8.2
+ls -later
+helm version
+
+
+===========================================HELM CHART ARCHITECTURE==========================================
+Helm is often described as the “package manager for Kubernetes.” It lets you define, install, and upgrade even the most complex Kubernetes apps using reusable templates called charts.
+
+
+1. Helm CLI (helm)
+- The command-line tool you use to interact with Helm.
+- Fetches charts from a repository, installs them, upgrades them, and much more.
+2. Chart Repository
+- Like npm for Node or pip for Python: a place where Helm charts are stored and versioned.
+- You can use public repos (e.g., Bitnami) or host your own.
+3. Helm Charts
+- Bundles of YAML files: parameterized templates for Kubernetes resources (Deployments, Services, Ingress, etc.).
+- Located inside the templates/ folder, configured using values.yaml
+
+4. kubectl / kubeconfig
+- Helm uses kubectl under the hood to interact with your Kubernetes cluster.
+5. Kube API Server
+- The gateway to your Kubernetes cluster for helm to have communication with your cluster
+- Helm sends chart manifests via this API, where Kubernetes processes and applies them.
+
+
+🔁 What Happens When You Run helm install mychart?
+- Chart Fetch: Helm gets the chart from a repo or local folder.
+- Template Render: It merges values from values.yaml with the templates.
+- Manifest Creation: YAML manifests for Kubernetes resources are rendered.
+- Kube API Push: Manifests are sent to Kubernetes through the kube API.
+- App Deployment: Kubernetes takes over, scheduling pods and spinning up services.
+
+basic(commands):
+helm install myhelloworld helloworld
+helm delete myhelloworld
+helm list -a
+
+========================================================A DEEPER DIVE: Basic hello world helm chart=========================================================================
+let suppose we have a cluster
 let there are one master and 2 worker nodes
 kubectl get nodes               =>lists control-plane and 2 worker nodes
 
-goto official documentation(helm.sh/docs) of helm and chose ur package manager to download using commands
+goto official documentation(helm.sh/docs) of helm and chose ur package manager to download helm-chart using commands
 ######curl and apt get commands
 
 check installation:
 helm version
 
 helm create <chartname>             =>creates a directory with 2 files and 2 folders
+ex: helm create helloworld
+
+tree <chartname ex:helloworld>
+
 cd <chartname>
 ls -lrt
-find
+find .                      =>lists everything ..or u can run
 
+
+we will try deploying this helloworld helm chart in our kubernetes cluster
+vi values.yaml              =>change service type to NodePort
+
+cd ../
+
+now install helmchart using -helm install:
+helm install myhelloworld helloworld
+helm install <customname which u want to deploy in k8s> <directoryname_u_created where the created helm chart exists>
+-we can call it simply:
+helm install <release-name> <chart-directory>
+
+
+verification:
+helm list -a
+kubectl get service
+kubectl get all        # See pods, deployments, services — everything
+kubectl describe service myhelloworld      # Deep dive into ports and selectors
+
+
+find the assigned PORT=>
+kubectl get service myhelloworld -o wide
+
+Then find IP=>
+-if u are using minikube:
+minikube ip
+-If you're on Kind (Kubernetes in Docker), use:
+kubectl get nodes -o wide
+
+test the service:
+curl http://<node-ip>:<node-port>
+
+NOTE: You can override NodePort like this while editing values.yaml:
+service:
+  type: NodePort
+  port: 80
+  nodePort: 31000  # Desired port
+
+
+========================================================================K8S UI DASHBOARD===========================================================================================
+
+
+==============================================================REPLACING HARDCODED VALUES: USE OF REFERENCES==============================================================================
 inspect all files and folders=>content inside them using nano/vim/vi
 upon inspection u will find that values are parameterized/templated or just reference is given...actual value is picked from somewhere else
 
@@ -189,6 +342,23 @@ helm install hello-prod ./sample-chart -f values-prod.yaml
 Helm handles the rendering and creates Kubernetes manifests customized for each environment 
 
 ==================================HEML AS PACKAGE MANAGER=========================================
+similar to windows: choco, mac: brew, ubuntu: apt, redhat: yum and all package managers
+
+HELM: also as a package manager for kubernetes
+
+why we need it?
+let us say we need to install ARGOCD(let a ci/cd tool)
+1.traditional way=>download binaries=>follow instructions
+2.if we install it as pod kubernetes=>we need to manage seprate deployment, service, role/binding, policies, namespace
+and all other yamls manually
+
+
+SOLUTION: HELM=>bundles all these together whatever we specified above...deployment, service, policies etc => collectively called as HELM CHART
+the chart is stored on helm REPOSITORY...artifacts.io   -> central repo for charts
+when we need to install the package...we pull chart from repo and create a RELEASE(running instance) out of it
+
+charts are reusable -> single chart into multiple environments
+each time we deploy a chart -> a new release is created
 
 let us suppose we need to install argocd:
 
