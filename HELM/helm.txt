@@ -122,6 +122,7 @@ basic(commands):
 helm install myhelloworld helloworld
 helm delete myhelloworld
 helm list -a
+helm uninstall helloworld
 
 ========================================================A DEEPER DIVE: Basic hello world helm chart=========================================================================
 let suppose we have a cluster
@@ -182,9 +183,84 @@ service:
   nodePort: 31000  # Desired port
 
 
-========================================================================K8S UI DASHBOARD===========================================================================================
+========================================================================K8S UI DASHBOARDS===========================================================================================
+you can access the Kubernetes Dashboard using Kind or Minikube, just like your instructor does with MicroK8s. Each tool has its own quirks, but the dashboard setup is totally doable across all three.
+
+with microk8s=>
+microk8s dashboard-proxy                        =>copy the token 
+you can open it on localhost:<portshown>        =>paste the token and click on sign in
+
+🧱 With Kind (Kubernetes IN Docker):
+Kind doesn’t include the dashboard by default, install it manually:
+- Deploy the Dashboard:
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+- Create Admin Access:
+kubectl create serviceaccount admin-user -n kubernetes-dashboard
+kubectl create clusterrolebinding admin-user \
+  --clusterrole=cluster-admin \
+  --serviceaccount=kubernetes-dashboard:admin-user
+- Start Proxy:
+kubectl proxy
+- Access Dashboard: Open:
+http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/
+- Login with Token:
+kubectl -n kubernetes-dashboard describe secret \
+$(kubectl -n kubernetes-dashboard get secret | grep admin-user | awk '{print $1}')
 
 
+🖥️ With Minikube
+Minikube makes it even easier:
+- Start Minikube:
+minikube start
+- Launch Dashboard(This opens the dashboard in your browser automatically):
+minikube dashboard
+- Optional: Get just the URL
+minikube dashboard --url
+
+in cloud: u can replace these commands with their respective dashboard commands
+
+
+
+🧠 Summary
+| Tool | Dashboard Setup | Access Method | Notes | 
+| MicroK8s | Built-in | microk8s dashboard-proxy | Your instructor’s setup | 
+| Kind | Manual install | kubectl proxy | Needs token login | 
+| Minikube | Built-in | minikube dashboard | Easiest for local dev | 
+
+=============================================================HELM CLI COMMANDS===========================================================================================
+
+- create a helm chart:
+helm create <chartname>             => u can deep dive into this
+
+- installation of helm chart
+helm install <releasename> <chartname>
+
+- list charts
+helm list -a                        =>let this shows revision=1
+
+- if u changed/want to make a new change into your helm chart(let us say u changed replicaCount in Values.yaml), 
+u need to run upgrade command so that new changes will be applied to helm chart
+helm upgrade <releasename> <chartname>                        =>u will witness a new revision, revision=2
+
+- you can check revision also by:
+helm list -a
+
+- rollback to specified release i.e. to a revision:
+helm rollback <releasename> <revisionnumber u want to rollback to>
+this also is a revision and thus revision will be 3 by now eventhough state is switched to previous
+
+- debug and dry run ur helm chart: validate helm chart before install/upgrade to know errors/misconfigurations
+helm install <releasename> --dry-run --debug <chartname>      =>communicates with k8s API server(verify and validate helm chart against k8s)
+
+- helm template:renders the chart templates locally(similar to previous ...but validates yamls without connecting to k8s API server)
+helm template <chartname>
+
+- Find errors or misconfigurations:
+helm lint <chartname>
+
+- uninstall helm chart:
+helm uninstall <releasename>
+helm list -a
 ==============================================================REPLACING HARDCODED VALUES: USE OF REFERENCES==============================================================================
 inspect all files and folders=>content inside them using nano/vim/vi
 upon inspection u will find that values are parameterized/templated or just reference is given...actual value is picked from somewhere else
