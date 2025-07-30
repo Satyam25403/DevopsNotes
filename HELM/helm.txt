@@ -261,6 +261,90 @@ helm lint <chartname>
 - uninstall helm chart:
 helm uninstall <releasename>
 helm list -a
+===============================================================CREATING OWN CUSTOM CHART=======================================================================================================
+
+Step-by-Step: Deploy JavaScript App with Helm
+
+1. Build JavaScript REST API
+Create your app using Node.js and Express:
+index.js =>
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('Hello from JS API!'));             //API endpoint
+app.listen(3000);
+
+
+2. 🐳 Create Docker Image
+Dockerfile =>
+FROM node:18
+WORKDIR /app
+COPY . .
+RUN npm install
+EXPOSE 3000
+CMD ["node", "index.js"]
+
+- Build image & tag:
+docker build -t my-js-api .
+
+- check by running the image before pushing to repo:
+docker run -p 9001:9001 my-js-api
+-access localhost:9001 on browser
+
+3. Push to Docker Registry(dockerhub.io)=> u can do $(docker login) before push:
+docker tag my-js-api <your-dockerhub-username>/my-js-api
+docker push <your-dockerhub-username>/my-js-api
+
+
+4. Create Helm Chart
+helm create js-api-chart
+
+- open Chart.yaml
+commentOut appVersion       => add a #
+- Customize values.yaml:
+image:
+  repository: <your-dockerhub-username>/my-js-api
+  tag: latest
+service:
+  port: 3000
+  type: NodePort
+- In deployment.yaml template: 
+commentout liveness probe and readiness probes
+in the image field: remove the {{.Values.image.tag | default .Chart.AppVersion}}    =>since we removed it in chart.yaml
+Update container port to 3000 and pull from .Values.image.repository
+
+5. Install the Chart( you can debug and dry-run optionally before testing)
+helm install js-api-release ./js-api-chart
+
+
+6. Verify Deployment/helm chart:
+helm list
+kubectl get all
+kubectl get service
+kubectl get service js-api-release-js-api-chart
+
+
+
+🌐 Accessing the Service(environment based...different for minkube, kind, cloud etc)
+
+Get Node IP (Minikube):
+- If you're on minikube, use:
+minikube ip     
+
+- Get the NodePort:
+kubectl get svc js-api-release-js-api-chart
+
+- Access:
+http://<node-ip>:<node-port>
+
+- If you're on (Kind), you need to do Port-forwarding:
+accessing nodeport externally requires knowing how Kind maps ports from the Docker container to your host machine.
+Kind doesn't expose NodePorts to your host OS by default. You can manually forward:
+kubectl port-forward service/js-api-release-js-api-chart 3000:3000
+
+- Then access it via=>
+http://localhost:3000
+
+
 ==============================================================REPLACING HARDCODED VALUES: USE OF REFERENCES==============================================================================
 inspect all files and folders=>content inside them using nano/vim/vi
 upon inspection u will find that values are parameterized/templated or just reference is given...actual value is picked from somewhere else
