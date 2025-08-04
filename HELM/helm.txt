@@ -456,6 +456,111 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 to see the instructions provided by the developer of that helmchart:
 helm show readme bitnami/wordpress --version 10.0.3
 
+============================================================HELM HOOKS AND TEST=======================================================================================================
+
+why we need hooks?
+for example: we need to perform a cronjob, before installing a helmchart(pre-install) or run cleanup scripts(post-install) after installing helmchart
+
+there are different types: pre-install hook, post-install hook, pre-delete, post-delete, pre-upgrade, post-upgrade, pre-rollback, post-rollback etc
+check their usages from docs
+
+helm hooks can be any k8s resources... it can be JobHook, DeploymentHook, ServiceHook
+
+there is a helloworld helmchart=> u need to create hooks folder in templates directory and u can place that yaml(pre-install,post-install yamls)
+helloworld/
+├── Chart.yaml
+├── values.yaml             (nginx on nodeport 80)
+├── charts/
+├── templates/
+│   ├── NOTES.txt
+│   ├── _helpers.tpl
+│   ├── deployment.yaml
+│   ├── hooks/
+│   │   └── pre-install.yml
+│   ├── hpa.yaml
+│   ├── ingress.yaml
+│   ├── service.yaml
+│   ├── serviceaccount.yaml
+│   └── tests/
+│       └── test-connection.yaml
+
+pre-install.yaml:         (here we used batch k8s resource type)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: "{{ include 'helloworld.fullname' }}-pre-install-job-hook"
+  labels:
+    {{- include "helloworld.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install"                         <specify type of hook>
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  template:
+    spec:
+      containers:
+        - name: pre-install
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ['sh', '-c', 'echo pre-install Pod is Running ; sleep 10']               <job of this hook upon triggering>
+      restartPolicy: OnFailure
+  backoffLimit: 3
+  completions: 1
+  parallelism: 1
+
+job is when hook triggers=> display message => sleep for 10s as set=> delete accoring to delete policy=>
+and then install the helmchart(helloworld)
+
+watch -x kubectl get pods                   =>in seperate terminal to see the processes
+helm install helloworldrelease helloworld
+
+
+HELM TEST: like a unit test to validate our helm chart    =>in tests section
+there is a tree structure of helmchart:
+helloworld/
+├── Chart.yaml
+├── values.yaml             (nginx on nodeport 80)
+├── charts/
+├── templates/
+│   ├── NOTES.txt
+│   ├── _helpers.tpl
+│   ├── deployment.yaml
+│   ├── hooks/
+│   │   └── pre-install.yml
+│   ├── hpa.yaml
+│   ├── ingress.yaml
+│   ├── service.yaml
+│   ├── serviceaccount.yaml
+│   └── tests/
+│       └── test-connection.yaml
+
+we need to first install helmchart for any test to be performed on top of that
+helm install myhellorelease helloworld
+
+test-connection.yaml=>
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include 'helloworld.fullname' . }}-test-connection"
+  labels:
+    {{- include "helloworld.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ["wget"]                     => a simple wget command test
+      args: ["{{ include 'helloworld.fullname' . }}:{{ .Values.service.port }}"]
+  restartPolicy: Never
+
+kubectl get service           => then do portforwarding and hit that port
+or if u are on cloud, do => hostname -I
+then ip:port in browser   =>check nginx service
+
+helm list -a 
+helm test <chartname>             =>testing command
+
 ===================================================REPLACING HARDCODED VALUES: USE OF REFERENCES======================================================================
 inspect all files and folders=>content inside them using nano/vim/vi
 upon inspection u will find that values are parameterized/templated or just reference is given...actual value is picked from somewhere else
