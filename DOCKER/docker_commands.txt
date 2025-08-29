@@ -32,5 +32,149 @@ docker pull <imagename>
 docker run <imagename>
 
 docker ps -a        => all containers
+docker ps -aq       =>get all container ids
+
+docker run -it <image>          =>run a container with the specified image interactively: i->interactive t->terminal attached
 docker restart <containerid>        =>restart a stopped container
 docker exec -it <containerid> <terminal:bash/sh>        =>use its terminal
+
+docker start/restart <containerid>      =>start a stopped container
+docker stop <containerid>               =>stop a container
+
+docker rm $(docker ps -a)       =>remove all stopped containers
+docker rmi imagename            =>remove an image built in local env
+
+
+
+What Are Dangling Images in Docker?
+Dangling images are Docker images that:
+Have no name (tag) → their repository and tag are <none>:<none>
+Are not used by any container like these:
+REPOSITORY          TAG       IMAGE ID       CREATED         SIZE
+<none>              <none>    abc12345defg   10 minutes ago  300MB
+They are intermediate build layers or outdated images left behind
+
+Remove only dangling images:
+docker image prune
+
+Remove all unused images (dangling + unreferenced(nolonger being used by containers)):
+docker image prune -a
+
+
+
+docker logs <containerid>       =>show logs of that container
+
+let us say we have a container running in detached mode...we want to run a command...we dont want to open interactive terminal again, we use docker exec
+docker exec <container_name> <command>
+
+docker inspect <containerid>           =>gives info about the container imageused, mounts/vols, path, ips, ports, envvars, workdir etc etc
+
+
+building a dockerimage from dockerfile
+docker build  -t <imagename>:<optional tag ex:v1/v2..latest> <directory of dockerfile:use '.' if current and file is named as "Dockerfile">
+
+
+portmapping=>gateway from local machine to the container
+let us say we run an nginx container=>nginx usually runs on port 80...we pull and run it it will run no issues
+but when we try accessing typing localhost:80 on our browser theres nothing in there
+coz browser is on our machine which has a different 80 port which is not nginx containers 80port
+
+so we map ourmachineport:nginxport  => 7999:80  =>we can now access nginx on port:7999 on our localhost
+docker run -it -p 8000:80 nginx
+
+
+
+RUN vs ENTRYPOINT vs CMD
+RUN Purpose:
+Used during the image build process.
+Executes commands once when building the image (like installing packages or setting up files).
+RUN apt update && apt install -y curl
+
+CMD Purpose:
+Provides default arguments or a command to run when the container starts.
+Can be overridden when starting a container using docker run.
+CMD ["python", "app.py"]
+overridable while running=> docker run my-image python other_script.py
+
+ENTRYPOINT Purpose:
+Defines the main executable for the container.
+Not easily overridden (unless using --entrypoint flag).
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+
+
+
+
+docker compose:making services run in single network
+for ex:localhost for one doesnt mean same localhost for other
+
+Why localhost doesn't mean the same across Docker containers?
+Each Docker container has its own isolated network namespace — meaning each one is seperate instance...each is a seperate machine:
+localhost (or 127.0.0.1) inside a container refers to itself — not the host or any other container.
+So if Container A tries to call localhost:5000, it is calling itself, not Container B.
+hence localhost for A and B both are seperate.
+
+✅ How to Make Services Talk to Each Other
+Use Docker Compose to run all services in the same custom network. Docker Compose does this by default.
+docker-compose.yaml
+version: '3.8'
+services:
+  frontend:
+    image: yourname/frontend:latest
+    environment:
+      - BACKEND_URL=http://backend:5000/
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+  backend:
+    image: yourname/backend:latest
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+  admin:
+    image: yourname/admin:latest
+    ports:
+      - "4000:4000"
+    networks:
+      - app-network
+networks:
+  app-network: {}
+
+
+💡 Then how do they communicate?
+In this case:
+The frontend can access the backend using:
+http://backend:5000
+Not:
+❌ http://localhost:5000
+Because:
+backend is the service name, and Docker DNS will resolve it to the backend container's IP.
+
+Example Use in Node.js Frontend
+const response = await axios.post('http://backend:5000/submit', formData);
+
+That works because:
+Docker Compose puts both containers in the same network
+backend is a valid hostname inside that network
+
+
+Why Use Docker Compose?
+Because it lets you:
+Define all services, ports, networks, volumes, etc. in one YAML file
+Launch everything with one command:
+
+    docker compose up
+
+Automatically create a shared network so containers can talk by service names
+
+
+
+push docker images to dockerhub =>hub.docker.com
+docker login    =>Enter username and password of docker account
+
+while pushing to repo ur image must be like : reponame/imagename
+docker push reponame/imagename
