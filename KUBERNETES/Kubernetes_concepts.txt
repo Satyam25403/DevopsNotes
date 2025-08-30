@@ -1,15 +1,79 @@
-🧠 Core Concepts (With Real-World Analogy)
-| Concept | Purpose | Analogy | 
+what is kubernetes?
+container orchestration(manage,create,delete,maintain,configure) tool for managing containers effeciently
+
+
+kubernetes components:
+🧠 Core Concepts (With Real-World Analogy) developers perspective:
 | Pod => Smallest deployable unit, holds one or more containers => A shipping box containing items (containers) | 
-| Node => A machine in the cluster => A worker in a warehouse running boxes (pods) | 
+| Node => A vm/machine in the cluster (has cpu/memory)=> A worker in a warehouse to run boxes (pods) | 
 | Cluster => Collection of nodes => The entire warehouse system | 
-| Deployment => Blueprint for managing pods => A plan saying “Keep 3 of these boxes running at all times” | 
+| Deployment => Blueprint for managing pods(non stateful) => A plan saying “Keep 3 of these boxes running at all times” | 
+| StatefulSet => Manages pods with persistent identity and storage(similar to deployment except for the persistance)
 | Service => Exposes pods to the network => A receptionist routing requests to the right boxes | 
 | Namespace => Logical partitioning => Like labeled rooms in the warehouse (dev, prod, test) | 
+| ReplicaSet => Ensures a specified number of pod replicas are running
+| DaemonSet => Ensures one pod per node (for monitoring/logging etc.)
+| ConfigMap => Stores configuration data as key-value pairs
+| Ingress => Manages external access to services (HTTP/HTTPS):single point of entry=>only single point of exposure...otherwise we would need to expose more and more prone to attack
+| Volume => Persistent storage attached to pods(persistant volumes(pv),persistant volume claims(pvc))
+| Scheduler => Assigns pods to nodes based on resource availability
+| Controller Manager=> Oversees controllers like Deployments, ReplicaSets
 
 
+k8s architecture:
+-Master Node(atleast 1){it has components of worker nodes too}
+  API server: Entry point for all commands and communication(allows us to use kubectl).- kubectl(client) sends HTTP requests (usually RESTful) to the Kubernetes API server.
+The API server is the central gateway to the cluster—it validates, processes, and routes your commands.
+  Scheduler: Assigns pods to nodes based on resource availability
+  controller manager: Watches cluster state and triggers changes
+  etcd: Key-value store for cluster state and config
+-worker nodes(0 or more)
+  kubelet: Talks to the container runtime and manages pods
+  kube proxy: Handles networking,ips,ports and loadbalancing (routing requests)
+  Container runtime: runs containers(CRI: for ex docker,containerd)
+
+
+Minikube: allows to create kubernetes clusters locally but can be resource intensive(might slow down machine)
+alternative can be kind but with lesser features
+ Minikube
+- Purpose: Spins up a full Kubernetes cluster locally.
+- Pros:
+- Supports multiple drivers (Docker, VirtualBox, Hyper-V, etc.)
+- Includes Kubernetes Dashboard, Ingress, LoadBalancer emulation
+
+create a cluster => minikube start --nodes=<number_of_nodes> -p <cluster_name>
+ex: minikube start --nodes=3 -p dev-cluster
+view all clusters/profiles => minikube profile list
+switch between clusters/profiles => minikube profile <dev-cluster>
+stop the cluster => minikube stop -p dev-cluster
+
+ Kind (Kubernetes IN Docker)
+- Purpose: Runs Kubernetes clusters inside Docker containers.
+- Pros:
+- Lightweight and fast
+- Ideal for CI/CD pipelines and quick testing
+- Easy to spin up multi-node clusters
+
+Kubectl: a commandline tool for interacting with and controlling kubernetes clusters
+- Create, update, delete resources (kubectl apply, kubectl delete)
+- Inspect cluster state (kubectl get, kubectl describe)
+- Debug and monitor (kubectl logs, kubectl exec)
+- Works With: Minikube, Kind, cloud clusters (EKS, AKS, GKE), kubeadm setups
+kubens and kubectx => complementary tools for making usage easy
+
+
+k8s Dashboard:
+minikube dashboard  => command to open ur local dashboard
+- Opens the official Kubernetes Dashboard in your default web browser
+- Gives you a visual interface to manage pods, deployments, services, and more
+- Automatically sets up a proxy so you can interact with the cluster securely
+If you're running this in a headless environment (like a remote server or WSL2), you can still access the dashboard by running:
+minikube dashboard --url
+
+
+pods, deployments and services: an analogy
 for example:
- a backend Node.js server with APIs, DB logic, etc., and a frontend React app. 
+we have a backend Node.js server with APIs, DB logic, etc., and a frontend React app. 
 Let’s say:
 - Your backend is a containerized Node.js app.
 - Your frontend is a React app built and served (e.g. via Nginx or Vite preview).
@@ -48,7 +112,6 @@ SERVICES:
 - You use Services to allow React to talk to Node via internal DNS names (e.g. http://backend-service:3000)
 service:GPS routing system between stores
 
-
 SETUP VISUALIZATION:
 [Cluster]
    └── Node A (Host Machine)
@@ -63,7 +126,6 @@ SETUP VISUALIZATION:
 - If a Node gets overloaded, it moves pods to other Nodes.
 - DNS inside Kubernetes lets the React app call http://backend-service:3000 without needing IPs.
 
-
 Services:
 - Frontend Service → exposes React to the outside world (users)
 - Backend Service → internal connection for React to call APIs
@@ -71,7 +133,7 @@ it can control what to expose what not to
 ex: Frontend exposed publicly, backend exposed only internally to frontend and not to outside internet or users
 
 
-🧪 Real-Life Scenarios You Might Build
+🧪 Real-Life Scenarios You Might Build=> namespaces usage
 1. Environment Separation
 - dev-namespace: Fast iteration, debug logging, exposed ports.
 - staging-namespace: Near-production replica, used for final testing.
@@ -81,7 +143,8 @@ Each runs the same set of Deployments, Services, etc., but tuned to its purpose.
 
 
 NAMESPACES:
-💯 Spot on! That’s a brilliant way to think about namespaces—they let you parallelize production lines for graceful updates, experiments, or migrations with minimal risk. Here’s how that plays out practically:
+💯 Spot on! That’s a brilliant way to think about namespaces—they let you parallelize production lines for 
+graceful updates, experiments, or migrations with minimal risk. Here’s how that plays out practically:
 
 🏭 Dual Production Lines with Namespaces
 Imagine two namespaces:
@@ -91,25 +154,26 @@ Each holds:
 - React + Node Deployments
 - Their own Services, ConfigMaps, Secrets, etc.
 You serve traffic from production-blue while safely testing new changes in production-green.
-
 🔁 Blue-Green Deployment Strategy (Using Namespaces)
 | Phase | Action | 
 | ✅ Active | production-blue serves all user traffic | 
 | 🧪 Test | You deploy updated code into production-green and validate it | 
 | 🔄 Switch | You update your external Service to point to production-green | 
 | 🧹 Cleanup | Once stable, you tear down or repurpose production-blue | 
-
 🧠 Why It’s Powerful
 - You avoid downtime entirely.
 - You get isolated crash-testing without breaking live traffic.
 - You can sniff pod traffic between namespaces, use RBAC to restrict access, or even simulate failures using tools like chaos-mesh.
 
+kubens    =>to see all namespaces
+kubens <namespace>    =>switch to a namespace
+kubectl create ns <namespace>       =>creating a new namespace
+kubectl delete ns <namespace>       =>to delete a particular namespace
+
+
 
 
 KUBERNETES OBJECTS:
-
-🧱 Core Kubernetes Objects (With Real-World Parallels)
-| Object | Purpose | Real-Life Analogy | 
 | Pod | Runs your container(s) 
 | Deployment | Manages and scales your Pods 
 | Service | Connects and exposes Pods |  
@@ -152,13 +216,100 @@ Use when:
 - You don’t host the service inside Kubernetes (e.g., third-party API or database)
 - You just want DNS resolution handled inside your cluster
 
+=============================================================
+
+yaml: a configuration language
+YAML (short for YAML Ain’t Markup Language) is a human-readable configuration language that's widely used in DevOps, cloud infrastructure,
+Used across tools like Kubernetes, Docker Compose, GitHub Actions, Ansible, and more
+
+for a basic application we need a deployment and a service which helps to access the services
+vs code extension: kubernetes   =>template yaml files
+
+1. Deployment = Pod Blueprint
+deployment is a collection of pods=>the type,template and configuration of pod
+are in template section specifying the pods that are in the deployment
+Your deployment YAML defines:
+- What to run (image)
+- How many to run (replicas)
+- Where to run it (selector)
+- How to configure it (resources, ports, etc.)
+apiVersion: apps/v1
+kind: Deployment        
+metadata:
+  name: backend-deploy    =>name for the app
+  namespace: web-app-ns
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend        =>should match with template label(select all pods that have label as backend)
+  template:
+    metadata:
+      labels:
+        app: backend      =>should match with selector label(new spinned pods are taken into deployment matching this label with the selector label)
+    spec:
+      containers:
+      - name: backend
+        image: docker.io/reponame/your-node-image   =>tell kubernetes where to pull image from
+        resources:
+          limits:
+            memory: "120Mi"
+            cpu: "500m"
+        ports:
+        - containerPort: 3000
+        env:
+        - name: DATABASE_URL
+          value: "somedburl"
+        
+kubectl apply -f <deploymentfilename>
+kubectl apply -f <deploymentfilename> -n <namespace>   =>specify namespace at runtime instead of hardcoding it in yaml
+
+now we have deployment...how do we access them? using services
+
+2. Service = Stable Access Point
+Your service YAML:
+- Selects pods using selector
+- Exposes them via a stable IP and port
+- Handles load balancing across replicas
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: web-app-ns
+spec:
+  selector:           =>service can always select a deployment or a statefulset
+    app: backend
+  ports:
+  - port: 3000              =>service port...where it should be accessed
+    targetPort: 3000        =>pod/containerport...where request goes to
+
+kubectl apply -f <servicefilename>
+
+now whenever we request...it goes through service which takes to one of 3 running pods
+since this service is mapped to the pods specified in selector field...it does the loadbalancing work
+between these 3 pods
+
+3. Port Forwarding = Local Access
+To access your service from your local machine:
+do portforwarding to make it accessible from our machine port
+
+kubectl port-forward svc/backend-service 8080:3000
+
+- You can now hit http://localhost:8080 and reach your backend
+
+kubectl get all -n <namespace>      =>to see everything at once in the same namespace
+
+kubectl get svc/deploy/someotherk8resource
+kubectl describe svc/deploy/someotherk8resource
+kubectl edit <resourcetype>/<resourcename>
+kubectl delete <resourcetype>/<resourcename>
+kubectl logs <podname>
+kubectl logs <podname> --follow   =>Use --tail or --follow with logs for real-time debugging
 
 
-
-
+=============================================================
 
 an example :
-
 
 🏗️ Step 1:Define the Namespace
 This is your production line. You can swap to another later using blue-green style if needed.
@@ -197,7 +348,6 @@ data:
 
 
 
-
 🐍 Step 3: Backend Deployment + Service
 This deploys your Node.js backend and makes it reachable inside the cluster.
 
@@ -233,8 +383,6 @@ spec:
             secretKeyRef:
               name: backend-secret
               key: DB_PASSWORD
-
-
 
 
 
@@ -297,15 +445,13 @@ spec:
   type: NodePort
 
 
-
-
-
 Now your frontend is externally accessible, and it can internally call the backend using:
 fetch("http://backend-service.web-app-ns.svc.cluster.local:3000/api/...")
 
+=========================================================================
 
-
-To deploy your Kubernetes app on your custom domain Satyam.dev, you’ll need to set up Ingress, an Ingress Controller, and configure DNS records to point your domain to your cluster. 
+To deploy your Kubernetes app on your custom domain Satyam.dev, you’ll need to set up Ingress, an Ingress Controller, 
+and configure DNS records to point your domain to your cluster. 
 
 🌐 Step 1: Deploy an Ingress Controller
 This is the traffic manager that understands how to route requests from the outside world into your cluster.
@@ -360,6 +506,7 @@ Then:
 You can use cert-manager with Let’s Encrypt to automatically provision SSL certificates.
 Let me know if you want help setting that up—it’s a great way to secure your app.
 
+===========================================================================================
 
 
 
