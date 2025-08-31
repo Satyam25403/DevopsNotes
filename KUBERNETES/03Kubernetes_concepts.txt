@@ -1,51 +1,3 @@
-what is kubernetes?
-container orchestration(manage,create,delete,maintain,configure) tool for managing containers effeciently
-
-
-kubernetes components:
-🧠 Core Concepts (With Real-World Analogy) developers perspective:
-| Pod => Smallest deployable unit, holds one or more containers => A shipping box containing items (containers) | 
-| Node => A vm/machine in the cluster (has cpu/memory)=> A worker in a warehouse to run boxes (pods) | 
-| Cluster => Collection of nodes => The entire warehouse system | 
-| Deployment => Blueprint for managing pods(non stateful) => A plan saying “Keep 3 of these boxes running at all times” | 
-| StatefulSet => Manages pods with persistent identity and storage(similar to deployment except for the persistance)
-| Service => Exposes pods to the network => A receptionist routing requests to the right boxes | 
-| Namespace => Logical partitioning => Like labeled rooms in the warehouse (dev, prod, test) | 
-| ReplicaSet => Ensures a specified number of pod replicas are running
-| DaemonSet => Ensures one pod per node (for monitoring/logging etc.)
-| ConfigMap => Stores configuration data as key-value pairs
-| Ingress => Manages external access to services (HTTP/HTTPS):single point of entry=>only single point of exposure...otherwise we would need to expose more and more prone to attack
-| Volume => Persistent storage attached to pods(persistant volumes(pv),persistant volume claims(pvc))
-| Scheduler => Assigns pods to nodes based on resource availability
-| Controller Manager=> Oversees controllers like Deployments, ReplicaSets
-
-
-k8s architecture:
--Master Node(atleast 1){it has components of worker nodes too}
-  API server: Entry point for all commands and communication(allows us to use kubectl).- kubectl(client) sends HTTP requests (usually RESTful) to the Kubernetes API server.
-The API server is the central gateway to the cluster—it validates, processes, and routes your commands.
-  Scheduler: Assigns pods to nodes based on resource availability
-  controller manager: Watches cluster state and triggers changes
-  etcd: Key-value store for cluster state and config
--worker nodes(0 or more)
-  kubelet: Talks to the container runtime and manages pods
-  kube proxy: Handles networking,ips,ports and loadbalancing (routing requests)
-  Container runtime: runs containers(CRI: for ex docker,containerd)
-
-
-Minikube: allows to create kubernetes clusters locally but can be resource intensive(might slow down machine)
-alternative can be kind but with lesser features
- Minikube
-- Purpose: Spins up a full Kubernetes cluster locally.
-- Pros:
-- Supports multiple drivers (Docker, VirtualBox, Hyper-V, etc.)
-- Includes Kubernetes Dashboard, Ingress, LoadBalancer emulation
-
-create a cluster => minikube start --nodes=<number_of_nodes> -p <cluster_name>
-ex: minikube start --nodes=3 -p dev-cluster
-view all clusters/profiles => minikube profile list
-switch between clusters/profiles => minikube profile <dev-cluster>
-stop the cluster => minikube stop -p dev-cluster
 
  Kind (Kubernetes IN Docker)
 - Purpose: Runs Kubernetes clusters inside Docker containers.
@@ -61,14 +13,6 @@ Kubectl: a commandline tool for interacting with and controlling kubernetes clus
 - Works With: Minikube, Kind, cloud clusters (EKS, AKS, GKE), kubeadm setups
 kubens and kubectx => complementary tools for making usage easy
 
-
-k8s Dashboard:
-minikube dashboard  => command to open ur local dashboard
-- Opens the official Kubernetes Dashboard in your default web browser
-- Gives you a visual interface to manage pods, deployments, services, and more
-- Automatically sets up a proxy so you can interact with the cluster securely
-If you're running this in a headless environment (like a remote server or WSL2), you can still access the dashboard by running:
-minikube dashboard --url
 
 
 pods, deployments and services: an analogy
@@ -143,6 +87,9 @@ Each runs the same set of Deployments, Services, etc., but tuned to its purpose.
 
 
 NAMESPACES:
+Namespaces in Kubernetes are like virtual clusters within your physical cluster — they provide a way to logically isolate resources and manage them more effectively
+namespace is a Kubernetes object that groups other objects (like pods, services, deployments) under a common name.
+
 💯 Spot on! That’s a brilliant way to think about namespaces—they let you parallelize production lines for 
 graceful updates, experiments, or migrations with minimal risk. Here’s how that plays out practically:
 
@@ -165,56 +112,11 @@ You serve traffic from production-blue while safely testing new changes in produ
 - You get isolated crash-testing without breaking live traffic.
 - You can sniff pod traffic between namespaces, use RBAC to restrict access, or even simulate failures using tools like chaos-mesh.
 
-kubens    =>to see all namespaces
+kubens    =>to see all namespaces(kubens tool required)
 kubens <namespace>    =>switch to a namespace
 kubectl create ns <namespace>       =>creating a new namespace
 kubectl delete ns <namespace>       =>to delete a particular namespace
 
-
-
-
-KUBERNETES OBJECTS:
-| Pod | Runs your container(s) 
-| Deployment | Manages and scales your Pods 
-| Service | Connects and exposes Pods |  
-| Namespace | Logical grouping of resources |ex: “Production” or “Testing” | Group it all in prod-webapp or client-x-env. 
-| ConfigMap | Injects config data as environment vars or files i.e. For environment configs—like API base URLs, feature flags ports etc
-| Secret | Stores sensitive data securely | To store DB passwords or API keys. | 
-| PersistentVolumeClaim (PVC) | Requests storage from cluster | Asking IT for a permanent hard drive for your box | 
-| StatefulSet | Handles stateful apps like DBs | Like assigning fixed names to boxes: box-0, box-1 | 
-| DaemonSet | Runs one Pod per Node | Like putting antivirus software on every machine | 
-| Job / CronJob | One-time or scheduled tasks | A temporary worker or a daily shift task ex: run backup every week | 
-| Ingress | HTTP routing from outside to Services | A traffic cop deciding which customer goes where | 
-
-
-
-there are some types under Kubernetes service object:
-🌐 Types of Kubernetes Services
-| Type | Visibility | Use Case | Notes | 
-| ClusterIP | Internal only | Talk between pods (e.g., frontend calling backend) | Default type, fastest, safest for internal comms | 
-| NodePort | External access | Quick exposure for testing or local setups | Opens port on each Node IP (<NodeIP>:<NodePort>) | 
-| LoadBalancer | External (cloud) | Real production-grade public access | Requires cloud support (AWS, GCP, Azure, etc.) | 
-| ExternalName | DNS-based redirect | Connect to external service (e.g., db.google.com) | No actual pod or selector—just maps DNS names | 
-
-
-
-Usecases:
-🔧 ClusterIP
-Use when:
-- Your React app (Pod A) needs to call the Node.js backend (Pod B)
-- You don’t want external users touching internal services directly
-🧪 NodePort
-Use when:
-- You want to expose your frontend quickly on http://<NodeIP>:30001
-- Good for local setups like Minikube or Docker Desktop
-☁️ LoadBalancer
-Use when:
-- You’re on a cloud platform and want a public IP to serve real traffic
-- Kubernetes will provision this automatically through your cloud provider
-🌍 ExternalName
-Use when:
-- You don’t host the service inside Kubernetes (e.g., third-party API or database)
-- You just want DNS resolution handled inside your cluster
 
 =============================================================
 
@@ -302,9 +204,172 @@ kubectl get all -n <namespace>      =>to see everything at once in the same name
 kubectl get svc/deploy/someotherk8resource
 kubectl describe svc/deploy/someotherk8resource
 kubectl edit <resourcetype>/<resourcename>
-kubectl delete <resourcetype>/<resourcename>
+kubectl delete <resourcetype>/<resourcename>    =>kubectl delete deployment <deploymentname>
 kubectl logs <podname>
 kubectl logs <podname> --follow   =>Use --tail or --follow with logs for real-time debugging
+
+kubectl delete all --all    =>to delete all pods,services etc at once
+
+=============================================================
+DATABASE SERVICE:
+deploying mongodb as a containerized pod:a practical Usecase
+
+docker run -p 27017:27017 mongo    =>runs on localhost port 27017
+- Useful for local development or testing.
+
+u just need to change MONGODB_CONNECTION_URI as process.env.DB_URI || http://database:27017
+given that u deployed mongodb as database(for internal dns routing) like this
+
+Containerizing MongoDB in Kubernetes
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongodb
+        image: mongo
+        ports:
+        - containerPort: 27017
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: database
+spec:
+  selector:
+    app: mongodb
+  ports:
+  - protocol: TCP
+    port: 27017
+    targetPort: 27017
+
+Connecting from Another Pod (e.g., Node.js App)
+In your app container:
+const DB_URI = process.env.DB_URI || 'mongodb://database:27017';
+mongoose.connect(DB_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+
+- process.env.DB_URI allows flexibility for different environments (local, staging, production).
+- Fallback to internal service name database ensures connectivity inside the cluster.
+- Scalability: You can scale MongoDB or your app independently.
+
+there is a mongo-express image in dockerhub providing a gui for ur db just like minikube dashboard provides for the clusters in local environment
+it’s incredibly handy for visualizing and interacting with your database in a containerized setup.
+
+docker ps
+docker inspect <containeridofmongoimagerunning>   => find the key value pair->{"IpAddress":someip}
+copy that ip and hit ip:27017 => to check whether mongo is running on it
+
+now run the command=> a gui in local env to monitor db
+docker run -e ME_CONFIG_MONGODB_SERVER=<above ip address>:27017 -p 8081:8081 mongo-express
+
+---
+
+or u can go with the yaml way and access the service using => minikube service mongo-express
+Let’s say you’ve already deployed MongoDB as a pod with a service named database. 
+You can now deploy mongo-express to give yourself a GUI — just like how Minikube Dashboard gives you a visual interface for your cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo-express
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo-express
+  template:
+    metadata:
+      labels:
+        app: mongo-express
+    spec:
+      containers:
+      - name: mongo-express
+        image: mongo-express
+        env:
+        - name: ME_CONFIG_MONGODB_SERVER
+          value: database             =>dns record:  <servicename>.<namespace>.svc.cluster.local:27017
+        - name: ME_CONFIG_MONGODB_PORT
+          value: "27017"
+        ports:
+        - containerPort: 8081
+note: we should use statefulsets for db...but since we are using deployment for the db
+if we have more than 1 replica data wouldnt be same accross all pods so we keep replicas:1(single source of truth)
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-express
+spec:
+  selector:
+    app: mongo-express
+  ports:
+  - protocol: TCP
+    port: 8081
+    targetPort: 8081
+    ports:
+  - protocol: TCP
+    port: 8081
+    targetPort: 8081
+    nodePort: 31000             =>service accessible at minikubeip:31000
+  type: NodePort
+
+minikube service mongo-express
+will automatically open the Mongo Express GUI in your default browser, typically Chrome, at a URL like:
+http://<minikube-ip>:31000
+
+or u can omit nodeport field and change type to cluster ip and do portforwarding to access it:
+kubectl port-forward svc/mongo-express 8081:8081
+
+=============================================================
+
+How to persist data ... how to keep them persistent when db pods die?
+
+By default, Kubernetes pods are ephemeral, meaning their file systems vanish when the pod is terminated or rescheduled.
+if you shut down your MongoDB deployment and haven't configured persistent storage, all the data written to the pod will be lost.
+MongoDB stores its data in /data/db inside the container. If you don’t mount a persistent volume to that path, the data lives only in the container’s writable layer — which disappears when the pod is deleted or restarted.
+
+how you can make MongoDB data survive restarts:
+1. Define a PersistentVolumeClaim (PVC)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+
+2. Mount the PVC in Your MongoDB Deployment.yaml
+spec:
+  containers:
+  - name: mongodb
+    image: mongo
+    volumeMounts:
+    - name: mongodb-storage
+      mountPath: /data/db
+  volumes:
+  - name: mongodb-storage
+    persistentVolumeClaim:
+      claimName: mongodb-pvc
+
+This ensures that MongoDB writes its data to a persistent volume, 
+which remains intact even if the pod is deleted or rescheduled.
+
+If you want even better control over pod identity and storage, 
+consider using a StatefulSet instead of a Deployment. It’s designed for 
+stateful applications like databases and works beautifully with persistent volumes.
 
 
 =============================================================
