@@ -1,0 +1,173 @@
+we have 2 ways to put our code from local onto server:
+1.SCP:Secure Copy...works similar to secure shell
+scp -i "keyfilename.pem" -r path/to/folder ubuntu@<ip_of_ec2_launched>:-/<foldername>
+
+2.Git:use git clone <url>
+
+==========================================================================
+
+Amazon EC2 (Elastic Compute Cloud), designed to provide scalable, resizable compute capacity in the cloud. virtual server farm 
+
+🚀 What EC2 Offers
+- Virtual Servers (Instances): Launch Linux or Windows servers on demand.
+- Customizable Resources: Choose CPU, memory, storage, and networking based on your workload.
+- On-Demand: Pay by the hour or second.
+
+- Security & Networking:
+- Use Security Groups (virtual firewalls), Key Pairs for SSH access, and Elastic IPs.
+- Storage Options:
+- Attach EBS volumes for persistent storage.
+- Use Instance Store for temporary, high-speed storage.
+
+🧠 Use Cases
+- Running backend services or microservices, web apps and APIs
+- Machine learning model training
+- High-performance computing (HPC)
+- CI/CD pipelines and dev environments
+
+🔧 Dev-Friendly Features
+- Integrates with Docker, Kubernetes, and Terraform
+- Supports auto-scaling and load balancing
+- Works seamlessly with other AWS services like S3, RDS, and CloudWatch
+
+-----------
+
+some trouble shooting...if upon successfully starting your webapp server on ec2 hitting <ec2ip>:<port> on your browser
+reloads infinitely, go to ur instance security groups, allow tcp traffic on above port
+
+=========================================================================================================
+
+while launching an instance u can create new key-pair: -> choose rsa algo and .pem file
+save it somewhere 
+
+
+how to connect?
+
+Using ec2 connect:directly in the aws website...
+opening a terminal of ec2 instance which is running
+
+Using SSH client:(from your local ubuntu machine)
+locate your private keyfile u created: cd to that path
+follow instructions there i.e. block write permissions to file:
+chmod 400 yourkryfile.pem
+use the givem command to connect using ssh:
+ssh -i "keyfilename.pem" <ec2_publicdns>
+
+we can replace ec2_publicdns with ubuntu@<ip_of_ec2_launched>
+and it works exactly the same
+
+=========================================SECURITY GROUPS=======================================================
+security group: analogous to a fire wall......it has a bunch of rules for traffic=> inbound/outbound rules
+for your EC2 instances (and other resources). It controls inbound and outbound traffic based on a set of rules you define.
+
+🔐 Security Group Basics
+- Inbound Rules: Define what traffic is allowed into your instance (e.g., allow HTTP on port 80, SSH on port 22).
+- Outbound Rules: Define what traffic your instance can send out (e.g., allow all traffic to the internet).
+- Stateful(by default): If you allow inbound traffic from an IP on a port, the response traffic is automatically allowed back out — no need to define outbound rules for it.
+
+🧱 Analogy: Like a Firewall with a Guest List
+Imagine your EC2 instance is a private club:
+- The Security Group is the bouncer.
+- The rules are the guest list — who can enter, and through which door (port).
+- If someone’s not on the list, they’re not getting in.
+
+You can attach multiple security groups to an instance, and the rules are aggregated — meaning if any group allows the traffic, it’s permitted.
+
+An important point to note:
+Security Groups do control inbound traffic, but only in a permissive way. That means:
+• 	You can restrict access by not allowing certain traffic.
+• 	But you cannot explicitly deny traffic — there's no “deny” rule like you'd find in traditional firewalls or Network ACLs.
+
+🔍 So what's really happening?
+• 	If none of the attached security groups allow a specific inbound traffic type (say, TCP on port 3306), then that traffic is blocked by default.
+• 	If any attached security group allows it, then it’s allowed, regardless of what other groups say.
+So yes — you’re controlling inbound traffic, but only by omission. 
+You’re saying “only these guests are allowed,” not “these guests are banned.”
+
+Imagine your EC2 instance is a club with multiple bouncers (security groups). Each bouncer has a guest list:
+• 	If any bouncer says “this person can come in,” they’re let in.
+• 	If none of the bouncers recognize the guest, they’re turned away.
+• 	But no bouncer ever says “this person is banned” — they just stay silent.
+
+NOTE:
+If you want explicit deny rules, that’s where Network ACLs come in
+
+========================================== DNS, Ingress, reverse proxy =======================================
+
+once website server is running on ec2,
+anyone can access the application on <ec2ip>:<port> whether on mobile or different laptop etc etc
+but this is not preferred way....people cant remember ips
+
+
+letus suppose we have a browser, a DNS and a server which has app.altair.com on 5000, altair.com on 8000, blog.altair.com on 8080
+assume all three are mapped to same ip address
+
+When multiple services are hosted on the same IP but differentiated by subdomains 
+(like app.altair.com, blog.altair.com, etc.), and users access them via standard ports 
+(usually 80 for HTTP or 443 for HTTPS), you need a smart traffic director to route requests correctly. 
+That’s where reverse proxies and Ingress controllers come into play.
+
+- Browser: Sends a request to app.altair.com
+- DNS: Resolves app.altair.com to a shared IP (e.g., 203.0.113.10)
+- Server: Receives the request on port 80
+- Problem: All requests hit the same IP and port — how do we know which app to serve?
+
+🧠 Solution: Host-Based Routing
+You need a component that:
+- Listens on port 80 (or 443)
+- Reads the Host header from the HTTP request
+- Routes traffic to the correct backend service based on that header
+
+Ingress:kubernetes deployments
+reverse proxy: vm/EC2 based deployments
+some solutions: Nginx, Apache HTTP Server, Traefik
+
+settingup nginx:
+sudo apt install nginx
+systemctl status nginx
+sudo lsof -i -P -n | grep LISTEN       =>list all listening services on ports
+curl localhost              =>same as http://localhost:80 as http protocol and 80 port are defaults
+
+
+
+
+🧱 Example: Nginx Reverse Proxy Config
+server {
+    listen 80;
+    server_name app.altair.com;
+    location / {
+        proxy_pass http://localhost:5000;
+    }
+}
+
+server {
+    listen 80;
+    server_name blog.altair.com;
+    location / {
+        proxy_pass http://localhost:8080;
+    }
+}
+
+server {
+    listen 80;
+    server_name altair.com;
+    location / {
+        proxy_pass http://localhost:8000;
+    }
+}
+
+🧭 Ingress in kubernetes
+rules:
+  - host: app.altair.com
+    http:
+      paths:
+        - path: /
+          backend:
+            service:
+              name: app-service
+              port:
+                number: 5000
+
+while Ingress and Reverse Proxy aren’t technically the same, they serve the same purpose 
+in different deployment models: routing traffic based on hostname or path.
+
