@@ -130,10 +130,15 @@ curl localhost              =>same as http://localhost:80 as http protocol and 8
 
 
 
-
+cd /etc/nginx           =>where all configurations for nginx are made
+cd sites-enabled
+cat default             =>this file contents we need to take reference from(the syntax is given here)
+nano <anyfilename ex:course>            =>create new file and add below content and save it
+systemctl reload nginx                  =>reload nginx after saving file
 🧱 Example: Nginx Reverse Proxy Config
 server {
     listen 80;
+    listen [::]:80;         =>add ipv6 support(optional)
     server_name app.altair.com;
     location / {
         proxy_pass http://localhost:5000;
@@ -155,6 +160,12 @@ server {
         proxy_pass http://localhost:8000;
     }
 }
+---
+for purpose of testing, since we dont own that domain, we modify our local dns records:
+sudo nano /etc/hosts
+
+add a record:
+<ec2ip>   <dnsname ex:altair.com>
 
 🧭 Ingress in kubernetes
 rules:
@@ -170,4 +181,103 @@ rules:
 
 while Ingress and Reverse Proxy aren’t technically the same, they serve the same purpose 
 in different deployment models: routing traffic based on hostname or path.
+
+====================================== SSL(secure socket layer)/TLS(Transport layer security)===================================================
+used to secure website over https connections
+Because when we dont use https and use http we send packets accross the internet and anyone who is sniffing, can capture them
+Exactly — that’s the core reason HTTPS exists: to protect data in transit from prying eyes.
+
+https: port 443  http: port 80
+
+🔐 Why HTTPS Matters
+When you use HTTP, your browser sends requests and receives responses in plain text. That means:
+- Login credentials
+- Personal data
+- Session cookies
+- Even search queries
+can be intercepted by anyone with access to the network — like someone on public Wi-Fi or a compromised router.
+This is called packet sniffing, and tools like Wireshark make it surprisingly easy.
+
+🛡️ What HTTPS Does
+HTTPS (HyperText Transfer Protocol Secure) wraps HTTP inside TLS encryption, so:
+- All data is encrypted before it leaves your browser
+- Only the intended server can decrypt it
+- It also authenticates the server using a certificate, so you know you're talking to the real site
+
+==================================Running server even upon ec2 ssh disconnect=========================================
+Using nohup with & on an EC2 instance is a classic way to run long-lived processes in the background 
+especially when you want them to survive even after you disconnect your SSH session.
+
+🛠 What Does It Do?
+nohup your-command & 
+ex: nohup python3 app.py &
+logs are in => nohup.out
+
+- nohup: Prevents the process from being terminated when the terminal session ends (ignores the SIGHUP signal(ctrl+c or exit)).
+- &: Runs the command in the background so your terminal is free for other tasks.
+
+✅ Example: Run a Python Script on EC2
+nohup python3 my_script.py > output.log 2>&1 &
+
+
+- > output.log: Redirects standard output to a log file.
+- 2>&1: Redirects standard error to the same log file.
+- &: Sends the process to the background.
+Now you can safely close your SSH session or just do ctrl+c to stop the process, the script will keep running.
+
+🔍 Check If It's Running
+ps aux | grep my_script.py
+
+Or check the output:
+tail -f output.log
+
+🧠 Pro Tip: Use setsid for Extra Isolation
+If you find nohup alone isn't enough (some EC2 setups still kill the process), try:
+setsid nohup python3 my_script.py > output.log 2>&1 &
+
+This starts the process in a new session, giving it even more independence from your terminal.
+
+---
+To stop a background process that was started with nohup and is still running after you've disconnected from your SSH session, you’ll need to:
+
+🛑 Step 1: Reconnect to Your EC2 Instance...if u just pressed ctl+c to just stop the process and still logged in u can skip this step
+ssh username@your-ec2-ip
+
+🔍 Step 2: Find the Process
+You can locate it using:
+ps aux | grep <your-command-or-script-name>
+
+Or if you know it was started with nohup, try:
+ps aux | grep nohup           (or)
+sudo lsof -i -P -n | grep LISTEN
+This will show you the PID (Process ID) of the running job.
+
+🧨 Step 3: Kill the Process
+Once you have the PID, stop it with:
+kill <PID>
+
+If it refuses to die:
+kill -9 <PID>               {9:send a SIGKILL signal, strongest and most non-negotiable}
+15:SIGTERM(graceful termination), 2:SIGINT(interrupt like ctrl+c), 9:SIGKILL(force kill)
+🧠 Why Use It?
+- When a process ignores softer signals like SIGTERM (kill -15) or Ctrl+C
+- When it's stuck, unresponsive, or zombie-like
+- When you need it gone now, regardless of consequences
+⚠️ Caution
+Because SIGKILL doesn’t allow the process to clean up:
+- It might leave behind temporary files, locks, or unfinished task
+
+
+🧼 Optional: Clean Up the nohup.out File
+If you want to remove the output log:
+rm nohup.out
+
+🧠 Pro Tip: Use pgrep for Simplicity
+If your script is called my_script.py, you can do:
+pgrep -f my_script.py
+
+Then:
+kill $(pgrep -f my_script.py)
+
+===========================================================================
 
