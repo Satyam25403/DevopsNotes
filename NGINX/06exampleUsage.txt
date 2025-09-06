@@ -1,0 +1,41 @@
+suppose we have no yaml files......we ran docker run command for same images 3 times and spinned up 3 containers from the image....they are nodejs applications in the server.js 
+we mentioned them as they will run on port 3000 or else we use docker compose to run them on ports 3001,3002 and 3003 respectively........so to add up till now and to differentiate 
+them we cast envornment variables for each as APP_NAME= app1,app2 and app3 and the server takes in the APPNAME env variable and on its / route it shows the appname(which container it is....
+like request served by ${APP_NAME}).....this we are doing to see which replica is handling the request now 3 instances are running...we hit them individually on localhost ports 
+3001,3002 and 3003 and they will work fine ...its ok till here
+but we want to have 1 entrypoint that forwards requests to backend servers>>>>that entrypoint is nginx........we want to be accessedour application as https......
+so we want nginx to act as loadbalancer and handle ssl encryption before request even reaches backend server
+
+
+Upstream: refers to the server nginx forwards requests to(traffic going from a client toward a higher level infra)
+Downstream: Traffic going back to client
+
+
+
+nginx.conf:
+
+worker_processes 1;     =>how many parallel nginx processes nginx spawns to handle client requests(you can set it as "auto" to let nginx decide)
+
+#in production it is recommended that no of worker processes should be equal to number of cpu cores on the server on which nginx is running
+
+#per worker process we define how many simultaneous connections each worker process should/can handle
+events{
+    worker_connections 1024;
+}
+
+#how to handle http requests
+http{
+    upstream <somename: nodejscluster>{
+        server 127.0.0.1:3001;
+        server 127.0.0.1:3002;
+        server 127.0.0.1:3003;
+    }
+    server{
+        listen 8080;
+        server_name <domain/ipaddress ex:facebook.com/localhost>
+
+        location / {
+            proxy_pass http://nodejscluster;                    #route them and forward to given upstream
+        }
+    }
+}
