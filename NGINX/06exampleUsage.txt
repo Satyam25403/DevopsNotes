@@ -10,7 +10,7 @@ so we want nginx to act as loadbalancer and handle ssl encryption before request
 Upstream: refers to the server nginx forwards requests to(traffic going from a client toward a higher level infra)
 Downstream: Traffic going back to client
 
-
+============================================================= SOLUTION ====================================================================
 
 nginx.conf:
 
@@ -25,7 +25,12 @@ events{
 
 #how to handle http requests
 http{
+    include mime.types;                 =>specifying what type of files to be sent as response(html,images,js etc)
+
+    #we can specify algorithm to be used to distribute requests among servers:default is round robin
+    #but for now assume that some servers have more compute capacity than others(we use least busy algo)
     upstream <somename: nodejscluster>{
+        least_conn;                         =>least busy algo
         server 127.0.0.1:3001;
         server 127.0.0.1:3002;
         server 127.0.0.1:3003;
@@ -34,8 +39,177 @@ http{
         listen 8080;
         server_name <domain/ipaddress ex:facebook.com/localhost>
 
+        #since backend does not interact directly with client, nginx need to send all sorts of important info or headers to it from client
+        #when Nginx acts as a reverse proxy, it becomes the gatekeeper between the client and your backend containers. That means it must 
+        #forward critical headers so your Node.js apps can behave as if they’re talking directly to the client.
         location / {
-            proxy_pass http://nodejscluster;                    #route them and forward to given upstream
+            proxy_pass http://nodejscluster;                    #route them and forward to given upstream(upstream has 3 identical running containers)
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
         }
+    }    
+}
+
+configuring HTTPS for secured /encrypted communication:
+HTTPS uses SSL to encrypt data transmitted over the Web => we need an SSL/TLS Certificate
+we generate a self signed certificate: Generated and signed by the server itself
+in production: the signing of certificate is done by a certificate authority(CA)
+
+mkdir nginx-certs
+cd nginx-certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout nginx-selfsigned.key -out nginx-selfsigned.crt
+
+-x509: Tells OpenSSL to generate a self-signed certificate instead of a CSR
+-nodes: Skips encryption of the private key (no passphrase), is helpful for automation (e.g., Docker, CI/CD)
+ since it avoids password prompts.
+-days: Sets the certificate to be valid for those no of days
+-newkey rsa:2048 => Generates a new RSA key pair with a 2048-bit key size
+-keyout: Specifies the output file for the private key(for the server) {.key extension}
+-out: Specifies the output file for the certificate(holds the public key for the clients) {.crt extension}
+
+🧪 After Running This:
+You’ll get:
+- nginx-selfsigned.key: your private key
+- nginx-selfsigned.crt: your self-signed certificate
+These can be used in your Nginx config like:
+ssl_certificate     /etc/nginx/ssl/nginx-selfsigned.crt;
+ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
+
+now we rewrite the server context:
+server{
+        listen 443 ssl;                                  =>ssl: enable 
+        server_name <domain/ipaddress ex:facebook.com/localhost>
+
+        #use this public and private key pair
+        ssl_certificate     /etc/nginx/ssl/nginx-selfsigned.crt;
+        ssl_certificate_key /etc/nginx/ssl/nginx-selfsigned.key;
+
+        #since backend does not interact directly with client, nginx need to send all sorts of important info or headers to it from client
+        #when Nginx acts as a reverse proxy, it becomes the gatekeeper between the client and your backend containers. That means it must 
+        #forward critical headers so your Node.js apps can behave as if they’re talking directly to the client.
+        location / {
+            proxy_pass http://nodejscluster;                    #route them and forward to given upstream(upstream has 3 identical running containers)
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+        }
+} 
+
+NOTE: restart nginx after making any configuration changes
+
+
+================================================HTTP to HTTPS Redirection=========================================================
+
+i.e. even if clients do a http request=> redirect them to use them https connection
+solution to above stated problem:
+
+Perfect setup—and you're almost there. Let's wire up Nginx as a reverse proxy + SSL terminator + load balancer for your 3 Node.js containers running on ports 3001, 3002, and 3003.
+
+🧰 Step-by-Step: Nginx as HTTPS Load Balancer
+🔧 1. Nginx Config (load balancing + SSL)
+Create a file like nginx.conf or mount it into your container at /etc/nginx/conf.d/default.conf:
+# Redirect HTTP to HTTPS
+server {
+    listen 80;
+    server_name localhost;
+
+    location / {
+        return 301 https://$host$request_uri;               #redirection/moved permanently
     }
 }
+
+# HTTPS Load Balancer
+server {
+    listen 443 ssl;
+    server_name localhost;
+
+    ssl_certificate     /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+
+    location / {
+        proxy_pass http://node_backends;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# Define upstream servers
+upstream node_backends {
+    server 127.0.0.1:3001;
+    server 127.0.0.1:3002;
+    server 127.0.0.1:3003;
+}
+
+📦 2. Run Nginx Container with SSL
+Assuming you have cert.pem and key.pem in a local ssl/ folder:
+docker run -d \
+  --name nginx-lb \
+  -p 80:80 -p 443:443 \
+  -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf \
+  -v $(pwd)/ssl:/etc/nginx/ssl \
+  nginx
+
+🧪 3. Test It
+Visit:
+https://localhost/
+
+You should see responses like:
+Request served by app1
+Request served by app2
+Request served by app3
+
+—rotating as Nginx load balances across the containers.
+
+🛡️ Bonus: Generate Self-Signed SSL (for local testing)
+mkdir ssl
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ssl/key.pem -out ssl/cert.pem \
+  -subj "/CN=localhost"
+
+🧠 Recap
+| Node.js apps | Serve content on ports 3001–3003 | 
+| Nginx        | Acts as HTTPS entrypoint + LB | 
+| SSL certs    | Encrypt traffic before backend hit | 
+
+===================================================SOME HEADERS======================================================
+
+When Nginx acts as a reverse proxy, it becomes the gatekeeper between the client and your backend containers. 
+That means it must forward critical headers so your Node.js apps can behave as if they’re talking directly to the client.
+Let’s enhance your config to make it more robust and production-ready:
+
+🔧 Improved Nginx Location Block for Reverse Proxy
+location / {
+    proxy_pass http://nodejscluster;  # Load-balanced upstream
+    proxy_http_version 1.1;
+
+    # Preserve original client info
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Handle WebSocket upgrades (if needed)
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+
+    # Optional: prevent caching at proxy level
+    proxy_cache_bypass $http_upgrade;
+}
+
+🧠 Why These Headers Matter:
+Preserves original domain name
+Passes client’s IP to backend
+Tracks client IP through proxy chain
+Indicates whether original request was HTTP or HTTPS
+Enables WebSocket support if your app uses it
+
+Accessing These in Node.js
+In your Express app, you can read them like this:
+app.get('/', (req, res) => {
+  const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  const proto = req.headers['x-forwarded-proto'];
+  const host = req.headers['host'];
+  res.send(`Served by ${process.env.APP_NAME} from ${ip} via ${proto}://${host}`);
+});
