@@ -1,0 +1,211 @@
+we will create an ec2 instance:
+terraform{
+  required_providers{
+    aws ={
+      source = "hashicorp/aws"
+      version = "-> 4.0"
+    }
+  }
+}
+
+provider "aws" {
+  region = "ap-south-1"
+  access_key = <access_key>
+  secret_key = <secret_key>
+}
+resource "aws_s3_bucket" <some_name>{
+  bucket = <bucket_name>
+  acl = "private"
+  tags = {
+    "name" : "value"
+  }
+}
+resource "aws_instance" <instance_name>{
+    ami = "ami-xyz"
+    instance_type: "t2.micro"
+    tags ={
+        "num" =var.num_var                  =>take from variables.tf
+    }
+    key_name = <an_IAM_User>            => a user having proper ec2 creation/full access permission
+}
+
+
+in outputs.tf file:(used for accessing created resources) after the .tf file is applied
+output "hosted_zone_id" {
+    value = aws_s3_bucket.<bucket_name>.hosted_zone_id
+}
+output "ip"{
+    value = aws_instance.<instancen_name>.public_ip
+}
+
+=========================================================================================================
+
+now we will take kubernetes as provider:
+
+provider "kubernetes" {
+  config_path    = "~/.kube/config"
+  config_context = "<your-cluster-context>"  # e.g., from `kubectx`
+}
+
+resource "kubernetes_namespace" "<namespace_resource_name>" {
+  metadata {
+    name = "<namespace_name>"             =>actual namespace name(the one in above line is for reference of terraform)
+  }
+}
+
+
+terraform init
+terraform plan
+terraform apply -auto-approve
+
+
+add a deployment:
+
+resource "kubernetes_deployment" "<deployment_resource_name>" {
+  metadata {
+    name   = "<deployment_name>"              =>kubernetes deployment name
+    labels = {
+      app = "<deployment_label>"              =>for selectors
+    }
+    namespace = kubernetes_namespace.<namespace_resource_name>.metadata[0].name
+  }
+
+  spec {
+    replicas = <replica_count>
+    selector {
+      match_labels = {
+        app = "<deployment_label>"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "<deployment_label>"
+        }
+      }
+
+      spec {
+        container {
+          name  = "<container_name>"
+          image = "<container_image>"
+          ports {
+            container_port = <container_port>
+          }
+        }
+      }
+    }
+  }
+}
+
+terraform apply -auto-approve
+->u can then go on to GCP => that namespace => and see the deployment
+
+
+resource "kubernetes_service" "<service_resource_name>" {
+  metadata {
+    name      = "<service_name>"
+    namespace = kubernetes_namespace.<namespace_resource_name>.metadata[0].name
+  }
+
+  spec {
+    selector = {
+      app = "<deployment_label>"          =>should match deployment to attach to it
+    }
+
+    port {
+      port        = <service_port>
+      target_port = <container_port>
+    }
+
+    type = "<service_type>"  # e.g., "ClusterIP", "NodePort", or "LoadBalancer"
+    #if chosen service is loadbalancer...or u can omit this and see the loadbalancer IP in GCP gui
+    load_balancer_ip = google_computer_address.default.address
+  }
+}
+
+how to get that static external IP using a google cloud resource like google_compute_address.
+Reserve a static IP in GCP:
+resource "google_compute_address" "default" {
+  name   = "<static_ip_name>"
+  region = "<your_region>"  # e.g., "us-central1"
+}
+
+====================================================================================================
+
+Helm provider : helps us to use our kubernetes yaml files directly without need of writing the file in resource body of .tf files
+
+The Helm provider in Terraform lets you deploy Kubernetes applications using Helm charts, so you don’t have to manually rewrite your 
+YAML files into Terraform resource blocks. It’s a powerful bridge between Helm’s packaging system and Terraform’s infrastructure-as-code 
+workflow.
+
+🚀 What the Helm Provider Does
+- Uses Helm charts directly (from public or private repositories of artifact hub)
+Artifact Hub is a central catalog for Helm charts, including those from Bitnami, 
+Prometheus, Grafana, and many others. You can use charts from Artifact Hub by referencing their repository URLs or OCI registry paths.
+- Manages Helm releases declaratively with version control
+- Supports values overrides via set blocks or values.yaml files
+
+main.tf
+provider "helm" {
+  kubernetes {
+    config_path = "~/.kube/config"
+    config_context = <some_cluster>
+  }
+}
+
+resource "helm_release" "nginx" {
+  name       = "nginx"
+  repository = "https://charts.bitnami.com/bitnami"           
+  chart      = "nginx"
+  version    = "13.2.24"
+
+  set {
+    name  = "service.type"
+    value = "LoadBalancer"
+  }
+}
+
+
+This deploys the Bitnami NGINX chart to your cluster—no need to copy-paste Kubernetes YAML.
+
+🔧 Bonus Features
+- Use values = [file("values.yaml")] to load custom config
+- Supports OCI registries and private chart repositories
+- Works seamlessly with Terraform’s dependency graph
+
+---
+
+If you have a Helm chart stored locally in a folder like ./charts, you can deploy it using the 
+Terraform Helm provider without needing a remote repository. Here's a clean example:
+
+📁 Project Structure
+terraform/
+├── main.tf
+└── charts/
+    └── mychart/
+        ├── Chart.yaml
+        ├── templates/
+        └── values.yaml
+
+🧾 main.tf 
+provider "helm" {
+  kubernetes {
+    config_path = "~/.kube/config"
+  }
+}
+
+resource "helm_release" "local_chart" {
+  name       = "my-local-app"
+  chart      = "./charts/mychart"
+  namespace  = "default"
+
+  values = [file("./charts/mychart/values.yaml")]
+}
+
+✅ What This Does
+- Deploys the Helm chart from your local ./charts/mychart directory
+- Uses the values.yaml file to configure the release
+
+
+terraform apply -auto-approve           =>applies the new configuration for Infra
