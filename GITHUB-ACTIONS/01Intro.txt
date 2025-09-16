@@ -1,0 +1,113 @@
+GitHub Actions is GitHub’s built-in CI/CD automation platform that lets you run workflows directly from your repository—no external tools needed. 
+It’s like Jenkins, but native to GitHub, and it’s incredibly flexible for automating builds, tests, deployments, and more.
+
+🚀 What Is GitHub Actions?
+- CI/CD Engine: Automates your software lifecycle—build, test, deploy—on every push, PR, or schedule.
+- Workflow-Based: You define workflows in YAML files under .github/workflows/ in form of yaml files -> ex:basic.yaml etc
+- Event-Driven: Triggers on events like push, pull_request, release, or even cron schedules.
+- Runs on GitHub-hosted or self-hosted runners: Linux, Windows, macOS environments.
+
+
+🧪 Demo: Basic Workflow
+Let’s say you want to build and run tests every time code is pushed to main.
+📄 .github/workflows/ci.yml
+
+u need to have ur docker image pushed to ur dockerhub before doing this
+
+name: CI Pipeline
+on:
+  push:
+    branches:
+      - master
+jobs:
+
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      # CI part
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ secrets.DOCKER_USERNAME }}/<imagename>          =>push to this repo
+          tags: |
+            type=ref,event=branch
+            type=sha
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+#This pushes your freshly built image to Docker Hub as 
+#docker.io/<docker_username>/edward:master or :sha.
+
+
+      # CD part
+      - name: Executing remote SSH commands using password
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        password: ${{ secrets.PASSWORD }}
+        port: ${{ secrets.PORT }}
+        script: |
+          whoami
+          docker stop edward || true
+          docker rm edward || true
+          docker rmi docker.io/<docker_username>/<imagename>    =>removing is imp because it will re-run locally available previous image on server... new changes wont get into effect
+          docker run --name edward -d -p 9000:9000 docker.io/<docker_username>/<imagename>:tag(master...mostly)           =>pull freshly updated new image from dockerhub
+
+
+
+for the remote ssh u need to do following settings on ur vm(instance):
+nano /etc/ssh/sshd_config =>
+PermitRootLogin yes
+PubKeyAuthentication node
+PasswordAuthentication yes
+sudo service ssh restart
+echo $USER
+sudo passwd $USER       ->set some password
+
+now do:
+ssh ip      =>it will prompt for password
+
+now goto-> github settings -> secrets and variables
+add HOST=<instanceip>,PORT=22,USER=<username>,PASSWORD=<password>
+
+
+now on every new push: it should return username upon hitting ip:port
+now since u havent pushed this .github folder, push this and u should see a new action 
+
+NOTE: u can use pwd, ls, echo....to debug in the script fileds and to keep track of upto where u succeded and whats failing
+
+
+🧠 Key Concepts
+| workflow | A YAML file that defines automation steps | 
+| job | A set of steps that run on the same runner | 
+| step | A single task—like running a script or using an action | 
+| action | A reusable unit of code (e.g., checkout, setup-node) | 
+| runner | The VM where your workflow executes | 
+
+
+

@@ -1,0 +1,113 @@
+we can also do the ci part using github actions and the cd part using jenkins 
+
+let us say our jenkins is running on our server on <instanceip>:<port>
+
+we can have a workflow like this: in github actions
+
+name: CI Pipeline
+on:
+  push:
+    branches:
+      - master
+jobs:
+
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    runs-on: ubuntu-latest
+    steps:
+      # CI part
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ secrets.DOCKER_USERNAME }}/<imagename>          =>push to this repo
+          tags: |
+            type=ref,event=branch
+            type=sha
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+ 
+This pushes your freshly built image to Docker Hub as 
+docker.io/<docker_username>/edward:master or :sha.
+
+
+# CD part
+configure jenkins to run these:=> will detect
+    docker stop edward || true
+    docker rm edward || true
+    docker rmi docker.io/<docker_username>/<imagename>    =>removing is imp because it will re-run locally available previous image on server... new changes wont get into effect
+    docker run --name edward -d -p 9000:9000 docker.io/<docker_username>/<imagename>:tag(master...mostly)           =>pull freshly updated new image from dockerhub
+
+u can now see the changes into effect in the jenkins panel(a new deployment)
+
+
+
+============================================================================================================================================================================================
+
+I have a doubt....since Jenkins is polling for GitHub.....while GitHub actions is building the image....there is a possibility for the Jenkins to detect the changes in git repo 
+and even before the new image is built by GitHub actions and pushed to dockerhub...Jenkins may delete the current image and fetch the same previous stale image even before GitHub actions 
+pushes the image to dockerhub
+
+You're absolutely right to flag that—this is a classic race condition between CI and CD when both are triggered by the same Git event but operate independently.
+
+⚠️ The Problem
+- GitHub Actions (CI): Starts building and pushing the new Docker image to Docker Hub.
+- Jenkins (CD): Polls GitHub, sees the new commit, and immediately starts its job.
+- Jenkins pulls the image before GitHub Actions finishes pushing it.
+- Result: Jenkins pulls the old/stale image with the same tag (:master), and your deployment doesn’t reflect the latest changes.
+
+🛡️ Solutions to Prevent This
+✅ 1. Use GitHub Webhook to Trigger Jenkins After CI Completes
+Instead of polling GitHub, configure GitHub Actions to trigger Jenkins only after the image is successfully pushed.
+You can do this by adding a final step in your GitHub Actions workflow:
+- name: Trigger Jenkins Deployment
+  run: |
+    curl -X POST http://<jenkins-ip>:<port>/job/<job-name>/build \
+      --user ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }}
+
+
+This ensures Jenkins only runs after the image is built and pushed.
+
+✅ 2. Use Unique Tags Instead of :latest or :master
+Tag your Docker images with commit SHA or timestamp:
+tags: |
+  type=sha
+
+
+Then pass that tag to Jenkins via environment variable or API trigger. Jenkins pulls the exact image version, avoiding ambiguity.
+
+✅ 3. Add Retry Logic in Jenkins
+If you must use polling, add a retry loop in Jenkins to wait for the image to appear:
+for i in {1..5}; do
+  docker pull docker.io/<user>/<image>:master && break
+  echo "Image not ready yet. Retrying in 30s..."
+  sleep 30
+done
+
+
+
+✅ 4. Use Docker Hub Webhooks
+Docker Hub can notify Jenkins when a new image is pushed. This decouples Jenkins from Git polling entirely.
+

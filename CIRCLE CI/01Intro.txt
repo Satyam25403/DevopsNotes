@@ -1,0 +1,113 @@
+A fully managed CI/CD tool
+
+CircleCI is a powerful cloud-based CI/CD platform that automates your software development workflows—from code commits 
+to testing, building, and deployment. It integrates seamlessly with GitHub, Bitbucket, and other version control systems, and supports Docker, Linux, macOS, and Windows environments.
+
+🚀 What Makes CircleCI Stand Out
+- Fast parallel builds: Run multiple jobs simultaneously to speed up pipelines
+- Docker-native: Easily build, test, and deploy containerized apps
+- Config-as-code: Define workflows in .circleci/config.yml
+- Built-in caching: Speeds up builds by reusing dependencies
+- Insights dashboard: Visualize build performance and failures
+
+🧪 Sample Demo: Python Project with Tests
+Let’s walk through a basic CircleCI.
+
+🗂️ Project Structure
+circleci-demo/
+├── main.py
+├── test_main.py
+└── .circleci/
+    └── config.yml                  =>mandatory
+
+
+📄 main.py
+def add(a, b):
+    return a + b
+
+
+📄 test_main.py
+from main import add
+
+def test_add():
+    assert add(2, 3) == 5
+
+go to project settings-> add environment variables -> add the credentials that u r using in this config file
+
+# CI part
+⚙️ .circleci/config.yml
+version: 2.1
+orbs:
+  docker: circleci/docker@1.5.0
+
+executors:
+  docker-publisher:
+    docker:
+      - image: circleci/node:latest
+        auth:
+          username: DOCKERHUB_USERNAME
+          password: DOCKERHUB_PASSWORD
+    environment:
+      IMAGE_NAME: docker.io/<username>/<imagename>
+
+jobs:
+  publishLatestToHub:
+    executor: docker-publisher
+    steps:
+      - setup_remote_docker
+
+      - run:
+          name: Login to Docker Hub
+          command: |
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+
+      - run:
+          name: Build Docker Image
+          command: docker build -t $IMAGE_NAME .
+
+      - run:
+          name: Push Docker Image
+          command: docker push $IMAGE_NAME:latest
+
+workflows:                  =>u must declare the jobs u defined in the jobs(ex: publishLatestToHub), inorder to make them come into action actually
+  build-master:
+    jobs:
+      - publishLatestToHub
+
+
+🧩 How It Works
+- CircleCI detects changes in your GitHub repo
+- It runs the test job inside a Python Docker container
+- Installs pytest, runs your tests, and reports results
+
+
+
+# CD part
+Now that CircleCI is handling the CI—building and pushing your Docker image to Docker Hub
+we can configure Jenkins to take over the CD (deployment) part, just like we did with GitHub Actions.
+
+
+- Configure build triggers:
+- Option A: Poll Docker Hub (less reliable)
+- Option B: Trigger manually or via webhook from CircleCI (recommended)
+- Add build steps (shell commands):
+docker stop $(docker ps -aq) || true
+docker rm $(docker ps -aq) || true
+docker rmi $(docker images -aq) || true
+docker pull docker.io/<dockerhub_username>/<imagename>:latest
+docker run --name edward -d -p 9000:9000 docker.io/<dockerhub_username>/<imagename>:latest
+
+
+🔗 Optional: Trigger Jenkins from CircleCI
+To avoid race conditions (like Jenkins pulling before CircleCI finishes pushing), you can trigger Jenkins after the image is pushed:
+🔐 CircleCI Step to Trigger Jenkins
+- run:
+    name: Trigger Jenkins Deployment
+    command: |
+      curl -X POST http://<jenkins-ip>:<port>/job/<job-name>/build \
+        --user $JENKINS_USER:$JENKINS_TOKEN
+
+
+Store JENKINS_USER and JENKINS_TOKEN as CircleCI environment variables.
+
+
