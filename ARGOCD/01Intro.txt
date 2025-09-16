@@ -1,0 +1,84 @@
+A continuous deployment application used to deploy kubernetes manifests
+This is git based
+
+Argo CD is a declarative, GitOps-based continuous delivery tool for Kubernetes. 
+It’s designed to keep your Kubernetes clusters in sync with your Git repositories—automating 
+deployments, rollbacks, and monitoring with precision and clarity.
+
+🚀 What Is Argo CD?
+- GitOps-first: Your Git repo is the single source of truth for your app’s desired state.
+- Declarative deployments: You define Kubernetes manifests (YAML files) in Git, and Argo CD ensures your cluster matches them.
+- Visual dashboard: See real-time sync status, diff views, and deployment history.
+- Auto-sync & rollback: Automatically apply changes or roll back if something breaks.
+- Multi-cluster support: Manage multiple Kubernetes clusters from one Argo CD instance.
+
+🧪 Demo: Deploying an App with Argo CD
+Let’s walk through a basic setup to deploy a sample app using Argo CD.
+
+🗂️ Git Repo Structure
+
+argo-app/
+└── helm-chart/
+    ├── Chart.yaml
+    ├── values.yaml
+    └── templates/
+
+
+🛠️ Steps to Deploy with Argo CD
+- Install Argo CD on your Kubernetes cluster:
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+- Install argo CD CLI:
+curl -sSL -o argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+sudo install -m 755 argocd /usr/local/bin/argocd
+
+- grab the password for UI:(username = admin)
+>argocd admin initial-password -n argocd
+
+- Expose Argo CD UI:
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+
+- Login to Argo CD CLI:
+argocd login localhost:8080
+- Or use GUI:
+localhost:8080
+
+=>create a new application =>follow prompts =>give repo url and sepcify branch
+=>follow prompts (destination is the created namesapace(on GCP))=> create
+
+NOTE: Argo CD has an amazing GUI that helps visualizing our workloads
+
+
+- Register your app:
+1. You can create an Argo CD application via CLI or GUI like this:
+argocd app create my-helm-app \
+  --repo https://github.com/<your-org>/argo-app.git \
+  --path helm-chart \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace my-namespace \
+  --helm-set image.tag=latest \
+  --sync-policy automated
+
+2. You can also deploy a chart from a public Helm repo:
+argocd app create redis-app \
+  --repo https://charts.bitnami.com/bitnami \
+  --helm-chart redis \
+  --revision 17.3.11 \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace redis \
+  --helm-set architecture=standalone \
+  --sync-policy automated
+
+- Sync the app:(to bring latest changes from github):
+argocd app sync hello-world
+
+
+
+✅ Result
+- Argo CD pulls manifests from Git
+- Applies them to your cluster
+- Monitors for drift and auto-syncs changes
+- You get a live dashboard showing app health and status
+
+Want to integrate Argo CD with Helm, Kustomize, or automate multi-environment deployments (dev/staging/prod)? I can help you build a GitOps pipeline that scales beautifully.
