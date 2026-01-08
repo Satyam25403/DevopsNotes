@@ -1,37 +1,87 @@
 File Creation and Viewing
 >echo "sample text"
->echo "file content" > <filename> :overwriting contents of file
->echo "file content" >> <filename> :appending contents to existing file
+>echo "file content" > <filename>   :overwriting contents of file
+>echo "file content" >> <filename>  :appending contents to existing file
 
+
+
+Text Processing and editing
 >cat <filename>                       :display file contents
+>cat -n <filename>                    :shows number of lines of content
 >cat <file1> <file2>...               :contents of multiple files together
 >cat <file1> <file2> > <combinedfile> :merge files
 >less <filename>                      :displays interactive view which we can scroll through(line by line)
 >more <filename>                      :same as less by displays(only page by page)
 >head -n <number> <file>              :display first n lines
+>head -n <number> <file1> <file2> ...
 >tail -n <number> <file>              :display last n lines
+>tail -n <number> <file1> <file2> ...
 
 
 
-File creation editing and access
->touch <filename with extension> : create a file
+File creation editing and access contorl
+>touch <filename with extension>            : create a file
+>vi/vim/nano <filename>                     :edit a file with editor
+i :activate insert mode, esc :come out of interactive mode, :wq(save and exit, colon is part of command here)
+>cp <src_file> <targetfile/directory>       : copy to a destination or to some file(duplicate contents)
+>cp -r <src_folder> <destination_folder>    :copy whole directory recursively(use -p to preservee permissions and timestamps)
+>mv <src_file> <targetfile/directory>       : move to a destination or to some file(rename)
 
->vi/nano <filename>     :edit a file with editor
+>chmod <permission> <filename>              :change file permissions
+>chmod -R <permission> <directory>          :recursively configuring permissions to all files in directory
+(but new files wont inherit this property and need to run this command again)c
+(read(r)=4, write(w)=2, execute(x)=1)
+(format: d/f owner-perm group-perm others/everyone-perm) can be numeric or alphabetical ex:g-r, 777 etc.
+(u+-, g+-, o+-):for user group and others   :(ex: g+w means add write permission to group)   
+>sudo chown -R <username> <file/folder>     :transfer the ownership of file/folder...use -R to do it recursively for all nested sub-dirs and files
+>sudo chown <user>:<group> <dirname>        :change owner and group together
 
->chmod <permission> <filename>  :change file permissions(read=4, write=2, execute=1)
 
->cp <src_file> <targetfile/directory>   : copy to a destination or to some file(duplicate contents)
->cp -r <src_folder> <destination_folder> :copy whole directory recursively(use -p to preservee permissions and timestamps)
->mv <src_file> <targetfile/directory>   : move to a destination or to some file(rename)
+>umask                                      :list default permissions for new files/directories
+umask defines the default permission mask for new files and directories created by a process (shell, script, service). It is process-specific, not global by default.
+umask REMOVES permissions from the system’s default permissions. It does not assign permissions directly.
+
+Default permissions(before umask):
+| Type        | Default           |
+| ----------- | ----------------- |
+| Files       | `666` (rw-rw-rw-) |umask never sets execute on files. Files never get execute by default(you must specify explicitly)
+| Directories | `777` (rwxrwxrwx) |
+ex: umask = 002
+This means:
+Owner → remove nothing
+Group → remove nothing
+Others → remove write (2)
+
+case1 : if umask set in a terminal: umask 002           :this applies to that shell session and all child processes started from it and not to other terminal sessions, other users and system services
+case2 : if it is set in shell config files(this is persistent)
+If set in:
+~/.bashrc
+~/.bash_profile
+~/.profile
+~/.zshrc
+Applies to: Every new shell for that user
+
+if set in:
+/etc/profile
+/etc/bashrc
+/etc/login.defs
+Example (/etc/login.defs):      UMASK 002       👉 Applies to: All users, All login shells
+
+Systemd services do NOT inherit your shell’s umask.
+
+>chmod g+s <directory>                      :set the gid bit on directory(Any new file or directory created inside: Automatically inherits the directory’s group)
+>ls -ld directory                           :verify setgid is active
+example output: drwxrws---  hanks developers directory
+notice: s instead of x in group permissions
 
 
 
 Directory Operations
 >mkdir <directory>
->mkfir -p </nested/directory/path> :create a nested directory
->rmdir <directory>      :remove empty directory only
->rm -rf <directory> :for recursive and force removal
->rm -r -i <directory> :prompt before deletion(interactive deletion)
+>mkfir -p </nested/directory/path>  :create a nested directory
+>rmdir <directory>                  :remove empty directory only
+>rm -rf <directory>                 :for recursive and force removal
+>rm -r -i <directory>               :prompt before deletion(interactive deletion)
 
 
 
@@ -71,8 +121,69 @@ Comparision Operators
 Searching Files and directories
 >find <directory> -name <filename> (or) >locate <filename> :search for a file in a particular directory
 search options: -name <filename>, -type f : for files, -type d :for directory , -perm=<permission ex:777>, -mtime -n :(modified in past n days)
->locate -i "*.log"  :locate log files(alternative of find)
+>locate -i "*.log"                                         :locate log files(alternative of find)
 
 
 
-Links
+Inodes: An inode (index node) is a data structure that stores metadata about a file.An inode does NOT store the filename or file data.
+when you do:
+cat file.txt
+
+Linux:
+Looks up file.txt in directory
+Finds inode number
+Uses inode to locate data blocks
+Reads file content
+🔹 Inodes & directories
+A directory:
+Is a file
+Has its own inode
+Stores filename → inode mappings
+
+Get inode details:
+>ls -li
+
+Check inode usage:
+>df -i
+
+Links:A link is simply another name or reference to a file.
+🔹 1️⃣ Hard Links
+A hard link points directly to the file’s inode
+Multiple filenames → same actual data on disk -> same inode
+No “original vs copy” concept
+📌 Think of it as:
+Two names, one file
+
+Creating hard links:
+>ln <original.txt> <hardlink.txt>
+
+Deleting one name does not delete the data
+File is deleted only when link count = 0
+File exists as long as at least one hard link exists
+If original file is deleted → hard link still works
+
+2️⃣ Soft Links (Symbolic Links)
+A soft link is a shortcut to another file. Soft link has its own inode
+Stores path of the target file
+
+📌 Think of it as:
+Pointer → file path
+
+It stores the path to target file
+If target is deleted → broken symlink
+
+Creating soft links:
+>ln -s original.txt symlink.txt
+
+
+🔹 Inode exhaustion (classic DevOps problem 🔥)
+You can have:
+❌ Free disk space
+❌ But still cannot create files
+Why?
+👉 All inodes are used
+
+
+
+
+
