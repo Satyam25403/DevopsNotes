@@ -1,0 +1,277 @@
+>ifconfig                                                       :legacy command...sows(network interfaces, ip addresses, mac addresses, up/down status)
+>ip                                                             :standard for ifconfig(modern)
+>ifconfig eth0 10.10.10.10 netmask 255.255.255.0                :temporarily assign an ip...lost after reboot
+>ip a add 10.10.10.10/24 dev eth0                               :assign temporary ip
+10.10.10.10 → IP
+/24 → subnet (255.255.255.0)
+eth0 → interface
+📌 /24 = 256 IPs
+>ip a (or) >ip addr                                             :show interfaces, ip+subnet, interface state
+>ip link set <interface> up/down                                       :bring interface up/down...use when interface is disabled or after assigning ip
+
+==================================================================================================================================================================================================================
+
+Network connectivity:
+>ping <ipaddress/domain>                                        :check internet connectivity(dns resolution and internet reachability)
+>ping -c <n> <domain>                                           :send limited number of packets
+>ping -c <n> -i <t> <domain>                                    :send fixed number of packets at some interval
+>sudo ping -f <domain>                                          :ping flood...send packets as fast as possible(used in DoS testing)...needs root priviliges
+>traceroute <domain>                                            :trace network path(hops between src and dest, the routers packets pass through), used to detect latency and traffic detection
+>netstat  -an (or) >ss -tulnp                                       :view active network connections(shows listening and active ports and services using ports)
+Meaning:
+t → TCP
+u → UDP
+l → listening
+n → numeric
+p → process
+
+======================================================================================================================================================================================================================
+
+DNS (domain names -> Ip addresses):
+>nslookup <domain>                          :check dns resolution
+>dig <domain>                               :more detailed version of nslookup
+>cat /etc/resolv.conf                       :check which dns servers are being used to resolve domain names
+...you can add one(googles dns server 8.8.8.8)
+example:
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+ping google.com      # DNS + network
+ping 8.8.8.8         # network only
+if ip ping works but domain fails-> DNS issue
+
+=======================================================================================================================================================================================
+
+Ports:Logical endpoint for services on an IP
+👉 Range: 0–65535
+| Service    | Port |
+| ---------- | ---- |
+| HTTP       | 80   |
+| HTTPS      | 443  |
+| SSH        | 22   |
+| FTP        | 21   |
+| MySQL      | 3306 |
+| PostgreSQL | 5432 |
+| Docker     | 2375 |
+>ss -tulnp (or) >netstat -tulnp                   :check open/listening ports
+>lsof -i :<port>                                  :processes using a particular port
+>sudo lsof -t -i :8080 | xargs kill -9            :force kill a process running on a particular port
+Explanation:
+lsof -i :8080 → find process using port
+-t → print only PID
+xargs → pass PID to next command
+kill -9 → force kill
+>sudo lsof -t -i :8080 | xargs kill               :safer kill(try SIGTERM before SIGKILL)
+
+========================================================================================================================================================================================
+
+Service:Background process managed by systemd
+>systemctl status <servicename>                   :inspect status of a service
+>systemctl start <servicename>                    :start a service
+>systemctl stop <servicename>                     :stop a service
+>systemctl restart <servicename>                  :restart a service
+>systemctl enable <servicename>                   :enable a service at boot
+>systemctl list-units --type=service              :list all running services
+
+========================================================================================================================================================================================
+
+Routing: Decides where the packets go
+>ip route                                           :view route table
+ex:default via 192.168.1.1 dev eth0   default gateway=router
+10.0.0.0/24 via 192.168.1.1 dev eth0
+>ip route add <dest-network> via <gateway>          :add a route temporarily...only lives temporarily on RAM(to route traffic destined for a network to be sent via specified gateway)
+ex:ip route add 10.0.0.0/24 via 192.168.1.1           
+👉 Any traffic destined for 10.0.0.0 – 10.0.0.255
+👉 Should be sent via gateway 192.168.1.1
+10.0.0.0/24 → destination network
+via → next hop
+192.168.1.1 → router/gateway
+Before adding a rule makesure the gateway is reachable >ping <gateway>
+>ip route del <dest-network>                           :delete a routing rule
+
+=======================================================================================================================================================================================
+
+Firewalls : security layer that allows or blocks network traffic based on rules(Ip, port, protocol, direction)
+
+a.Stateful firewall(secure and preferred): Remembers active connections and allows response traffic automatically.
+Tracks connection states:
+NEW, ESTABLISHED, RELATED, INVALID
+Uses connection tracking (conntrack).
+
+Example
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+✔ Only need to allow incoming traffic
+✔ Responses are allowed automatically
+
+Connection states explained
+| State       | Meaning                                    |
+| ----------- | ------------------------------------------ |
+| NEW         | New connection request                     |
+| ESTABLISHED | Existing connection                        |
+| RELATED     | Related connection (FTP data, ICMP errors) |
+| INVALID     | Malformed packets                          |
+
+b.Stateless firewall(less secure): examine each packet independently, doesn't remember past packets
+Checks:
+Source IP, Destination IP, Port, Protocol
+Makes a decision packet-by-packet
+example:
+Allow TCP traffic to port 80
+❌ But:
+Response packets may get blocked
+You must explicitly allow incoming + outgoing like this
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A OUTPUT -p tcp --sport 80 -j ACCEPT
+
+
+🔹 Types of Firewalls (Linux-focused)
+1.Packet filtering firewall
+Works on IP, port, protocol Example: iptables(can be stateful or stateless)
+2.Stateful firewall ✅ (MOST COMMON)
+Tracks connection state Example: iptables, nftables, firewalld
+3.Application-level firewall
+Works at Layer 7 Example: WAF
+
+Linux firewall stack
+Application
+   ↓
+iptables / nftables
+   ↓
+firewalld / ufw (frontends)
+   ↓
+Kernel (netfilter)
+
+
+Uncomplicated firewall(ufw) ubuntu firewall:
+>sudo ufw enable/disable                                    :enable or disable firewall
+>sudo ufw status numbered                                   :show rules listed in firewall
+>sudo ufw allow/deny <protocol>                             :allow/deny inbound traffic...can be ssh/ftp/http/https etc standard protocols, in place of <protocol>
+>sudo ufw allow OpenSSH                                     :allow ssh safely
+>sudo ufw allow/deny out <protocol>                         :allow/deny outbound traffic
+>sudo ufw allow/deny <port>                                 :control all incoming traffic on a port
+>sudo ufw allow/deny <port>/<protocol>                      :control particular incoming traffic on a particular port
+>sudo ufw deny from <network-with-subnet>                   :deny traffic from a network
+use: 'out' to control outbound traffic
+>sudo ufw deny/allow from <src-ip> to any port <port>       :allow/deny inbound packets from that ip to that port
+>sudo ufw delete <rule-number>                              :delete a rule listed by ufw status command
+
+Set default policies:
+>sudo ufw default deny incoming
+>sudo ufw default allow outgoing
+
+Reloading firewall:
+>sudo ufw reload
+
+netfilter → kernel engine
+iptables → rule manager
+firewalld / ufw → user-friendly tools
+
+
+Iptables(packet filtering and stateful firewall):
+| Table  | Purpose                         |
+| ------ | ------------------------------- |
+| filter | Allow / block traffic (default) |
+| nat    | Port forwarding, NAT            |
+| mangle | Modify packets                  |
+| raw    | Disable connection tracking     |
+
+| Chain   | Meaning          |
+| ------- | ---------------- |
+| INPUT   | Incoming traffic |
+| OUTPUT  | Outgoing traffic |
+| FORWARD | Routed traffic   |
+
+>sudo iptables -L -n -v         :view firewall rules
+Firewall policies(Default actions):
+>sudo iptables -P INPUT DROP                :drop all input packets unless explicitly mentioned
+>sudo iptables -P FORWARD DROP              :Block traffic being routed through the system, preventing accidental router behaviour
+>sudo iptables -P OUTPUT ACCEPT             :Allows all outbound traffic(common server default)
+✔ Allow outgoing
+❌ Block incoming unless allowed
+
+iptables rules are evaluated TOP → BOTTOM; first match wins
+
+>sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT                                     :allow ssh(port 22)...always allow before DROP rules
+⚠️ Missing this = lockout
+>sudo iptables -A INPUT -p tcp --dport 22 -s 203.0.113.5 -j ACCEPT                      :allow ssh only from one trusted IP(high security setup)
+>sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT                                     :allow http
+>sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT                                    :allow https
+>sudo iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT            :(stateful)without this replies will be blocked... allow response traffic to allowed connections
+Enables:
+Web browsing
+SSH sessions
+Package downloads
+>sudo iptables -A INPUT -p tcp --dport 3306 -j DROP                                     :block a port
+>sudo iptables -A INPUT -s 192.168.1.100 -j DROP                                        :block an ip(all traffic from that ip)
+>sudo iptables -A INPUT -p tcp --dport 22 -s 203.0.113.5 -j ACCEPT                      :allow from an ip
+>sudo iptables -A INPUT -j LOG --log-prefix "IPTABLES-DROP: "                           :logging firewall drops before actually discarding(DROP)
+>sudo iptables -A INPUT -j DROP                                                         :drop the packet
+NOTE: logging everything may flood logs, fill disk and crash server...hence use limit to only log dropped traffic
+iptables -A INPUT -m limit --limit 5/min -j LOG --log-prefix "IPTABLES-DROP: "
+iptables -A INPUT -j DROP
+
+check logs >journalctl -k
+>sudo iptables -L --line-numbers                                                        :delete firewall rules with help of rule numbers
+>sudo iptables -D INPUT 3
+-A: addrule, -D:delete a rule, -p: protocol, --dport:destination port, -j:action
+
+save iptable rules:
+>sudo iptables-save > /etc/iptables/rules.v4             :rules for ipv4
+>sudo iptables-save > /etc/iptables/rules.v6             :rules for ipv6
+Dumps current IPv4 and IPv6  firewall rules (all tables) into a file
+Output format is iptables-restore compatible
+✔ Includes: filter, nat, mangle, raw tables
+
+Making rules persistent accross reboot: 
+boot-time script executed at system startup
+Only works if rc-local service is enabled
+make /etc/rc.local executable(sudo chmod +x /etc/rc.local)
+>sudo nano /etc/rc.local(edit this file)...write a script
+#!/bin/bash
+/sbin/iptables-restore < /etc/iptables/rules.v4
+/sbin/ip6tables-restore < /etc/iptables/rules.v6
+exit0
+
+Persistance(Modern way):
+>sudo apt install iptables-persistent                       :make them persistant
+>sudo netfilter-persistent save
+installs service to auto-load firewall rules at boot. Saves current rules to:
+/etc/iptables/rules.v4
+/etc/iptables/rules.v6
+
+view iptable tables:
+>sudo iptables -t nat -L                 :list NAT table rules(used for port forwarding, masquerading, DNAT/SNAT)
+>sudo iptables -t mangle -L              :Display packet modification rules(used for TOS, TTL, Packet marking(QoS))
+>sudo iptables -L --line-numbers         :list rules from filter table only, shows INPUT, OUTPUT, FORWARD chains...line numbers represent rule numbers needed for deletion(in case)
+
+Flush rules(reset firewall safely):
+>sudo iptables -F
+>sudo iptables -X
+>sudo iptables -t nat -F
+
+Allow loopback traffic(without this the system breaks):
+>iptables -A INPUT -i lo -j ACCEPT
+>iptables -A OUTPUT -o lo -j ACCEPT
+
+Allow ICMP(to make ping work):
+>iptables -A INPUT -p icmp -j ACCEPT
+
+Rate limiting SSH:
+>iptables -A INPUT -p tcp --dport 22 -m limit --limit 5/min -j ACCEPT
+
+🔹 Reject vs Drop
+-j DROP     # silent
+-j REJECT   # sends response
+
+
+DevOps use:
+DROP → internet-facing
+REJECT → internal networks
+
+
+
+
+
+
+
+
