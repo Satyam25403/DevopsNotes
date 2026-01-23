@@ -1,0 +1,55 @@
+#Deployment part
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: webapp
+  name: webapp-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - image: mongo-express
+        name: mongo-express:latest
+        ports:
+        - containerPort: 8081
+        env:
+        - name: ME_CONFIG_MONGODB_ADMINUSERNAME
+          valueFrom:
+            secretKeyRef:       #where to get key from
+              name: secrets
+              key: MONGO_USER_NAME
+        - name: ME_CONFIG_MONGODB_ADMINPASSWORD
+          valueFrom:
+            secretKeyRef:       #where to get key from
+              name: secrets
+              key: MONGO_PASSWORD
+        - name: ME_CONFIG_MONGODB_SERVER
+          valueFrom:
+            ConfigMapKeyRef:       #where to get key from
+              name: mongo-config
+              key: mongo-url
+
+---
+
+# service part
+apiVersion : v1
+kind : Service
+metadata :
+  name: webapp-service
+spec: 
+  selector:
+    app: webapp      #service attached to deployment: mongo
+  ports:
+    - protocol: TCP
+      port: 8081
+      targetPort: 8081
+      nodePort: 30007
+
