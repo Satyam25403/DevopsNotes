@@ -1,0 +1,78 @@
+set -e                          :(fail fast)exit on error...if any command fails, script stops immediately
+set -u                          :undefined variable protection
+set -o pipefail                 :catch pipe failures
+
+without this:
+false | true
+# exit code = 0 ❌
+with this:
+false | true
+# exit code ≠ 0 ✅
+
+Golden combo:
+set -euo pipefail
+
+======================================================================================================
+
+3️⃣ trap → Cleanup & signal handling
+Runs commands when:
+Script exits
+Error occurs
+Signal received (CTRL+C, kill)
+
+Basic trap:
+trap 'echo "Script exited"' EXIT
+
+cleanup temp files:
+tmpfile="/tmp/data.$$"                          $$->PID(unique)
+trap 'rm -f "$tmpfile"' EXIT
+
+Handle CTRL+C:
+trap 'echo "Interrupted"; exit 1' INT
+
+Trap on ERROR:
+trap 'echo "Error on line $LINENO"' ERR
+
+===============================================================================
+
+example scripts:
+
+1.check service and restart:
+#!/bin/sh
+set -e
+SERVICE=nginx
+if systemctl is-active "$SERVICE" >/dev/null; then
+  echo "$SERVICE running"
+else
+  echo "$SERVICE down, restarting..."
+  systemctl restart "$SERVICE"
+fi
+
+2.File backup with timestamp:
+#!/bin/sh
+set -e
+SRC="/etc/nginx/nginx.conf"
+DEST="/backup"
+if [ ! -f "$SRC" ]; then
+  echo "Source missing"
+  exit 1
+fi
+cp "$SRC" "$DEST/nginx.conf.$(date +%F_%T)"
+
+3.Disk usage alert:
+#!/bin/sh
+THRESHOLD=80
+USAGE=$(df / | awk 'NR==2 {print $5}' | tr -d '%')
+if [ "$USAGE" -gt "$THRESHOLD" ]; then
+  echo "Disk usage critical: $USAGE%"
+fi
+
+4.Loop through files:
+for file in *.log; do
+  [ -f "$file" ] || continue
+  echo "Processing $file"
+done
+
+
+
+
