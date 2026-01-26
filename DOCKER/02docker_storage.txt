@@ -1,0 +1,123 @@
+Data written to the container layer doesn't persist when the container is destroyed. This means that it can be difficult to get the data out of the container if another process needs it.
+writable layer is unique per container. You can't easily extract the data from the writeable layer to the host, or to another container. Hence we use storage mounts
+
+Docker supports these types of storage mounts:
+
+1.Volume mounts: 
+Volume data is stored on the filesystem on the host, but in order to interact with the data in the volume, you must mount the volume to a container
+Docker creates & manages the directory
+You don’t care where on host it lives
+
+✅ Use case
+Databases (MySQL, PostgreSQL)
+App state
+Production workloads
+
+example:
+docker volume create mydata
+
+docker run -d \
+  --name mysql-db \
+  -v mydata:/var/lib/mysql \
+  mysql:8
+
+MySQL writes data to /var/lib/mysql inside container
+Docker stores it somewhere like:
+/var/lib/docker/volumes/mydata/_data
+
+==================================================================================================================================================================================================
+
+2.Bind mounts: 
+create a direct link between a host system path and a container, allowing access to files or directories stored anywhere on the host.
+both non-Docker processes on the host and container processes can modify the mounted files simultaneously. We control the exact location
+Use bind mounts when you need to be able to access files from both the container and the host.
+
+✅ Use case
+Local development
+Config files
+Logs
+Sharing source code
+⚠️ Not ideal for production (host-dependent, security risk)
+
+Example:
+Let /home/satyam/app/index.html be host directory
+run container:
+docker run -it \
+  -v /home/satyam/app:/usr/share/nginx/html \
+  -p 8080:80 \
+  nginx
+
+🧪 Test
+Edit index.html on host
+Refresh browser → changes appear instantly
+
+=============================================================================================================================================================================
+
+3.tmpfs mounts: 
+stores files directly in the host machine's RAM, ensuring the data is not written to disk. This storage is ephemeral: Destroyed on container stop/restart,
+or when the host is rebooted. suitable for scenarios requiring temporary, in-memory storage, such as caching intermediate data, handling sensitive information like credentials,
+or reducing disk I/O.
+
+✅ Use case
+Credentials
+Session data
+Temporary cache
+Reduce disk I/O
+
+Example:Temporary sensitive data:
+docker run -it \
+  --tmpfs /run/secrets \
+  ubuntu
+inside container:
+echo "SECRET=12345" > /run/secrets/key.txt
+Stop container → 💥 data gone
+
+Example: High speed cache:
+docker run -d \
+  --tmpfs /cache:rw,size=64m \
+  redis
+
+===========================================================================================================================================================================================
+
+4.Named pipes:
+Used for communication between the Docker host and a container. Common use case is to run a third-party tool inside of a container and connect to the Docker Engine API using a named pipe.
+Used mainly for inter-process communication. Common on Windows & Docker Engine API access
+
+Example (Windows): Docker Engine API access
+docker run -it `
+  -v \\.\pipe\docker_engine:\\.\pipe\docker_engine `
+  docker
+Container can now talk to Docker daemon on host
+
+Example (Linux – FIFO pipe)
+Host:
+mkfifo /tmp/my_pipe
+
+Run container:
+docker run -it \
+  -v /tmp/my_pipe:/tmp/my_pipe \
+  ubuntu
+
+Host writes:
+echo "hello" > /tmp/my_pipe
+
+Container reads:
+cat /tmp/my_pipe
+
+✅ Use case
+Docker CLI inside container
+Debugging tools
+IPC with host services
+⚠️ Security sensitive — container can control host Docker
+
+=================================================================================
+
+
+
+
+| Type       | Managed by Docker   | Persistent | Use case         |
+| ---------- | ------------------  | ---------- | ---------------- |
+| Volume     |  Yes                |  Yes       | Databases, prod  |
+| Bind mount |  No                 |  Yes       | Dev, configs     |
+| tmpfs      |  No                 |  No        | Secrets, cache   |
+| Named pipe |  No                 | IPC only   | Host ↔ container |
