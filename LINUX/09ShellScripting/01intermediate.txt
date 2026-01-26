@@ -73,6 +73,133 @@ for file in *.log; do
   echo "Processing $file"
 done
 
+5.UFW rules deletion:
+#!/bin/bash
+set -euo pipefail
+# Enable firewall & show rules
+sudo ufw enable
+sudo ufw status numbered
+# Read user input
+read -p "Which UFW rules do you want to delete? (e.g. 1 2 4 6): " choices
+# Validate input (numbers only)
+for choice in $choices; do
+  if [[ ! "$choice" =~ ^[0-9]+$ ]]; then
+    echo "Invalid input: $choice (not a rule number)"
+    exit 1
+  fi
+done
+# Sort rule numbers in reverse order
+sorted_choices=$(echo "$choices" | tr ' ' '\n' | sort -nr)
+# Delete rules safely
+for rule in $sorted_choices; do
+  echo "Deleting rule $rule..."
+  sudo ufw delete "$rule"
+done
+echo "Selected UFW rules deleted successfully."
+
+6.Backup script:
+#!/usr/bin/env bash
+set -euo pipefail
+read -p "What directory do you want to back up? (e.g. /source/dir): " SRC_DIR
+read -p "Where should the backup be stored? (e.g. /backup/dir): " BACKUP_DIR
+read -p "Where should logs be written? (e.g. /var/log/backup.log): " LOG_FILE
+# Validate source directory
+if [[ ! -d "$SRC_DIR" ]]; then
+  echo "Source directory does not exist!"
+  exit 1
+fi
+# Create dated backup directory
+DATE=$(date +%Y-%m-%d)
+FULL_BACKUP_DIR="${BACKUP_DIR}/backup-${DATE}"
+mkdir -p "$FULL_BACKUP_DIR"
+mkdir -p "$(dirname "$LOG_FILE")"
+echo "Backup started at $(date)" >> "$LOG_FILE"
+if rsync -av --delete "$SRC_DIR/" "$FULL_BACKUP_DIR/" >> "$LOG_FILE" 2>&1; then
+  echo "Backup completed successfully at $(date)" >> "$LOG_FILE"
+  echo "Backup completed successfully"
+else
+  echo "Backup failed at $(date)" >> "$LOG_FILE"
+  echo "Backup failed. Check log file for details."
+  exit 1
+fi
+
+7.Service status monitoring:
+#!/usr/bin/env bash
+set -euo pipefail
+# Root check
+if [[ $EUID -ne 0 ]]; then
+  echo "Please run this script as root (sudo)"
+  exit 1
+fi
+read -p "Enter services to monitor (comma-separated): " SERVICE_INPUT
+# Split input into array
+IFS=',' read -ra SERVICES <<< "$SERVICE_INPUT"                        :way to read an array
+for service in "${SERVICES[@]}"; do                                   :"${SERVICES[@]}" expands array element by element like spread operator in js
+  # Trim whitespace
+  service=$(echo "$service" | xargs)
+
+  if systemctl is-active --quiet "$service"; then
+    echo "✅ $service is running"
+  else
+    echo "⚠️  $service is not running — restarting..."
+    systemctl start "$service"
+
+    if systemctl is-active --quiet "$service"; then
+      echo "✅ $service restarted successfully"
+    else
+      echo "❌ Failed to restart $service"
+    fi
+  fi
+done
+
+Mailing:
+>sudo apt install msmtp msmtp-mta           :using msmtp
+Configuring smtp:
+>nano ~/.msmtprc                            :creating config
+defaults
+auth           on
+tls            on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        ~/.msmtp.log
+
+account gmail
+host smtp.gmail.com
+port 587
+from yourmail@gmail.com
+user yourmail@gmail.com
+password YOUR_APP_PASSWORD
+
+account default : gmail
+>chmod 600 ~/.msmtprc
+
+Test mail:
+echo -e "Subject: Test Mail\n\nHello from Linux SMTP" | msmtp receiver@gmail.com
+
+Common SMTP providers:
+| Provider | SMTP Host           | Port | TLS |
+| -------- | ------------------- | ---- | --- |
+| Gmail    | smtp.gmail.com      | 587  | Yes |
+| Outlook  | smtp.office365.com  | 587  | Yes |
+| Yahoo    | smtp.mail.yahoo.com | 587  | Yes |
+| AWS SES  | email-smtp.*        | 587  | Yes |
+
+8.send_mail.sh
+#!/usr/bin/env bash
+TO="receiver@gmail.com"
+SUBJECT="Server Alert"
+BODY="Disk usage exceeded threshold on $(hostname)"
+FROM="yourmail@gmail.com"
+{
+  echo "From: $FROM"
+  echo "To: $TO"
+  echo "Subject: $SUBJECT"
+  echo
+  echo "$BODY"
+} | msmtp "$TO"
+
+
+
+
 
 
 
