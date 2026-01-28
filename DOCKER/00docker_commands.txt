@@ -187,10 +187,11 @@ Defines the main executable for the container.
 Not easily overridden (unless using --entrypoint flag).
 ENTRYPOINT ["python"]
 CMD ["app.py"]
+
+RUN builds the image, CMD runs the container
 ======================================================================================================================
 Image layers:  images are composed of layers. And each of these layers, once created, are immutable and those layers used to create the filesystem a container can use.
-A layer is: A snapshot of filesystem changes...layers live on the host machine not inside container.(something like: /var/lib/docker)
-“What got added / removed / modified”
+A layer is: A snapshot of filesystem changes(“What got added / removed / modified”)...layers live on the host machine not inside container.(something like: /var/lib/docker)
 
 Example:
 Ubuntu base → one layer
@@ -207,7 +208,158 @@ The fifth layer copies in the actual source code of the application.
 It allows layers to be reused between images. For example, imagine you wanted to create another Python application. Due to layering, you can leverage the same Python base
 This will make builds faster and reduce the amount of storage and bandwidth required to distribute the images
 
-=======================================================================================================================
+A deeper dive into image layers: https://docs.docker.com/get-started/docker-concepts/building-images/understanding-image-layers/
+=================================================================================================================================================================
+
+Dockerfile: text-based document that provides instructions to the image builder to create container images
+
+FROM <image>                          :specifies the base image 
+WORKDIR <path>                        :sets the working directory inside the image for subsequent COPY, RUN, CMD etc.
+COPY <host-path> <image-path>         :copies files from the build context on the host into the image
+RUN <command>                         :builder runs this command inside the container(this is different from the command that executes when we say >docker run...)
+ENV <name> <value>                    :sets an environment variable at build time, which is also available at runtime(it exists in the image)
+EXPOSE <port-number>                  :documents the port the application listens on(it wont expose until we do >docker run -p 8080:80)
+USER <user-or-uid>                    :sets default user for all subsequent operations(so container dont run as root user)
+CMD ["<command>", "<arg1>"]           :default command run when the container starts.(when we use >docker run <image>)
+
+Production ready images have: max build cache, fast, secure, run as non-root and use multi-stage builds
+
+You can actually view the history (or how the image was created) by using :
+>docker image history <imagename>
+
+===========================================================================================================================================================================
+
+Build cache(faster builds->optimized images):
+Docker executes each instruction in your Dockerfile, creating a layer for each command and in the order specified.
+Docker checks whether it can reuse the instruction from a previous build. If it finds that you've already executed a similar instruction before, it doesn't need to redo it. 
+it’ll use the cached result so that builds becomes faster and more efficient
+
+If one layer changes → that layer and everything after it is rebuilt.
+ex:
+If you change: RUN apt install -y nodejs
+to:            RUN apt install -y nodejs npm
+Docker invalidates that layer, Command is re-run, New layer is created...even small change=cache miss
+
+Once a layer is invalidated,
+Layer 1  ✔ cached
+Layer 2  ❌ changed
+Layer 3  ❌ rebuilt
+Layer 4  ❌ rebuilt
+Docker cannot reuse later layers, because: They depend on filesystem state from earlier layers hence
+all subsequent layers are rebuilt to maintain consistency.
+
+Bad dockerfile:
+COPY . .
+RUN npm install
+Any code change → npm install reruns 😭
+
+Good dockerfile(cache friendly):
+COPY package.json package-lock.json ./
+RUN npm install
+COPY . .
+even if Code changes → npm install cached
+
+1.Build cache is invalidated when there are changes in a RUN instruction or in files copied using COPY or ADD
+2.What does NOT invalidate cache? (important!)
+❌ Container runtime changes
+❌ CMD execution
+❌ Logs
+❌ Environment at docker run time
+Only build-time inputs matter.
+
+practical example case demonstrating importance of build caches: (bottom of page) https://docs.docker.com/get-started/docker-concepts/building-images/using-the-build-cache/
+==============================================================================================================================================================================
+
+Multi-stage builds: In traditional builds, all build instructions are executed in sequence and in single build container(creating bulky images)
+Multi-stage builds introduce multiple stages in your Dockerfile, each with a specific purpose. we can think of it like the ability to run different parts of a build
+in multiple different environments, concurrently. By separating the build environment from the final runtime environment, we can significantly reduce the image size and attack surface.
+
+Multi-stage builds are recommended for all types of applications:
+1.For interpreted languages: JavaScript or Ruby or Python, you can build and minify your code in one stage, and copy the production-ready files to a smaller runtime image.
+2.For compiled languages, like C or Go or Rust, multi-stage builds let you compile in one stage and copy the compiled binaries into a final runtime image. 
+No need to bundle the entire compiler in your final image.
+
+Example of muilt-stage build:
+# Stage 1: Build Environment
+FROM builder-image AS build-stage 
+# Install build tools (e.g., Maven, Gradle)
+# Copy source code
+# Build commands (e.g., compile, package)
+
+# Stage 2: Runtime environment
+FROM runtime-image AS final-stage  
+#  Copy application artifacts from the build stage (e.g., JAR file)
+COPY --from=build-stage /path/in/build/stage /path/to/place/in/final/stage
+# Define runtime configuration (e.g., CMD, ENTRYPOINT) 
+
+🔹 Copy only what is needed
+COPY --from=build-stage /path/in/build/stage /path/in/final/stage
+Copies only the built output
+Leaves behind: Source code, Compilers, Build tools
+
+This Dockerfile uses two stages:
+1.Build-stage:
+Uses a heavy image
+Contains: Build tools (Maven, Gradle, compilers)
+includes commands to install build tools, copy source code, and execute build commands.
+Purpose:  Compile / build the application
+Output:   Final artifact (e.g., .jar, .exe, dist/ folder)
+📌 This stage is not shipped to production
+
+2.Final-stage:
+Uses a lightweight image
+No build tools
+Only what is needed to run the app. It copies the compiled artifacts (a JAR file, for example) from the build stage. 
+Finally, it defines the runtime configuration (using CMD or ENTRYPOINT) for starting your application.
+
+Real-world example:
+Stage 1: Java + Maven → build app.jar
+Stage 2: Java only → run app.jar
+
+example:
+# -------- Stage 1: Build stage --------
+FROM node:20 AS build
+WORKDIR /app
+# Copy dependency files first (better caching)
+COPY package*.json ./
+# Install all dependencies (including dev)
+RUN npm install
+# Copy source code
+COPY . .
+# Build the app (for React / TS / Nest etc.)
+RUN npm run build
+
+# -------- Stage 2: Runtime stage --------
+FROM node:20-slim AS runtime
+WORKDIR /app
+# Copy only built output and production deps
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package*.json ./
+# Install only production dependencies
+RUN npm install --omit=dev
+# App runs on this port
+EXPOSE 3000
+# Run the app
+CMD ["node", "dist/index.js"]
+
+Stage 1 – Build
+Uses full Node image
+Installs all dependencies
+Builds the application
+Produces output (e.g. dist/)
+
+🔹 Stage 2 – Run
+Uses lightweight Node image
+Copies only:
+built files
+production dependencies
+No source code
+No dev tools
+
+With multi-stage builds, a Docker build uses one base image for compilation, packaging, and unit tests and then a separate image for the application runtime.
+As a result, the final image is smaller in size since it doesn’t contain any development or debugging tools. 
+
+================================================================================================================================================================
 With Docker Compose, you can define all of your containers and their configurations in a single YAML file.
 docker compose:making services run with minimal setup and cleanup effort
 
@@ -347,24 +499,44 @@ Already using in-container watchers (nodemon, uvicorn)
 =========================================================================================
 
 Push docker images to dockerhub =>hub.docker.com(create an account on this)
-1.Create dockerfiles/compose files
+1.Create dockerfiles and compose files(if needed)
 
 while pushing to repo ur image must be like : username/imagename
 
 2.Build:
-docker build -t <image_name> .            :'.'means current directory
+docker build .                            :simple build(gives id of image as sha256:xyz...)
+docker build -t <image_name> .            :'.'means current directory(path or URL to the build context)
 
 3.Check:
 docker images
 
-4.Tag:
-docker tag <image_name> <dockerhub_username>/<imagename>:<tag>
+4.Tag(adding another tag if image already built):
+docker tag <username/image_name> <another_username>/<another_imagename>:<tag>
 
 Tag and build in one command:
 docker build -t <dockerhub_username>/<image>:<tag> .
 
 5.Login
-docker login    =>Enter username and password/access token of docker account
+docker login    =>Enter username and password/access-token of docker account
+or
+docker login -u <username>
+you can configure the credential store in the Docker configuration file, which is located at $HOME/.docker/config.json on Linux 
+or %USERPROFILE%/.docker/config.json on Windows
 
 6.push
 docker push <dockerhub_username>/<image>:<tag>
+
+==============================================================
+tagging images:
+[HOST[:PORT_NUMBER]/]PATH[:TAG]
+
+HOST: The optional registry hostname where the image is located. If not specified, Docker's public registry at docker.io is default.
+PORT_NUMBER: The registry port number if a hostname is provided
+PATH: The path of the image, consisting of slash-separated components. For Docker Hub, the format follows [NAMESPACE]/REPOSITORY, where namespace is either a user's or organization's name. 
+If no namespace is specified, library is used, which is the namespace for Docker Official Images.
+TAG: A custom, human-readable identifier that's typically used to identify different versions or variants.'latest' is used by default.
+
+examples:
+nginx, equivalent to docker.io/library/nginx:latestst
+docker/welcome-to-docker, equivalent to docker.io/docker/welcome-to-docker:latest
+ghcr.io/dockersamples/example-voting-app-vote:pr-311: an image from the GitHub Container Registry, dockersamples namespace, example-voting-app-vote image repository, pr-311 tag
