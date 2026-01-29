@@ -1,0 +1,135 @@
+With Docker Compose, you can define all of your containers and their configurations in a single YAML file.
+docker compose:making services run with minimal setup and cleanup effort
+
+localhost for one doesnt mean same localhost for other
+Why localhost doesn't mean the same across Docker containers?
+(incase u dockerized a frontend(5173) and backend(3000) and frontend needs to make api call, it can't simply call on localhost:8000 while it will work when u dont use docker to run the project)
+if your frontend container tries http://localhost:3000, it’s looking for a backend process inside the same container, which doesn’t exist.
+Each Docker container has its own isolated network namespace — meaning each one is seperate instance...each is a seperate machine:
+localhost (or 127.0.0.1) inside a container refers to itself — not the host or any other container.
+So if Container A tries to call localhost:5000, it is calling itself, not Container B.
+hence localhost for A and B both are seperate.
+
+💡 Then how do they communicate?
+In this case:
+The frontend can access the backend using:
+http://backend:5000
+Not:
+❌ http://localhost:5000
+Because:
+backend is the service name, and Docker DNS will resolve it to the backend container's IP.
+
+Example Use in Node.js Frontend
+const response = await axios.post('http://backend:5000/submit', formData);
+
+That works because:
+Docker Compose puts both containers in the same network
+backend is a valid hostname inside that network
+
+✅ How to Make Services Talk to Each Other: use names that docker DNS resolves to(service discovery)
+Use Docker Compose to run all services in the same custom network. Docker Compose does this by default.
+docker-compose.yaml
+version: '3.8'
+services:
+  frontend:
+    image: yourname/frontend:latest
+    environment:
+      - BACKEND_URL=http://backend:5000/
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+  backend:
+    image: yourname/backend:latest
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+  admin:
+    image: yourname/admin:latest
+    ports:
+      - "4000:4000"
+    networks:
+      - app-network
+networks:
+  app-network: {}
+
+A Dockerfile provides instructions to build a container image while a Compose file defines your running containers. 
+Quite often, a Compose file references a Dockerfile to build an image to use for a particular service.
+
+Why Use Docker Compose?
+Because it lets you:
+Define all services, ports, networks, volumes, etc. in one YAML file
+
+Launch everything with one command:
+>docker compose up
+
+Automatically creates a shared network so containers can talk by service names
+
+To shut down all containers at once that were started by docker compose:
+>docker compose down
+---
+
+Old dev workflow 😒(need to bring down, then rebuild and make up and running if after any changes were made)
+>docker compose down
+>docker compose up --build
+⏳ slow, annoying
+or
+volumes:
+  - .:/app
+❌ messy
+❌ breaks node_modules / python venv
+❌ permission issues
+
+
+New dev workflow 😍(file sync+auto rebuild)
+>docker compose watch
+
+Docker:
+Watches source files
+Syncs only what changed
+Restarts container if required
+Rebuilds image if Dockerfile changes
+
+Example: compose.yaml
+services:
+  web:
+    build: .
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+
+        - action: rebuild
+          path: package.json
+Run:
+docker compose watch
+What happens:
+| Change                | Action              |
+| --------------------- | ------------------- |
+| Edit `src/app.js`     | Sync into container |
+| Change `package.json` | Rebuild image       |
+| Change Dockerfile     | Rebuild             |
+| No manual restart     | 🎉                  |
+
+Actions supported in watch:
+| Action         | Meaning                 |
+| -------------- | ----------------------- |
+| `sync`         | Copy files to container |
+| `rebuild`      | Rebuild image           |
+| `restart`      | Restart container       |
+| `sync+restart` | Both                    |
+
+✅ Use it when:
+Developing Node / Python / Java apps
+Want hot reload without bind mounts
+Hate permission & performance issues
+Using Docker Compose v2+
+
+❌ Don’t use when:
+Production
+Simple one-off containers
+Already using in-container watchers (nodemon, uvicorn)

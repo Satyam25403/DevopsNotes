@@ -169,7 +169,7 @@ coz browser is on our machine which has a different 80 port which is not nginx c
 so we map ourmachineport:nginxport  => 7999:80  =>we can now access nginx on port:7999 on our localhost
 docker run -it -p 8000:80 nginx
 
-
+===========================================================================================================
 RUN vs ENTRYPOINT vs CMD
 RUN Purpose:
 Used during the image build process.
@@ -189,6 +189,11 @@ ENTRYPOINT ["python"]
 CMD ["app.py"]
 
 RUN builds the image, CMD runs the container
+
+---
+
+Overriding container defaults:
+
 ======================================================================================================================
 Image layers:  images are composed of layers. And each of these layers, once created, are immutable and those layers used to create the filesystem a container can use.
 A layer is: A snapshot of filesystem changes(“What got added / removed / modified”)...layers live on the host machine not inside container.(something like: /var/lib/docker)
@@ -268,275 +273,29 @@ even if Code changes → npm install cached
 Only build-time inputs matter.
 
 practical example case demonstrating importance of build caches: (bottom of page) https://docs.docker.com/get-started/docker-concepts/building-images/using-the-build-cache/
-==============================================================================================================================================================================
 
-Multi-stage builds: In traditional builds, all build instructions are executed in sequence and in single build container(creating bulky images)
-Multi-stage builds introduce multiple stages in your Dockerfile, each with a specific purpose. we can think of it like the ability to run different parts of a build
-in multiple different environments, concurrently. By separating the build environment from the final runtime environment, we can significantly reduce the image size and attack surface.
+===========================================================================================================================================================================================
+Publishing and exposing ports:
+containers provide isolated processes for each component of application(react frontend, python api, database etc) each runnning in its own sandboxed environment completely isolated
+from everything on your host machine. Isolation is good for security and managing dependencies but that also means you cant access them directly(ex: you cant access the web app in browser)
 
-Multi-stage builds are recommended for all types of applications:
-1.For interpreted languages: JavaScript or Ruby or Python, you can build and minify your code in one stage, and copy the production-ready files to a smaller runtime image.
-2.For compiled languages, like C or Go or Rust, multi-stage builds let you compile in one stage and copy the compiled binaries into a final runtime image. 
-No need to bundle the entire compiler in your final image.
+publishing a port gives ability to access containers by setting up a forwarding rule:
+>docker run -d -p HOST-PORT:CONTAINER-PORT <imagename>
 
-Example of muilt-stage build:
-# Stage 1: Build Environment
-FROM builder-image AS build-stage 
-# Install build tools (e.g., Maven, Gradle)
-# Copy source code
-# Build commands (e.g., compile, package)
+HOST-PORT: port on machine where you want to receive traffic
+CONTAINER-PORT: port within the container that's listening for connections
+NOTE: when a port is published, it is published to all network interfaces by default...meaning traffic reaching the published port cann access the published application
+(thats y it is not recommended to publish databases)
 
-# Stage 2: Runtime environment
-FROM runtime-image AS final-stage  
-#  Copy application artifacts from the build stage (e.g., JAR file)
-COPY --from=build-stage /path/in/build/stage /path/to/place/in/final/stage
-# Define runtime configuration (e.g., CMD, ENTRYPOINT) 
+Ephermal ports:
+when we want docker to choose which port to publish and are ok with any port, we simply omit HOST-PORT
+>docker run -p <CONTAINER-PORT> <image>
+port chosen by docker is called Ephermal port and is seen once the container is running by:
+>docker ps
 
-🔹 Copy only what is needed
-COPY --from=build-stage /path/in/build/stage /path/in/final/stage
-Copies only the built output
-Leaves behind: Source code, Compilers, Build tools
+publishing all ports:
+while creating an image using dockerfile, EXPOSE instruction is used to indicate that the packaged application will use specified port, but they are not published by default.
+with -P, we can automatically publish all exposed ports to ephermal ports(docker chooses on host). Use when you want to avoid port conflicts in development or testing.
+>docker run -P <imagename>
 
-This Dockerfile uses two stages:
-1.Build-stage:
-Uses a heavy image
-Contains: Build tools (Maven, Gradle, compilers)
-includes commands to install build tools, copy source code, and execute build commands.
-Purpose:  Compile / build the application
-Output:   Final artifact (e.g., .jar, .exe, dist/ folder)
-📌 This stage is not shipped to production
-
-2.Final-stage:
-Uses a lightweight image
-No build tools
-Only what is needed to run the app. It copies the compiled artifacts (a JAR file, for example) from the build stage. 
-Finally, it defines the runtime configuration (using CMD or ENTRYPOINT) for starting your application.
-
-Real-world example:
-Stage 1: Java + Maven → build app.jar
-Stage 2: Java only → run app.jar
-
-example:
-# -------- Stage 1: Build stage --------
-FROM node:20 AS build
-WORKDIR /app
-# Copy dependency files first (better caching)
-COPY package*.json ./
-# Install all dependencies (including dev)
-RUN npm install
-# Copy source code
-COPY . .
-# Build the app (for React / TS / Nest etc.)
-RUN npm run build
-
-# -------- Stage 2: Runtime stage --------
-FROM node:20-slim AS runtime
-WORKDIR /app
-# Copy only built output and production deps
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/package*.json ./
-# Install only production dependencies
-RUN npm install --omit=dev
-# App runs on this port
-EXPOSE 3000
-# Run the app
-CMD ["node", "dist/index.js"]
-
-Stage 1 – Build
-Uses full Node image
-Installs all dependencies
-Builds the application
-Produces output (e.g. dist/)
-
-🔹 Stage 2 – Run
-Uses lightweight Node image
-Copies only:
-built files
-production dependencies
-No source code
-No dev tools
-
-With multi-stage builds, a Docker build uses one base image for compilation, packaging, and unit tests and then a separate image for the application runtime.
-As a result, the final image is smaller in size since it doesn’t contain any development or debugging tools. 
-
-================================================================================================================================================================
-With Docker Compose, you can define all of your containers and their configurations in a single YAML file.
-docker compose:making services run with minimal setup and cleanup effort
-
-localhost for one doesnt mean same localhost for other
-Why localhost doesn't mean the same across Docker containers?
-(incase u dockerized a frontend(5173) and backend(3000) and frontend needs to make api call, it can't simply call on localhost:8000 while it will work when u dont use docker to run the project)
-if your frontend container tries http://localhost:3000, it’s looking for a backend process inside the same container, which doesn’t exist.
-Each Docker container has its own isolated network namespace — meaning each one is seperate instance...each is a seperate machine:
-localhost (or 127.0.0.1) inside a container refers to itself — not the host or any other container.
-So if Container A tries to call localhost:5000, it is calling itself, not Container B.
-hence localhost for A and B both are seperate.
-
-💡 Then how do they communicate?
-In this case:
-The frontend can access the backend using:
-http://backend:5000
-Not:
-❌ http://localhost:5000
-Because:
-backend is the service name, and Docker DNS will resolve it to the backend container's IP.
-
-Example Use in Node.js Frontend
-const response = await axios.post('http://backend:5000/submit', formData);
-
-That works because:
-Docker Compose puts both containers in the same network
-backend is a valid hostname inside that network
-
-✅ How to Make Services Talk to Each Other: use names that docker DNS resolves to(service discovery)
-Use Docker Compose to run all services in the same custom network. Docker Compose does this by default.
-docker-compose.yaml
-version: '3.8'
-services:
-  frontend:
-    image: yourname/frontend:latest
-    environment:
-      - BACKEND_URL=http://backend:5000/
-    ports:
-      - "3000:3000"
-    depends_on:
-      - backend
-    networks:
-      - app-network
-  backend:
-    image: yourname/backend:latest
-    ports:
-      - "5000:5000"
-    networks:
-      - app-network
-  admin:
-    image: yourname/admin:latest
-    ports:
-      - "4000:4000"
-    networks:
-      - app-network
-networks:
-  app-network: {}
-
-A Dockerfile provides instructions to build a container image while a Compose file defines your running containers. 
-Quite often, a Compose file references a Dockerfile to build an image to use for a particular service.
-
-Why Use Docker Compose?
-Because it lets you:
-Define all services, ports, networks, volumes, etc. in one YAML file
-
-Launch everything with one command:
->docker compose up
-
-Automatically creates a shared network so containers can talk by service names
-
-To shut down all containers at once that were started by docker compose:
->docker compose down
----
-
-Old dev workflow 😒(need to bring down, then rebuild and make up and running if after any changes were made)
->docker compose down
->docker compose up --build
-⏳ slow, annoying
-or
-volumes:
-  - .:/app
-❌ messy
-❌ breaks node_modules / python venv
-❌ permission issues
-
-
-New dev workflow 😍(file sync+auto rebuild)
->docker compose watch
-
-Docker:
-Watches source files
-Syncs only what changed
-Restarts container if required
-Rebuilds image if Dockerfile changes
-
-Example: compose.yaml
-services:
-  web:
-    build: .
-    develop:
-      watch:
-        - action: sync
-          path: ./src
-          target: /app/src
-
-        - action: rebuild
-          path: package.json
-Run:
-docker compose watch
-What happens:
-| Change                | Action              |
-| --------------------- | ------------------- |
-| Edit `src/app.js`     | Sync into container |
-| Change `package.json` | Rebuild image       |
-| Change Dockerfile     | Rebuild             |
-| No manual restart     | 🎉                  |
-
-Actions supported in watch:
-| Action         | Meaning                 |
-| -------------- | ----------------------- |
-| `sync`         | Copy files to container |
-| `rebuild`      | Rebuild image           |
-| `restart`      | Restart container       |
-| `sync+restart` | Both                    |
-
-✅ Use it when:
-Developing Node / Python / Java apps
-Want hot reload without bind mounts
-Hate permission & performance issues
-Using Docker Compose v2+
-
-❌ Don’t use when:
-Production
-Simple one-off containers
-Already using in-container watchers (nodemon, uvicorn)
-
-=========================================================================================
-
-Push docker images to dockerhub =>hub.docker.com(create an account on this)
-1.Create dockerfiles and compose files(if needed)
-
-while pushing to repo ur image must be like : username/imagename
-
-2.Build:
-docker build .                            :simple build(gives id of image as sha256:xyz...)
-docker build -t <image_name> .            :'.'means current directory(path or URL to the build context)
-
-3.Check:
-docker images
-
-4.Tag(adding another tag if image already built):
-docker tag <username/image_name> <another_username>/<another_imagename>:<tag>
-
-Tag and build in one command:
-docker build -t <dockerhub_username>/<image>:<tag> .
-
-5.Login
-docker login    =>Enter username and password/access-token of docker account
-or
-docker login -u <username>
-you can configure the credential store in the Docker configuration file, which is located at $HOME/.docker/config.json on Linux 
-or %USERPROFILE%/.docker/config.json on Windows
-
-6.push
-docker push <dockerhub_username>/<image>:<tag>
-
-==============================================================
-tagging images:
-[HOST[:PORT_NUMBER]/]PATH[:TAG]
-
-HOST: The optional registry hostname where the image is located. If not specified, Docker's public registry at docker.io is default.
-PORT_NUMBER: The registry port number if a hostname is provided
-PATH: The path of the image, consisting of slash-separated components. For Docker Hub, the format follows [NAMESPACE]/REPOSITORY, where namespace is either a user's or organization's name. 
-If no namespace is specified, library is used, which is the namespace for Docker Official Images.
-TAG: A custom, human-readable identifier that's typically used to identify different versions or variants.'latest' is used by default.
-
-examples:
-nginx, equivalent to docker.io/library/nginx:latestst
-docker/welcome-to-docker, equivalent to docker.io/docker/welcome-to-docker:latest
-ghcr.io/dockersamples/example-voting-app-vote:pr-311: an image from the GitHub Container Registry, dockersamples namespace, example-voting-app-vote image repository, pr-311 tag
+===========================================================================================================================================================================================
