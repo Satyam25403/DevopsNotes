@@ -113,11 +113,61 @@ IPC with host services
 =================================================================================
 
 
-
-
 | Type       | Managed by Docker   | Persistent | Use case         |
 | ---------- | ------------------  | ---------- | ---------------- |
 | Volume     |  Yes                |  Yes       | Databases, prod  |
 | Bind mount |  No                 |  Yes       | Dev, configs     |
 | tmpfs      |  No                 |  No        | Secrets, cache   |
 | Named pipe |  No                 | IPC only   | Host ↔ container |
+
+
+================================================================================================
+
+Data persistance:
+When a container is deleted, the file changes(creat.ions, updates and deletions) are also deleted.
+Volumes are storage mechanism that provide ability to persist data beyond lifecycle of the container.
+imagine it like a shortcut or symlink from inside of container to outside of container.
+
+create volume:
+>docker volume create <volumename>
+
+mount onto container(in some location):
+>docker ruun -d -p <HOST>:<CONTAINER-PORT> -v <volumename>:</directory/in/container> <image>
+when container runs, all files it writes to the given directory in container will be saved in given volume(outside of container).
+we can use same volume attach it to new container to same directory and see the data persists.
+
+File-sharing:
+Attaching same volume to multiple containers might help to gather data in central location.
+Useful in cases like log-aggregation, data-pipelines or other event-driven applications.
+
+Managing volumes:
+Volumes have their own lifecycle beyond that of container and can grow quite large.
+>docker volume -ls                  :list all volumes
+>docker volume rm <vol-name-or-id>  :remove a volume(only removes if not attached to a container)
+>docker volume prune                :remove all unattached volumes
+
+Docker desktop allows us to view contents of a volume as well as ability to export, import, empty, delete and clone volumes.
+NOTE: before removing volumes, stop and remove the container it is attached to
+
+=================================================================================================================
+
+Sharing local files with docker:
+Containers run in isolation and cannot access host files by default.To allow containers persist data:(use volumes)
+and to share files with host system:(use bind mounts)
+
+Volumes:
+Managed by docker
+Stored in dockers internal location
+best for persistent data(databases, app data) is safer and portable
+Survives container removal
+
+Bind Mounts:
+Directly map host directories/files into a container.
+changes reflect instantly on host as well as container.
+Best for development, config files, source code (real-time file sharing)
+
+>docker run -v <HOST/PATH>:<CONTAINER/PATH> <image>                                       :creates host directory if missing
+>docker run --mount type=bind,source=</HOST/PATH>,target=</CONTAINER/PATH> <image>        :safer, recommended and production use...file changes sync instantly with bind mounts
+>docker run -v <HOST/PATH>:<CONTAINER/PATH>:ro <image>                                    :(ro)read-only mounts protect accidental host file changes(:rw read-write is default permission)
+
+an example on page(at bottom): https://docs.docker.com/get-started/docker-concepts/running-containers/sharing-local-files/
