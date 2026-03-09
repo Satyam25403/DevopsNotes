@@ -65,7 +65,13 @@ head -n 5 file1 file2                  # First 5 lines of multiple files
 tail -n 10 file                        # Last 10 lines
 tail -f /var/log/syslog               # Follow file in real-time (for logs)
 tail -n 20 file1 file2                # Last 20 lines of multiple files
+
+# View content before and after a match
+grep "word_to_match" -A5       #5 lines after the match
+grep "word_to_match" -B5       #5 lines before the match
+grep "word_to_match" -C5       #5 lines befor and after match(context of 5)
 ```
+
 
 ---
 
@@ -256,7 +262,7 @@ cd -                                   # Go to previous directory
 pwd                                    # Print working directory
 
 ls                                     # List files
-ls -l                                  # Long format (permissions, owner, size)
+ls -l                                  # Long listing(permissions, owner, size)
 ls -a                                  # Include hidden files (starting with .)
 ls -R                                  # Recursive listing
 ls -lah                                # Common: long, all, human-readable
