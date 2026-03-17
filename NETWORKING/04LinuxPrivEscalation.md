@@ -2165,8 +2165,6 @@ history -c
 
 ---
 
-*Next module: **Windows Privilege Escalation** — SeImpersonatePrivilege, service misconfigs, registry autoruns, DLL hijacking, unquoted service paths, AlwaysInstallElevated, Windows PrivEsc tools (WinPEAS, SharpUp).*
-
 *Cross-references:*
 - *Initial shell via web: `Web_Application_Security_RedTeam_Field_Manual.md` Sections 13, 27*
 - *SSH port and tunneling: `Ports_Protocols_RedTeam_Field_Manual.md` Section 5*
