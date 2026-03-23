@@ -16,6 +16,8 @@
 4. [Subnetting — The Skill Every Engineer Must Own](#4-subnetting--the-skill-every-engineer-must-own)
 5. [CIDR, Route Aggregation & Longest Prefix Match](#5-cidr-route-aggregation--longest-prefix-match)
 6. [NAT — Network Address Translation](#6-nat--network-address-translation)
+- [Redundant Gateway Protocols (HSRP / VRRP / GLBP)](#redundant-gateway-protocols-hsrp--vrrp--glbp)
+- [Virtual IPs — How They Work](#virtual-ips--how-they-work)
 7. [DHCP — Dynamic Host Configuration Protocol](#7-dhcp--dynamic-host-configuration-protocol)
 8. [DNS — The Internet's Phone Book (Deep Internals)](#8-dns--the-internets-phone-book-deep-internals)
 9. [TCP Internals — Beyond the Handshake](#9-tcp-internals--beyond-the-handshake)
@@ -383,7 +385,7 @@ Security abuse: Attackers with BGP access can inject a /24 to
 ## 6. NAT — Network Address Translation
 
 ### Layman's Terms
-NAT is like a **company receptionist**. Employees (private IPs) use internal extension numbers, but to the outside world, everyone appears to call from the same main number (public IP). The receptionist keeps a log of who called out and routes replies back to the right extension.
+NAT is like a **company receptionist**. Employees (private IPs) use internal extension numbers, but to the outside world, everyone appears to call from the same main number (public IP). The receptionist keeps a log of who called out and routes replies back to the right extension. NAT maps private ip addresses to a single public IP address, allowing multiple devices to access the internet.
 
 ### Real-World Analogy & Event
 Every home router does NAT. Your entire household (192.168.1.0/24) appears as **one IP** to the internet. This is why IPv4 hasn't run out even though there are billions of devices — NAT hid the shortage for decades.
@@ -394,7 +396,7 @@ In 2011, APNIC (Asia-Pacific) ran out of IPv4 addresses. Massive ISP-grade NAT (
 
 ```
 1. STATIC NAT (One-to-One):
-   Private: 10.0.0.5  ←→  Public: 203.0.113.5 (always)
+   Private: 10.0.0.5  ←→  Public: 203.0.113.5 (always); one to one mapping
    Use: DMZ servers that need a permanent public IP
    Security: Exposes the private IP 1:1 — no hiding
 
@@ -410,6 +412,8 @@ In 2011, APNIC (Asia-Pacific) ran out of IPv4 addresses. Massive ISP-grade NAT (
    
    This is what your home router does.
    One public IP supports ~65,535 simultaneous connections.
+
+  Static NAT maps one private ip to one public ip while PAT uses port numbers to share a single public IP among multiple devices
 ```
 
 ### NAT Translation Table
@@ -472,6 +476,269 @@ sudo watch -n1 'conntrack -L 2>/dev/null | grep ESTABLISHED | wc -l'
 sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 8080 \
   -j DNAT --to-destination 192.168.1.100:80
 ```
+---
+
+## Redundant Gateway Protocols (HSRP / VRRP / GLBP)
+
+### Layman's Terms
+Every device needs a **default gateway** — one router it sends traffic to when the destination is outside its subnet. If that router fails, everything loses connectivity. Redundant gateway protocols solve this by making **two physical routers appear as one virtual router** with a shared IP and MAC. If the active router fails, the standby takes over in under a second — no client reconfiguration needed.
+
+### Formal Definition
+First Hop Redundancy Protocols (FHRPs) allow multiple routers to share a single virtual IP and virtual MAC address. The active router handles all traffic; the standby monitors via hello messages and assumes the active role if the active becomes unreachable.
+
+---
+
+### HSRP — Hot Standby Router Protocol
+
+**Vendor:** Cisco proprietary | **Versions:** HSRPv1 (IPv4), HSRPv2 (IPv4 + IPv6)
+
+```
+                     Virtual IP:  10.0.10.1
+                     Virtual MAC: 0000.0c07.ac0a
+                                  │
+         ┌───────────────────────┴───────────────────────┐
+         │                                               │
+ [Router A — ACTIVE]                         [Router B — STANDBY]
+ Real IP: 10.0.10.2                           Real IP: 10.0.10.3
+ Priority: 110 (higher = wins)                Priority: 100 (default)
+         │                                               │
+         └───────────────────── LAN ────────────────────┘
+                      │           │           │
+                    PC1         PC2         PC3
+               GW: 10.0.10.1  ← virtual, never changes
+```
+
+**HSRP States:**
+
+| State | Description |
+|-------|-------------|
+| Initial | Interface just came up |
+| Learn | Waiting to hear virtual IP from active |
+| Listen | Knows virtual IP, neither active nor standby |
+| Speak | Sending hellos, participating in election |
+| Standby | Backup — monitoring, ready to take over |
+| Active | Forwarding all traffic for the virtual IP |
+
+**Configuration:**
+
+```cisco
+! Router A — Active
+interface GigabitEthernet0/0
+ ip address 10.0.10.2 255.255.255.0
+ standby version 2
+ standby 10 ip 10.0.10.1             ! Virtual IP
+ standby 10 priority 110             ! Higher than 100 default = wins
+ standby 10 preempt                  ! Reclaim Active role if it returns
+ standby 10 timers 1 3               ! Hello 1s, hold 3s
+ standby 10 track GigabitEthernet0/1 30
+ ! Uplink fails → priority drops 30 (110-30=80 < 100) → B takes over
+
+! Router B — Standby
+interface GigabitEthernet0/0
+ ip address 10.0.10.3 255.255.255.0
+ standby version 2
+ standby 10 ip 10.0.10.1
+ standby 10 priority 100
+ standby 10 preempt
+ standby 10 timers 1 3
+
+! Verify
+show standby brief
+! Interface   Grp  Pri P State   Active       Standby      Virtual IP
+! Gi0/0       10   110 P Active  local        10.0.10.3    10.0.10.1
+```
+
+**Failover speed:**
+
+```
+Default:    Hello 3s, Hold 10s  →  up to 10 seconds
+Aggressive: Hello 1s, Hold  3s  →  up to  3 seconds
+Subsecond:  standby 10 timers msec 200 msec 700
+```
+
+**Security — HSRP hijacking:**
+
+```
+Attack:  Send crafted HSRP hello with priority 255 → become Active → MITM
+Tool:    Yersinia  (sudo yersinia -G)
+Defense: standby 10 authentication md5 key-string STRONGKEY
+```
+
+---
+
+### VRRP — Virtual Router Redundancy Protocol
+
+**Vendor:** Open standard — RFC 5798 (VRRPv3 supports IPv4 + IPv6)
+
+```
+Differences from HSRP:
+
+Feature           HSRP                  VRRP
+─────────────────────────────────────────────────────
+Standard          Cisco proprietary     Open (RFC 5798)
+Terminology       Active / Standby      Master / Backup
+Virtual MAC       0000.0c07.acXX        0000.5e00.01XX
+Multicast group   224.0.0.2             224.0.0.18
+IPv6 support      HSRPv2 only           VRRPv3 native
+Priority range    0–255 (default 100)   1–254 (default 100)
+```
+
+**Configuration:**
+
+```cisco
+fhrp version vrrp v3
+
+interface GigabitEthernet0/0
+ ip address 10.0.10.2 255.255.255.0
+ vrrp 10 address-family ipv4
+  address 10.0.10.1 primary
+  priority 110
+  preempt
+  timers advertise msec 200
+
+! Verify
+show vrrp brief
+! Interface   Grp  A-F  Pri  State   Master addr   Group addr
+! Gi0/0       10   IPv4 110  Master  10.0.10.2     10.0.10.1
+```
+
+---
+
+### GLBP — Gateway Load Balancing Protocol
+
+**Vendor:** Cisco proprietary | **Unique:** All routers forward traffic simultaneously
+
+```
+HSRP / VRRP:  1 active router, others idle  →  redundancy only
+GLBP:         ALL routers forward           →  redundancy + load balancing
+
+Roles:
+  AVG (Active Virtual Gateway)   — one per group
+    Responds to ARP for the virtual IP
+    Assigns a different virtual MAC to each client
+    Each client's traffic goes to a different physical router
+
+  AVF (Active Virtual Forwarder) — one per router
+    Each router gets its own virtual MAC
+    Forwards traffic for clients assigned to its MAC
+
+Example — 3 routers, 6 clients:
+  Router A (AVG + AVF1): virtual MAC 0007.b400.0101 → PC1, PC2
+  Router B       (AVF2): virtual MAC 0007.b400.0102 → PC3, PC4
+  Router C       (AVF3): virtual MAC 0007.b400.0103 → PC5, PC6
+```
+
+**Configuration:**
+
+```cisco
+interface GigabitEthernet0/0
+ ip address 10.0.10.2 255.255.255.0
+ glbp 10 ip 10.0.10.1
+ glbp 10 priority 150
+ glbp 10 preempt
+ glbp 10 load-balancing round-robin    ! or: host-dependent, weighted
+
+show glbp brief
+! Interface   Grp  Fwd Pri  State    Address          Active router
+! Gi0/0       10   -   150  Active   10.0.10.1        local
+! Gi0/0       10   1   -    Active   0007.b400.0101   local
+! Gi0/0       10   2   -    Active   0007.b400.0102   10.0.10.3
+```
+
+---
+
+### HSRP vs VRRP vs GLBP
+
+| Feature | HSRP | VRRP | GLBP |
+|---------|------|------|------|
+| Standard | Cisco only | Open / multi-vendor | Cisco only |
+| Active routers | 1 of N | 1 of N | All N |
+| Load balancing | No | No | Yes |
+| IPv6 | HSRPv2 | VRRPv3 native | Yes |
+| Best for | Cisco, simple failover | Multi-vendor | Cisco, traffic distribution |
+
+---
+
+## Virtual IPs — How They Work
+
+### Layman's Terms
+A Virtual IP (VIP) is an **IP address that doesn't belong to any single physical interface**. It floats — it can be claimed by different machines on failure, or shared across machines for load balancing. The client always connects to the same IP; what's behind it can change invisibly.
+
+### How a VIP Moves — Gratuitous ARP
+
+```
+WITHOUT VIP:
+  Server A fails → client retries same IP → connection refused
+  Fix requires DNS change → minutes to hours depending on TTL
+
+WITH VIP:
+  Server A fails → Server B claims the VIP in < 1 second
+  Server B sends a Gratuitous ARP (unsolicited broadcast):
+    "10.0.0.50 is now at MAC bb:bb:bb:bb:bb:bb"
+  All switches and clients flush their ARP cache entry
+  Next packet goes to Server B — client never notices
+
+Gratuitous ARP:
+  Sender IP:  10.0.0.50       ← the VIP
+  Sender MAC: bb:bb:bb:bb:bb  ← new owner's real MAC
+  Target IP:  10.0.0.50       ← same IP (makes it "gratuitous")
+  Target MAC: ff:ff:ff:ff:ff  ← broadcast — everyone hears it
+
+Send manually on Linux:
+  sudo arping -A -I eth0 -c 3 10.0.0.50
+```
+
+### VIP on Linux — Keepalived
+
+The most common software VIP implementation — used for databases, web servers, any service needing HA without hardware.
+
+```bash
+# Both servers run keepalived
+# VIP lives on whichever is MASTER
+
+# /etc/keepalived/keepalived.conf — Server A (Master)
+vrrp_instance VI_1 {
+    state MASTER
+    interface eth0
+    virtual_router_id 51            # Must match on both servers
+    priority 110                    # Higher = Master (Server B has 100)
+    advert_int 1
+
+    authentication {
+        auth_type PASS
+        auth_pass strongpassword
+    }
+
+    virtual_ipaddress {
+        10.0.0.50/24                # The VIP
+    }
+
+    track_script { check_service }
+}
+
+vrrp_script check_service {
+    script "systemctl is-active nginx"
+    interval 2
+    weight -30                      # Fail → drop priority by 30
+}                                   # (110-30=80 < 100) → B takes over
+
+# Server B: same config, state BACKUP, priority 100
+
+sudo systemctl enable --now keepalived
+
+# Verify VIP is on master:
+ip addr show eth0 | grep 10.0.0.50
+# inet 10.0.0.50/24 scope global secondary eth0
+```
+
+### VIP vs Other HA Approaches
+
+| Mechanism | Failover Speed | Load Balancing | Complexity |
+|-----------|---------------|----------------|------------|
+| VIP + FHRP (HSRP/VRRP) | < 3 seconds | No (active/standby) | Low |
+| VIP + Keepalived | 1–3 seconds | No (active/standby) | Low |
+| VIP + Load Balancer | Instant | Yes | Medium |
+| DNS Round-Robin | Minutes (TTL) | Basic, no health check | Low |
 
 ---
 
@@ -1206,6 +1473,10 @@ Detection and hardening:
   Vector                              backbone)
     │              │
   RIP, EIGRP    OSPF, IS-IS
+
+  RIP: Routing Information Protocol
+  EIGRP: Enhanced Interior Gateway Routing Protocol
+  IS-IS: Intermediate System to Intermediate System Protocol
 ```
 
 ### OSPF — Open Shortest Path First
@@ -1215,6 +1486,7 @@ Type: Link-State, Interior Gateway Protocol
 Algorithm: Dijkstra's SPF (Shortest Path First)
 Metric: Cost (based on bandwidth: cost = 100Mbps / interface_bw)
 Administrative Distance: 110
+A router discovers nearby routers and establishes communication. The router creates a packet about state of its links and sends it to all routers in the network. Each router builds a network database based on LSAs(Link-state-Advertisement) it receives.
 
 How OSPF works:
 1. Neighbor discovery via Hello packets (multicast 224.0.0.5)
@@ -1254,7 +1526,7 @@ Administrative Distance: 20 (eBGP), 200 (iBGP)
 
 BGP is the routing protocol of the ENTIRE INTERNET.
 ~900,000 routes in the global BGP table (2024).
-Every ISP, cloud provider, and large enterprise uses BGP.
+Every ISP, cloud provider, and large enterprise uses BGP. Share a complete list of autonomous systems(ASes) a route passes through, enabling detailed route analysis and this helps in loop prevention.
 
 BGP Attributes (how routes are selected):
   1. WEIGHT (Cisco-proprietary, highest wins, not sent to neighbors)
@@ -1433,7 +1705,7 @@ Frame forwarding decisions:
 ### VLANs — Virtual Local Area Networks
 
 ```
-VLANs divide one physical switch into multiple logical switches.
+VLANs divide one physical switch into multiple logical switches. A logical grouping of devices ona a network, allowing devices to communicate as if there were on the same physical network, even if they are not.
 Each VLAN = separate broadcast domain.
 
 Without VLANs:
@@ -1459,7 +1731,12 @@ Trunk port:  carries traffic for MULTIPLE VLANs, keeps 802.1Q tags
 
 Native VLAN:  Traffic on trunk port WITHOUT a VLAN tag = native VLAN
               Default = VLAN 1 (NEVER use VLAN 1 in production — too many defaults)
-              
+other types: Default VLAN, Data VLAN, Voice VLAN, Management VLAN
+     
+Trunking Environment: A network configuration where multiple data streams or connections are aggregated and carried over a single physical link.(often associated with VLANS)
+
+Link Aggregation: combining multiple physical connections into a single logical link to increase bandwidth and frequency(contrast to VLANS where one unit is broken down into logical segments) using LACP(Link Aggregation Control Protocol).
+
 VLAN Hopping attack: Double-tag a frame with two VLAN tags:
   Outer tag: Native VLAN (stripped by first switch)
   Inner tag: Target VLAN (still present, second switch forwards it)
@@ -1474,7 +1751,7 @@ Fix: Set native VLAN to an unused, dedicated VLAN (e.g., VLAN 999):
 Problem: Redundant switch links = Layer 2 loops
          Broadcast storm: ARP → flood → flood → flood (infinitely)
          
-STP Solution: Block redundant paths, activate only on failure
+STP Solution: Block redundant paths, activate only on failure;(prevent loops in a network)
 
 STP Election Process:
   1. Elect Root Bridge: lowest Bridge ID (priority + MAC)
@@ -1490,14 +1767,16 @@ STP Election Process:
   4. All other ports → BLOCKING state (no data, receives BPDUs only)
 
 STP Port States:
-  BLOCKING   → 20 sec  (listens for BPDUs, no data)
-  LISTENING  → 15 sec  (transitional)
+  BLOCKING   → 20 sec  (listens for BPDUs, does not forward traffic)
+  LISTENING  → 15 sec  (transitional, listen BPDU packets to determine topology)
   LEARNING   → 15 sec  (builds MAC table, no data forwarding)
-  FORWARDING → active  (normal operation)
-  DISABLED            (admin shutdown)
+  FORWARDING → active  (normal operation: forward traffic)
+  DISABLED            (admin shutdown of port)
   
   Total convergence time: up to 50 seconds!
-  
+
+Variants: RSTP(faster convergence), MSTP(multiple spanning tree instances for scalability)
+
 RSTP (802.1w) — Rapid STP:
   Convergence < 1 second
   New port roles: Alternate Port (immediate backup for Root Port)
@@ -1546,6 +1825,19 @@ Inter-VLAN routing (Router-on-a-Stick):
 ```
 
 ### Switch Security Configuration Reference
+
+```bash
+# Basic switch Interface Configuration
+# 1.Access ports: for end devices(pc's, printers), assigned to single VLAN
+interface fa0/1         
+ switchport mode access
+ switchport access vlan 10
+
+# 2.Trunk ports: carry traffic for multiple VLANS between switches
+interface Gi0/1         
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+```
 
 ```bash
 # Cisco IOS switch hardening (key commands)
@@ -2432,21 +2724,11 @@ sudo wg-quick up wg0
 ### Layman's Terms
 A Wireless Access Point (WAP) is a **wireless version of a network switch port** — it lets devices connect to the network without cables. It converts Wi-Fi radio signals (L1) to Ethernet frames (L2) and vice versa.
 
-### Wi-Fi Standards Evolution
-
-| Standard | Year | Max Speed | Frequency | Notes |
-|----------|------|-----------|-----------|-------|
-| 802.11a | 1999 | 54 Mbps | 5 GHz | First 5GHz, limited adoption |
-| 802.11b | 1999 | 11 Mbps | 2.4 GHz | Mass adoption started here |
-| 802.11g | 2003 | 54 Mbps | 2.4 GHz | Backward compat with b |
-| 802.11n (Wi-Fi 4) | 2009 | 600 Mbps | 2.4/5 GHz | MIMO (multiple antennas) |
-| 802.11ac (Wi-Fi 5) | 2013 | 3.5 Gbps | 5 GHz | MU-MIMO, beamforming |
-| 802.11ax (Wi-Fi 6) | 2019 | 9.6 Gbps | 2.4/5 GHz | OFDMA, BSS Coloring |
-| 802.11ax (Wi-Fi 6E) | 2020 | 9.6 Gbps | 6 GHz | New 6GHz band (less congestion) |
-| 802.11be (Wi-Fi 7) | 2024 | 46 Gbps | 2.4/5/6 GHz | MLO (multi-link operation) |
+### SSID(Service Set Identifier)
+SSID is name of a wireless network, providing identity to the network, broadcasting it allows devices to detect the network. Some wireless acess points support multiple SSIDs each for different VLAN for network segmentation.
+Use case: seperate SSIDs for employees and guests to restrict access to internal resources.   
 
 ### Wi-Fi Security Protocols
-
 ```
 WEP (Wired Equivalent Privacy) — DEAD, never use:
   RC4 stream cipher with 40/104-bit keys
@@ -2470,9 +2752,9 @@ WPA2 — Current standard (2004–present):
     Tool: hcxdumptool + hashcat
     
 WPA3 — Current generation (2018+):
-  Personal:   SAE (Simultaneous Authentication of Equals)
+  Personal:   SAE (Simultaneous Authentication of Equals), resistant to bruteforce attacks.
               Password-authenticated key exchange — no offline dictionary attacks
-              Forward secrecy per session
+              Forward secrecy per session(intercepted traffic cannot be decrypted even if password is compromised later) Opportunistic Wireless Encryption(OWE)
   Enterprise: Suite-B cryptography (192-bit)
   Transition: WPA3 AP can support WPA2/WPA3 simultaneously
   
