@@ -2,7 +2,7 @@
 
 > **Series:** System Design Notes  
 > **Module:** 02 — Load Balancing  
-> **Prerequisites:** Networking basics (OSI Model, TCP/UDP), Horizontal vs Vertical Scaling
+> **Prerequisites:** Networking basics, Scaling
 
 ---
 

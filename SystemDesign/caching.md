@@ -2,7 +2,7 @@
 
 > **Series:** System Design Notes  
 > **Module:** 03 — Caching  
-> **Prerequisites:** `02_load_balancing.md`, Basic DB knowledge (reads/writes), Redis basics
+> **Prerequisites:** loadbalancing, Basic DB knowledge (reads/writes), Redis basics
 
 ---
 

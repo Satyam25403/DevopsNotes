@@ -2,7 +2,7 @@
 
 > **Series:** System Design Notes  
 > **Module:** 04 — CDN  
-> **Prerequisites:** `02_load_balancing.md`, `03_caching.md`, Basic DNS knowledge
+> **Prerequisites:** load_balancing, caching, Basic DNS knowledge
 
 ---
 
