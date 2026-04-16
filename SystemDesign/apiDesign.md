@@ -35,7 +35,7 @@
 Client                   API Contract               Server
   │                      ─────────────               │
   │── "GET /users/42" ──────────────────────────────►│
-  │                                                   │  (look up user 42)
+  │                                                  │  (look up user 42)
   │◄──── 200 OK { id: 42, name: "Satyam" } ──────────│
 
 The API contract says:
