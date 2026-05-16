@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Write-Through vs Write-Behind</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 14px;flex-shrink:0;border-bottom:1px solid #1a1a2a}
+.hdr-title{font-family:'Press Start 2P';font-size:13px;color:#e8a020;text-align:center;line-height:1.5;text-shadow:0 0 10px #e8a02066}
+.hdr-sub{font-family:'Press Start 2P';font-size:9px;color:#555;text-align:center}
+.dots{display:flex;gap:9px}
+.dot{width:11px;height:11px;background:#1a1a2e;border:1px solid #333;border-radius:1px}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 6px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:10px;left:12px;font-family:'Press Start 2P';font-size:13px;z-index:5}
+.sc-badge{position:absolute;top:10px;right:12px;font-family:'Press Start 2P';font-size:10px;padding:4px 9px;border:2px solid;z-index:5}
+.panel{height:84px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.pl{font-family:'Press Start 2P';font-size:9px;line-height:1.7}
+.stats{height:68px;display:flex;gap:8px;padding:0 12px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:7px 4px;text-align:center;background:#0a0a14}
+.stat-val{font-family:'Press Start 2P';font-size:14px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:8px;color:#555;display:block;margin-top:4px}
+.btns{height:58px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;flex-shrink:0;background:#05050a;border-top:1px solid #181828}
+.btn{font-family:'Press Start 2P';font-size:10px;padding:9px 13px;border:2px solid;cursor:pointer;background:transparent;touch-action:manipulation}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#555;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.07}to{opacity:.45}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 · HOOK
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">WRITE-THROUGH vs<br>WRITE-BEHIND</div>
+    <div class="hdr-sub">TWO STRATEGIES. ONE TRADEOFF.</div>
+    <div class="dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE TRADEOFF</div>
+    <div class="sc-badge" style="color:#4ec9e1;border-color:#4ec9e1">WRITE PATTERNS</div>
+    <div class="star" style="top:3%;left:7%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:7%;left:23%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:4%;left:45%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:11%;left:65%;--d:1.7s;--delay:.9s"></div>
+    <div class="star" style="top:6%;left:83%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:16%;left:91%;--d:1.6s;--delay:.8s"></div>
+    <div class="star" style="top:18%;left:13%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:3%;left:96%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:20%;left:55%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:13%;left:37%;--d:1.5s;--delay:1.1s"></div>
+    <div class="star" style="top:22%;left:76%;--d:2.3s;--delay:0s"></div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+      <g id="h1q" opacity="0">
+        <rect x="15" y="6" width="360" height="70" fill="#12081e" stroke="#e8a020" stroke-width="2.5" rx="4"/>
+        <text x="195" y="30" font-family="'Press Start 2P'" font-size="9" fill="#888" text-anchor="middle">SAME DATA. TWO STRATEGIES.</text>
+        <text x="195" y="50" font-family="'Press Start 2P'" font-size="9" fill="#e8a020" text-anchor="middle">ONE RISKS YOUR MONEY.</text>
+        <text x="195" y="68" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">ONE RISKS YOUR DATA.</text>
+      </g>
+
+      <g id="h1left" opacity="0">
+        <rect x="8" y="88" width="178" height="110" fill="#051020" stroke="#4ec9e1" stroke-width="2.5"/>
+        <text x="97" y="110" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">WRITE-THROUGH</text>
+        <text x="97" y="127" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">cache + DB together</text>
+        <text x="97" y="147" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle">✓ CONSISTENT</text>
+        <text x="97" y="165" font-family="'Press Start 2P'" font-size="9" fill="#e8a020" text-anchor="middle">✗ SLOWER WRITES</text>
+        <text x="97" y="185" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">Finance · Banking</text>
+      </g>
+
+      <g id="h1vs" opacity="0">
+        <text x="195" y="148" font-family="'Press Start 2P'" font-size="14" fill="#e8a020" text-anchor="middle">VS</text>
+      </g>
+
+      <g id="h1right" opacity="0">
+        <rect x="204" y="88" width="178" height="110" fill="#0a1a00" stroke="#4eff9a" stroke-width="2.5"/>
+        <text x="293" y="110" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">WRITE-BEHIND</text>
+        <text x="293" y="127" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">cache now, DB async</text>
+        <text x="293" y="147" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle">✓ FAST WRITES</text>
+        <text x="293" y="165" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">✗ DATA RISK</text>
+        <text x="293" y="185" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">IoT · Analytics</text>
+      </g>
+
+      <g id="h1sum" opacity="0">
+        <rect x="15" y="210" width="360" height="90" fill="#060610" stroke="#c97aff" stroke-width="2" rx="3"/>
+        <text x="195" y="232" font-family="'Press Start 2P'" font-size="9" fill="#c97aff" text-anchor="middle">THE CORE TRADEOFF:</text>
+        <text x="195" y="252" font-family="'Press Start 2P'" font-size="9" fill="#aaa"   text-anchor="middle">CONSISTENCY  vs  THROUGHPUT</text>
+        <text x="195" y="272" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">Both write to cache first.</text>
+        <text x="195" y="290" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle">When DB gets it — that's everything.</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#aaa;display:none" id="p1b">TWO PATTERNS. ONE CORE TRADEOFF.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">SYNC</span><span class="stat-lbl">WRITE-THROUGH</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">ASYNC</span><span class="stat-lbl">WRITE-BEHIND</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">BOTH</span><span class="stat-lbl">CACHE FIRST</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 · WRITE-THROUGH
+═══════════════════════════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">WRITE-THROUGH</div>
+    <div class="hdr-sub">CACHE + DB WRITTEN SIMULTANEOUSLY</div>
+    <div class="dots"><div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">WRITE-THROUGH</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">CONSISTENT</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- APP -->
+      <rect x="8" y="10" width="110" height="62" fill="#0d1020" stroke="#4ec9e1" stroke-width="2"/>
+      <text x="63" y="33" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">APP</text>
+      <text x="63" y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">updateBalance</text>
+      <text x="63" y="64" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">(id:42, $500)</text>
+
+      <!-- CACHE -->
+      <rect id="wt-cache" x="130" y="10" width="130" height="112" fill="#051020" stroke="#4ec9e1" stroke-width="2.5"/>
+      <text x="195" y="32" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">CACHE</text>
+      <rect id="wc1" x="138" y="40" width="114" height="15" fill="#0a1828"/>
+      <text x="195" y="52" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle" id="wct1">balance:42 → ?</text>
+      <rect id="wc2" x="138" y="58" width="114" height="15" fill="#071420"/>
+      <text x="195" y="70" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">session:x → ok</text>
+      <rect id="wc3" x="138" y="76" width="114" height="15" fill="#0a1828"/>
+      <text x="195" y="88" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">promo → SAVE20</text>
+      <rect id="wc4" x="138" y="94" width="114" height="15" fill="#071420"/>
+      <text x="195" y="106" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">config → {v:2}</text>
+      <text id="wt-chit" x="195" y="128" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle" opacity="0">✓ WRITTEN</text>
+
+      <!-- DB -->
+      <rect id="wt-db" x="272" y="10" width="110" height="112" fill="#0a1020" stroke="#4ec9e1" stroke-width="2.5"/>
+      <text x="327" y="32" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">DATABASE</text>
+      <rect id="wd1" x="280" y="40" width="94" height="14" fill="#0a1828"/>
+      <text x="327" y="51" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle" id="wdt1">balance: ???</text>
+      <rect id="wd2" x="280" y="57" width="94" height="14" fill="#071420"/>
+      <text x="327" y="68" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">user: Alice</text>
+      <rect id="wd3" x="280" y="74" width="94" height="14" fill="#0a1828"/>
+      <text x="327" y="85" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">plan: pro</text>
+      <rect id="wd4" x="280" y="91" width="94" height="14" fill="#071420"/>
+      <text x="327" y="102" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">credits: 450</text>
+      <text id="wt-dhit" x="327" y="128" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle" opacity="0">✓ WRITTEN</text>
+
+      <!-- beams -->
+      <line id="wt-b1" x1="118" y1="38" x2="130" y2="44" stroke="#4ec9e1" stroke-width="3" stroke-dasharray="6 4" opacity="0"/>
+      <line id="wt-b2" x1="118" y1="52" x2="272" y2="60" stroke="#4ec9e1" stroke-width="3" stroke-dasharray="6 4" opacity="0"/>
+      <text id="wt-sync" x="195" y="150" font-family="'Press Start 2P'" font-size="9" fill="#e8a020" text-anchor="middle" opacity="0">↕ SYNCHRONOUS</text>
+      <line id="wt-ack" x1="130" y1="30" x2="118" y2="28" stroke="#4eff9a" stroke-width="3" stroke-dasharray="5 3" opacity="0"/>
+
+      <text id="wt-time" x="195" y="174" font-family="'Press Start 2P'" font-size="18" fill="#4ec9e1" text-anchor="middle" opacity="0">⏱ ~8ms</text>
+      <text id="wt-sub"  x="195" y="194" font-family="'Press Start 2P'" font-size="8.5" fill="#888" text-anchor="middle" opacity="0">CACHE + DB BOTH UPDATED</text>
+
+      <g id="wt-flow" opacity="0">
+        <rect x="8" y="210" width="374" height="88" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="3"/>
+        <text x="195" y="230" font-family="'Press Start 2P'" font-size="8" fill="#4ec9e1" text-anchor="middle">FLOW: WRITE REQUEST ARRIVES</text>
+        <text x="195" y="248" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">① WRITE TO CACHE  (sync)</text>
+        <text x="195" y="266" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">② WRITE TO DB     (sync)</text>
+        <text x="195" y="284" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle">③ ACK TO CLIENT   (both done)</text>
+      </g>
+      <text id="wt-safe" x="195" y="308" font-family="'Press Start 2P'" font-size="7.5" fill="#4eff9a" text-anchor="middle" opacity="0">CRASH-SAFE: DB ALWAYS HAS LATEST</text>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p2a">▶ PRESS PLAY TO SEE WRITE-THROUGH</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p2b">CACHE + DB WRITTEN TOGETHER, BEFORE ACK</div>
+    <div class="pl" style="color:#888;display:none"   id="p2c">STRONG CONSISTENCY. ACK ONLY AFTER BOTH DONE.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">SYNC</span><span class="stat-lbl">WRITE MODE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">~8ms</span><span class="stat-lbl">WRITE TIME</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">✓</span><span class="stat-lbl">CONSISTENT</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 · WRITE-BEHIND
+═══════════════════════════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">WRITE-BEHIND</div>
+    <div class="hdr-sub">CACHE NOW. DB LATER (ASYNC).</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0a1a0a">
+    <div class="sc-label" style="color:#4eff9a">WRITE-BEHIND</div>
+    <div class="sc-badge" style="color:#e8a020;border-color:#e8a020">FAST WRITES</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- APP -->
+      <rect x="8" y="10" width="110" height="62" fill="#0d1a08" stroke="#4eff9a" stroke-width="2"/>
+      <text x="63" y="33" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">APP</text>
+      <text x="63" y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">logSensor</text>
+      <text x="63" y="64" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">(42, 98.6°F)</text>
+
+      <!-- CACHE (bright green) -->
+      <rect id="wb-cache" x="130" y="10" width="130" height="112" fill="#051a08" stroke="#4eff9a" stroke-width="2.5"/>
+      <text x="195" y="32" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">CACHE</text>
+      <rect id="bc1" x="138" y="40" width="114" height="15" fill="#0a2010"/>
+      <text x="195" y="52" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle" id="bct1">sensor:42 → ?</text>
+      <rect id="bc2" x="138" y="58" width="114" height="15" fill="#071e08"/>
+      <text x="195" y="70" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">sensor:11 → 37.2</text>
+      <rect id="bc3" x="138" y="76" width="114" height="15" fill="#0a2010"/>
+      <text x="195" y="88" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">device:88 → ok</text>
+      <rect id="bc4" x="138" y="94" width="114" height="15" fill="#071e08"/>
+      <text x="195" y="106" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">config → batch</text>
+      <text id="wb-chit" x="195" y="128" font-family="'Press Start 2P'" font-size="10" fill="#4eff9a" text-anchor="middle" opacity="0">✓ INSTANT!</text>
+
+      <!-- DB (dim) -->
+      <rect id="wb-db" x="272" y="10" width="110" height="112" fill="#0a0a10" stroke="#333" stroke-width="2"/>
+      <text x="327" y="32" font-family="'Press Start 2P'" font-size="8" fill="#333" text-anchor="middle">DATABASE</text>
+      <rect id="bd1" x="280" y="40" width="94" height="14" fill="#0d0d0d"/>
+      <text x="327" y="51" font-family="'Press Start 2P'" font-size="7" fill="#1e1e1e" text-anchor="middle" id="bdt1">PENDING…</text>
+      <rect id="bd2" x="280" y="57" width="94" height="14" fill="#0a0a0a"/>
+      <text x="327" y="68" font-family="'Press Start 2P'" font-size="7" fill="#1a1a1a" text-anchor="middle">sensor:11 → ok</text>
+      <rect id="bd3" x="280" y="74" width="94" height="14" fill="#0d0d0d"/>
+      <text x="327" y="85" font-family="'Press Start 2P'" font-size="7" fill="#1e1e1e" text-anchor="middle">stale…</text>
+      <rect id="bd4" x="280" y="91" width="94" height="14" fill="#0a0a0a"/>
+      <text x="327" y="102" font-family="'Press Start 2P'" font-size="7" fill="#1a1a1a" text-anchor="middle">stale…</text>
+
+      <!-- beams -->
+      <line id="wb-b1"    x1="118" y1="38" x2="130" y2="44" stroke="#4eff9a" stroke-width="3" stroke-dasharray="6 4" opacity="0"/>
+      <line id="wb-ack"   x1="130" y1="28" x2="118" y2="26" stroke="#4eff9a" stroke-width="3" stroke-dasharray="5 3" opacity="0"/>
+      <text id="wb-ackl"  x="63" y="14" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle" opacity="0">ACK ✓</text>
+
+      <line id="wb-async" x1="260" y1="70" x2="272" y2="70" stroke="#e8a020" stroke-width="2.5" stroke-dasharray="4 5" opacity="0"/>
+      <text id="wb-asyncl" x="195" y="148" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle" opacity="0">↻ ASYNC FLUSH (later)</text>
+      <text id="wb-dhit"  x="327" y="128" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle" opacity="0">⏳ QUEUED</text>
+
+      <text id="wb-time" x="195" y="172" font-family="'Press Start 2P'" font-size="18" fill="#4eff9a" text-anchor="middle" opacity="0">⚡ ~1ms</text>
+      <text id="wb-sub"  x="195" y="192" font-family="'Press Start 2P'" font-size="8.5" fill="#888" text-anchor="middle" opacity="0">ACK SENT BEFORE DB WRITE</text>
+
+      <g id="wb-flow" opacity="0">
+        <rect x="8" y="208" width="374" height="90" fill="#051a08" stroke="#4eff9a" stroke-width="1.5" rx="3"/>
+        <text x="195" y="228" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">FLOW: WRITE REQUEST ARRIVES</text>
+        <text x="195" y="246" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">① WRITE TO CACHE  (instant)</text>
+        <text x="195" y="264" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">② ACK TO CLIENT   (immediate!)</text>
+        <text x="195" y="282" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle">③ FLUSH TO DB     (async batch)</text>
+      </g>
+      <text id="wb-risk" x="195" y="308" font-family="'Press Start 2P'" font-size="7.5" fill="#e85050" text-anchor="middle" opacity="0">⚠ CRASH BEFORE FLUSH = DATA LOSS</text>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4eff9a;background:#001a05ee">
+    <div class="pl" style="color:#4eff9a" id="p3a">▶ PRESS PLAY TO SEE WRITE-BEHIND</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p3b">CACHE WRITTEN → ACK INSTANTLY → DB LATER</div>
+    <div class="pl" style="color:#e85050;display:none" id="p3c">⚠ CRASH BEFORE FLUSH = DATA LOST FOREVER.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">ASYNC</span><span class="stat-lbl">DB FLUSH</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">~1ms</span><span class="stat-lbl">ACK TIME</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">RISK</span><span class="stat-lbl">DATA LOSS</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 · WHEN TO USE WHICH
+═══════════════════════════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">WHEN TO USE WHICH</div>
+    <div class="hdr-sub">MATCH THE PATTERN TO THE RISK</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">DECISION GUIDE</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">USE THIS</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <g id="d4wt" opacity="0">
+        <rect x="8" y="8" width="374" height="30" fill="#051020" stroke="#4ec9e1" stroke-width="2" rx="2"/>
+        <text x="195" y="28" font-family="'Press Start 2P'" font-size="9" fill="#4ec9e1" text-anchor="middle">USE WRITE-THROUGH WHEN:</text>
+      </g>
+      <g id="d4wt1" opacity="0">
+        <rect x="8" y="46" width="374" height="42" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="65" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a">✓  Financial transactions</text>
+        <text x="26" y="81" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Bank balances, payments, ledgers</text>
+      </g>
+      <g id="d4wt2" opacity="0">
+        <rect x="8" y="96" width="374" height="42" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="115" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a">✓  Inventory / stock levels</text>
+        <text x="26" y="131" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Overselling stock is catastrophic</text>
+      </g>
+      <g id="d4wt3" opacity="0">
+        <rect x="8" y="146" width="374" height="42" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="165" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a">✓  Auth / access control</text>
+        <text x="26" y="181" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Stale permissions = security breach</text>
+      </g>
+
+      <g id="d4wb" opacity="0">
+        <rect x="8" y="198" width="374" height="30" fill="#0a1a00" stroke="#4eff9a" stroke-width="2" rx="2"/>
+        <text x="195" y="218" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle">USE WRITE-BEHIND WHEN:</text>
+      </g>
+      <g id="d4wb1" opacity="0">
+        <rect x="8" y="236" width="374" height="34" fill="#0a1a00" stroke="#4eff9a" stroke-width="1.5" rx="2"/>
+        <text x="26" y="252" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020">⚡  IoT / sensor data streams</text>
+        <text x="26" y="264" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Losing one reading is acceptable</text>
+      </g>
+      <g id="d4wb2" opacity="0">
+        <rect x="8" y="278" width="374" height="32" fill="#0a1a00" stroke="#4eff9a" stroke-width="1.5" rx="2"/>
+        <text x="26" y="294" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020">⚡  Analytics / click events</text>
+        <text x="26" y="306" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Approximate counts are fine</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p4a">▶ PRESS PLAY TO SEE DECISION GUIDE</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4b">CAN YOU AFFORD DATA LOSS? → WRITE-BEHIND</div>
+    <div class="pl" style="color:#888;display:none"   id="p4c">MONEY / SAFETY CRITICAL? → WRITE-THROUGH.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">BANK</span><span class="stat-lbl">WRITE-THROUGH</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">IoT</span><span class="stat-lbl">WRITE-BEHIND</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">RISK</span><span class="stat-lbl">IS THE KEY</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let T=[];
+function clr(){T.forEach(clearTimeout);T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=String(v);}
+function fc(id,c){let e=document.getElementById(id);if(e)e.setAttribute('fill',c);}
+function tx(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+function sh(id){op(id,1);}
+function hd(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+}
+
+function resetScene(n){
+  if(n===1){['h1q','h1left','h1right','h1vs','h1sum'].forEach(hd);bl('p1a');hn('p1b');}
+  if(n===2){
+    ['wt-b1','wt-b2','wt-chit','wt-dhit','wt-sync','wt-ack','wt-time','wt-sub','wt-flow','wt-safe'].forEach(hd);
+    ['wc1','wc2','wc3','wc4'].forEach((id,i)=>fc(id,i%2===0?'#0a1828':'#071420'));
+    ['wd1','wd2','wd3','wd4'].forEach((id,i)=>fc(id,i%2===0?'#0a1828':'#071420'));
+    tx('wct1','balance:42 → ?');tx('wdt1','balance: ???');
+    bl('p2a');hn('p2b');hn('p2c');
+  }
+  if(n===3){
+    ['wb-b1','wb-ack','wb-ackl','wb-chit','wb-async','wb-asyncl','wb-dhit','wb-time','wb-sub','wb-flow','wb-risk'].forEach(hd);
+    ['bc1','bc2','bc3','bc4'].forEach((id,i)=>fc(id,i%2===0?'#0a2010':'#071e08'));
+    ['bd1','bd2','bd3','bd4'].forEach((id,i)=>fc(id,i%2===0?'#0d0d0d':'#0a0a0a'));
+    tx('bct1','sensor:42 → ?');tx('bdt1','PENDING…');
+    bl('p3a');hn('p3b');hn('p3c');
+  }
+  if(n===4){['d4wt','d4wt1','d4wt2','d4wt3','d4wb','d4wb1','d4wb2'].forEach(hd);bl('p4a');hn('p4b');hn('p4c');}
+}
+
+function play1(){
+  clr();resetScene(1);
+  af(300,()=>sh('h1q'));
+  af(1100,()=>{sh('h1left');sh('h1vs');sh('h1right');});
+  af(2100,()=>sh('h1sum'));
+  af(2400,()=>{hn('p1a');bl('p1b');});
+}
+
+function play2(){
+  clr();resetScene(2);
+  af(300,()=>sh('wt-b1'));
+  af(600,()=>sh('wt-b2'));
+  af(800,()=>{
+    ['wc1','wc2','wc3','wc4'].forEach((id,i)=>{af(i*120,()=>{fc(id,'#1a5a30');af(200,()=>fc(id,i%2===0?'#0a2a18':'#071e10'));af(380,()=>{fc(id,'#1a5a30');af(200,()=>fc(id,i%2===0?'#0a1828':'#071420'));});});});
+    ['wd1','wd2','wd3','wd4'].forEach((id,i)=>{af(i*120,()=>{fc(id,'#1a4a5a');af(200,()=>fc(id,i%2===0?'#0a2030':'#071428'));af(380,()=>{fc(id,'#1a4a5a');af(200,()=>fc(id,i%2===0?'#0a1828':'#071420'));});});});
+  });
+  af(1100,()=>{tx('wct1','balance:42→$500');tx('wdt1','balance: $500');});
+  af(1400,()=>{sh('wt-chit');sh('wt-dhit');sh('wt-sync');hn('p2a');bl('p2b');bl('p2c');});
+  af(1900,()=>{hd('wt-b1');hd('wt-b2');sh('wt-ack');});
+  af(2400,()=>{sh('wt-time');sh('wt-sub');});
+  af(2900,()=>sh('wt-flow'));
+  af(3500,()=>sh('wt-safe'));
+}
+
+function play3(){
+  clr();resetScene(3);
+  af(300,()=>sh('wb-b1'));
+  af(500,()=>{['bc1','bc2','bc3','bc4'].forEach((id,i)=>{af(i*100,()=>{fc(id,'#1a6a20');af(180,()=>fc(id,i%2===0?'#0a3010':'#071e08'));af(340,()=>{fc(id,'#1a6a20');af(180,()=>fc(id,i%2===0?'#0a2010':'#071e08'));});});});});
+  af(700,()=>{tx('bct1','sensor:42→98.6');sh('wb-chit');});
+  af(1000,()=>{hd('wb-b1');sh('wb-ack');sh('wb-ackl');hn('p3a');bl('p3b');bl('p3c');});
+  af(1500,()=>{sh('wb-time');sh('wb-sub');});
+  af(2100,()=>{sh('wb-async');sh('wb-asyncl');sh('wb-dhit');});
+  af(2300,()=>{['bd1','bd2','bd3','bd4'].forEach((id,i)=>{af(i*100,()=>{fc(id,'#2a2a10');af(300,()=>fc(id,i%2===0?'#0d0d0d':'#0a0a0a'));});});tx('bdt1','QUEUED…');});
+  af(2900,()=>sh('wb-flow'));
+  af(3500,()=>sh('wb-risk'));
+}
+
+function play4(){
+  clr();resetScene(4);
+  af(200,()=>{sh('d4wt');hn('p4a');bl('p4b');bl('p4c');});
+  af(800,()=>sh('d4wt1'));
+  af(1400,()=>sh('d4wt2'));
+  af(2000,()=>sh('d4wt3'));
+  af(2600,()=>sh('d4wb'));
+  af(3200,()=>sh('d4wb1'));
+  af(3800,()=>sh('d4wb2'));
+}
+</script>
+</body>
+</html>

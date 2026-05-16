@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Write-Around Cache</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 14px;flex-shrink:0;border-bottom:1px solid #1a1a2a}
+.hdr-title{font-family:'Press Start 2P';font-size:13px;color:#e8a020;text-align:center;line-height:1.5;text-shadow:0 0 10px #e8a02066}
+.hdr-sub{font-family:'Press Start 2P';font-size:9px;color:#555;text-align:center}
+.dots{display:flex;gap:9px}
+.dot{width:11px;height:11px;background:#1a1a2e;border:1px solid #333;border-radius:1px}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 6px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:10px;left:12px;font-family:'Press Start 2P';font-size:13px;z-index:5}
+.sc-badge{position:absolute;top:10px;right:12px;font-family:'Press Start 2P';font-size:10px;padding:4px 9px;border:2px solid;z-index:5}
+.panel{height:84px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.pl{font-family:'Press Start 2P';font-size:9px;line-height:1.7}
+.stats{height:68px;display:flex;gap:8px;padding:0 12px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:7px 4px;text-align:center;background:#0a0a14}
+.stat-val{font-family:'Press Start 2P';font-size:14px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:8px;color:#555;display:block;margin-top:4px}
+.btns{height:58px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;flex-shrink:0;background:#05050a;border-top:1px solid #181828}
+.btn{font-family:'Press Start 2P';font-size:10px;padding:9px 13px;border:2px solid;cursor:pointer;background:transparent;touch-action:manipulation}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#555;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.07}to{opacity:.45}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════
+     SCENE 1 · HOOK
+═══════════════════════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">WRITE-AROUND</div>
+    <div class="hdr-sub">SKIP THE CACHE — ON PURPOSE</div>
+    <div class="dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE INSIGHT</div>
+    <div class="sc-badge" style="color:#4ec9e1;border-color:#4ec9e1">PATTERN</div>
+    <div class="star" style="top:3%;left:7%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:7%;left:23%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:4%;left:45%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:11%;left:65%;--d:1.7s;--delay:.9s"></div>
+    <div class="star" style="top:6%;left:83%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:16%;left:91%;--d:1.6s;--delay:.8s"></div>
+    <div class="star" style="top:18%;left:13%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:3%;left:96%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:20%;left:55%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:13%;left:37%;--d:1.5s;--delay:1.1s"></div>
+    <div class="star" style="top:22%;left:76%;--d:2.3s;--delay:0s"></div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <g id="h1hook" opacity="0">
+        <rect x="15" y="4" width="360" height="72" fill="#12081e" stroke="#e8a020" stroke-width="2.5" rx="4"/>
+        <text x="195" y="26" font-family="'Press Start 2P'" font-size="8.5" fill="#888"    text-anchor="middle">SOMETIMES THE BEST CACHE</text>
+        <text x="195" y="44" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">STRATEGY IS TO NOT</text>
+        <text x="195" y="62" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">CACHE AT ALL — ON WRITES.</text>
+      </g>
+
+      <g id="h1problem" opacity="0">
+        <rect x="8" y="88" width="374" height="30" fill="#1a0505" stroke="#e85050" stroke-width="2" rx="2"/>
+        <text x="195" y="108" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">THE PROBLEM: CACHE POLLUTION</text>
+      </g>
+
+      <g id="h1pollute" opacity="0">
+        <rect x="8" y="126" width="374" height="66" fill="#110808" stroke="#333" stroke-width="1.5" rx="2"/>
+        <text x="26" y="148" font-family="'Press Start 2P'" font-size="8" fill="#e85050">log:2024-01-01T00:00:01Z</text>
+        <text x="26" y="166" font-family="'Press Start 2P'" font-size="8" fill="#e85050">log:2024-01-01T00:00:02Z</text>
+        <text x="26" y="184" font-family="'Press Start 2P'" font-size="8" fill="#e85050">log:2024-01-01T00:00:03Z</text>
+        <text x="310" y="162" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">CACHE</text>
+        <text x="310" y="176" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">NEVER</text>
+        <text x="310" y="190" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">READ</text>
+      </g>
+
+      <g id="h1fix" opacity="0">
+        <rect x="8" y="204" width="374" height="52" fill="#051a05" stroke="#4eff9a" stroke-width="2" rx="3"/>
+        <text x="195" y="224" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a" text-anchor="middle">WRITE-AROUND SOLUTION:</text>
+        <text x="195" y="244" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"   text-anchor="middle">WRITE DIRECT TO DB. SKIP CACHE.</text>
+      </g>
+
+      <g id="h1cases" opacity="0">
+        <rect x="8"   y="266" width="178" height="38" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="97"  y="282" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">Log ingestion</text>
+        <text x="97"  y="297" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Time-series data</text>
+        <rect x="204" y="266" width="178" height="38" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="293" y="282" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">Write-once data</text>
+        <text x="293" y="297" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Rarely re-read</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#aaa;display:none" id="p1b">WRITE DIRECT TO DB — CACHE STAYS CLEAN</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">SKIP</span><span class="stat-lbl">CACHE ON WRITE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">CLEAN</span><span class="stat-lbl">CACHE STAYS</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">MISS</span><span class="stat-lbl">FIRST READ</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCENE 2 · THE WRITE — BYPASS ARC
+     LAYOUT (viewBox 0 0 390 310):
+       APP box:   x8  y10  w100 h130  (left)
+       CACHE box: x148 y10  w94  h130  (center — greyed)
+       DB box:    x280 y10  w102 h130  (right — active)
+       Bypass arc: curves from APP top → over CACHE → DB top
+       Bypass annotation: y≈-8 (above arc, inside viewBox)
+       CACHE cross: diagonal lines over cache box
+       Flow steps: y200–305 (full bottom half)
+═══════════════════════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">THE WRITE PATH</div>
+    <div class="hdr-sub">ARROW ARCS AROUND THE CACHE</div>
+    <div class="dots"><div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">WRITE-AROUND</div>
+    <div class="sc-badge" style="color:#e8a020;border-color:#e8a020">BYPASS</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- ── APP box  x:8–108, y:10–140 ── -->
+      <rect x="8" y="10" width="100" height="130" fill="#12081e" stroke="#e8a020" stroke-width="2.5"/>
+      <text x="58" y="34"  font-family="'Press Start 2P'" font-size="8"   fill="#e8a020" text-anchor="middle">APP</text>
+      <text x="58" y="54"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">write(</text>
+      <text x="58" y="70"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">  log,</text>
+      <text x="58" y="86"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">  data</text>
+      <text x="58" y="102" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">)</text>
+      <text x="58" y="124" font-family="'Press Start 2P'" font-size="7"   fill="#e8a020" text-anchor="middle">WRITES</text>
+      <text x="58" y="136" font-family="'Press Start 2P'" font-size="7"   fill="#e8a020" text-anchor="middle">→ WHERE?</text>
+
+      <!-- ── CACHE box  x:148–242, y:10–140  (GREYED OUT) ── -->
+      <rect id="ca2box" x="148" y="10" width="94" height="130" fill="#0e0814" stroke="#2a2040" stroke-width="2"/>
+      <text x="195" y="30"  font-family="'Press Start 2P'" font-size="7.5" fill="#2a2040" text-anchor="middle">CACHE</text>
+      <rect x="154" y="36"  width="82" height="13" fill="#0c0812"/>
+      <text x="195" y="47"  font-family="'Press Start 2P'" font-size="6"   fill="#1e1a2e" text-anchor="middle">key → ???</text>
+      <rect x="154" y="52"  width="82" height="13" fill="#0a0610"/>
+      <text x="195" y="63"  font-family="'Press Start 2P'" font-size="6"   fill="#1a1628" text-anchor="middle">… empty …</text>
+      <rect x="154" y="68"  width="82" height="13" fill="#0c0812"/>
+      <text x="195" y="79"  font-family="'Press Start 2P'" font-size="6"   fill="#1e1a2e" text-anchor="middle">… empty …</text>
+      <rect x="154" y="84"  width="82" height="13" fill="#0a0610"/>
+      <text x="195" y="95"  font-family="'Press Start 2P'" font-size="6"   fill="#1a1628" text-anchor="middle">… empty …</text>
+      <rect x="154" y="100" width="82" height="13" fill="#0c0812"/>
+      <text x="195" y="111" font-family="'Press Start 2P'" font-size="6"   fill="#1e1a2e" text-anchor="middle">… empty …</text>
+      <!-- SKIPPED label below cache rows -->
+      <text id="ca2skip" x="195" y="132" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle" opacity="0">✗ SKIPPED</text>
+      <!-- Big X over cache box -->
+      <g id="cache-x" opacity="0">
+        <line x1="154" y1="36" x2="236" y2="122" stroke="#e85050" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="236" y1="36" x2="154" y2="122" stroke="#e85050" stroke-width="3.5" stroke-linecap="round"/>
+      </g>
+
+      <!-- ── DB box  x:280–382, y:10–140  (ACTIVE) ── -->
+      <rect id="db2box" x="280" y="10" width="102" height="130" fill="#1a0e2e" stroke="#e8a020" stroke-width="2.5"/>
+      <text x="331" y="30"  font-family="'Press Start 2P'" font-size="7.5" fill="#e8a020" text-anchor="middle">DATABASE</text>
+      <rect id="dr1" x="288" y="36"  width="86" height="14" fill="#2a1f3d"/>
+      <text id="dt1" x="331" y="47"  font-family="'Press Start 2P'" font-size="6.5" fill="#888" text-anchor="middle">log:entry → ?</text>
+      <rect id="dr2" x="288" y="53"  width="86" height="14" fill="#231830"/>
+      <text      x="331" y="64"  font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">prev:entry</text>
+      <rect id="dr3" x="288" y="70"  width="86" height="14" fill="#2a1f3d"/>
+      <text      x="331" y="81"  font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">prev:entry2</text>
+      <rect id="dr4" x="288" y="87"  width="86" height="14" fill="#231830"/>
+      <text      x="331" y="98"  font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">prev:entry3</text>
+      <rect id="dr5" x="288" y="104" width="86" height="14" fill="#2a1f3d"/>
+      <text      x="331" y="115" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">prev:entry4</text>
+      <text id="db2written" x="331" y="134" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle" opacity="0">✓ WRITTEN</text>
+
+      <!-- ── BYPASS ARC: from APP right-top → over cache → DB left-top ──
+           Path: starts at (108,30) curves up through (195, -22) lands at (280,30)
+           The arc goes ABOVE both boxes, clearly visible, labelled mid-arc
+      ── -->
+      <path id="bypass-path" d="M 108 30 Q 195 -28 280 30"
+            fill="none" stroke="#e8a020" stroke-width="4"
+            stroke-dasharray="8 5" stroke-linecap="round" opacity="0"/>
+      <!-- Arrowhead at DB entry point -->
+      <polygon id="bypass-arrow" points="280,30 268,18 272,34" fill="#e8a020" opacity="0"/>
+      <!-- Arc annotation label sits just above the arc midpoint  y≈-10 in viewBox space → renders at ~10px above top of boxes -->
+      <text id="bypass-lbl" x="195" y="-8" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle" opacity="0">— BYPASSES CACHE —</text>
+
+      <!-- ── RESULT TIMING  y:152–178 ── -->
+      <text id="s2time" x="195" y="162" font-family="'Press Start 2P'" font-size="17" fill="#e8a020" text-anchor="middle" opacity="0">✓ DB WRITTEN</text>
+      <text id="s2sub"  x="195" y="182" font-family="'Press Start 2P'" font-size="8.5" fill="#888" text-anchor="middle" opacity="0">CACHE NOT TOUCHED</text>
+
+      <!-- ── FLOW STEPS  y:198–308 (fills remaining space) ── -->
+      <g id="s2flow" opacity="0">
+        <rect x="8" y="198" width="374" height="108" fill="#100a1e" stroke="#e8a020" stroke-width="2" rx="3"/>
+        <text x="195" y="220" font-family="'Press Start 2P'" font-size="9"   fill="#e8a020" text-anchor="middle">WRITE-AROUND FLOW:</text>
+        <text x="195" y="241" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">① APP SENDS WRITE REQUEST</text>
+        <text x="195" y="261" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">② ARC BYPASSES CACHE ENTIRELY</text>
+        <text x="195" y="281" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">③ LANDS DIRECTLY IN DATABASE</text>
+        <text x="195" y="301" font-family="'Press Start 2P'" font-size="8"   fill="#555"    text-anchor="middle">Cache key stays empty — by design</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p2a">▶ PRESS PLAY TO SEE THE BYPASS</div>
+    <div class="pl" style="color:#e8a020;display:none" id="p2b">WRITE ARCS OVER CACHE → HITS DB DIRECTLY</div>
+    <div class="pl" style="color:#555;display:none"    id="p2c">CACHE KEY STAYS EMPTY. BY DESIGN.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#333">EMPTY</span><span class="stat-lbl">CACHE STATE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">✓</span><span class="stat-lbl">DB WRITTEN</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">~5ms</span><span class="stat-lbl">WRITE TIME</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCENE 3 · FIRST READ — MISS → POPULATE
+═══════════════════════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">FIRST READ: MISS</div>
+    <div class="hdr-sub">BY DESIGN — THEN CACHE-ASIDE KICKS IN</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">FIRST READ</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">MISS (OK!)</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- APP -->
+      <rect x="8" y="10" width="100" height="120" fill="#0d1020" stroke="#4ec9e1" stroke-width="2"/>
+      <text x="58" y="34"  font-family="'Press Start 2P'" font-size="8"   fill="#4ec9e1" text-anchor="middle">APP</text>
+      <text x="58" y="54"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">read(</text>
+      <text x="58" y="70"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">  log,</text>
+      <text x="58" y="86"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">  entry</text>
+      <text x="58" y="102" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">)</text>
+      <text x="58" y="122" font-family="'Press Start 2P'" font-size="7"   fill="#4ec9e1" text-anchor="middle">READ REQ</text>
+
+      <!-- CACHE (empty initially, filled after) -->
+      <rect id="ca3box" x="148" y="10" width="94" height="120" fill="#0e0814" stroke="#2a2040" stroke-width="2"/>
+      <text id="ca3title" x="195" y="30" font-family="'Press Start 2P'" font-size="7.5" fill="#2a2040" text-anchor="middle">CACHE</text>
+      <rect id="c3r1" x="154" y="36" width="82" height="13" fill="#0c0812"/>
+      <text id="c3t1" x="195" y="47" font-family="'Press Start 2P'" font-size="6" fill="#1e1a2e" text-anchor="middle">entry → ???</text>
+      <rect id="c3r2" x="154" y="52" width="82" height="13" fill="#0a0610"/>
+      <text x="195" y="63" font-family="'Press Start 2P'" font-size="6" fill="#1a1628" text-anchor="middle">… empty …</text>
+      <rect id="c3r3" x="154" y="68" width="82" height="13" fill="#0c0812"/>
+      <text x="195" y="79" font-family="'Press Start 2P'" font-size="6" fill="#1e1a2e" text-anchor="middle">… empty …</text>
+      <rect id="c3r4" x="154" y="84" width="82" height="13" fill="#0a0610"/>
+      <text x="195" y="95" font-family="'Press Start 2P'" font-size="6" fill="#1a1628" text-anchor="middle">… empty …</text>
+      <text id="ca3miss"   x="195" y="120" font-family="'Press Start 2P'" font-size="11" fill="#e85050" text-anchor="middle" opacity="0">✗ MISS</text>
+      <text id="ca3filled" x="195" y="120" font-family="'Press Start 2P'" font-size="9"  fill="#4eff9a" text-anchor="middle" opacity="0">CACHED ✓</text>
+
+      <!-- DB (has data) -->
+      <rect id="db3box" x="280" y="10" width="102" height="120" fill="#051020" stroke="#4ec9e1" stroke-width="2.5"/>
+      <text x="331" y="30"  font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">DATABASE</text>
+      <rect id="r3r1" x="288" y="36" width="86" height="13" fill="#0a1828"/>
+      <text x="331" y="47"  font-family="'Press Start 2P'" font-size="6.5" fill="#4ec9e1" text-anchor="middle">entry → data✓</text>
+      <rect id="r3r2" x="288" y="52" width="86" height="13" fill="#071420"/>
+      <text x="331" y="63"  font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">prev:entry</text>
+      <rect id="r3r3" x="288" y="68" width="86" height="13" fill="#0a1828"/>
+      <text x="331" y="79"  font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">prev:entry2</text>
+      <rect id="r3r4" x="288" y="84" width="86" height="13" fill="#071420"/>
+      <text x="331" y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">prev:entry3</text>
+      <text id="db3found" x="331" y="118" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle" opacity="0">✓ FOUND</text>
+
+      <!-- Beams -->
+      <line id="b3req"   x1="108" y1="40" x2="148" y2="50"  stroke="#4ec9e1" stroke-width="3"   stroke-dasharray="6 4" opacity="0"/>
+      <line id="b3fetch" x1="242" y1="65" x2="280" y2="65"  stroke="#e85050" stroke-width="3"   stroke-dasharray="5 4" opacity="0"/>
+      <line id="b3resp"  x1="280" y1="52" x2="108" y2="46"  stroke="#4eff9a" stroke-width="3.5" stroke-dasharray="5 3" opacity="0"/>
+      <!-- write-back beam: db → cache -->
+      <line id="b3wb"    x1="280" y1="76" x2="242" y2="76"  stroke="#4eff9a" stroke-width="3"   stroke-dasharray="5 3" opacity="0"/>
+
+      <!-- Result -->
+      <text id="s3time" x="195" y="152" font-family="'Press Start 2P'" font-size="14" fill="#e8a020" text-anchor="middle" opacity="0">MISS → DB FETCH</text>
+      <text id="s3sub"  x="195" y="172" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle" opacity="0">NOW WRITTEN TO CACHE ✓</text>
+
+      <g id="s3flow" opacity="0">
+        <rect x="8" y="190" width="374" height="112" fill="#051020" stroke="#4ec9e1" stroke-width="2" rx="3"/>
+        <text x="195" y="212" font-family="'Press Start 2P'" font-size="9"   fill="#4ec9e1" text-anchor="middle">FIRST READ FLOW:</text>
+        <text x="195" y="232" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">① CHECK CACHE → MISS (expected)</text>
+        <text x="195" y="252" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">② FETCH FROM DATABASE</text>
+        <text x="195" y="272" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">③ WRITE TO CACHE (cache-aside)</text>
+        <text x="195" y="292" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">④ NEXT READ: ⚡ CACHE HIT</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p3a">▶ PRESS PLAY TO SEE FIRST READ</div>
+    <div class="pl" style="color:#e85050;display:none" id="p3b">CACHE MISS (EXPECTED!) → FETCH FROM DB</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p3c">CACHE POPULATED. NEXT READ IS INSTANT.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">MISS</span><span class="stat-lbl">FIRST READ</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">HIT</span><span class="stat-lbl">AFTER LOAD</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">~50ms</span><span class="stat-lbl">FIRST READ</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     SCENE 4 · WHEN TO USE
+═══════════════════════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">WHEN TO USE IT</div>
+    <div class="hdr-sub">DATA WRITTEN ONCE, RARELY RE-READ</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">USE CASES</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">GUIDE</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <g id="d1" opacity="0">
+        <rect x="8" y="4" width="374" height="32" fill="#051a08" stroke="#4eff9a" stroke-width="2" rx="2"/>
+        <text x="195" y="26" font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle">USE WRITE-AROUND WHEN:</text>
+      </g>
+      <g id="d2" opacity="0">
+        <rect x="8" y="44" width="374" height="46" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="64"  font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a">⚡  Log ingestion pipelines</text>
+        <text x="26" y="82"  font-family="'Press Start 2P'" font-size="7.5" fill="#888">Billions of lines written, rarely queried</text>
+      </g>
+      <g id="d3" opacity="0">
+        <rect x="8" y="98" width="374" height="46" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="118" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a">⚡  Time-series / IoT sensors</text>
+        <text x="26" y="136" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Each reading unique, read only on alert</text>
+      </g>
+      <g id="d4" opacity="0">
+        <rect x="8" y="152" width="374" height="46" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26" y="172" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a">⚡  Large media / file uploads</text>
+        <text x="26" y="190" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Uploaded once, served from CDN</text>
+      </g>
+
+      <g id="d5" opacity="0">
+        <rect x="8" y="208" width="374" height="32" fill="#1a0505" stroke="#e85050" stroke-width="2" rx="2"/>
+        <text x="195" y="229" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">AVOID WRITE-AROUND WHEN:</text>
+      </g>
+      <g id="d6" opacity="0">
+        <rect x="8" y="248" width="374" height="30" fill="#100808" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26" y="268" font-family="'Press Start 2P'" font-size="8.5" fill="#e85050">✗  Data read immediately after write</text>
+      </g>
+      <g id="d7" opacity="0">
+        <rect x="8" y="286" width="374" height="22" fill="#100808" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26" y="302" font-family="'Press Start 2P'" font-size="8.5" fill="#e85050">✗  Frequently updated hot records</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p4a">▶ PRESS PLAY TO SEE WHEN TO USE IT</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4b">WRITE-ONCE DATA THAT'S RARELY RE-READ</div>
+    <div class="pl" style="color:#888;display:none"    id="p4c">PREVENTS CACHE THRASH. KEEPS HOT DATA HOT.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">LOGS</span><span class="stat-lbl">PRIMARY USE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">CLEAN</span><span class="stat-lbl">CACHE STAYS</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">HOT</span><span class="stat-lbl">DATA STAYS</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let T=[];
+function clr(){T.forEach(clearTimeout);T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=String(v);}
+function fc(id,c){let e=document.getElementById(id);if(e)e.setAttribute('fill',c);}
+function tx(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+function sh(id){op(id,1);}
+function hd(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['h1hook','h1problem','h1pollute','h1fix','h1cases'].forEach(hd);
+    bl('p1a');hn('p1b');
+  }
+  if(n===2){
+    ['bypass-path','bypass-arrow','bypass-lbl','ca2skip','cache-x','db2written','s2time','s2sub','s2flow'].forEach(hd);
+    ['dr1','dr2','dr3','dr4','dr5'].forEach((id,i)=>fc(id,i%2===0?'#2a1f3d':'#231830'));
+    tx('dt1','log:entry → ?');
+    bl('p2a');hn('p2b');hn('p2c');
+  }
+  if(n===3){
+    ['b3req','b3fetch','b3resp','b3wb','ca3miss','ca3filled','db3found','s3time','s3sub','s3flow'].forEach(hd);
+    ['r3r1','r3r2','r3r3','r3r4'].forEach((id,i)=>fc(id,i%2===0?'#0a1828':'#071420'));
+    fc('c3r1','#0c0812');fc('c3r2','#0a0610');fc('c3r3','#0c0812');fc('c3r4','#0a0610');
+    tx('c3t1','entry → ???');
+    fc('ca3box','#0e0814');
+    let ca3=document.getElementById('ca3box');if(ca3)ca3.setAttribute('stroke','#2a2040');
+    let ct=document.getElementById('ca3title');if(ct){ct.setAttribute('fill','#2a2040');}
+    bl('p3a');hn('p3b');hn('p3c');
+  }
+  if(n===4){
+    ['d1','d2','d3','d4','d5','d6','d7'].forEach(hd);
+    bl('p4a');hn('p4b');hn('p4c');
+  }
+}
+
+/* ─── SCENE 1 ─── */
+function play1(){
+  clr();resetScene(1);
+  af(300,()=>sh('h1hook'));
+  af(1100,()=>sh('h1problem'));
+  af(1700,()=>sh('h1pollute'));
+  af(2500,()=>sh('h1fix'));
+  af(3200,()=>{sh('h1cases');hn('p1a');bl('p1b');});
+}
+
+/* ─── SCENE 2 ─── */
+function play2(){
+  clr();resetScene(2);
+  // 1. Arc flies from APP → over cache → DB
+  af(400,()=>{sh('bypass-path');sh('bypass-lbl');});
+  af(900,()=>sh('bypass-arrow'));
+  // 2. Cache gets big red X
+  af(1200,()=>{sh('cache-x');sh('ca2skip');hn('p2a');bl('p2b');bl('p2c');});
+  // 3. DB rows flash amber
+  af(1500,()=>{
+    ['dr1','dr2','dr3','dr4','dr5'].forEach((id,i)=>{
+      af(i*130,()=>{
+        fc(id,'#5a3a10');
+        af(200,()=>fc(id,i%2===0?'#3a2a20':'#2a1a10'));
+        af(380,()=>{fc(id,'#5a3a10');af(200,()=>fc(id,i%2===0?'#2a1f3d':'#231830'));});
+      });
+    });
+  });
+  af(2100,()=>{tx('dt1','log:entry → OK ✓');sh('db2written');});
+  af(2600,()=>{sh('s2time');sh('s2sub');});
+  af(3200,()=>sh('s2flow'));
+}
+
+/* ─── SCENE 3 ─── */
+function play3(){
+  clr();resetScene(3);
+  // request → cache
+  af(300,()=>sh('b3req'));
+  af(700,()=>{hd('b3req');sh('ca3miss');hn('p3a');bl('p3b');});
+  // cache → DB fetch
+  af(1100,()=>sh('b3fetch'));
+  af(1300,()=>{
+    ['r3r1','r3r2','r3r3','r3r4'].forEach((id,i)=>{
+      af(i*140,()=>{
+        fc(id,'#1a4a5a');
+        af(200,()=>fc(id,i%2===0?'#0a1828':'#071420'));
+        af(380,()=>{fc(id,'#1a4a5a');af(200,()=>fc(id,i%2===0?'#0a1828':'#071420'));});
+      });
+    });
+  });
+  af(1800,()=>{hd('b3fetch');sh('db3found');});
+  // response + write-back to cache
+  af(2100,()=>{sh('b3resp');sh('s3time');sh('s3sub');bl('p3c');});
+  af(2600,()=>{
+    hd('b3resp');sh('b3wb');
+    // cache box turns green / populated
+    let ca=document.getElementById('ca3box');if(ca){ca.setAttribute('fill','#051a08');ca.setAttribute('stroke','#4eff9a');}
+    let ct=document.getElementById('ca3title');if(ct)ct.setAttribute('fill','#4eff9a');
+    fc('c3r1','#0a2a10');fc('c3r2','#071e08');fc('c3r3','#0a2a10');fc('c3r4','#071e08');
+    tx('c3t1','entry → data ✓');
+    hd('ca3miss');sh('ca3filled');
+  });
+  af(3100,()=>{hd('b3wb');sh('s3flow');});
+}
+
+/* ─── SCENE 4 ─── */
+function play4(){
+  clr();resetScene(4);
+  af(200,()=>{sh('d1');hn('p4a');bl('p4b');bl('p4c');});
+  af(800,()=>sh('d2'));
+  af(1400,()=>sh('d3'));
+  af(2000,()=>sh('d4'));
+  af(2600,()=>sh('d5'));
+  af(3200,()=>sh('d6'));
+  af(3800,()=>sh('d7'));
+}
+</script>
+</body>
+</html>

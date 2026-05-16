@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>CIDR & Route Aggregation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+
+/* HEADER 90px */
+.hdr{
+  height:90px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:8px;padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+
+/* SCENE LABEL 28px */
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+/* ANIMATION AREA */
+.anim{flex:1;position:relative;overflow:hidden;min-height:270px}
+.floor{position:absolute;bottom:0;left:0;right:0;height:16px;
+  background:repeating-linear-gradient(90deg,#2a1f3d 0,#2a1f3d 38px,#231830 38px,#231830 76px);
+  border-top:1px solid #4a3a6a}
+.floor-b{
+  background:repeating-linear-gradient(90deg,#0f2240 0,#0f2240 38px,#0c1c38 38px,#0c1c38 76px);
+  border-top-color:#1e4080}
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;animation:twk 2s infinite alternate}
+@keyframes twk{from{opacity:.1}to{opacity:.5}}
+
+/* INFO PANEL 110px */
+.info{
+  height:110px;flex-shrink:0;margin:0 12px;
+  border:2px solid #4ec9e1;padding:10px 14px;
+  display:flex;flex-direction:column;justify-content:center;gap:7px;
+  font-size:9px;line-height:1.9;
+}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+
+/* STATS ROW 70px */
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#9a4ef8}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+
+/* CONTROLS 68px */
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* bit cell */
+.bit{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:14px;height:20px;font-size:8px;font-family:'Press Start 2P',monospace;
+  border:1px solid #2a1f3d;background:#0a0a14;transition:all .3s;
+  flex-shrink:0;
+}
+.bit.match{background:#004a3090;border-color:#4eff9a;color:#4eff9a}
+.bit.diff{background:#1a05050a;border-color:#e8505040;color:#e85050}
+.bit.wild{color:#333;border-color:#1a1a1a}
+
+/* route row */
+.rrow{
+  display:flex;align-items:center;gap:6px;padding:6px 8px;
+  border:1px solid #2a1f3d;background:#0d0d1a;
+  margin-bottom:4px;transition:all .35s;opacity:0;flex-shrink:0;
+}
+.rrow-cidr{font-size:8px;min-width:115px;flex-shrink:0}
+.rrow-bar{flex:1;height:7px;background:#1a1a2a;position:relative;overflow:hidden;border-radius:1px}
+.rrow-fill{height:100%;width:0%;transition:width 1s ease-out;border-radius:1px}
+.rrow-tag{font-size:6px;min-width:50px;text-align:right;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — CIDR: END OF CLASSFUL
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CIDR REPLACES CLASSES</div>
+    <div class="hdr-sub">ANY PREFIX LENGTH — NOT JUST /8 /16 /24</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE OLD WAY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RIGID</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:20px;top:8px;animation-delay:0s"></div>
+    <div class="star" style="left:85px;top:4px;animation-delay:.4s"></div>
+    <div class="star" style="left:170px;top:14px;animation-delay:.9s"></div>
+    <div class="star" style="left:262px;top:5px;animation-delay:.2s"></div>
+    <div class="star" style="left:340px;top:11px;animation-delay:1.1s"></div>
+    <div class="star" style="left:60px;top:34px;animation-delay:.7s"></div>
+    <div class="star" style="left:300px;top:30px;animation-delay:1.3s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <!-- Before/After cards -->
+      <div style="display:flex;gap:6px;margin-bottom:8px;flex-shrink:0">
+        <div id="old-lbl" style="flex:1;border:1px solid #e8505050;background:#1a050590;padding:7px;text-align:center;opacity:0;transition:opacity .4s">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">CLASSFUL (PRE-1993)</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Only /8 /16 /24<br>Class A B C only</div>
+        </div>
+        <div id="new-lbl" style="flex:1;border:1px solid #4eff9a50;background:#001a1090;padding:7px;text-align:center;opacity:0;transition:opacity .4s">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">CIDR (RFC 1519, 1993)</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Any /0 – /32<br>Fine-grained control</div>
+        </div>
+      </div>
+
+      <!-- Gradient prefix bar -->
+      <div style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:5px;flex-shrink:0">PREFIX LENGTH → SPECIFICITY:</div>
+      <div style="position:relative;height:24px;background:#0d0820;border:1px solid #2a1f3d;overflow:hidden;margin-bottom:4px;flex-shrink:0">
+        <div id="cidr-bar" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:linear-gradient(90deg,#e85050,#e8a020,#4ec9e1,#4eff9a);transition:width 1.2s ease-out"></div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 8px">
+          <span style="font-size:5px;color:#ccc">/8</span>
+          <span style="font-size:5px;color:#ccc">/16</span>
+          <span style="font-size:5px;color:#ccc">/21</span>
+          <span style="font-size:5px;color:#ccc">/24</span>
+          <span style="font-size:5px;color:#ccc">/30</span>
+          <span style="font-size:5px;color:#ccc">/32</span>
+        </div>
+      </div>
+      <div style="height:10px;margin-bottom:7px;flex-shrink:0;position:relative">
+        <span style="position:absolute;left:0;font-size:5px;color:#555">broad</span>
+        <span style="position:absolute;right:0;font-size:5px;color:#555">specific</span>
+      </div>
+
+      <!-- Example routes -->
+      <div id="ex1" class="rrow">
+        <span class="rrow-cidr" style="color:#e85050">10.0.0.0/8</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="ef1" style="background:#e85050"></div></div>
+        <span class="rrow-tag" style="color:#e85050">16M hosts</span>
+      </div>
+      <div id="ex2" class="rrow">
+        <span class="rrow-cidr" style="color:#e8a020">172.16.0.0/16</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="ef2" style="background:#e8a020"></div></div>
+        <span class="rrow-tag" style="color:#e8a020">65K hosts</span>
+      </div>
+      <div id="ex3" class="rrow">
+        <span class="rrow-cidr" style="color:#4ec9e1">203.0.113.0/24</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="ef3" style="background:#4ec9e1"></div></div>
+        <span class="rrow-tag" style="color:#4ec9e1">254 hosts</span>
+      </div>
+      <div id="ex4" class="rrow">
+        <span class="rrow-cidr" style="color:#4eff9a">198.51.0.0/21</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="ef4" style="background:#4eff9a"></div></div>
+        <span class="rrow-tag" style="color:#4eff9a">2046 hosts</span>
+      </div>
+      <div id="ex5" class="rrow">
+        <span class="rrow-cidr" style="color:#9a4ef8">10.1.4.0/30</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="ef5" style="background:#9a4ef8"></div></div>
+        <span class="rrow-tag" style="color:#9a4ef8">2 (P2P)</span>
+      </div>
+
+      <!-- Insight -->
+      <div id="ins1" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 9px;margin-top:6px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">CIDR KEY INSIGHT</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">/21 = 11111111.11111111.11111000.00000000<br>Any prefix /0 to /32 — not just 8/16/24.</div>
+      </div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Classful: only /8, /16, /24 — wasteful.</div>
+    <div class="il">CIDR: any prefix /0 to /32 (RFC 1519).</div>
+    <div class="ih am">198.51.0.0/21 — impossible pre-CIDR.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">3</div><div class="sl">CLASSFUL SIZES</div></div>
+    <div class="sc"><div class="sv gn">33</div><div class="sl">CIDR PREFIXES</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1993</div><div class="sl">RFC 1519</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — 4× /24 → 1× /21
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">4 ROUTES → 1 ROUTE</div>
+    <div class="hdr-sub">SUPERNETTING: ANNOUNCE LESS, ROUTE MORE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">BEFORE AGGREGATION</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">4 BGP ADS</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:30px;top:7px;animation-delay:.2s"></div>
+    <div class="star" style="left:200px;top:4px;animation-delay:.7s"></div>
+    <div class="star" style="left:350px;top:10px;animation-delay:1s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">YOUR ISP BLOCK: 198.51.100.0 – 198.51.107.255</div>
+
+      <!-- 4 /24 rows -->
+      <div id="r1" class="rrow">
+        <span class="rrow-cidr" style="color:#e85050">198.51.100.0/24</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="rf1" style="background:#e85050"></div></div>
+        <span class="rrow-tag" style="color:#e85050">BGP AD #1</span>
+      </div>
+      <div id="r2" class="rrow">
+        <span class="rrow-cidr" style="color:#e8a020">198.51.101.0/24</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="rf2" style="background:#e8a020"></div></div>
+        <span class="rrow-tag" style="color:#e8a020">BGP AD #2</span>
+      </div>
+      <div id="r3" class="rrow">
+        <span class="rrow-cidr" style="color:#4ec9e1">198.51.102.0/24</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="rf3" style="background:#4ec9e1"></div></div>
+        <span class="rrow-tag" style="color:#4ec9e1">BGP AD #3</span>
+      </div>
+      <div id="r4" class="rrow">
+        <span class="rrow-cidr" style="color:#9a4ef8">198.51.103.0/24</span>
+        <div class="rrow-bar"><div class="rrow-fill" id="rf4" style="background:#9a4ef8"></div></div>
+        <span class="rrow-tag" style="color:#9a4ef8">BGP AD #4</span>
+      </div>
+
+      <!-- Arrow -->
+      <div id="arw" style="text-align:center;padding:6px 0;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:8px;color:#4eff9a">⬇ AGGREGATE ⬇</div>
+        <div style="font-size:6px;color:#666;margin-top:3px">find common prefix → summarize</div>
+      </div>
+
+      <!-- Summary block -->
+      <div id="sumbox" style="border:2px solid #4eff9a;background:#001a1090;padding:9px 11px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:10px;color:#4eff9a">198.51.100.0/21</div>
+          <div style="font-size:7px;padding:3px 7px;border:1px solid #4eff9a;color:#4eff9a">1 BGP AD</div>
+        </div>
+        <div style="height:9px;background:#001a10;border:1px solid #4eff9a40;position:relative;overflow:hidden;margin-bottom:6px">
+          <div id="sfill" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a40;border-right:2px solid #4eff9a;transition:width 1.1s ease-out"></div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">covers .100 .101 .102 .103 .104 .105 .106 .107<br>2046 usable hosts · 4 routes become 1</div>
+      </div>
+
+      <!-- Savings -->
+      <div id="savbox" style="border:1px solid #4eff9a30;background:#001a1060;padding:8px 10px;margin-top:6px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">BGP TABLE IMPACT</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Before: 4 prefix entries in every router<br>After: 1 prefix — 75% reduction.</div>
+          </div>
+          <div style="text-align:center;padding-left:10px">
+            <div style="font-size:20px;color:#4eff9a">4→1</div>
+            <div style="font-size:6px;color:#888">routes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info am">
+    <div class="il">4 contiguous /24s → 1 /21 summary.</div>
+    <div class="il">Every router on the internet stores less.</div>
+    <div class="ih am">BGP table has 900K+ prefixes today.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4</div><div class="sl">ROUTES BEFORE</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">ROUTE AFTER</div></div>
+    <div class="sc"><div class="sv gn">75%</div><div class="sl">TABLE SAVINGS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — BINARY PROOF
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE BINARY PROOF</div>
+    <div class="hdr-sub">COMMON BITS DETERMINE PREFIX LENGTH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOW TO FIND /21</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">BINARY</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:6px;flex-shrink:0">3RD OCTET IN BINARY — WHERE THEY DIFFER</div>
+
+      <!-- bit rows -->
+      <div id="brow0" style="margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:6px;color:#888;margin-bottom:3px">198.51.<span style="color:#e85050">100</span>.0</div>
+        <div style="display:flex;gap:2px" id="b100"></div>
+      </div>
+      <div id="brow1" style="margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:6px;color:#888;margin-bottom:3px">198.51.<span style="color:#e8a020">101</span>.0</div>
+        <div style="display:flex;gap:2px" id="b101"></div>
+      </div>
+      <div id="brow2" style="margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:6px;color:#888;margin-bottom:3px">198.51.<span style="color:#4ec9e1">102</span>.0</div>
+        <div style="display:flex;gap:2px" id="b102"></div>
+      </div>
+      <div id="brow3" style="margin-bottom:8px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:6px;color:#888;margin-bottom:3px">198.51.<span style="color:#9a4ef8">103</span>.0</div>
+        <div style="display:flex;gap:2px" id="b103"></div>
+      </div>
+
+      <div id="mhdr" style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        MATCHING LEADING BITS (teal = shared):
+      </div>
+
+      <div id="mrow" style="margin-bottom:8px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="display:flex;gap:2px;margin-bottom:5px" id="bmatch"></div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">
+          First 5 bits match: <span style="color:#4eff9a">01100</span>___<br>
+          198.51 = 16 bits + 5 octet-3 bits = <span style="color:#4eff9a">21 shared bits</span>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div id="resbox" style="border:2px solid #4eff9a;background:#001a1090;padding:8px 10px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px;letter-spacing:1px">SUMMARY PREFIX</div>
+        <div style="font-size:10px;color:#fff;margin-bottom:5px">198.51.100.0<span style="color:#4eff9a">/21</span></div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">16 matching bits (198.51) +<br>5 matching bits in 3rd octet (01100) =<br><span style="color:#4eff9a">21 bit prefix → /21 ✓</span></div>
+      </div>
+
+      <!-- Rule -->
+      <div id="rulebox" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 9px;margin-top:6px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">THE RULE</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">Count common leading bits across ALL addresses.<br>That count is your summary prefix length.</div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">Compare 3rd octets in binary.</div>
+    <div class="il">100–103 share first 5 bits: 01100.</div>
+    <div class="ih">16 + 5 = /21 summary prefix. ✓</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">16</div><div class="sl">BITS: 198.51</div></div>
+    <div class="sc"><div class="sv gn">+5</div><div class="sl">BITS: OCTET 3</div></div>
+    <div class="sc"><div class="sv gn">/21</div><div class="sl">SUMMARY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — OVER-AGGREGATION RISK
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">THE DARK SIDE</div>
+    <div class="hdr-sub">OVER-AGGREGATION = BGP HIJACK RISK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">DANGER ZONE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">REAL RISK</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:18px;top:7px;animation-delay:.1s"></div>
+    <div class="star" style="left:280px;top:5px;animation-delay:.6s"></div>
+    <div class="star" style="left:352px;top:13px;animation-delay:1s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">CORRECT VS OVER-AGGREGATION</div>
+
+      <!-- Good -->
+      <div id="good" style="border:1px solid #4eff9a50;background:#001a1080;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">✓ CORRECT — announce what you own</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:8px;color:#4eff9a;min-width:115px">198.51.100.0/21</div>
+          <div style="flex:1;height:3px;background:#4eff9a40;position:relative">
+            <div id="gb" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a">AS64500</div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">covers exactly .100.0–.107.255<br>you own all 8 /24s → safe to advertise</div>
+      </div>
+
+      <!-- Bad -->
+      <div id="bad" style="border:1px solid #e8505060;background:#1a050590;padding:8px 10px;margin-bottom:7px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">✗ OVER-AGGREGATED — too broad</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:8px;color:#e85050;min-width:115px">198.51.96.0/19</div>
+          <div style="flex:1;height:3px;background:#e8505040;position:relative">
+            <div id="bb" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e85050;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#e85050">AS64500</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">covers .96.0–.127.255 (8192 addrs)<br>you only own .100–.107 range<br>advertising 24 /24s you DON'T own!</div>
+      </div>
+
+      <!-- Incidents -->
+      <div id="inc" style="border:1px solid #e8a02050;background:#10090090;padding:7px 9px;opacity:0;transition:opacity .4s;margin-bottom:6px;flex-shrink:0">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">REAL-WORLD INCIDENTS</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          <span style="color:#e85050">2008:</span> Pakistan Telecom over-aggregated YouTube<br>
+          → blackholed globally for 2 hours<br>
+          <span style="color:#e85050">2010:</span> China Telecom hijacked 50K+ prefixes<br>
+          <span style="color:#e8a020">FIX:</span> RPKI — cryptographically sign your prefixes
+        </div>
+      </div>
+
+      <!-- Golden rule -->
+      <div id="golden" style="border:2px solid #4ec9e160;background:#001a2080;padding:8px 10px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px;letter-spacing:1px">THE GOLDEN RULE</div>
+        <div style="font-size:7px;color:#fff;line-height:2">
+          Only aggregate <span style="color:#4eff9a">what you own</span>.<br>
+          Match your IRR/RPKI ROA records.<br>
+          Prefix &gt; your block = <span style="color:#e85050">BGP hijack</span>.
+        </div>
+      </div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Aggregate only your registered prefixes.</div>
+    <div class="il">Over-advertising → traffic blackholing.</div>
+    <div class="ih rd">RPKI signs routes. Validate always.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">/21</div><div class="sl">CORRECT AGGR</div></div>
+    <div class="sc"><div class="sv rd">/19</div><div class="sl">OVER-AGGR ⚠</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">RPKI</div><div class="sl">THE FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var T=[];
+function tm(fn,ms){T.push(setTimeout(fn,ms))}
+function clr(){T.forEach(clearTimeout);T=[]}
+
+function go(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(function(s,i){s.classList.toggle('active',i+1===n)});
+  setTimeout(function(){[playS1,playS2,playS3,playS4][n-1]()},200);
+}
+
+function makeBits(containerId,value,matchCount,diffMode){
+  var c=document.getElementById(containerId);
+  c.innerHTML='';
+  for(var i=7;i>=0;i--){
+    var bit=(value>>i)&1;
+    var pos=7-i;
+    var d=document.createElement('div');
+    d.className='bit';
+    d.textContent=bit;
+    if(pos<matchCount){d.classList.add('match')}
+    else if(diffMode){d.classList.add('diff')}
+    else{d.classList.add('wild')}
+    c.appendChild(d);
+  }
+}
+
+function makeSummary(containerId){
+  var c=document.getElementById(containerId);
+  c.innerHTML='';
+  var p=[0,1,1,0,0,'?','?','?'];
+  p.forEach(function(b,i){
+    var d=document.createElement('div');
+    d.className='bit';
+    d.textContent=b;
+    if(i<5){d.classList.add('match')}
+    else{d.classList.add('wild')}
+    c.appendChild(d);
+  });
+}
+
+function playS1(){
+  clr();
+  var exs=['ex1','ex2','ex3','ex4','ex5'];
+  var fills=[['ef1',40],['ef2',25],['ef3',12],['ef4',8],['ef5',1]];
+  exs.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  fills.forEach(function(f){document.getElementById(f[0]).style.width='0%'});
+  document.getElementById('old-lbl').style.opacity='0';
+  document.getElementById('new-lbl').style.opacity='0';
+  document.getElementById('cidr-bar').style.width='0%';
+  document.getElementById('ins1').style.opacity='0';
+
+  tm(function(){document.getElementById('old-lbl').style.opacity='1'},300);
+  tm(function(){document.getElementById('new-lbl').style.opacity='1'},700);
+  tm(function(){document.getElementById('cidr-bar').style.width='100%'},900);
+  exs.forEach(function(id,i){
+    tm(function(){
+      document.getElementById(id).style.opacity='1';
+      setTimeout(function(){document.getElementById(fills[i][0]).style.width=fills[i][1]+'%'},100);
+    },1400+i*350);
+  });
+  tm(function(){document.getElementById('ins1').style.opacity='1'},1400+exs.length*350+200);
+}
+
+function playS2(){
+  clr();
+  var rows=['r1','r2','r3','r4'];
+  var fills=[['rf1',24],['rf2',24],['rf3',24],['rf4',24]];
+  rows.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  fills.forEach(function(f){document.getElementById(f[0]).style.width='0%'});
+  document.getElementById('arw').style.opacity='0';
+  document.getElementById('sumbox').style.opacity='0';
+  document.getElementById('sfill').style.width='0%';
+  document.getElementById('savbox').style.opacity='0';
+
+  rows.forEach(function(id,i){
+    tm(function(){
+      document.getElementById(id).style.opacity='1';
+      setTimeout(function(){document.getElementById(fills[i][0]).style.width='24%'},100);
+    },300+i*370);
+  });
+  tm(function(){document.getElementById('arw').style.opacity='1'},300+rows.length*370+200);
+  tm(function(){
+    document.getElementById('sumbox').style.opacity='1';
+    setTimeout(function(){document.getElementById('sfill').style.width='96%'},200);
+  },300+rows.length*370+700);
+  tm(function(){document.getElementById('savbox').style.opacity='1'},300+rows.length*370+1400);
+}
+
+function playS3(){
+  clr();
+  makeBits('b100',100,5,true);
+  makeBits('b101',101,5,true);
+  makeBits('b102',102,5,true);
+  makeBits('b103',103,5,true);
+  makeSummary('bmatch');
+
+  var brows=['brow0','brow1','brow2','brow3'];
+  brows.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  ['mhdr','mrow','resbox','rulebox'].forEach(function(id){document.getElementById(id).style.opacity='0'});
+
+  brows.forEach(function(id,i){tm(function(){document.getElementById(id).style.opacity='1'},300+i*400)});
+  tm(function(){document.getElementById('mhdr').style.opacity='1'},300+brows.length*400+200);
+  tm(function(){document.getElementById('mrow').style.opacity='1'},300+brows.length*400+550);
+  tm(function(){document.getElementById('resbox').style.opacity='1'},300+brows.length*400+1000);
+  tm(function(){document.getElementById('rulebox').style.opacity='1'},300+brows.length*400+1500);
+}
+
+function playS4(){
+  clr();
+  ['good','bad','inc','golden'].forEach(function(id){document.getElementById(id).style.opacity='0'});
+  ['gb','bb'].forEach(function(id){document.getElementById(id).style.width='0%'});
+
+  tm(function(){
+    document.getElementById('good').style.opacity='1';
+    setTimeout(function(){document.getElementById('gb').style.width='100%'},200);
+  },400);
+  tm(function(){
+    document.getElementById('bad').style.opacity='1';
+    setTimeout(function(){document.getElementById('bb').style.width='100%'},200);
+  },1100);
+  tm(function(){document.getElementById('inc').style.opacity='1'},1900);
+  tm(function(){document.getElementById('golden').style.opacity='1'},2700);
+}
+
+setTimeout(playS1,350);
+</script>
+</body>
+</html>

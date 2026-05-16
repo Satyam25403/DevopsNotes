@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>Ethernet Frame</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  color:#fff;
+  overflow-x:hidden;
+}
+.scene{
+  width:390px;
+  min-height:100vh;
+  display:none;
+  flex-direction:column;
+}
+.scene.active{display:flex}
+
+/* ── HEADER ── 90px */
+.hdr{
+  height:90px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:8px;padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:0.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#888;text-align:center;letter-spacing:1px}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+
+/* ── SCENE LABEL ── 28px */
+.slr{
+  height:28px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;
+}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+/* ── ANIMATION AREA ── flex:1 */
+.anim{
+  flex:1;
+  position:relative;
+  overflow:hidden;
+  min-height:280px;
+}
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;animation:twinkle 2s infinite alternate}
+@keyframes twinkle{from{opacity:.1}to{opacity:.5}}
+.floor{
+  position:absolute;bottom:0;left:0;right:0;height:16px;
+  background:repeating-linear-gradient(90deg,#2a1f3d 0,#2a1f3d 38px,#231830 38px,#231830 76px);
+  border-top:1px solid #4a3a6a;
+}
+.floor-b{
+  background:repeating-linear-gradient(90deg,#0f2240 0,#0f2240 38px,#0c1c38 38px,#0c1c38 76px);
+  border-top-color:#1e4080;
+}
+
+/* ── INFO PANEL ── 110px */
+.info{
+  height:110px;flex-shrink:0;
+  margin:0 12px;
+  border:2px solid #4ec9e1;
+  padding:10px 14px;
+  display:flex;flex-direction:column;
+  justify-content:center;gap:7px;
+  font-size:9px;line-height:1.9;
+}
+.info.am{border-color:#e8a020}
+.iline{color:#ccc}
+.ihigh{color:#4eff9a}
+.ihigh.am{color:#e8a020}
+
+/* ── STATS ROW ── 70px */
+.srow{
+  height:70px;flex-shrink:0;
+  display:flex;gap:8px;padding:8px 12px;
+}
+.sc{
+  flex:1;background:#130d1e;border:1px solid #2a1f3d;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+}
+.sv{font-size:14px;color:#4ec9e1}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.pu{color:#9a4ef8}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#888;text-align:center;line-height:1.4}
+
+/* ── CONTROLS ── 68px */
+.ctrl{
+  height:68px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  padding:0 12px;
+}
+.btn{
+  font-family:'Press Start 2P',monospace;font-size:9px;
+  padding:10px 14px;border:2px solid #4ec9e1;
+  background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;
+}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── FIELD BLOCKS (scene 1) ── */
+.fblock{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:2px solid #2a1f3d;padding:5px 2px;transition:all .3s;
+  min-height:52px;
+}
+.fb-b{font-size:10px;font-weight:bold;text-align:center}
+.fb-l{font-size:7px;text-align:center;line-height:1.5;margin-top:2px}
+.fb-n{font-size:6px;color:#555;text-align:center;line-height:1.4;margin-top:2px}
+.fblock.lit .fb-n{color:#aaa}
+
+/* ── ETHERTYPE ROWS (scene 2) ── */
+.et-row{
+  display:flex;align-items:center;gap:7px;padding:5px 10px;
+  border-left:3px solid transparent;margin-bottom:3px;
+  opacity:0;transition:opacity .4s;
+}
+.et-hex{font-size:9px;font-family:monospace;min-width:58px}
+.et-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.et-nm{font-size:7px;color:#aaa;line-height:1.5}
+
+/* ── HEX BYTES (scene 4) ── */
+.hb{
+  font-size:8px;font-family:monospace;padding:3px 3px;
+  background:#130d1e;border:1px solid #2a1f3d;
+  transition:all .3s;min-width:22px;text-align:center;
+  color:#4a6080;
+}
+.hex-grid{display:flex;flex-wrap:wrap;gap:3px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SCENE 1 — THE FRAME STRUCTURE
+══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ETHERNET FRAME</div>
+    <div class="hdr-sub">14 BYTES NOBODY TALKS ABOUT</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE STRUCTURE</span>
+    <span class="sbadge" style="color:#e8a020">ETHERNET II</span>
+  </div>
+
+  <div class="anim" id="a1" style="background:#1a1025">
+    <div class="star" style="left:25px;top:8px;animation-delay:0s"></div>
+    <div class="star" style="left:90px;top:4px;animation-delay:.4s"></div>
+    <div class="star" style="left:170px;top:12px;animation-delay:.8s"></div>
+    <div class="star" style="left:260px;top:5px;animation-delay:.2s"></div>
+    <div class="star" style="left:340px;top:10px;animation-delay:1s"></div>
+    <div class="star" style="left:55px;top:34px;animation-delay:1.3s"></div>
+    <div class="star" style="left:310px;top:32px;animation-delay:.6s"></div>
+
+    <!-- Wire -->
+    <div style="position:absolute;top:48px;left:10px;right:10px;height:3px;background:#2a1f3d;border-radius:2px"></div>
+    <div id="pkt" style="position:absolute;top:40px;left:-80px;width:68px;height:18px;background:#e8a020;border:2px solid #e8c060;display:flex;align-items:center;justify-content:center;font-size:6px;color:#0a0a0f;opacity:0">FRAME ►</div>
+    <div style="position:absolute;top:10px;left:0;right:0;text-align:center;font-size:7px;color:#555;letter-spacing:2px">ETHERNET II FRAME ON THE WIRE</div>
+
+    <!-- Content pinned below wire -->
+    <div style="position:absolute;top:66px;left:10px;right:10px;bottom:20px;display:flex;flex-direction:column;gap:0">
+
+      <!-- L2 label -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px;padding:0 2px;margin-bottom:3px">── LAYER 2 HEADER (14 bytes) ─────────────</div>
+
+      <!-- Row 1 -->
+      <div style="display:flex;gap:3px;margin-bottom:3px">
+        <div class="fblock" id="f-dst" style="flex:3;background:#1e0a0a">
+          <div class="fb-b" style="color:#e85050">6B</div>
+          <div class="fb-l" style="color:#e85050">DST MAC</div>
+          <div class="fb-n">ff:ff:ff:ff:ff:ff</div>
+        </div>
+        <div class="fblock" id="f-src" style="flex:3;background:#1a0d08">
+          <div class="fb-b" style="color:#e8a020">6B</div>
+          <div class="fb-l" style="color:#e8a020">SRC MAC</div>
+          <div class="fb-n">aa:bb:cc:dd:ee:ff</div>
+        </div>
+        <div class="fblock" id="f-et" style="flex:2;background:#0a1020">
+          <div class="fb-b" style="color:#4ec9e1">2B</div>
+          <div class="fb-l" style="color:#4ec9e1">ETHER<br>TYPE</div>
+          <div class="fb-n">0x0800</div>
+        </div>
+      </div>
+
+      <!-- Payload label -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px;padding:0 2px;margin-bottom:3px;margin-top:2px">── PAYLOAD (46 – 1500 bytes, MTU) ─────────</div>
+
+      <!-- Row 2 -->
+      <div style="display:flex;gap:3px;margin-bottom:3px">
+        <div class="fblock" id="f-pay" style="flex:1;background:#081608;min-height:58px">
+          <div class="fb-b" style="color:#4eff9a">UP TO 1500B</div>
+          <div class="fb-l" style="color:#4eff9a">PAYLOAD</div>
+          <div class="fb-n">IP packet / ARP / data…</div>
+        </div>
+      </div>
+
+      <!-- Trailer label -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px;padding:0 2px;margin-bottom:3px;margin-top:2px">── TRAILER ────────────────────────────────</div>
+
+      <!-- Row 3 -->
+      <div style="display:flex;gap:3px;margin-bottom:6px">
+        <div class="fblock" id="f-fcs" style="flex:1;background:#0a0820;min-height:42px">
+          <div class="fb-b" style="color:#9a4ef8">4B</div>
+          <div class="fb-l" style="color:#9a4ef8">FCS (CRC32)</div>
+          <div class="fb-n">error check — CRC32 of frame</div>
+        </div>
+      </div>
+
+      <!-- Total bar -->
+      <div id="tot" style="border:1px solid #2a1f3d;background:#130d1e;padding:6px 10px;display:flex;justify-content:space-between;align-items:center;opacity:0;transition:opacity .4s;margin-bottom:3px">
+        <div style="font-size:7px;color:#888">TOTAL FRAME SIZE</div>
+        <div style="font-size:11px;color:#4ec9e1">64 – 1518 bytes</div>
+      </div>
+      <div id="bdown" style="font-size:7px;color:#555;text-align:center;opacity:0;transition:opacity .4s">6 + 6 + 2 + payload + 4 = frame</div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info am">
+    <div class="iline">Every bit you send is wrapped in this.</div>
+    <div class="iline">DST MAC → SRC MAC → EtherType →</div>
+    <div class="ihigh am">Payload → FCS. 14-byte header always.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">14B</div><div class="sl">HEADER SIZE</div></div>
+    <div class="sc"><div class="sv gn">1500B</div><div class="sl">MAX PAYLOAD (MTU)</div></div>
+    <div class="sc"><div class="sv pu">4B</div><div class="sl">FCS TRAILER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 2 — ETHERTYPE DEEP DIVE
+══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ETHERTYPE FIELD</div>
+    <div class="hdr-sub">2 BYTES THAT TELL EVERYTHING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">0x____</span>
+    <span class="sbadge" style="color:#4ec9e1">ETHERTYPE</span>
+  </div>
+
+  <div class="anim" id="a2" style="background:#1a1025">
+    <div class="star" style="left:30px;top:7px;animation-delay:.1s"></div>
+    <div class="star" style="left:200px;top:3px;animation-delay:.6s"></div>
+    <div class="star" style="left:350px;top:9px;animation-delay:1.1s"></div>
+
+    <!-- Frame bar -->
+    <div style="position:absolute;top:12px;left:10px;right:10px">
+      <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">ETHERTYPE POSITION IN FRAME</div>
+      <div style="display:flex;gap:2px;height:38px">
+        <div style="flex:3;background:#1e0a0a;border:1px solid #e85050;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e85050;text-align:center">DST<br>MAC 6B</div>
+        <div style="flex:3;background:#1a0d08;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e8a020;text-align:center">SRC<br>MAC 6B</div>
+        <div id="eth" style="flex:2;background:#001a30;border:2px solid #4ec9e1;display:flex;align-items:center;justify-content:center;font-size:8px;color:#4ec9e1;transition:all .3s">0x????</div>
+        <div style="flex:6;background:#081608;border:1px solid #4eff9a30;display:flex;align-items:center;justify-content:center;font-size:6px;color:#4eff9a50">PAYLOAD</div>
+        <div style="flex:1;background:#0a0820;border:1px solid #9a4ef830;display:flex;align-items:center;justify-content:center;font-size:5px;color:#9a4ef870">FCS</div>
+      </div>
+    </div>
+
+    <!-- Scanner line -->
+    <div id="scan" style="position:absolute;top:65px;left:10px;width:0px;height:2px;background:#4ec9e1;opacity:0;box-shadow:0 0 5px #4ec9e1;transition:opacity .3s"></div>
+
+    <!-- Decoder -->
+    <div style="position:absolute;top:78px;left:10px;right:10px;background:#0d0d20;border:1px solid #2a1f3d;padding:10px">
+      <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;text-align:center;letter-spacing:1px">▼ ETHERTYPE DECODER ▼</div>
+
+      <div class="et-row" id="e1" style="border-left-color:#4ec9e1">
+        <div class="et-hex" style="color:#4ec9e1">0x0800</div>
+        <div class="et-dot" style="background:#4ec9e1"></div>
+        <div class="et-nm">IPv4 — most internet traffic</div>
+      </div>
+      <div class="et-row" id="e2" style="border-left-color:#e8a020">
+        <div class="et-hex" style="color:#e8a020">0x0806</div>
+        <div class="et-dot" style="background:#e8a020"></div>
+        <div class="et-nm">ARP — "who has this IP?"</div>
+      </div>
+      <div class="et-row" id="e3" style="border-left-color:#4eff9a">
+        <div class="et-hex" style="color:#4eff9a">0x86DD</div>
+        <div class="et-dot" style="background:#4eff9a"></div>
+        <div class="et-nm">IPv6 — next-gen addressing</div>
+      </div>
+      <div class="et-row" id="e4" style="border-left-color:#9a4ef8">
+        <div class="et-hex" style="color:#9a4ef8">0x8100</div>
+        <div class="et-dot" style="background:#9a4ef8"></div>
+        <div class="et-nm">802.1Q VLAN tag — segmentation</div>
+      </div>
+      <div class="et-row" id="e5" style="border-left-color:#e85050">
+        <div class="et-hex" style="color:#e85050">0x8035</div>
+        <div class="et-dot" style="background:#e85050"></div>
+        <div class="et-nm">RARP — reverse ARP (legacy)</div>
+      </div>
+
+      <div id="etins" style="margin-top:10px;border:1px solid #4ec9e140;background:#001a2090;padding:8px;font-size:7px;color:#4ec9e1;text-align:center;line-height:1.9;opacity:0;transition:opacity .4s">
+        NIC reads EtherType FIRST →<br>decides which stack handles the frame
+      </div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info">
+    <div class="iline">EtherType at bytes 13–14 tells the NIC:</div>
+    <div class="iline">"This payload is IPv4 / ARP / IPv6…"</div>
+    <div class="ihigh">Wrong type → frame silently dropped.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">2B</div><div class="sl">FIELD SIZE</div></div>
+    <div class="sc"><div class="sv gn">65535</div><div class="sl">POSSIBLE VALUES</div></div>
+    <div class="sc"><div class="sv am">~10</div><div class="sl">COMMON IN WILD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 3 — MTU & FRAGMENTATION
+══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">MTU: 1500 BYTE LIMIT</div>
+    <div class="hdr-sub">WHY PACKETS GET CHOPPED UP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">MAX PAYLOAD</span>
+    <span class="sbadge" style="color:#4eff9a">1500 BYTES</span>
+  </div>
+
+  <div class="anim" id="a3" style="background:#0d1a2e">
+
+    <div style="position:absolute;top:12px;left:10px;right:10px;bottom:20px;display:flex;flex-direction:column;gap:0">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:7px">PAYLOAD CAPACITY — 1 ETHERNET FRAME</div>
+
+      <!-- Capacity bar -->
+      <div style="background:#0a1a2e;border:1px solid #1e4080;height:50px;position:relative;overflow:hidden;margin-bottom:12px;flex-shrink:0">
+        <div id="mfill" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a18;border-right:2px solid #4eff9a;transition:width 1.2s ease-out"></div>
+        <div id="mlbl" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:9px;color:#4eff9a;opacity:0;transition:opacity .4s">1500B</div>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;color:#1e4080;letter-spacing:1px">MAX PAYLOAD CAPACITY</div>
+      </div>
+
+      <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px;flex-shrink:0">WHAT FITS IN 1500 BYTES?</div>
+
+      <div id="fi1" style="display:flex;align-items:center;gap:8px;margin-bottom:7px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:170px;height:16px;background:#4ec9e118;border:1px solid #4ec9e1;position:relative;flex-shrink:0">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:13%;background:#4ec9e1"></div>
+        </div>
+        <div style="font-size:7px;color:#4ec9e1">200B — avg DNS reply</div>
+      </div>
+      <div id="fi2" style="display:flex;align-items:center;gap:8px;margin-bottom:7px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:170px;height:16px;background:#4eff9a18;border:1px solid #4eff9a;position:relative;flex-shrink:0">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:60%;background:#4eff9a"></div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a">900B — avg HTTP header</div>
+      </div>
+      <div id="fi3" style="display:flex;align-items:center;gap:8px;margin-bottom:7px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:170px;height:16px;background:#e8a02018;border:1px solid #e8a020;position:relative;flex-shrink:0">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:100%;background:#e8a020"></div>
+        </div>
+        <div style="font-size:7px;color:#e8a020">1500B — full MTU used</div>
+      </div>
+      <div id="fi4" style="display:flex;align-items:center;gap:8px;margin-bottom:12px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:170px;height:16px;background:#e8505018;border:1px solid #e85050;position:relative;overflow:hidden;flex-shrink:0">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:100%;background:#e85050"></div>
+        </div>
+        <div style="font-size:7px;color:#e85050">3000B → FRAGMENTED ✂</div>
+      </div>
+
+      <!-- Frag box -->
+      <div id="fragbox" style="border:1px solid #e8505040;background:#1a050590;padding:9px 10px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">FRAGMENTATION: 3000B DATA</div>
+        <div style="display:flex;gap:4px">
+          <div style="flex:1;height:26px;background:#e8505030;border:1px solid #e85050;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e85050;text-align:center;line-height:1.5">FRAME 1<br>1500B</div>
+          <div style="flex:1;height:26px;background:#e8a02030;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e8a020;text-align:center;line-height:1.5">FRAME 2<br>1500B</div>
+          <div style="flex:.4;height:26px;background:#4eff9a20;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center;font-size:6px;color:#4eff9a;text-align:center;line-height:1.5">+<br>40B</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="iline">Ethernet MTU = 1500 byte payload max.</div>
+    <div class="iline">Bigger data → IP fragments it across frames.</div>
+    <div class="ihigh">Jumbo frames push MTU to 9000B (LANs).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1500B</div><div class="sl">STANDARD MTU</div></div>
+    <div class="sc"><div class="sv am">9000B</div><div class="sl">JUMBO FRAME</div></div>
+    <div class="sc"><div class="sv rd">✂</div><div class="sl">FRAG IF OVER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 4 — WIRESHARK HEX VIEW
+══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">READ WIRESHARK</div>
+    <div class="hdr-sub">HEX BYTES MAP TO FRAME FIELDS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">LIVE DECODE</span>
+    <span class="sbadge" style="color:#4eff9a">WIRESHARK</span>
+  </div>
+
+  <div class="anim" id="a4" style="background:#0d1a2e">
+    <div style="position:absolute;top:12px;left:10px;right:10px;bottom:20px;display:flex;flex-direction:column;gap:0">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:6px">WIRESHARK HEX DUMP — REAL FRAME</div>
+
+      <!-- Hex dump -->
+      <div style="background:#050e1a;border:1px solid #1e4080;padding:8px;margin-bottom:8px;flex-shrink:0">
+        <div style="font-size:6px;color:#2a4060;margin-bottom:4px">0000&nbsp;&nbsp;</div>
+        <div class="hex-grid" id="hg">
+          <span class="hb" data-g="dst">ff</span><span class="hb" data-g="dst">ff</span>
+          <span class="hb" data-g="dst">ff</span><span class="hb" data-g="dst">ff</span>
+          <span class="hb" data-g="dst">ff</span><span class="hb" data-g="dst">ff</span>
+          <span class="hb" data-g="src">aa</span><span class="hb" data-g="src">bb</span>
+          <span class="hb" data-g="src">cc</span><span class="hb" data-g="src">dd</span>
+          <span class="hb" data-g="src">ee</span><span class="hb" data-g="src">11</span>
+          <span class="hb" data-g="et">08</span><span class="hb" data-g="et">00</span>
+          <span class="hb" data-g="pay" style="min-width:26px">45</span>
+          <span class="hb" data-g="pay">00</span>
+          <span class="hb" data-g="pay">00</span><span class="hb" data-g="pay">3c</span>
+          <span class="hb" data-g="pay">40</span><span class="hb" data-g="pay">06</span>
+          <span class="hb" data-g="pay">b3</span><span class="hb" data-g="pay">e5</span>
+          <span class="hb" data-g="pay">…</span>
+          <span class="hb" data-g="fcs">de</span><span class="hb" data-g="fcs">ad</span>
+          <span class="hb" data-g="fcs">be</span><span class="hb" data-g="fcs">ef</span>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:8px;flex-shrink:0">
+        <div id="ld" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s">
+          <div style="width:11px;height:11px;background:#e85050;flex-shrink:0"></div>
+          <div style="font-size:7px;color:#e85050;line-height:1.4">DST MAC (6B) — ff:ff:ff:ff:ff:ff (broadcast)</div>
+        </div>
+        <div id="ls" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s">
+          <div style="width:11px;height:11px;background:#e8a020;flex-shrink:0"></div>
+          <div style="font-size:7px;color:#e8a020;line-height:1.4">SRC MAC (6B) — aa:bb:cc:dd:ee:11</div>
+        </div>
+        <div id="le" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s">
+          <div style="width:11px;height:11px;background:#4ec9e1;flex-shrink:0"></div>
+          <div style="font-size:7px;color:#4ec9e1;line-height:1.4">EtherType 0x0800 = IPv4</div>
+        </div>
+        <div id="lp" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s">
+          <div style="width:11px;height:11px;background:#4eff9a;flex-shrink:0"></div>
+          <div style="font-size:7px;color:#4eff9a;line-height:1.4">IPv4 payload (0x45 = ver 4, IHL 20B)</div>
+        </div>
+        <div id="lf" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .4s">
+          <div style="width:11px;height:11px;background:#9a4ef8;flex-shrink:0"></div>
+          <div style="font-size:7px;color:#9a4ef8;line-height:1.4">FCS CRC32 trailer (4B)</div>
+        </div>
+      </div>
+
+      <!-- Wireshark tree -->
+      <div id="wst" style="background:#050e1a;border:1px solid #1e4080;padding:9px;font-size:7px;line-height:2.1;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="color:#4ec9e1">▾ Ethernet II</div>
+        <div style="padding-left:14px;color:#e85050">Destination: ff:ff:ff:ff:ff:ff (Broadcast)</div>
+        <div style="padding-left:14px;color:#e8a020">Source: aa:bb:cc:dd:ee:11</div>
+        <div style="padding-left:14px;color:#4ec9e1">Type: IPv4 (0x0800)</div>
+        <div style="color:#4eff9a;margin-top:3px">▾ Internet Protocol Version 4</div>
+        <div style="padding-left:14px;color:#4eff9a90">Version: 4 · IHL: 20 bytes</div>
+      </div>
+
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="iline">Every hex byte in Wireshark maps</div>
+    <div class="iline">directly to an Ethernet frame field.</div>
+    <div class="ihigh">Offset 12–13 always = EtherType.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">12</div><div class="sl">ETHERTYPE OFFSET</div></div>
+    <div class="sc"><div class="sv gn">0800</div><div class="sl">= IPv4 HEX</div></div>
+    <div class="sc"><div class="sv pu">CRC32</div><div class="sl">FCS ALGO</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var T=[],grpC={dst:'#e85050',src:'#e8a020',et:'#4ec9e1',pay:'#4eff9a',fcs:'#9a4ef8'};
+
+function clr(){T.forEach(clearTimeout);T=[]}
+function tm(fn,ms){T.push(setTimeout(fn,ms))}
+
+function go(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(function(s,i){s.classList.toggle('active',i+1===n)});
+  setTimeout(function(){[playS1,playS2,playS3,playS4][n-1]()},200);
+}
+
+/* ── S1 ── */
+function playS1(){
+  clr();
+  var ids=['f-dst','f-src','f-et','f-pay','f-fcs'];
+  var cols=['#e85050','#e8a020','#4ec9e1','#4eff9a','#9a4ef8'];
+  var bgs=['#3e1010','#3a2010','#002a40','#103010','#201040'];
+  var orig=['#1e0a0a','#1a0d08','#0a1020','#081608','#0a0820'];
+
+  document.getElementById('tot').style.opacity='0';
+  document.getElementById('bdown').style.opacity='0';
+  ids.forEach(function(id,i){
+    var el=document.getElementById(id);
+    if(el){el.style.borderColor='#2a1f3d';el.style.background=orig[i]}
+  });
+
+  // Packet slide
+  var pkt=document.getElementById('pkt');
+  pkt.style.opacity='1';pkt.style.left='-80px';pkt.style.transition='left 1.5s linear';
+  tm(function(){pkt.style.left='430px'},80);
+  tm(function(){pkt.style.opacity='0';pkt.style.transition='none';pkt.style.left='-80px'},1700);
+
+  // Light up fields
+  ids.forEach(function(id,i){
+    tm(function(){
+      var el=document.getElementById(id);
+      if(!el)return;
+      el.style.borderColor=cols[i];el.style.background=bgs[i];
+      tm(function(){el.style.borderColor='#2a1f3d';el.style.background=orig[i]},380);
+    },800+i*480);
+  });
+
+  tm(function(){document.getElementById('tot').style.opacity='1'},800+ids.length*480);
+  tm(function(){document.getElementById('bdown').style.opacity='1'},800+ids.length*480+300);
+}
+
+/* ── S2 ── */
+function playS2(){
+  clr();
+  var rows=['e1','e2','e3','e4','e5'];
+  var hexes=['0x0800','0x0806','0x86DD','0x8100','0x8035'];
+  var cols=['#4ec9e1','#e8a020','#4eff9a','#9a4ef8','#e85050'];
+  var eth=document.getElementById('eth');
+  var scan=document.getElementById('scan');
+  var ins=document.getElementById('etins');
+
+  rows.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  ins.style.opacity='0';
+  eth.textContent='0x????';eth.style.borderColor='#4ec9e1';eth.style.color='#4ec9e1';
+
+  // Scanner
+  scan.style.opacity='1';scan.style.transition='none';scan.style.width='0px';
+  tm(function(){scan.style.transition='width 1s ease-out';scan.style.width='260px'},80);
+  tm(function(){scan.style.opacity='0'},1200);
+  tm(function(){eth.textContent=hexes[0];eth.style.color=cols[0];eth.style.borderColor=cols[0]},1300);
+
+  rows.forEach(function(id,i){
+    tm(function(){document.getElementById(id).style.opacity='1'},1450+i*420);
+  });
+  tm(function(){ins.style.opacity='1'},1450+rows.length*420+200);
+}
+
+/* ── S3 ── */
+function playS3(){
+  clr();
+  var fis=['fi1','fi2','fi3','fi4'];
+  var mf=document.getElementById('mfill');
+  var ml=document.getElementById('mlbl');
+  var fb=document.getElementById('fragbox');
+
+  fis.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  fb.style.opacity='0';
+  mf.style.width='0%';ml.style.opacity='0';
+
+  tm(function(){mf.style.width='100%'},200);
+  tm(function(){ml.style.opacity='1'},1500);
+
+  fis.forEach(function(id,i){
+    tm(function(){document.getElementById(id).style.opacity='1'},1700+i*430);
+  });
+  tm(function(){fb.style.opacity='1'},1700+fis.length*430+300);
+}
+
+/* ── S4 ── */
+function playS4(){
+  clr();
+  var legs=['ld','ls','le','lp','lf'];
+  var wst=document.getElementById('wst');
+  var hbs=document.querySelectorAll('#hg .hb');
+
+  legs.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  wst.style.opacity='0';
+  hbs.forEach(function(el){el.style.color='#4a6080';el.style.borderColor='#2a1f3d';el.style.background='#130d1e'});
+
+  var grps=['dst','src','et','pay','fcs'];
+  grps.forEach(function(g,gi){
+    tm(function(){
+      if(gi>0){
+        var pg=grps[gi-1];
+        hbs.forEach(function(el){
+          if(el.dataset.g===pg){el.style.background='#130d1e';el.style.borderColor='#2a1f3d';el.style.color='#4a6080'}
+        });
+      }
+      var c=grpC[g];
+      hbs.forEach(function(el){
+        if(el.dataset.g===g){el.style.color=c;el.style.borderColor=c;el.style.background=c+'22'}
+      });
+      document.getElementById(legs[gi]).style.opacity='1';
+    },400+gi*680);
+  });
+
+  tm(function(){
+    hbs.forEach(function(el){
+      var c=grpC[el.dataset.g];
+      if(c){el.style.color=c;el.style.borderColor=c;el.style.background=c+'22'}
+    });
+    wst.style.opacity='1';
+  },400+grps.length*680+200);
+}
+
+// Auto-play on load
+setTimeout(playS1,350);
+</script>
+</body>
+</html>

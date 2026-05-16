@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cache Hit, Miss & Hit Ratio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;position:relative;overflow:hidden;display:flex;flex-direction:column}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:68px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:0 12px;flex-shrink:0}
+.hdr-title{font-family:'Press Start 2P';font-size:10px;color:#e8a020;text-align:center;line-height:1.5;text-shadow:0 0 8px #e8a02055}
+.hdr-sub{font-family:'Press Start 2P';font-size:6px;color:#555;text-align:center}
+.dots{display:flex;gap:7px}
+.dot{width:8px;height:8px;background:#1a1a2e;border:1px solid #333}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 5px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:8px;left:10px;font-family:'Press Start 2P';font-size:9px;z-index:5}
+.sc-badge{position:absolute;top:8px;right:10px;font-family:'Press Start 2P';font-size:7px;padding:3px 6px;border:1px solid;z-index:5}
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.08}to{opacity:.45}}
+.panel{height:72px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:6px 12px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.pl{font-family:'Press Start 2P';font-size:7px;line-height:1.7}
+.stats{height:58px;display:flex;gap:6px;padding:0 10px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:5px 3px;text-align:center}
+.stat-val{font-family:'Press Start 2P';font-size:12px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:5px;color:#555;display:block;margin-top:2px}
+.btns{height:50px;display:flex;align-items:center;justify-content:center;gap:7px;padding:0 10px;flex-shrink:0;background:#060609;border-top:1px solid #1a1a2a}
+.btn{font-family:'Press Start 2P';font-size:7px;padding:7px 9px;border:2px solid;cursor:pointer;background:transparent}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#666;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1: HOOK ═══ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">HIT, MISS & HIT RATIO</div>
+    <div class="hdr-sub">3 NUMBERS EVERY ENGINEER MUST KNOW</div>
+    <div class="dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" id="c1" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE DANGER</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">⚠ SCENE 1</div>
+    <div class="star" style="top:5%;left:8%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:10%;left:22%;--d:1.7s;--delay:.8s"></div>
+    <div class="star" style="top:7%;left:42%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:14%;left:60%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:6%;left:78%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:18%;left:90%;--d:1.6s;--delay:.9s"></div>
+    <div class="star" style="top:22%;left:14%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:4%;left:94%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:20%;left:50%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:28%;left:75%;--d:1.5s;--delay:1.1s"></div>
+    <div class="star" style="top:30%;left:30%;--d:2.3s;--delay:0s"></div>
+
+    <svg style="position:absolute;top:30px;left:50%;transform:translateX(-50%);width:340px;height:290px;overflow:visible">
+      <!-- Broken gauge (0%) -->
+      <g id="hook-gauge">
+        <!-- gauge bg arc -->
+        <path d="M 50 180 A 120 120 0 0 1 290 180" fill="none" stroke="#1e1e2e" stroke-width="28"/>
+        <!-- danger zone red -->
+        <path d="M 50 180 A 120 120 0 0 1 110 75" fill="none" stroke="#3a1010" stroke-width="28"/>
+        <!-- warn zone amber -->
+        <path d="M 110 75 A 120 120 0 0 1 200 50" fill="none" stroke="#2a1e00" stroke-width="28"/>
+        <!-- good zone green -->
+        <path d="M 200 50 A 120 120 0 0 1 290 180" fill="none" stroke="#0a2a0a" stroke-width="28"/>
+        <!-- needle at 2% -->
+        <line id="hook-needle" x1="170" y1="180" x2="54" y2="188" stroke="#e85050" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="170" cy="180" r="8" fill="#e8a020"/>
+        <text x="170" y="230" font-family="'Press Start 2P'" font-size="10" fill="#e85050" text-anchor="middle" id="hook-pct">0%</text>
+        <text x="170" y="248" font-family="'Press Start 2P'" font-size="5" fill="#444" text-anchor="middle">HIT RATIO</text>
+        <!-- zone labels -->
+        <text x="68" y="200" font-family="'Press Start 2P'" font-size="5" fill="#e85050">BAD</text>
+        <text x="148" y="46" font-family="'Press Start 2P'" font-size="5" fill="#e8a020">WARN</text>
+        <text x="238" y="130" font-family="'Press Start 2P'" font-size="5" fill="#4eff9a">GOOD</text>
+      </g>
+
+      <!-- warning text -->
+      <g id="hook-warn" opacity="0">
+        <rect x="20" y="255" width="300" height="30" fill="#1a0505" stroke="#e85050" stroke-width="1"/>
+        <text x="170" y="267" font-family="'Press Start 2P'" font-size="5.5" fill="#e85050" text-anchor="middle">YOUR CACHE COULD BE BROKEN</text>
+        <text x="170" y="279" font-family="'Press Start 2P'" font-size="5.5" fill="#888" text-anchor="middle">AND YOU'D NEVER KNOW...</text>
+      </g>
+    </svg>
+
+    <!-- buildings -->
+    <div style="position:absolute;bottom:40px;left:5px;width:40px;height:52px;background:#2a1f3d;border:1px solid #3a2a5a"><div style="width:4px;height:4px;background:#e8a020;position:absolute;top:8px;left:7px;border-radius:50%;animation:twinkle 1.9s .2s infinite alternate"></div></div>
+    <div style="position:absolute;bottom:40px;right:5px;width:34px;height:64px;background:#231830;border:1px solid #3a2a5a"><div style="width:4px;height:4px;background:#e8a020;position:absolute;top:8px;right:7px;border-radius:50%;animation:twinkle 2.3s .7s infinite alternate"></div></div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:40px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#888;display:none" id="p1b">UNLESS YOU WATCH THE HIT RATIO</div>
+  </div>
+  <div class="stats">
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#e85050">???</span><span class="stat-lbl">HIT RATIO</span></div>
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#e85050">DARK</span><span class="stat-lbl">STATUS</span></div>
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#888">0</span><span class="stat-lbl">MONITORING</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: CACHE HIT ═══ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">CACHE HIT</div>
+    <div class="hdr-sub">DATA FOUND — THE FAST PATH</div>
+    <div class="dots"><div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" id="c2" style="background:#0a1a0a">
+    <div class="sc-label" style="color:#4eff9a">CACHE HIT</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">✓ FAST</div>
+
+    <svg style="position:absolute;top:20px;left:50%;transform:translateX(-50%);width:350px;height:295px;overflow:visible">
+      <!-- USER (blue shirt) -->
+      <g id="user2">
+        <!-- head -->
+        <rect x="14" y="100" width="20" height="18" fill="#f4c27a"/>
+        <rect x="16" y="102" width="4" height="4" fill="#111"/>
+        <rect x="24" y="102" width="4" height="4" fill="#111"/>
+        <rect x="18" y="112" width="8" height="2" fill="#b06a3a"/>
+        <rect x="10" y="104" width="4" height="8" fill="#f4c27a"/>
+        <rect x="34" y="104" width="4" height="8" fill="#f4c27a"/>
+        <rect x="12" y="97" width="20" height="5" fill="#2a1a0a"/>
+        <!-- body blue -->
+        <rect x="12" y="118" width="24" height="20" fill="#1a6ae8"/>
+        <rect x="14" y="138" width="8" height="16" fill="#2a2a4a"/>
+        <rect x="26" y="138" width="8" height="16" fill="#2a2a4a"/>
+        <rect x="14" y="150" width="10" height="6" fill="#1a0a00"/>
+        <rect x="26" y="150" width="10" height="6" fill="#1a0a00"/>
+      </g>
+
+      <!-- CACHE BOX (glowing green) -->
+      <rect x="120" y="75" width="110" height="90" fill="#051a05" stroke="#4eff9a" stroke-width="2"/>
+      <text x="175" y="93" font-family="'Press Start 2P'" font-size="5.5" fill="#4eff9a" text-anchor="middle">CACHE</text>
+      <rect id="h2r1" x="126" y="100" width="98" height="9" fill="#0a2a0a"/>
+      <text x="175" y="108" font-family="'Press Start 2P'" font-size="4.5" fill="#4eff9a" text-anchor="middle">user_count: 1247</text>
+      <rect id="h2r2" x="126" y="112" width="98" height="9" fill="#072007"/>
+      <text x="175" y="120" font-family="'Press Start 2P'" font-size="4.5" fill="#4ec9e1" text-anchor="middle">session:abc → valid</text>
+      <rect id="h2r3" x="126" y="124" width="98" height="9" fill="#0a2a0a"/>
+      <text x="175" y="132" font-family="'Press Start 2P'" font-size="4.5" fill="#4eff9a" text-anchor="middle">promo_price: $29</text>
+      <rect id="h2r4" x="126" y="136" width="98" height="9" fill="#072007"/>
+      <text x="175" y="144" font-family="'Press Start 2P'" font-size="4.5" fill="#4ec9e1" text-anchor="middle">latest_posts: [...]</text>
+
+      <!-- HIT flash label -->
+      <text id="hit2" x="175" y="162" font-family="'Press Start 2P'" font-size="10" fill="#4eff9a" text-anchor="middle" opacity="0">✓ HIT!</text>
+
+      <!-- DB (grey, idle) -->
+      <rect x="278" y="85" width="62" height="75" fill="#0a0a0a" stroke="#222" stroke-width="2"/>
+      <text x="309" y="103" font-family="'Press Start 2P'" font-size="4.5" fill="#2a2a2a" text-anchor="middle">DATABASE</text>
+      <rect x="282" y="110" width="54" height="7" fill="#111"/><rect x="282" y="120" width="54" height="7" fill="#0d0d0d"/>
+      <rect x="282" y="130" width="54" height="7" fill="#111"/><rect x="282" y="140" width="54" height="7" fill="#0d0d0d"/>
+      <text x="309" y="158" font-family="'Press Start 2P'" font-size="4.5" fill="#222" text-anchor="middle">BYPASSED</text>
+      <!-- sleep Z -->
+      <text id="dbz2" x="309" y="78" font-family="'Press Start 2P'" font-size="8" fill="#1e1e1e" text-anchor="middle" opacity="0">zzz</text>
+
+      <!-- beams -->
+      <line id="b2a" x1="38" y1="125" x2="120" y2="110" stroke="#4ec9e1" stroke-width="2" stroke-dasharray="5 3" opacity="0"/>
+      <line id="b2b" x1="120" y1="118" x2="38" y2="130" stroke="#4eff9a" stroke-width="2.5" stroke-dasharray="5 3" opacity="0"/>
+      <!-- no-DB cross -->
+      <line id="b2c" x1="232" y1="115" x2="278" y2="115" stroke="#333" stroke-width="2" stroke-dasharray="4 3" opacity="0"/>
+      <text id="nodb2" x="255" y="108" font-family="'Press Start 2P'" font-size="8" fill="#333" text-anchor="middle" opacity="0">✗</text>
+
+      <!-- result -->
+      <text id="res2" x="175" y="210" font-family="'Press Start 2P'" font-size="14" fill="#4eff9a" text-anchor="middle" opacity="0">⚡ 3ms</text>
+      <text id="res2b" x="175" y="228" font-family="'Press Start 2P'" font-size="5.5" fill="#4ec9e1" text-anchor="middle" opacity="0">SERVED FROM MEMORY</text>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:40px;display:flex">
+      <div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4eff9a;background:#001a05ee">
+    <div class="pl" style="color:#4eff9a" id="p2a">▶ PRESS PLAY TO SEE A CACHE HIT</div>
+    <div class="pl" style="color:#4ec9e1;display:none" id="p2b">✅ KEY FOUND IN CACHE → RETURN IMMEDIATELY</div>
+    <div class="pl" style="color:#888;display:none" id="p2c">DB NEVER WAKES UP. PURE MEMORY SPEED.</div>
+  </div>
+  <div class="stats">
+    <div class="stat" style="background:#051505"><span class="stat-val" style="color:#4eff9a">HIT</span><span class="stat-lbl">RESULT</span></div>
+    <div class="stat" style="background:#051505"><span class="stat-val" style="color:#4eff9a">3ms</span><span class="stat-lbl">LATENCY</span></div>
+    <div class="stat" style="background:#051505"><span class="stat-val" style="color:#4eff9a">0%</span><span class="stat-lbl">DB USAGE</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: CACHE MISS ═══ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">CACHE MISS</div>
+    <div class="hdr-sub">NOT FOUND — THE SLOW PATH</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" id="c3" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">CACHE MISS</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">✗ SLOW</div>
+
+    <svg style="position:absolute;top:20px;left:50%;transform:translateX(-50%);width:350px;height:295px;overflow:visible">
+      <!-- USER (red shirt) -->
+      <rect x="14" y="100" width="20" height="18" fill="#f4c27a"/>
+      <rect x="16" y="102" width="4" height="4" fill="#111"/>
+      <rect x="24" y="102" width="4" height="4" fill="#111"/>
+      <rect x="18" y="112" width="8" height="2" fill="#b06a3a"/>
+      <rect x="10" y="104" width="4" height="8" fill="#f4c27a"/>
+      <rect x="34" y="104" width="4" height="8" fill="#f4c27a"/>
+      <rect x="12" y="97" width="20" height="5" fill="#2a1a0a"/>
+      <rect x="12" y="118" width="24" height="20" fill="#e83030"/>
+      <rect x="14" y="138" width="8" height="16" fill="#2a2a4a"/>
+      <rect x="26" y="138" width="8" height="16" fill="#2a2a4a"/>
+      <rect x="14" y="150" width="10" height="6" fill="#1a0a00"/>
+      <rect x="26" y="150" width="10" height="6" fill="#1a0a00"/>
+
+      <!-- CACHE (empty / searching) -->
+      <rect x="118" y="80" width="100" height="78" fill="#100a1a" stroke="#2a2040" stroke-width="2"/>
+      <text x="168" y="98" font-family="'Press Start 2P'" font-size="5.5" fill="#333" text-anchor="middle">CACHE</text>
+      <rect x="124" y="105" width="88" height="9" fill="#160e22"/>
+      <text x="168" y="113" font-family="'Press Start 2P'" font-size="4" fill="#2a2a40" text-anchor="middle">user_count: 1247</text>
+      <rect x="124" y="117" width="88" height="9" fill="#120c1e"/>
+      <text x="168" y="125" font-family="'Press Start 2P'" font-size="4" fill="#2a2a40" text-anchor="middle">session:abc → valid</text>
+      <rect x="124" y="129" width="88" height="9" fill="#160e22"/>
+      <text id="searching-row" x="168" y="137" font-family="'Press Start 2P'" font-size="4" fill="#555" text-anchor="middle" opacity="0">NEW_KEY: ???</text>
+      <!-- miss X -->
+      <text id="miss3" x="168" y="158" font-family="'Press Start 2P'" font-size="11" fill="#e85050" text-anchor="middle" opacity="0">✗ MISS</text>
+
+      <!-- DB (active / lit) -->
+      <rect id="dbbox3" x="272" y="70" width="70" height="95" fill="#1a0e2e" stroke="#e8a020" stroke-width="2"/>
+      <text x="307" y="88" font-family="'Press Start 2P'" font-size="4.5" fill="#e8a020" text-anchor="middle">DATABASE</text>
+      <rect id="dr1" x="278" y="95" width="58" height="8" fill="#2a1f3d"/>
+      <rect id="dr2" x="278" y="106" width="58" height="8" fill="#231830"/>
+      <rect id="dr3" x="278" y="117" width="58" height="8" fill="#2a1f3d"/>
+      <rect id="dr4" x="278" y="128" width="58" height="8" fill="#231830"/>
+      <rect id="dr5" x="278" y="139" width="58" height="8" fill="#2a1f3d"/>
+      <text id="scan3" x="307" y="160" font-family="'Press Start 2P'" font-size="4.5" fill="#e85050" text-anchor="middle" opacity="0">SCANNING…</text>
+
+      <!-- spinner -->
+      <g id="spin3" opacity="0" style="transform-origin:80px 170px">
+        <circle cx="80" cy="175" r="15" fill="none" stroke="#e8a020" stroke-width="3" stroke-dasharray="36 18"/>
+      </g>
+
+      <!-- beams -->
+      <line id="b3a" x1="38" y1="120" x2="118" y2="112" stroke="#e8a020" stroke-width="2" stroke-dasharray="5 3" opacity="0"/>
+      <line id="b3b" x1="218" y1="115" x2="272" y2="108" stroke="#e85050" stroke-width="2" stroke-dasharray="5 3" opacity="0"/>
+      <line id="b3c" x1="272" y1="118" x2="38" y2="128" stroke="#4eff9a" stroke-width="2" stroke-dasharray="5 3" opacity="0"/>
+
+      <!-- result -->
+      <text id="res3" x="175" y="210" font-family="'Press Start 2P'" font-size="14" fill="#e85050" text-anchor="middle" opacity="0">⏱ 820ms</text>
+      <text id="res3b" x="175" y="228" font-family="'Press Start 2P'" font-size="5.5" fill="#e8a020" text-anchor="middle" opacity="0">FULL TABLE SCAN + DISK READ</text>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:40px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p3a">▶ PRESS PLAY TO SEE A CACHE MISS</div>
+    <div class="pl" style="color:#e85050;display:none" id="p3b">❌ KEY NOT IN CACHE → MUST QUERY DATABASE</div>
+    <div class="pl" style="color:#888;display:none" id="p3c">SLOW DISK READ. DB UNDER LOAD. USER WAITS.</div>
+  </div>
+  <div class="stats">
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#e85050">MISS</span><span class="stat-lbl">RESULT</span></div>
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#e85050">820ms</span><span class="stat-lbl">LATENCY</span></div>
+    <div class="stat" style="background:#1a1025"><span class="stat-val" style="color:#e85050">100%</span><span class="stat-lbl">DB USAGE</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: HIT RATIO SCOREBOARD ═══ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">HIT RATIO</div>
+    <div class="hdr-sub">THE NUMBER THAT TELLS ALL</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div></div>
+  </div>
+  <div class="canvas" id="c4" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">HIT RATIO</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">FORMULA</div>
+
+    <svg id="svg4" style="position:absolute;top:8px;left:50%;transform:translateX(-50%);width:350px;height:320px;overflow:visible">
+
+      <!-- FORMULA bar — row 1, y 0-28 -->
+      <rect x="10" y="0" width="330" height="28" fill="#051020" stroke="#1e3a6e" stroke-width="1"/>
+      <text x="175" y="11" font-family="'Press Start 2P'" font-size="4.5" fill="#4ec9e1" text-anchor="middle">HIT RATIO = HITS ÷ (HITS + MISSES)</text>
+      <text x="175" y="23" font-family="'Press Start 2P'" font-size="4.5" fill="#4eff9a" text-anchor="middle">TARGET: &gt; 80%  ·  EXCELLENT: &gt; 95%</text>
+
+      <!-- SCOREBOARD — row 2, y 36-96 (height 60) -->
+      <rect x="10" y="36" width="152" height="58" fill="#051a05" stroke="#4eff9a" stroke-width="2"/>
+      <text x="86" y="52" font-family="'Press Start 2P'" font-size="6" fill="#4eff9a" text-anchor="middle">✓ HITS</text>
+      <text id="hit-cnt" x="86" y="84" font-family="'Press Start 2P'" font-size="22" fill="#4eff9a" text-anchor="middle">0</text>
+
+      <rect x="188" y="36" width="152" height="58" fill="#1a0505" stroke="#e85050" stroke-width="2"/>
+      <text x="264" y="52" font-family="'Press Start 2P'" font-size="6" fill="#e85050" text-anchor="middle">✗ MISSES</text>
+      <text id="miss-cnt" x="264" y="84" font-family="'Press Start 2P'" font-size="22" fill="#e85050" text-anchor="middle">0</text>
+
+      <!-- GAUGE — row 3, pivot at y=230, arc top at ~y=110 → clear of scoreboard bottom y=94 -->
+      <!-- arc bg -->
+      <path d="M 45 240 A 130 130 0 0 1 305 240" fill="none" stroke="#0e1e2e" stroke-width="28"/>
+      <!-- red zone 0-50% -->
+      <path d="M 45 240 A 130 130 0 0 1 105 122" fill="none" stroke="#2a0808" stroke-width="28"/>
+      <!-- amber zone 50-80% -->
+      <path d="M 105 122 A 130 130 0 0 1 228 103" fill="none" stroke="#1e1400" stroke-width="28"/>
+      <!-- green zone 80-100% -->
+      <path d="M 228 103 A 130 130 0 0 1 305 240" fill="none" stroke="#071a07" stroke-width="28"/>
+
+      <!-- zone labels -->
+      <text x="62" y="228" font-family="'Press Start 2P'" font-size="4" fill="#5a1a1a" text-anchor="middle">BAD</text>
+      <text x="152" y="108" font-family="'Press Start 2P'" font-size="4" fill="#3a2800" text-anchor="middle">WARN</text>
+      <text x="268" y="140" font-family="'Press Start 2P'" font-size="4" fill="#0a3a0a" text-anchor="middle">GOOD</text>
+
+      <!-- needle — pivot 175,240 -->
+      <line id="needle4" x1="175" y1="240" x2="46" y2="243" stroke="#e85050" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="175" cy="240" r="9" fill="#e8a020"/>
+
+      <!-- pct label -->
+      <text id="pct4" x="175" y="278" font-family="'Press Start 2P'" font-size="13" fill="#e85050" text-anchor="middle">0%</text>
+      <text x="175" y="292" font-family="'Press Start 2P'" font-size="4.5" fill="#444" text-anchor="middle">CACHE HIT RATIO</text>
+
+      <!-- status badge -->
+      <rect id="status-box" x="115" y="298" width="120" height="18" fill="#1a0505" stroke="#e85050" stroke-width="1" rx="2"/>
+      <text id="status-txt" x="175" y="310" font-family="'Press Start 2P'" font-size="5" fill="#e85050" text-anchor="middle">CRITICAL</text>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:40px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p4a">▶ PRESS PLAY TO FILL THE SCOREBOARD</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4b">19 HITS + 1 MISS = 95% HIT RATIO ✓ EXCELLENT</div>
+    <div class="pl" style="color:#888;display:none" id="p4c">MONITOR THIS IN REDIS INFO, DATADOG, OR CLOUDWATCH</div>
+  </div>
+  <div class="stats">
+    <div class="stat" style="background:#0d1a2e"><span class="stat-val" style="color:#4eff9a" id="s4-h">0</span><span class="stat-lbl">HITS</span></div>
+    <div class="stat" style="background:#0d1a2e"><span class="stat-val" style="color:#e85050" id="s4-m">0</span><span class="stat-lbl">MISSES</span></div>
+    <div class="stat" style="background:#0d1a2e"><span class="stat-val" style="color:#e8a020" id="s4-r">0%</span><span class="stat-lbl">HIT RATIO</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let timers=[];
+function T(ms,fn){let t=setTimeout(fn,ms);timers.push(t);}
+function kill(){timers.forEach(clearTimeout);timers=[];}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v==null?'1':String(v);}
+function tx(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+function fill(id,c){let e=document.getElementById(id);if(e)e.setAttribute('fill',c);}
+function show(id){op(id,1);}
+function hide(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+
+function goScene(n){
+  kill();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+}
+
+function resetAll(n){
+  if(n===1){
+    hide('hook-warn');
+    // needle at ~2%
+    let needle=document.getElementById('hook-needle');
+    if(needle)needle.setAttribute('x2','54');needle&&needle.setAttribute('y2','188');
+    let hw=document.getElementById('hook-needle');if(hw){hw.setAttribute('x2','54');hw.setAttribute('y2','188');}
+    tx('hook-pct','0%');fill('hook-pct','#e85050');
+    tx('p1a','▶ PRESS PLAY TO START');bl('p1a');hn('p1b');
+  }
+  if(n===2){
+    ['b2a','b2b','b2c','nodb2','hit2','res2','res2b','dbz2'].forEach(hide);
+    ['h2r1','h2r2','h2r3','h2r4'].forEach(id=>fill(id,id==='h2r1'||id==='h2r3'?'#0a2a0a':'#072007'));
+    tx('p2a','▶ PRESS PLAY TO SEE A CACHE HIT');bl('p2a');hn('p2b');hn('p2c');
+  }
+  if(n===3){
+    ['b3a','b3b','b3c','miss3','scan3','searching-row','res3','res3b'].forEach(hide);
+    let sp=document.getElementById('spin3');if(sp)sp.style.opacity='0';
+    ['dr1','dr2','dr3','dr4','dr5'].forEach((id,i)=>fill(id,i%2===0?'#2a1f3d':'#231830'));
+    tx('p3a','▶ PRESS PLAY TO SEE A CACHE MISS');bl('p3a');hn('p3b');hn('p3c');
+  }
+  if(n===4){
+    tx('hit-cnt','0');tx('miss-cnt','0');tx('pct4','0%');fill('pct4','#e85050');
+    tx('s4-h','0');tx('s4-m','0');tx('s4-r','0%');
+    setNeedle4(0);
+    setStatus(0);
+    tx('p4a','▶ PRESS PLAY TO FILL THE SCOREBOARD');bl('p4a');hn('p4b');hn('p4c');
+  }
+}
+
+/* ── SCENE 1 PLAY ── */
+function play1(){
+  kill();resetAll(1);
+  // animate needle from 0 to 5% (broken)
+  animateNeedle1(0,5,1200);
+  T(1500,()=>{show('hook-warn');});
+  T(1800,()=>{hn('p1a');bl('p1b');});
+}
+function animateNeedle1(from,to,dur){
+  // arc: 0% = x2=41,y2=233 angle -5deg from left, 100% = x2=309,y2=233
+  // needle pivot = 170,180; arc from -175deg to -5deg = span 170 degrees
+  let start=null;
+  function frame(ts){
+    if(!start)start=ts;
+    let p=Math.min((ts-start)/dur,1);
+    let pct=from+(to-from)*p;
+    setNeedle1(pct);
+    if(p<1)requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+function setNeedle1(pct){
+  // pivot 170,180; 0%→angle 185deg, 100%→angle 5deg (sweeping 180deg)
+  let angle=185-(pct/100)*180;
+  let rad=angle*Math.PI/180;
+  let r=105;
+  let x2=170+r*Math.cos(rad);
+  let y2=180+r*Math.sin(rad);
+  let n=document.getElementById('hook-needle');
+  if(n){n.setAttribute('x2',x2);n.setAttribute('y2',y2);}
+  let col=pct<50?'#e85050':pct<80?'#e8a020':'#4eff9a';
+  tx('hook-pct',Math.round(pct)+'%');
+  fill('hook-pct',col);
+}
+
+/* ── SCENE 2 PLAY ── */
+function play2(){
+  kill();resetAll(2);
+  T(300,()=>show('b2a'));
+  T(700,()=>{
+    hide('b2a');
+    // flash rows
+    ['h2r1','h2r2','h2r3','h2r4'].forEach((id,i)=>{
+      T(i*140,()=>{fill(id,'#1a4a1a');T(180,()=>fill(id,i%2===0?'#0a2a0a':'#072007'));});
+    });
+  });
+  T(1200,()=>show('hit2'));
+  T(1500,()=>{show('b2b');show('b2c');show('nodb2');show('dbz2');hn('p2a');bl('p2b');bl('p2c');});
+  T(2100,()=>{hide('b2b');show('res2');show('res2b');});
+}
+
+/* ── SCENE 3 PLAY ── */
+let spinAnim=null;
+function play3(){
+  kill();resetAll(3);
+  if(spinAnim)cancelAnimationFrame(spinAnim);
+  let spinEl=document.getElementById('spin3');let angle=0;
+  function spinFrame(){let e=document.getElementById('spin3');if(!e||e.style.opacity==='0')return;angle=(angle+8)%360;e.style.transform='rotate('+angle+'deg)';e.style.transformOrigin='80px 175px';spinAnim=requestAnimationFrame(spinFrame);}
+  T(300,()=>show('b3a'));
+  T(750,()=>{
+    hide('b3a');show('miss3');show('searching-row');
+    hn('p3a');bl('p3b');
+  });
+  T(1100,()=>{
+    show('b3b');
+    // spin
+    let sp=document.getElementById('spin3');if(sp)sp.style.opacity='1';
+    spinFrame();
+    show('scan3');
+    let rows=['dr1','dr2','dr3','dr4','dr5'];
+    rows.forEach((id,i)=>{
+      T(i*220,()=>{fill(id,'#5a1a1a');T(160,()=>fill(id,i%2===0?'#2a1f3d':'#231830'));T(300,()=>{fill(id,'#5a1a1a');T(160,()=>fill(id,i%2===0?'#2a1f3d':'#231830'));});});
+    });
+  });
+  T(2600,()=>{
+    hide('b3b');hide('scan3');
+    let sp=document.getElementById('spin3');if(sp)sp.style.opacity='0';
+    show('b3c');bl('p3c');
+  });
+  T(3100,()=>{hide('b3c');show('res3');show('res3b');});
+}
+
+/* ── SCENE 4 PLAY ── */
+function play4(){
+  kill();resetAll(4);
+  // sequence: 19 hits, 1 miss, animate scoreboard + needle
+  // fast ticker: 20 requests in ~3.5s
+  let sequence=[1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1]; // 1=hit 0=miss
+  let hits=0,misses=0;
+  sequence.forEach((v,i)=>{
+    T(i*160+300,()=>{
+      if(v===1)hits++;else misses++;
+      let total=hits+misses;
+      let ratio=total>0?Math.round(hits/total*100):0;
+      tx('hit-cnt',hits);tx('miss-cnt',misses);
+      tx('s4-h',hits);tx('s4-m',misses);tx('s4-r',ratio+'%');
+      let col=ratio<50?'#e85050':ratio<80?'#e8a020':'#4eff9a';
+      tx('pct4',ratio+'%');fill('pct4',col);
+      setNeedle4(ratio);
+      setStatus(ratio);
+      // flash the relevant counter
+      if(v===1){
+        let hb=document.getElementById('hit-cnt');if(hb){hb.style.filter='brightness(2)';setTimeout(()=>hb.style.filter='',180);}
+      } else {
+        let mb=document.getElementById('miss-cnt');if(mb){mb.style.filter='brightness(2)';setTimeout(()=>mb.style.filter='',180);}
+      }
+    });
+  });
+  T(3800,()=>{hn('p4a');bl('p4b');bl('p4c');});
+}
+
+function setNeedle4(pct){
+  // pivot 175,240; 0%→185deg, 100%→5deg, 180deg span
+  let angle=185-(pct/100)*180;
+  let rad=angle*Math.PI/180;
+  let r=116;
+  let x2=175+r*Math.cos(rad);
+  let y2=240+r*Math.sin(rad);
+  let n=document.getElementById('needle4');
+  if(n){n.setAttribute('x1','175');n.setAttribute('y1','240');n.setAttribute('x2',x2.toFixed(1));n.setAttribute('y2',y2.toFixed(1));}
+  let col=pct<50?'#e85050':pct<80?'#e8a020':'#4eff9a';
+  if(n)n.setAttribute('stroke',col);
+}
+function setStatus(pct){
+  let txt,col,bg;
+  if(pct<50){txt='CRITICAL';col='#e85050';bg='#1a0505';}
+  else if(pct<80){txt='WARNING';col='#e8a020';bg='#1a1000';}
+  else if(pct<95){txt='HEALTHY';col='#4eff9a';bg='#051505';}
+  else{txt='EXCELLENT';col='#4ec9e1';bg='#051520';}
+  let sb=document.getElementById('status-box');
+  let st=document.getElementById('status-txt');
+  if(sb){sb.setAttribute('fill',bg);sb.setAttribute('stroke',col);}
+  if(st){st.textContent=txt;st.setAttribute('fill',col);}
+}
+</script>
+</body>
+</html>

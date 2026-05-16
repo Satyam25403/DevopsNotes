@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>Longest Prefix Match</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+
+.hdr{
+  height:90px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:8px;padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+.anim{flex:1;position:relative;overflow:hidden;min-height:280px}
+.floor{position:absolute;bottom:0;left:0;right:0;height:16px;
+  background:repeating-linear-gradient(90deg,#2a1f3d 0,#2a1f3d 38px,#231830 38px,#231830 76px);
+  border-top:1px solid #4a3a6a}
+.floor-b{
+  background:repeating-linear-gradient(90deg,#0f2240 0,#0f2240 38px,#0c1c38 38px,#0c1c38 76px);
+  border-top-color:#1e4080}
+
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;animation:twk 2s infinite alternate}
+@keyframes twk{from{opacity:.1}to{opacity:.5}}
+
+.info{
+  height:110px;flex-shrink:0;margin:0 12px;
+  border:2px solid #4ec9e1;padding:10px 14px;
+  display:flex;flex-direction:column;justify-content:center;gap:7px;
+  font-size:9px;line-height:1.9;
+}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#9a4ef8}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Route row styles */
+.rrow{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 8px;border:2px solid #2a1f3d;
+  background:#0d0d1a;margin-bottom:3px;
+  transition:all .35s;opacity:0;flex-shrink:0;
+}
+.rrow .prefix{font-size:9px;font-family:monospace;min-width:115px;flex-shrink:0}
+.rrow .nexthop{font-size:6px;color:#555;flex:1}
+.rrow .bits{font-size:6px;text-align:right;flex-shrink:0}
+.rrow .check{font-size:13px;flex-shrink:0;width:16px;text-align:center;opacity:0;transition:opacity .3s}
+
+/* Packet pill */
+.pkt{
+  position:absolute;height:22px;padding:0 10px;
+  border:2px solid #e8a020;background:#e8a02020;
+  display:flex;align-items:center;justify-content:center;
+  font-size:7px;color:#e8a020;white-space:nowrap;
+  transition:left .6s ease-in-out;
+}
+
+/* Binary match display */
+.binrow{display:flex;gap:2px;align-items:center;margin-bottom:4px;flex-shrink:0}
+.bit{width:14px;height:20px;display:flex;align-items:center;justify-content:center;font-size:8px;font-family:monospace;border:1px solid #2a1f3d;background:#0d0d1a;transition:all .3s;flex-shrink:0}
+.bit.match{background:#4eff9a20;border-color:#4eff9a;color:#4eff9a}
+.bit.wild{background:#e8a02015;border-color:#e8a02030;color:#555}
+.bit.sep{background:transparent;border:none;width:6px;color:#555;font-size:10px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — THE ROUTING TABLE
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">5 ROUTES, 1 PACKET</div>
+    <div class="hdr-sub">WHICH ONE WINS?</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ROUTING TABLE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">PROBLEM</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:20px;top:8px;animation-delay:0s"></div>
+    <div class="star" style="left:88px;top:4px;animation-delay:.4s"></div>
+    <div class="star" style="left:170px;top:13px;animation-delay:.9s"></div>
+    <div class="star" style="left:262px;top:5px;animation-delay:.2s"></div>
+    <div class="star" style="left:340px;top:11px;animation-delay:1.1s"></div>
+    <div class="star" style="left:55px;top:36px;animation-delay:.7s"></div>
+    <div class="star" style="left:300px;top:32px;animation-delay:1.3s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <!-- Incoming packet banner -->
+      <div id="pkt1" style="border:2px solid #e8a020;background:#e8a02018;padding:6px 10px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div>
+          <div style="font-size:6px;color:#888;margin-bottom:3px">INCOMING PACKET DST:</div>
+          <div style="font-size:12px;color:#e8a020">192.168.1.200</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:6px;color:#888;margin-bottom:3px">BINARY:</div>
+          <div style="font-size:6px;color:#e8a020;font-family:monospace;line-height:1.6">11000000.10101000<br>.00000001.11001000</div>
+        </div>
+      </div>
+
+      <div style="font-size:6px;color:#888;letter-spacing:1px;margin-bottom:5px;flex-shrink:0">ROUTER FORWARDING TABLE — ALL ROUTES:</div>
+
+      <!-- Route rows -->
+      <div id="rr0" class="rrow">
+        <div class="prefix" style="color:#e85050">0.0.0.0/0</div>
+        <div class="nexthop">via 10.0.0.1 (ISP)</div>
+        <div class="bits" style="color:#555">0 bits</div>
+        <div class="check" id="ck0">?</div>
+      </div>
+
+      <div id="rr1" class="rrow">
+        <div class="prefix" style="color:#e8a020">192.168.0.0/16</div>
+        <div class="nexthop">via 10.1.0.1 (WAN)</div>
+        <div class="bits" style="color:#555">16 bits</div>
+        <div class="check" id="ck1">?</div>
+      </div>
+
+      <div id="rr2" class="rrow">
+        <div class="prefix" style="color:#4ec9e1">192.168.1.0/24</div>
+        <div class="nexthop">via 10.2.0.1 (core)</div>
+        <div class="bits" style="color:#555">24 bits</div>
+        <div class="check" id="ck2">?</div>
+      </div>
+
+      <div id="rr3" class="rrow">
+        <div class="prefix" style="color:#4eff9a">192.168.1.128/25</div>
+        <div class="nexthop">via 10.3.0.1 (edge)</div>
+        <div class="bits" style="color:#555">25 bits</div>
+        <div class="check" id="ck3">?</div>
+      </div>
+
+      <div id="rr4" class="rrow">
+        <div class="prefix" style="color:#9a4ef8">10.0.0.0/8</div>
+        <div class="nexthop">via 192.168.99.1</div>
+        <div class="bits" style="color:#555">8 bits</div>
+        <div class="check" id="ck4">?</div>
+      </div>
+
+      <!-- Question -->
+      <div id="qbox" style="margin-top:5px;border:1px solid #4ec9e150;background:#001a2080;padding:7px 10px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:6px;color:#4ec9e1;margin-bottom:4px">THE QUESTION EVERY ROUTER ASKS:</div>
+        <div style="font-size:8px;color:#fff;line-height:1.9">Which route has the MOST bits<br>in common with 192.168.1.200?</div>
+      </div>
+    </div>
+    <div class="floor"></div>
+  </div>
+
+  <div class="info am">
+    <div class="il">4 routes ALL match 192.168.1.200.</div>
+    <div class="il">10/8 does NOT — different network.</div>
+    <div class="ih am">Most specific match always wins.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">5</div><div class="sl">TOTAL ROUTES</div></div>
+    <div class="sc"><div class="sv am">4</div><div class="sl">MATCHES</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">WINNER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — LONGEST PREFIX MATCH
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">LONGEST PREFIX WINS</div>
+    <div class="hdr-sub">MORE BITS MATCHED = MORE SPECIFIC</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PREFIX MATCH</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DEMO</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <!-- Destination header -->
+      <div style="border:1px solid #e8a02060;background:#100c0060;padding:7px 10px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div style="font-size:7px;color:#888">DESTINATION IP</div>
+        <div style="font-size:11px;color:#e8a020">192.168.1.200</div>
+      </div>
+
+      <!-- Binary bits of dest ip (first 25 bits shown) -->
+      <div style="font-size:7px;color:#888;margin-bottom:5px;flex-shrink:0">BIT-BY-BIT COMPARISON (first 25 bits):</div>
+      <div style="background:#050e1a;border:1px solid #1e4080;padding:7px 8px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:6px;color:#888;margin-bottom:4px">192.168.1.200 in binary:</div>
+        <div style="display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden">
+          <!-- 192=11000000, 168=10101000, 1=00000001, 200=11001000 -->
+          <!-- show 25 bits: 11000000 10101000 00000001 1 -->
+          <span id="bp0" class="bit">1</span><span id="bp1" class="bit">1</span><span id="bp2" class="bit">0</span><span id="bp3" class="bit">0</span><span id="bp4" class="bit">0</span><span id="bp5" class="bit">0</span><span id="bp6" class="bit">0</span><span id="bp7" class="bit">0</span>
+          <span class="bit sep">.</span>
+          <span id="bp8" class="bit">1</span><span id="bp9" class="bit">0</span><span id="bp10" class="bit">1</span><span id="bp11" class="bit">0</span><span id="bp12" class="bit">1</span><span id="bp13" class="bit">0</span><span id="bp14" class="bit">0</span><span id="bp15" class="bit">0</span>
+          <span class="bit sep">.</span>
+          <span id="bp16" class="bit">0</span><span id="bp17" class="bit">0</span><span id="bp18" class="bit">0</span><span id="bp19" class="bit">0</span><span id="bp20" class="bit">0</span><span id="bp21" class="bit">0</span><span id="bp22" class="bit">0</span><span id="bp23" class="bit">1</span>
+          <span class="bit sep">.</span>
+          <span id="bp24" class="bit">1</span>
+        </div>
+      </div>
+
+      <!-- Match candidates, lighting up in sequence -->
+      <div id="m0" style="display:flex;align-items:center;border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 10px;margin-bottom:4px;gap:8px;opacity:0;transition:all .4s;flex-shrink:0">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#e85050;margin-bottom:3px">0.0.0.0/0</div>
+          <div style="height:8px;background:#1a0505;position:relative;overflow:hidden">
+            <div id="mb0" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e85050;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#555;margin-top:2px">0 bits matched — matches everything</div>
+        </div>
+        <div id="ml0" style="font-size:7px;color:#555;flex-shrink:0;text-align:right;min-width:50px;opacity:0;transition:opacity .3s">✗ no<br>match</div>
+      </div>
+
+      <div id="m1" style="display:flex;align-items:center;border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 10px;margin-bottom:4px;gap:8px;opacity:0;transition:all .4s;flex-shrink:0">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#e8a020;margin-bottom:3px">192.168.0.0/16</div>
+          <div style="height:8px;background:#1a1000;position:relative;overflow:hidden">
+            <div id="mb1" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e8a020;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#555;margin-top:2px">16 bits matched — broad match</div>
+        </div>
+        <div id="ml1" style="font-size:7px;color:#e8a020;flex-shrink:0;text-align:right;min-width:50px;opacity:0;transition:opacity .3s">✓ 16<br>bits</div>
+      </div>
+
+      <div id="m2" style="display:flex;align-items:center;border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 10px;margin-bottom:4px;gap:8px;opacity:0;transition:all .4s;flex-shrink:0">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#4ec9e1;margin-bottom:3px">192.168.1.0/24</div>
+          <div style="height:8px;background:#001020;position:relative;overflow:hidden">
+            <div id="mb2" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4ec9e1;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#555;margin-top:2px">24 bits matched — better match</div>
+        </div>
+        <div id="ml2" style="font-size:7px;color:#4ec9e1;flex-shrink:0;text-align:right;min-width:50px;opacity:0;transition:opacity .3s">✓ 24<br>bits</div>
+      </div>
+
+      <div id="m3" style="display:flex;align-items:center;border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 10px;margin-bottom:8px;gap:8px;opacity:0;transition:all .4s;flex-shrink:0">
+        <div style="flex:1">
+          <div style="font-size:9px;color:#4eff9a;margin-bottom:3px">192.168.1.128/25</div>
+          <div style="height:8px;background:#001a00;position:relative;overflow:hidden">
+            <div id="mb3" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width .8s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#555;margin-top:2px">25 bits matched — most specific!</div>
+        </div>
+        <div id="ml3" style="font-size:9px;color:#4eff9a;flex-shrink:0;text-align:right;min-width:50px;opacity:0;transition:opacity .3s">🏆<br>WINS</div>
+      </div>
+
+      <!-- Winner box -->
+      <div id="winner" style="border:2px solid #4eff9a;background:#001a1090;padding:9px 11px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px;letter-spacing:1px">FORWARDING DECISION</div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:9px;color:#fff">192.168.1.128<span style="color:#4eff9a">/25</span></div>
+          <div style="font-size:8px;color:#4eff9a">→ 10.3.0.1 (edge)</div>
+        </div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">/25 matches 25 bits. /24 matches 24.</div>
+    <div class="il">More bits = more specific = wins.</div>
+    <div class="ih">192.168.1.200 exits via 10.3.0.1.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0</div><div class="sl">DEFAULT /0</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">24</div><div class="sl">/24 BITS</div></div>
+    <div class="sc"><div class="sv gn">25</div><div class="sl">/25 WINS 🏆</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — /32 HOST ROUTES
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">/32 ALWAYS WINS</div>
+    <div class="hdr-sub">HOST ROUTE OVERRIDES EVERYTHING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#9a4ef8">HOST ROUTES</span>
+    <span class="sbadge" style="color:#9a4ef8;border-color:#9a4ef8">OVERRIDE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:8px;flex-shrink:0">THE NUCLEAR OPTION IN ROUTING</div>
+
+      <!-- Visual: prefix length spectrum -->
+      <div style="border:1px solid #1e4080;background:#050e1a;padding:10px;margin-bottom:10px;flex-shrink:0">
+        <div style="font-size:7px;color:#888;margin-bottom:8px">PREFIX LENGTH → SPECIFICITY:</div>
+        <div style="display:flex;align-items:center;gap:0;height:28px;border:1px solid #1e4080;overflow:hidden;margin-bottom:6px">
+          <div style="flex:1;background:#e8505020;border-right:1px solid #0a0a0f;display:flex;align-items:center;justify-content:center;height:100%">
+            <span style="font-size:7px;color:#e85050">/0</span>
+          </div>
+          <div style="flex:2;background:#e8a02025;border-right:1px solid #0a0a0f;display:flex;align-items:center;justify-content:center;height:100%">
+            <span style="font-size:7px;color:#e8a020">/8-/16</span>
+          </div>
+          <div style="flex:2;background:#4ec9e125;border-right:1px solid #0a0a0f;display:flex;align-items:center;justify-content:center;height:100%">
+            <span style="font-size:7px;color:#4ec9e1">/24-/25</span>
+          </div>
+          <div style="flex:1;background:#9a4ef840;border-right:1px solid #0a0a0f;display:flex;align-items:center;justify-content:center;height:100%">
+            <span style="font-size:7px;color:#9a4ef8">/30</span>
+          </div>
+          <div id="h32bar" style="width:28px;background:#9a4ef8;display:flex;align-items:center;justify-content:center;height:100%;flex-shrink:0;transition:background .3s">
+            <span style="font-size:7px;color:#fff">/32</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between">
+          <span style="font-size:6px;color:#555">← BROAD</span>
+          <span style="font-size:6px;color:#9a4ef8">EXACT HOST →</span>
+        </div>
+      </div>
+
+      <!-- Use case cards -->
+      <div id="uc1" style="border:1px solid #9a4ef860;background:#0a082090;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:8px;color:#9a4ef8;margin-bottom:5px">/32 USE CASE 1 — TRAFFIC ENGINEERING</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Summary: 10.0.0.0/8 → datacenter A<br>Host route: 10.1.2.3/32 → datacenter B<br>That ONE server goes to B. All others → A.</div>
+      </div>
+
+      <div id="uc2" style="border:1px solid #4eff9a60;background:#001a1090;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:5px">/32 USE CASE 2 — LOOPBACK ADDRESSES</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Router loopbacks always /32.<br>Never changes, always reachable.<br>Used as BGP router-ID and OSPF source.</div>
+      </div>
+
+      <div id="uc3" style="border:1px solid #4ec9e160;background:#001a2090;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:5px">/32 USE CASE 3 — CLOUD SECURITY GROUPS</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">AWS: 54.10.20.30/32 in inbound rule<br>= allow exactly ONE IP, nothing else.<br>Most precise firewall rule possible.</div>
+      </div>
+
+      <!-- Rule box -->
+      <div id="rule32" style="border:2px solid #9a4ef8;background:#0a082090;padding:9px 11px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:5px;letter-spacing:1px">THE RULE</div>
+        <div style="font-size:8px;color:#fff;line-height:1.9">/32 = all 32 bits match.<br>No subnet summary can beat it.<br>Always the most specific possible.</div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">/32 matches exactly one IP address.</div>
+    <div class="il">No route can ever be more specific.</div>
+    <div class="ih">Always wins against any summary route.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">32</div><div class="sl">BITS MATCHED</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">HOST MATCHED</div></div>
+    <div class="sc"><div class="sv gn">∞</div><div class="sl">PRIORITY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — BGP HIJACK MECHANIC
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">BGP HIJACK</div>
+    <div class="hdr-sub">INJECT /24 TO STEAL FROM /8</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">SECURITY ABUSE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:25px;top:7px;animation-delay:.1s"></div>
+    <div class="star" style="left:195px;top:3px;animation-delay:.5s"></div>
+    <div class="star" style="left:355px;top:9px;animation-delay:1s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;flex-shrink:0">HOW ROUTE INJECTION STEALS TRAFFIC</div>
+
+      <!-- Legitimate state -->
+      <div id="leg" style="border:1px solid #4eff9a60;background:#001a1080;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">BEFORE — LEGITIMATE STATE</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:8px;color:#4eff9a;min-width:110px">1.0.0.0/8</div>
+          <div style="flex:1;height:1px;background:#4eff9a40"></div>
+          <div style="font-size:7px;color:#4eff9a">→ ISP-A (legit)</div>
+        </div>
+        <div style="font-size:6px;color:#888">All traffic for 1.x.x.x routes through ISP-A<br>Google, Cloudflare etc own big /8 blocks</div>
+      </div>
+
+      <!-- Attack -->
+      <div id="atk" style="border:1px solid #e8505060;background:#1a050580;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">ATTACK — ROGUE BGP ANNOUNCEMENT</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:8px;color:#4eff9a;min-width:110px">1.0.0.0/8</div>
+          <div style="flex:1;height:1px;background:#4eff9a40"></div>
+          <div style="font-size:7px;color:#4eff9a">→ ISP-A (legit)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <div style="font-size:8px;color:#e85050;min-width:110px">1.0.1.0/24</div>
+          <div style="flex:1;height:2px;background:#e85050;animation:pulse 1s infinite alternate"></div>
+          <div style="font-size:7px;color:#e85050">→ ATTACKER 💀</div>
+        </div>
+        <div style="font-size:6px;color:#888">Rogue AS injects more-specific /24 into BGP</div>
+      </div>
+
+      <!-- Result -->
+      <div id="res" style="border:1px solid #e8a02060;background:#10090090;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">RESULT — LPM WORKS AGAINST YOU</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Packet to 1.0.1.50:<br>/24 is MORE specific than /8<br>→ router picks attacker's /24<br>→ traffic silently redirected 💀</div>
+      </div>
+
+      <!-- Real examples -->
+      <div id="rex" style="border:1px solid #9a4ef860;background:#0a082090;padding:8px 10px;margin-bottom:5px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:5px">REAL-WORLD HIJACKS</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">2010: China Telecom hijacked ~37,000 prefixes<br>2018: Amazon Route53 hijacked (MyEtherWallet)<br>2019: Rostelecom hijacked Google, AWS, Facebook<br>Defense: BGP route filtering + RPKI validation</div>
+      </div>
+
+      <!-- Defense -->
+      <div id="def" style="border:2px solid #4eff9a60;background:#001a1090;padding:8px 10px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px;letter-spacing:1px">DEFENSE: RPKI</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Route Origin Authorization (ROA) cryptographically<br>signs which AS can announce which prefix.<br>Routers reject unauthorized more-specifics.</div>
+      </div>
+    </div>
+    <div class="floor"></div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">LPM is a feature. Attackers exploit it.</div>
+    <div class="il">More-specific /24 hijacks traffic from /8.</div>
+    <div class="ih rd">RPKI signs routes — reject the rest.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">/24</div><div class="sl">BEATS /8</div></div>
+    <div class="sc"><div class="sv am">BGP</div><div class="sl">HIJACK VECTOR</div></div>
+    <div class="sc"><div class="sv gn">RPKI</div><div class="sl">DEFENSE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<style>
+@keyframes pulse{from{opacity:.4}to{opacity:1}}
+</style>
+
+<script>
+var T=[];
+function tm(fn,ms){T.push(setTimeout(fn,ms))}
+function clr(){T.forEach(clearTimeout);T=[]}
+
+function go(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(function(s,i){s.classList.toggle('active',i+1===n)});
+  setTimeout(function(){[playS1,playS2,playS3,playS4][n-1]()},200);
+}
+
+/* ── S1: routing table reveals ── */
+function playS1(){
+  clr();
+  var rows=['rr0','rr1','rr2','rr3','rr4'];
+  rows.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  ['ck0','ck1','ck2','ck3','ck4'].forEach(function(id){document.getElementById(id).style.opacity='0'});
+  document.getElementById('pkt1').style.opacity='0';
+  document.getElementById('qbox').style.opacity='0';
+
+  tm(function(){document.getElementById('pkt1').style.opacity='1'},300);
+
+  rows.forEach(function(id,i){
+    tm(function(){
+      var el=document.getElementById(id);
+      el.style.opacity='1';
+    },900+i*380);
+  });
+
+  // mark which match
+  var marks=[
+    {id:'ck0',txt:'✗',col:'#e85050'},
+    {id:'ck1',txt:'✓',col:'#e8a020'},
+    {id:'ck2',txt:'✓',col:'#4ec9e1'},
+    {id:'ck3',txt:'✓',col:'#4eff9a'},
+    {id:'ck4',txt:'✗',col:'#e85050'}
+  ];
+  marks.forEach(function(m,i){
+    tm(function(){
+      var el=document.getElementById(m.id);
+      el.textContent=m.txt;
+      el.style.color=m.col;
+      el.style.opacity='1';
+    },900+rows.length*380+i*250);
+  });
+
+  tm(function(){document.getElementById('qbox').style.opacity='1'},900+rows.length*380+marks.length*250+200);
+}
+
+/* ── S2: bit-by-bit match ── */
+function playS2(){
+  clr();
+  var matches=['m0','m1','m2','m3'];
+  var bars=[['mb0',0],['mb1',64],['mb2',96],['mb3',100]];
+  var labels=['ml0','ml1','ml2','ml3'];
+  matches.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  labels.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  bars.forEach(function(b){document.getElementById(b[0]).style.width='0%'});
+  document.getElementById('winner').style.opacity='0';
+
+  // light up destination bits
+  for(var i=0;i<25;i++){
+    (function(idx){
+      tm(function(){
+        var el=document.getElementById('bp'+idx);
+        if(el) el.classList.add('match');
+      },300+idx*40);
+    })(i);
+  }
+
+  // show each match candidate
+  matches.forEach(function(id,i){
+    tm(function(){
+      document.getElementById(id).style.opacity='1';
+      var bc=bars[i];
+      setTimeout(function(){document.getElementById(bc[0]).style.width=bc[1]+'%'},150);
+      setTimeout(function(){
+        document.getElementById(labels[i]).style.opacity='1';
+        if(i===3){
+          document.getElementById('m3').style.borderColor='#4eff9a';
+          document.getElementById('m3').style.background='#001a1090';
+        }
+      },1000);
+    },1200+i*600);
+  });
+
+  tm(function(){document.getElementById('winner').style.opacity='1'},1200+matches.length*600+400);
+}
+
+/* ── S3: /32 use cases ── */
+function playS3(){
+  clr();
+  var items=['uc1','uc2','uc3','rule32'];
+  items.forEach(function(id){document.getElementById(id).style.opacity='0'});
+
+  // pulse /32 bar
+  var bar=document.getElementById('h32bar');
+  var on=true;
+  var flash=setInterval(function(){bar.style.background=on?'#4eff9a':'#9a4ef8';on=!on},300);
+  T.push(flash);
+  tm(function(){clearInterval(flash);bar.style.background='#9a4ef8'},2000);
+
+  items.forEach(function(id,i){
+    tm(function(){document.getElementById(id).style.opacity='1'},500+i*480);
+  });
+}
+
+/* ── S4: BGP hijack ── */
+function playS4(){
+  clr();
+  var items=['leg','atk','res','rex','def'];
+  items.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  items.forEach(function(id,i){
+    tm(function(){document.getElementById(id).style.opacity='1'},300+i*520);
+  });
+}
+
+setTimeout(playS1,350);
+</script>
+</body>
+</html>

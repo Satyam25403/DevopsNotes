@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Redis vs Memcached</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 14px;flex-shrink:0;border-bottom:1px solid #1a1a2a}
+.hdr-title{font-family:'Press Start 2P';font-size:13px;color:#e8a020;text-align:center;line-height:1.5;text-shadow:0 0 10px #e8a02066}
+.hdr-sub{font-family:'Press Start 2P';font-size:9px;color:#555;text-align:center}
+.dots{display:flex;gap:9px}
+.dot{width:11px;height:11px;background:#1a1a2e;border:1px solid #333;border-radius:1px}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 6px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:10px;left:12px;font-family:'Press Start 2P';font-size:13px;z-index:5}
+.sc-badge{position:absolute;top:10px;right:12px;font-family:'Press Start 2P';font-size:10px;padding:4px 9px;border:2px solid;z-index:5}
+.panel{height:84px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.pl{font-family:'Press Start 2P';font-size:9px;line-height:1.7}
+.stats{height:68px;display:flex;gap:8px;padding:0 12px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:7px 4px;text-align:center;background:#0a0a14}
+.stat-val{font-family:'Press Start 2P';font-size:14px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:8px;color:#555;display:block;margin-top:4px}
+.btns{height:58px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;flex-shrink:0;background:#05050a;border-top:1px solid #181828}
+.btn{font-family:'Press Start 2P';font-size:10px;padding:9px 13px;border:2px solid;cursor:pointer;background:transparent;touch-action:manipulation}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#555;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.07}to{opacity:.45}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1 · HOOK ═══ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">REDIS vs MEMCACHED</div>
+    <div class="hdr-sub">THE INTERVIEW QUESTION YOU MUST NAIL</div>
+    <div class="dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE HOOK</div>
+    <div class="sc-badge" style="color:#4ec9e1;border-color:#4ec9e1">KNOW THIS</div>
+    <div class="star" style="top:3%;left:7%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:7%;left:23%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:4%;left:45%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:11%;left:65%;--d:1.7s;--delay:.9s"></div>
+    <div class="star" style="top:6%;left:83%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:16%;left:91%;--d:1.6s;--delay:.8s"></div>
+    <div class="star" style="top:18%;left:13%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:3%;left:96%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:20%;left:55%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:13%;left:37%;--d:1.5s;--delay:1.1s"></div>
+    <div class="star" style="top:22%;left:76%;--d:2.3s;--delay:0s"></div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- Wrong answer box -->
+      <g id="h1wrong" opacity="0">
+        <rect x="15" y="4" width="360" height="60" fill="#12081e" stroke="#e85050" stroke-width="2.5" rx="4"/>
+        <text x="195" y="24" font-family="'Press Start 2P'" font-size="8" fill="#888"    text-anchor="middle">INTERVIEWER: "CACHE OR MEMCACHED?"</text>
+        <text x="195" y="44" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">ENGINEER: "UH… USE REDIS?"</text>
+        <text x="195" y="58" font-family="'Press Start 2P'" font-size="7" fill="#555"    text-anchor="middle">← WRONG ANSWER. NO EXPLANATION = FAIL.</text>
+      </g>
+
+      <!-- Two brand boxes -->
+      <g id="h1redis" opacity="0">
+        <rect x="8" y="78" width="174" height="110" fill="#051020" stroke="#e85050" stroke-width="2.5"/>
+        <text x="95" y="100" font-family="'Press Start 2P'" font-size="11" fill="#e85050" text-anchor="middle">REDIS</text>
+        <text x="95" y="118" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Rich data structures</text>
+        <text x="95" y="134" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Persistence + pub/sub</text>
+        <text x="95" y="150" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Clustering + scripting</text>
+        <text x="95" y="176" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a" text-anchor="middle">✓ DEFAULT CHOICE</text>
+      </g>
+
+      <g id="h1mem" opacity="0">
+        <rect x="208" y="78" width="174" height="110" fill="#0a1000" stroke="#4ec9e1" stroke-width="2.5"/>
+        <text x="295" y="100" font-family="'Press Start 2P'" font-size="9"   fill="#4ec9e1" text-anchor="middle">MEMCACHED</text>
+        <text x="295" y="118" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Simple key-value</text>
+        <text x="295" y="134" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Multi-threaded</text>
+        <text x="295" y="150" font-family="'Press Start 2P'" font-size="7.5" fill="#888"    text-anchor="middle">Raw throughput</text>
+        <text x="295" y="176" font-family="'Press Start 2P'" font-size="8"   fill="#e8a020" text-anchor="middle">SPECIFIC USE ONLY</text>
+      </g>
+
+      <g id="h1vs" opacity="0">
+        <text x="195" y="138" font-family="'Press Start 2P'" font-size="14" fill="#e8a020" text-anchor="middle">VS</text>
+      </g>
+
+      <!-- Real answer -->
+      <g id="h1ans" opacity="0">
+        <rect x="15" y="202" width="360" height="96" fill="#060610" stroke="#c97aff" stroke-width="2" rx="3"/>
+        <text x="195" y="222" font-family="'Press Start 2P'" font-size="9"   fill="#c97aff" text-anchor="middle">THE REAL ANSWER:</text>
+        <text x="195" y="242" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">Redis unless you ONLY need</text>
+        <text x="195" y="260" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">raw multi-threaded throughput</text>
+        <text x="195" y="280" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">THEN explain the features.</text>
+        <text x="195" y="293" font-family="'Press Start 2P'" font-size="7.5" fill="#555"    text-anchor="middle">That's what gets you hired.</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#aaa;display:none" id="p1b">"USE REDIS" ALONE FAILS THE INTERVIEW.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">❌</span><span class="stat-lbl">"JUST USE REDIS"</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">✓</span><span class="stat-lbl">EXPLAIN WHY</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">2</span><span class="stat-lbl">OPTIONS EXIST</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 · MEMCACHED PROFILE ═══ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">MEMCACHED</div>
+    <div class="hdr-sub">SIMPLE. FAST. NOTHING EXTRA.</div>
+    <div class="dots"><div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0a1a10">
+    <div class="sc-label" style="color:#4ec9e1">MEMCACHED</div>
+    <div class="sc-badge" style="color:#4ec9e1;border-color:#4ec9e1">FAST KV</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- Memcached logo-style box -->
+      <rect x="30" y="4" width="330" height="52" fill="#0a1a10" stroke="#4ec9e1" stroke-width="2.5" rx="3"/>
+      <text x="195" y="24" font-family="'Press Start 2P'" font-size="11"  fill="#4ec9e1" text-anchor="middle">MEMCACHED</text>
+      <text x="195" y="42" font-family="'Press Start 2P'" font-size="7.5" fill="#555"    text-anchor="middle">Designed at LiveJournal · 2003</text>
+
+      <!-- Feature rows — 5 rows, each revealed -->
+      <g id="m1" opacity="0">
+        <rect x="8" y="66" width="374" height="38" fill="#0a1a08" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="81"  font-family="'Press Start 2P'" font-size="8"   fill="#4ec9e1">DATA TYPES</text>
+        <text x="26"  y="97"  font-family="'Press Start 2P'" font-size="7.5" fill="#888">Strings only — plain key-value</text>
+        <text x="368" y="89"  font-family="'Press Start 2P'" font-size="10"  fill="#e8a020" text-anchor="end">KV ONLY</text>
+      </g>
+      <g id="m2" opacity="0">
+        <rect x="8" y="112" width="374" height="38" fill="#0a1a08" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="127" font-family="'Press Start 2P'" font-size="8"   fill="#4ec9e1">THREADING</text>
+        <text x="26"  y="143" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Multi-threaded — uses all CPU cores</text>
+        <text x="368" y="136" font-family="'Press Start 2P'" font-size="10"  fill="#4eff9a" text-anchor="end">✓ WIN</text>
+      </g>
+      <g id="m3" opacity="0">
+        <rect x="8" y="158" width="374" height="38" fill="#0a1a08" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="173" font-family="'Press Start 2P'" font-size="8"   fill="#4ec9e1">PERSISTENCE</text>
+        <text x="26"  y="189" font-family="'Press Start 2P'" font-size="7.5" fill="#888">None — data lost on restart</text>
+        <text x="368" y="182" font-family="'Press Start 2P'" font-size="10"  fill="#e85050" text-anchor="end">✗ NONE</text>
+      </g>
+      <g id="m4" opacity="0">
+        <rect x="8" y="204" width="374" height="38" fill="#0a1a08" stroke="#4ec9e1" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="219" font-family="'Press Start 2P'" font-size="8"   fill="#4ec9e1">CLUSTERING</text>
+        <text x="26"  y="235" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Client-side sharding only</text>
+        <text x="368" y="228" font-family="'Press Start 2P'" font-size="10"  fill="#e8a020" text-anchor="end">LIMITED</text>
+      </g>
+      <g id="m5" opacity="0">
+        <rect x="8" y="250" width="374" height="52" fill="#051a08" stroke="#4eff9a" stroke-width="2" rx="2"/>
+        <text x="26"  y="269" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a">✓ BEST FOR:</text>
+        <text x="26"  y="287" font-family="'Press Start 2P'" font-size="8"   fill="#888">Simple HTML fragment caching,</text>
+        <text x="26"  y="300" font-family="'Press Start 2P'" font-size="8"   fill="#888">max raw throughput workloads</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a05ee">
+    <div class="pl" style="color:#4ec9e1" id="p2a">▶ PRESS PLAY TO SEE MEMCACHED</div>
+    <div class="pl" style="color:#4ec9e1;display:none" id="p2b">SIMPLE, MULTI-THREADED, NO PERSISTENCE</div>
+    <div class="pl" style="color:#888;display:none"    id="p2c">ONE TRICK PONY — BUT VERY FAST AT THAT TRICK.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">1</span><span class="stat-lbl">DATA TYPE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">MULTI</span><span class="stat-lbl">THREADED</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">NONE</span><span class="stat-lbl">PERSISTENCE</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 · REDIS PROFILE ═══ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">REDIS</div>
+    <div class="hdr-sub">A DATABASE. NOT JUST A CACHE.</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e85050">REDIS</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">FULL POWER</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <rect x="30" y="4" width="330" height="52" fill="#12081e" stroke="#e85050" stroke-width="2.5" rx="3"/>
+      <text x="195" y="24" font-family="'Press Start 2P'" font-size="11"  fill="#e85050" text-anchor="middle">REDIS</text>
+      <text x="195" y="42" font-family="'Press Start 2P'" font-size="7.5" fill="#555"    text-anchor="middle">Remote Dictionary Server · 2009</text>
+
+      <g id="r1" opacity="0">
+        <rect x="8" y="66" width="374" height="38" fill="#120820" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="81"  font-family="'Press Start 2P'" font-size="8"   fill="#e85050">DATA TYPES</text>
+        <text x="26"  y="97"  font-family="'Press Start 2P'" font-size="7.5" fill="#888">String, List, Set, Hash, ZSet, Stream</text>
+        <text x="368" y="89"  font-family="'Press Start 2P'" font-size="10"  fill="#4eff9a" text-anchor="end">✓ RICH</text>
+      </g>
+      <g id="r2" opacity="0">
+        <rect x="8" y="112" width="374" height="38" fill="#120820" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="127" font-family="'Press Start 2P'" font-size="8"   fill="#e85050">THREADING</text>
+        <text x="26"  y="143" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Single-threaded core (I/O threads added)</text>
+        <text x="368" y="136" font-family="'Press Start 2P'" font-size="10"  fill="#e8a020" text-anchor="end">SINGLE</text>
+      </g>
+      <g id="r3" opacity="0">
+        <rect x="8" y="158" width="374" height="38" fill="#120820" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="173" font-family="'Press Start 2P'" font-size="8"   fill="#e85050">PERSISTENCE</text>
+        <text x="26"  y="189" font-family="'Press Start 2P'" font-size="7.5" fill="#888">RDB snapshots + AOF append log</text>
+        <text x="368" y="182" font-family="'Press Start 2P'" font-size="10"  fill="#4eff9a" text-anchor="end">✓ RDB+AOF</text>
+      </g>
+      <g id="r4" opacity="0">
+        <rect x="8" y="204" width="374" height="38" fill="#120820" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="26"  y="219" font-family="'Press Start 2P'" font-size="8"   fill="#e85050">EXTRAS</text>
+        <text x="26"  y="235" font-family="'Press Start 2P'" font-size="7.5" fill="#888">Pub/Sub, Lua scripts, native cluster</text>
+        <text x="368" y="228" font-family="'Press Start 2P'" font-size="10"  fill="#4eff9a" text-anchor="end">✓ ALL</text>
+      </g>
+      <g id="r5" opacity="0">
+        <rect x="8" y="250" width="374" height="52" fill="#0a0520" stroke="#c97aff" stroke-width="2" rx="2"/>
+        <text x="26"  y="269" font-family="'Press Start 2P'" font-size="8.5" fill="#c97aff">✓ USE FOR:</text>
+        <text x="26"  y="287" font-family="'Press Start 2P'" font-size="8"   fill="#888">Sessions · Leaderboards · Rate limit</text>
+        <text x="26"  y="300" font-family="'Press Start 2P'" font-size="8"   fill="#888">Queues · Pub/Sub · Geo · Search</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e85050;background:#100c00ee">
+    <div class="pl" style="color:#e85050" id="p3a">▶ PRESS PLAY TO SEE REDIS</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p3b">RICH TYPES · PERSISTENCE · PUB/SUB · CLUSTER</div>
+    <div class="pl" style="color:#888;display:none"    id="p3c">REDIS IS A FULL IN-MEMORY DATA STORE.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">6+</span><span class="stat-lbl">DATA TYPES</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">RDB+AOF</span><span class="stat-lbl">PERSISTENCE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#c97aff">PUB/SUB</span><span class="stat-lbl">+ SCRIPTS</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 · HEAD-TO-HEAD COMPARISON TABLE ═══ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">HEAD TO HEAD</div>
+    <div class="hdr-sub">FEATURE BY FEATURE — ROW BY ROW</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">COMPARISON</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">USE THIS</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- Header row -->
+      <rect x="8"   y="4"  width="174" height="28" fill="#12081e" stroke="#e85050" stroke-width="2"/>
+      <text x="95"  y="22" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">REDIS</text>
+      <rect x="208" y="4"  width="174" height="28" fill="#0a1a10" stroke="#4ec9e1" stroke-width="2"/>
+      <text x="295" y="22" font-family="'Press Start 2P'" font-size="9" fill="#4ec9e1" text-anchor="middle">MEMCACHED</text>
+
+      <!-- Row 1: Data types -->
+      <g id="t1" opacity="0">
+        <text x="195" y="50" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">DATA TYPES</text>
+        <rect x="8"   y="54" width="174" height="26" fill="#0a0514" stroke="#e85050" stroke-width="1"/>
+        <text x="95"  y="71" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">Str/List/Set/ZSet/Hash ✓</text>
+        <rect x="208" y="54" width="174" height="26" fill="#080e08" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="295" y="71" font-family="'Press Start 2P'" font-size="8" fill="#888"    text-anchor="middle">String only</text>
+      </g>
+      <!-- Row 2: Persistence -->
+      <g id="t2" opacity="0">
+        <text x="195" y="94" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">PERSISTENCE</text>
+        <rect x="8"   y="98" width="174" height="26" fill="#0a0514" stroke="#e85050" stroke-width="1"/>
+        <text x="95"  y="115" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">RDB + AOF  ✓</text>
+        <rect x="208" y="98" width="174" height="26" fill="#080e08" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="295" y="115" font-family="'Press Start 2P'" font-size="8" fill="#e85050"  text-anchor="middle">None  ✗</text>
+      </g>
+      <!-- Row 3: Pub/Sub -->
+      <g id="t3" opacity="0">
+        <text x="195" y="138" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">PUB / SUB</text>
+        <rect x="8"   y="142" width="174" height="26" fill="#0a0514" stroke="#e85050" stroke-width="1"/>
+        <text x="95"  y="159" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">Native  ✓</text>
+        <rect x="208" y="142" width="174" height="26" fill="#080e08" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="295" y="159" font-family="'Press Start 2P'" font-size="8" fill="#e85050"  text-anchor="middle">None  ✗</text>
+      </g>
+      <!-- Row 4: Clustering -->
+      <g id="t4" opacity="0">
+        <text x="195" y="182" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">CLUSTERING</text>
+        <rect x="8"   y="186" width="174" height="26" fill="#0a0514" stroke="#e85050" stroke-width="1"/>
+        <text x="95"  y="203" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a" text-anchor="middle">Native cluster  ✓</text>
+        <rect x="208" y="186" width="174" height="26" fill="#080e08" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="295" y="203" font-family="'Press Start 2P'" font-size="8" fill="#e8a020"  text-anchor="middle">Client-side only</text>
+      </g>
+      <!-- Row 5: Throughput — Memcached WINS -->
+      <g id="t5" opacity="0">
+        <text x="195" y="226" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">RAW THROUGHPUT</text>
+        <rect x="8"   y="230" width="174" height="26" fill="#0a0514" stroke="#e85050" stroke-width="1"/>
+        <text x="95"  y="247" font-family="'Press Start 2P'" font-size="8" fill="#888"    text-anchor="middle">Good (single thread)</text>
+        <rect x="208" y="230" width="174" height="26" fill="#0a1a10" stroke="#4eff9a" stroke-width="2.5"/>
+        <text x="295" y="247" font-family="'Press Start 2P'" font-size="8" fill="#4eff9a"  text-anchor="middle">Highest  ✓ WIN</text>
+      </g>
+      <!-- Winner banner -->
+      <g id="t6" opacity="0">
+        <rect x="8"   y="266" width="374" height="36" fill="#0a0520" stroke="#e85050" stroke-width="2.5" rx="3"/>
+        <text x="195" y="281" font-family="'Press Start 2P'" font-size="9"   fill="#e85050" text-anchor="middle">DEFAULT: USE REDIS</text>
+        <text x="195" y="297" font-family="'Press Start 2P'" font-size="8"   fill="#888"    text-anchor="middle">Memcached only for max raw throughput</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p4a">▶ PRESS PLAY TO SEE THE TABLE</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4b">REDIS WINS EVERY ROW EXCEPT RAW THROUGHPUT</div>
+    <div class="pl" style="color:#888;display:none"    id="p4c">MEMCACHED ONLY IF YOU NEED PURE SPEED.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">4/5</span><span class="stat-lbl">REDIS WINS</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">1/5</span><span class="stat-lbl">MEMCACHED</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">1</span><span class="stat-lbl">EXCEPTION</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let T=[];
+function clr(){T.forEach(clearTimeout);T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=String(v);}
+function sh(id){op(id,1);}
+function hd(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+}
+function resetScene(n){
+  if(n===1){['h1wrong','h1redis','h1mem','h1vs','h1ans'].forEach(hd);bl('p1a');hn('p1b');}
+  if(n===2){['m1','m2','m3','m4','m5'].forEach(hd);bl('p2a');hn('p2b');hn('p2c');}
+  if(n===3){['r1','r2','r3','r4','r5'].forEach(hd);bl('p3a');hn('p3b');hn('p3c');}
+  if(n===4){['t1','t2','t3','t4','t5','t6'].forEach(hd);bl('p4a');hn('p4b');hn('p4c');}
+}
+
+function play1(){
+  clr();resetScene(1);
+  af(300,()=>sh('h1wrong'));
+  af(1100,()=>{sh('h1redis');sh('h1vs');sh('h1mem');});
+  af(2100,()=>sh('h1ans'));
+  af(2400,()=>{hn('p1a');bl('p1b');});
+}
+function play2(){
+  clr();resetScene(2);
+  af(200,()=>{sh('m1');hn('p2a');bl('p2b');bl('p2c');});
+  af(700,()=>sh('m2'));
+  af(1200,()=>sh('m3'));
+  af(1700,()=>sh('m4'));
+  af(2200,()=>sh('m5'));
+}
+function play3(){
+  clr();resetScene(3);
+  af(200,()=>{sh('r1');hn('p3a');bl('p3b');bl('p3c');});
+  af(700,()=>sh('r2'));
+  af(1200,()=>sh('r3'));
+  af(1700,()=>sh('r4'));
+  af(2200,()=>sh('r5'));
+}
+function play4(){
+  clr();resetScene(4);
+  hn('p4a');bl('p4b');bl('p4c');
+  af(300,()=>sh('t1'));
+  af(800,()=>sh('t2'));
+  af(1300,()=>sh('t3'));
+  af(1800,()=>sh('t4'));
+  af(2300,()=>sh('t5'));
+  af(2900,()=>sh('t6'));
+}
+</script>
+</body>
+</html>

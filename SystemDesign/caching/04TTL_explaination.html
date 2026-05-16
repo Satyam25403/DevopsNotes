@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>TTL Explained</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+
+/* HEADER — 90px */
+.hdr{height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 14px;flex-shrink:0;border-bottom:1px solid #1a1a2a}
+.hdr-title{font-family:'Press Start 2P';font-size:14px;color:#e8a020;text-align:center;line-height:1.45;text-shadow:0 0 10px #e8a02066}
+.hdr-sub{font-family:'Press Start 2P';font-size:9px;color:#555;text-align:center}
+.dots{display:flex;gap:9px}
+.dot{width:11px;height:11px;background:#1a1a2e;border:1px solid #333;border-radius:1px}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 6px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+
+/* CANVAS fills remaining space */
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:10px;left:12px;font-family:'Press Start 2P';font-size:13px;z-index:5}
+.sc-badge{position:absolute;top:10px;right:12px;font-family:'Press Start 2P';font-size:10px;padding:4px 9px;border:2px solid;z-index:5}
+
+/* INFO PANEL — 84px */
+.panel{height:84px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.pl{font-family:'Press Start 2P';font-size:9px;line-height:1.7}
+
+/* STATS — 68px */
+.stats{height:68px;display:flex;gap:8px;padding:0 12px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:7px 4px;text-align:center;background:#0a0a14}
+.stat-val{font-family:'Press Start 2P';font-size:15px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:8px;color:#555;display:block;margin-top:4px}
+
+/* BUTTONS — 58px */
+.btns{height:58px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;flex-shrink:0;background:#05050a;border-top:1px solid #181828}
+.btn{font-family:'Press Start 2P';font-size:10px;padding:9px 13px;border:2px solid;cursor:pointer;background:transparent;touch-action:manipulation}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#555;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.07}to{opacity:.45}}
+
+/* TTL countdown ring animation */
+@keyframes ring-shrink{from{stroke-dashoffset:0}to{stroke-dashoffset:283}}
+@keyframes blink-red{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 · HOOK — "This one line..."
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">TTL EXPLAINED</div>
+    <div class="hdr-sub">TIME-TO-LIVE FOR CACHE KEYS</div>
+    <div class="dots">
+      <div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE DANGER</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">⚠ HOOK</div>
+
+    <div class="star" style="top:3%;left:6%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:7%;left:22%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:4%;left:44%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:10%;left:62%;--d:1.7s;--delay:.9s"></div>
+    <div class="star" style="top:6%;left:80%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:14%;left:90%;--d:1.6s;--delay:.8s"></div>
+    <div class="star" style="top:16%;left:12%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:3%;left:94%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:18%;left:52%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:12%;left:34%;--d:1.5s;--delay:1.1s"></div>
+    <div class="star" style="top:20%;left:72%;--d:2.3s;--delay:0s"></div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- STALE CACHE KEY visual — big box center -->
+      <g id="stale-box" opacity="0">
+        <rect x="55" y="10" width="280" height="90" fill="#1a0505" stroke="#e85050" stroke-width="3" rx="4"/>
+        <text x="195" y="36"  font-family="'Press Start 2P'" font-size="8"  fill="#888" text-anchor="middle">cache.get("user_profile")</text>
+        <text x="195" y="58"  font-family="'Press Start 2P'" font-size="11" fill="#e85050" text-anchor="middle">NO TTL SET</text>
+        <text x="195" y="80"  font-family="'Press Start 2P'" font-size="8"  fill="#e85050" text-anchor="middle">⚠ LIVES FOREVER</text>
+      </g>
+
+      <!-- Skull / old data horror -->
+      <g id="horror" opacity="0">
+        <text x="195" y="145" font-family="'Press Start 2P'" font-size="44" fill="#3a1010" text-anchor="middle">💀</text>
+        <text x="195" y="178" font-family="'Press Start 2P'" font-size="10" fill="#e85050" text-anchor="middle">3-YEAR-OLD DATA</text>
+        <text x="195" y="198" font-family="'Press Start 2P'" font-size="10" fill="#e85050" text-anchor="middle">STILL IN YOUR CACHE</text>
+      </g>
+
+      <!-- Fix line -->
+      <g id="fix-line" opacity="0">
+        <rect x="30" y="220" width="330" height="60" fill="#051a05" stroke="#4eff9a" stroke-width="2.5" rx="4"/>
+        <text x="195" y="244" font-family="'Press Start 2P'" font-size="8"   fill="#888" text-anchor="middle">cache.set("user", data,</text>
+        <text x="195" y="265" font-family="'Press Start 2P'" font-size="11"  fill="#4eff9a" text-anchor="middle">EX 300)  ← TTL: 5min</text>
+      </g>
+
+      <!-- hook -->
+      <g id="hook1" opacity="0">
+        <text x="195" y="300" font-family="'Press Start 2P'" font-size="9" fill="#aaa" text-anchor="middle">ONE LINE. PREVENTS STALE DATA.</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#e85050;display:none" id="p1b">NO TTL = CACHE LIVES FOREVER = STALE DATA</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">∞</span><span class="stat-lbl">WITHOUT TTL</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">300s</span><span class="stat-lbl">WITH TTL</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">#1</span><span class="stat-lbl">PROD BUG</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 · WITHOUT TTL — grows forever
+═══════════════════════════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">NO TTL = STALE FOREVER</div>
+    <div class="hdr-sub">THE PROBLEM — CACHE NEVER EXPIRES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e85050">WITHOUT TTL</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">BROKEN</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- TIMELINE — horizontal, full width, y=40 -->
+      <line x1="20" y1="52" x2="370" y2="52" stroke="#2a1f3d" stroke-width="3"/>
+      <!-- ticks -->
+      <line x1="20"  y1="44" x2="20"  y2="60" stroke="#4a3a6a" stroke-width="2"/>
+      <line x1="112" y1="44" x2="112" y2="60" stroke="#4a3a6a" stroke-width="2"/>
+      <line x1="205" y1="44" x2="205" y2="60" stroke="#4a3a6a" stroke-width="2"/>
+      <line x1="297" y1="44" x2="297" y2="60" stroke="#4a3a6a" stroke-width="2"/>
+      <line x1="370" y1="44" x2="370" y2="60" stroke="#4a3a6a" stroke-width="2"/>
+      <!-- tick labels -->
+      <text x="20"  y="75" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">JAN</text>
+      <text x="112" y="75" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">APR</text>
+      <text x="205" y="75" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">JUL</text>
+      <text x="297" y="75" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">OCT</text>
+      <text x="370" y="75" font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">JAN+</text>
+
+      <!-- Cache key SET event -->
+      <circle cx="20" cy="52" r="7" fill="#4eff9a"/>
+      <text x="20" y="38" font-family="'Press Start 2P'" font-size="6" fill="#4eff9a" text-anchor="middle">SET</text>
+
+      <!-- Stale key bar — grows across timeline -->
+      <rect id="stale-bar" x="20" y="44" width="0" height="16" fill="#3a1010" stroke="#e85050" stroke-width="1.5" opacity="0.9"/>
+
+      <!-- Stale labels that appear over time -->
+      <g id="s2-l1" opacity="0">
+        <rect x="65" y="86" width="130" height="40" fill="#1a0505" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="130" y="103" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">price: $29.99</text>
+        <text x="130" y="118" font-family="'Press Start 2P'" font-size="6.5" fill="#888" text-anchor="middle">STILL CACHED</text>
+        <line x1="112" y1="60" x2="112" y2="86" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3 2"/>
+      </g>
+      <g id="s2-l2" opacity="0">
+        <rect x="155" y="86" width="130" height="40" fill="#1a0505" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="220" y="103" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">price: $29.99</text>
+        <text x="220" y="118" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">PRICE CHANGED!</text>
+        <line x1="205" y1="60" x2="205" y2="86" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3 2"/>
+      </g>
+      <g id="s2-l3" opacity="0">
+        <rect x="245" y="86" width="130" height="40" fill="#1a0505" stroke="#e85050" stroke-width="1.5" rx="2"/>
+        <text x="310" y="103" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">price: $29.99</text>
+        <text x="310" y="118" font-family="'Press Start 2P'" font-size="6.5" fill="#888" text-anchor="middle">3 YEAR OLD DATA</text>
+        <line x1="297" y1="60" x2="297" y2="86" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3 2"/>
+      </g>
+
+      <!-- NOW marker -->
+      <g id="s2-now" opacity="0">
+        <line x1="370" y1="28" x2="370" y2="68" stroke="#e8a020" stroke-width="3"/>
+        <text x="370" y="22" font-family="'Press Start 2P'" font-size="7.5" fill="#e8a020" text-anchor="middle">NOW</text>
+      </g>
+
+      <!-- USER shocked -->
+      <!-- head -->
+      <rect x="162" y="140" width="26" height="24" fill="#f4c27a"/>
+      <rect x="165" y="143" width="5" height="5" fill="#111"/>
+      <rect x="177" y="143" width="5" height="5" fill="#111"/>
+      <!-- shocked mouth O -->
+      <ellipse cx="175" cy="157" rx="5" ry="6" fill="#111"/>
+      <rect x="160" y="146" width="6" height="10" fill="#f4c27a"/>
+      <rect x="192" y="146" width="6" height="10" fill="#f4c27a"/>
+      <!-- hair -->
+      <rect x="162" y="136" width="26" height="6" fill="#1a1a0a"/>
+      <!-- shirt red -->
+      <rect x="160" y="164" width="30" height="24" fill="#e83030"/>
+      <!-- legs -->
+      <rect x="162" y="188" width="11" height="20" fill="#2a2a4a"/>
+      <rect x="177" y="188" width="11" height="20" fill="#2a2a4a"/>
+      <rect x="161" y="204" width="13" height="8" fill="#1a0a00"/>
+      <rect x="176" y="204" width="13" height="8" fill="#1a0a00"/>
+
+      <!-- shocked text -->
+      <g id="s2-shock" opacity="0">
+        <text x="210" y="155" font-family="'Press Start 2P'" font-size="13" fill="#e85050">!!</text>
+        <text x="100" y="155" font-family="'Press Start 2P'" font-size="13" fill="#e85050">!!</text>
+      </g>
+
+      <!-- PROBLEM label -->
+      <g id="s2-prob" opacity="0">
+        <rect x="30" y="240" width="330" height="58" fill="#1a0505" stroke="#e85050" stroke-width="2" rx="3"/>
+        <text x="195" y="261" font-family="'Press Start 2P'" font-size="8.5" fill="#e85050" text-anchor="middle">USERS SEE WRONG PRICES</text>
+        <text x="195" y="280" font-family="'Press Start 2P'" font-size="8.5" fill="#e85050" text-anchor="middle">STALE DATA SERVED FOREVER</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e85050;background:#1a0505ee">
+    <div class="pl" style="color:#e85050" id="p2a">▶ PRESS PLAY TO SEE THE PROBLEM</div>
+    <div class="pl" style="color:#e85050;display:none" id="p2b">❌ KEY CACHED JAN — NEVER EXPIRES</div>
+    <div class="pl" style="color:#888;display:none" id="p2c">PRICE CHANGED IN DB. CACHE DOESN'T KNOW.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">∞</span><span class="stat-lbl">KEY LIFETIME</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">STALE</span><span class="stat-lbl">DATA STATUS</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">😱</span><span class="stat-lbl">USER IMPACT</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 · TTL COUNTDOWN — key expires
+═══════════════════════════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">TTL COUNTDOWN</div>
+    <div class="hdr-sub">KEY EXPIRES → FRESH DATA FETCHED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">WITH TTL</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">SAFE</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- CACHE KEY BOX — left, x:10–200, y:10–110 -->
+      <rect x="10" y="10" width="200" height="110" fill="#051020" stroke="#4ec9e1" stroke-width="2.5"/>
+      <text x="110" y="30" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">CACHE KEY</text>
+      <text x="110" y="46" font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">user_profile:42</text>
+      <rect x="18" y="54" width="184" height="16" fill="#0a2030"/>
+      <text x="110" y="66" font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">name: "Alice Carter"</text>
+      <rect x="18" y="73" width="184" height="16" fill="#071828"/>
+      <text x="110" y="85" font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">role: "admin"</text>
+      <rect x="18" y="92" width="184" height="16" fill="#0a2030"/>
+      <text x="110" y="104" font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">plan: "pro"</text>
+
+      <!-- EXPIRY banner on key box -->
+      <text id="key-ttl-label" x="110" y="120" font-family="'Press Start 2P'" font-size="0" fill="#e8a020" text-anchor="middle" opacity="0">KEY EXPIRED</text>
+
+      <!-- TTL RING — right side, cx:310 cy:60 r:45 -->
+      <circle cx="310" cy="60" r="45" fill="#0a1a0a" stroke="#1a3a1a" stroke-width="5"/>
+      <!-- ring progress — circumference of r=45 → 2π×45 ≈ 283 -->
+      <circle id="ttl-ring" cx="310" cy="60" r="45"
+              fill="none"
+              stroke="#4eff9a"
+              stroke-width="8"
+              stroke-dasharray="283"
+              stroke-dashoffset="0"
+              stroke-linecap="round"
+              transform="rotate(-90 310 60)"/>
+      <!-- countdown number -->
+      <text id="ttl-num" x="310" y="52" font-family="'Press Start 2P'" font-size="22" fill="#4eff9a" text-anchor="middle">300</text>
+      <text x="310" y="74" font-family="'Press Start 2P'" font-size="8" fill="#888" text-anchor="middle">seconds</text>
+      <!-- TTL label above ring -->
+      <text x="310" y="12" font-family="'Press Start 2P'" font-size="8" fill="#e8a020" text-anchor="middle">TTL TIMER</text>
+
+      <!-- EXPIRED overlay — appears when countdown hits 0 -->
+      <g id="expired-x" opacity="0">
+        <circle cx="310" cy="60" r="48" fill="#1a0505" stroke="#e85050" stroke-width="4"/>
+        <text x="310" y="47" font-family="'Press Start 2P'" font-size="16" fill="#e85050" text-anchor="middle">KEY</text>
+        <text x="310" y="70" font-family="'Press Start 2P'" font-size="16" fill="#e85050" text-anchor="middle">GONE</text>
+        <text x="310" y="12" font-family="'Press Start 2P'" font-size="8" fill="#e85050" text-anchor="middle">EXPIRED!</text>
+      </g>
+
+      <!-- CACHE MISS after expiry -->
+      <g id="cache-miss" opacity="0">
+        <rect x="10" y="128" width="200" height="50" fill="#1a0505" stroke="#e85050" stroke-width="2" rx="2"/>
+        <text x="110" y="148" font-family="'Press Start 2P'" font-size="8" fill="#e85050" text-anchor="middle">CACHE MISS</text>
+        <text x="110" y="166" font-family="'Press Start 2P'" font-size="7" fill="#888"    text-anchor="middle">KEY NOT FOUND</text>
+      </g>
+
+      <!-- DB FETCH -->
+      <g id="db-fetch" opacity="0">
+        <rect x="220" y="128" width="160" height="65" fill="#051a08" stroke="#4eff9a" stroke-width="2" rx="2"/>
+        <text x="300" y="148" font-family="'Press Start 2P'" font-size="7.5" fill="#4eff9a" text-anchor="middle">→ HIT DATABASE</text>
+        <text x="300" y="164" font-family="'Press Start 2P'" font-size="7"   fill="#4ec9e1" text-anchor="middle">FRESH DATA LOADED</text>
+        <text x="300" y="180" font-family="'Press Start 2P'" font-size="7"   fill="#4eff9a" text-anchor="middle">RE-CACHED + TTL SET</text>
+      </g>
+
+      <!-- beam cache → db -->
+      <line id="c3beam" x1="210" y1="153" x2="220" y2="155" stroke="#4eff9a" stroke-width="3" stroke-dasharray="5 3" opacity="0"/>
+
+      <!-- RESULT -->
+      <text id="s3result" x="195" y="225" font-family="'Press Start 2P'" font-size="14" fill="#4eff9a" text-anchor="middle" opacity="0">✓ FRESH DATA SERVED</text>
+
+      <!-- Golden rule -->
+      <g id="golden" opacity="0">
+        <rect x="20" y="244" width="350" height="56" fill="#051a08" stroke="#4eff9a" stroke-width="2" rx="3"/>
+        <text x="195" y="264" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">GOLDEN RULE:</text>
+        <text x="195" y="284" font-family="'Press Start 2P'" font-size="8"   fill="#4eff9a" text-anchor="middle">ALWAYS SET A TTL. ALWAYS.</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p3a">▶ PRESS PLAY TO SEE TTL IN ACTION</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p3b">TTL COUNTDOWN → KEY EXPIRES → DB FETCHES FRESH</div>
+    <div class="pl" style="color:#4ec9e1;display:none" id="p3c">CACHE STAYS FRESH. STALE DATA IMPOSSIBLE.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">300s</span><span class="stat-lbl">TTL VALUE</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">AUTO</span><span class="stat-lbl">EXPIRY</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">FRESH</span><span class="stat-lbl">DATA ALWAYS</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 · HOW TO CHOOSE TTL
+═══════════════════════════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">CHOOSING YOUR TTL</div>
+    <div class="hdr-sub">MATCH TTL TO HOW FAST DATA CHANGES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div>
+    </div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">TTL GUIDE</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">GOLDEN RULE</div>
+
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- 4 TTL choice rows — full width, stacked -->
+      <!-- Row 1: Static assets -->
+      <g id="row1" opacity="0">
+        <rect x="8" y="8" width="374" height="58" fill="#051020" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="20"  y="30" font-family="'Press Start 2P'" font-size="8"  fill="#4ec9e1">STATIC ASSETS</text>
+        <text x="20"  y="47" font-family="'Press Start 2P'" font-size="7"  fill="#888">CSS, JS, images</text>
+        <rect x="240" y="18" width="134" height="30" fill="#071828" rx="2"/>
+        <text x="307" y="38" font-family="'Press Start 2P'" font-size="11" fill="#4eff9a" text-anchor="middle">7 days</text>
+      </g>
+
+      <!-- Row 2: User sessions -->
+      <g id="row2" opacity="0">
+        <rect x="8" y="76" width="374" height="58" fill="#051020" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="20"  y="98"  font-family="'Press Start 2P'" font-size="8"  fill="#4ec9e1">USER SESSIONS</text>
+        <text x="20"  y="115" font-family="'Press Start 2P'" font-size="7"  fill="#888">Auth tokens, prefs</text>
+        <rect x="240" y="86" width="134" height="30" fill="#071828" rx="2"/>
+        <text x="307" y="106" font-family="'Press Start 2P'" font-size="11" fill="#4eff9a" text-anchor="middle">15–30 min</text>
+      </g>
+
+      <!-- Row 3: Product / API -->
+      <g id="row3" opacity="0">
+        <rect x="8" y="144" width="374" height="58" fill="#0a1020" stroke="#e8a020" stroke-width="2"/>
+        <text x="20"  y="166" font-family="'Press Start 2P'" font-size="8"  fill="#e8a020">PRODUCT DATA</text>
+        <text x="20"  y="183" font-family="'Press Start 2P'" font-size="7"  fill="#888">Prices, inventory</text>
+        <rect x="240" y="154" width="134" height="30" fill="#1a1000" rx="2"/>
+        <text x="307" y="174" font-family="'Press Start 2P'" font-size="11" fill="#e8a020" text-anchor="middle">5–30 min</text>
+      </g>
+
+      <!-- Row 4: Real-time -->
+      <g id="row4" opacity="0">
+        <rect x="8" y="212" width="374" height="58" fill="#1a0505" stroke="#e85050" stroke-width="2"/>
+        <text x="20"  y="234" font-family="'Press Start 2P'" font-size="8"  fill="#e85050">REAL-TIME DATA</text>
+        <text x="20"  y="251" font-family="'Press Start 2P'" font-size="7"  fill="#888">Stock prices, scores</text>
+        <rect x="240" y="222" width="134" height="30" fill="#1a0505" rx="2"/>
+        <text x="307" y="242" font-family="'Press Start 2P'" font-size="11" fill="#e85050" text-anchor="middle">5–30 sec</text>
+      </g>
+
+      <!-- Golden rule banner -->
+      <g id="golden4" opacity="0">
+        <rect x="20" y="280" width="350" height="28" fill="#051a05" stroke="#4eff9a" stroke-width="2" rx="3"/>
+        <text x="195" y="299" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">⚡ FASTER CHANGE = SHORTER TTL</text>
+      </g>
+    </svg>
+
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p4a">▶ PRESS PLAY TO SEE TTL GUIDE</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4b">FASTER DATA CHANGES = SHORTER TTL NEEDED</div>
+    <div class="pl" style="color:#888;display:none" id="p4c">NEVER OMIT TTL. SET EXPIRY ON EVERY KEY.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">7d</span><span class="stat-lbl">STATIC MAX</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">5min</span><span class="stat-lbl">API TYPICAL</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e85050">30s</span><span class="stat-lbl">REALTIME MIN</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+<script>
+let T=[]; 
+function clr(){T.forEach(clearTimeout);T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=String(v);}
+function fc(id,c){let e=document.getElementById(id);if(e)e.setAttribute('fill',c);}
+function sh(id){op(id,1);}
+function hd(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function attr(id,a,v){let e=document.getElementById(id);if(e)e.setAttribute(a,v);}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['stale-box','horror','fix-line','hook1'].forEach(hd);
+    bl('p1a');hn('p1b');
+  }
+  if(n===2){
+    ['s2-l1','s2-l2','s2-l3','s2-now','s2-shock','s2-prob'].forEach(hd);
+    attr('stale-bar','width','0');
+    bl('p2a');hn('p2b');hn('p2c');
+  }
+  if(n===3){
+    ['expired-x','cache-miss','db-fetch','c3beam','s3result','golden'].forEach(hd);
+    sh('ttl-ring');
+    attr('ttl-ring','stroke-dashoffset','0');
+    attr('ttl-ring','stroke','#4eff9a');
+    attr('ttl-num','font-size','22');
+    fc('ttl-num','#4eff9a');
+    let e=document.getElementById('ttl-num');if(e)e.textContent='300';
+    let r=document.getElementById('ttl-ring');if(r){r.style.animation='';r.style.transition='';}
+    bl('p3a');hn('p3b');hn('p3c');
+  }
+  if(n===4){
+    ['row1','row2','row3','row4','golden4'].forEach(hd);
+    bl('p4a');hn('p4b');hn('p4c');
+  }
+}
+
+/* ─── SCENE 1 ─── */
+function play1(){
+  clr();resetScene(1);
+  af(300,()=>sh('stale-box'));
+  af(1200,()=>sh('horror'));
+  af(2100,()=>sh('fix-line'));
+  af(2900,()=>sh('hook1'));
+  af(3100,()=>{hn('p1a');bl('p1b');});
+}
+
+/* ─── SCENE 2 ─── */
+function play2(){
+  clr();resetScene(2);
+  // animate stale bar growing
+  let bar=document.getElementById('stale-bar');
+  let startT=null;
+  const dur=2200;
+  function growBar(ts){
+    if(!startT)startT=ts;
+    let p=Math.min((ts-startT)/dur,1);
+    if(bar)bar.setAttribute('width',String(Math.round(350*p)));
+    if(p<1)requestAnimationFrame(growBar);
+  }
+  af(300,()=>{hn('p2a');bl('p2b');bl('p2c');requestAnimationFrame(growBar);});
+  af(900,()=>sh('s2-l1'));
+  af(1500,()=>sh('s2-l2'));
+  af(2200,()=>{sh('s2-l3');sh('s2-now');});
+  af(2800,()=>sh('s2-shock'));
+  af(3300,()=>sh('s2-prob'));
+}
+
+/* ─── SCENE 3 ─── */
+function play3(){
+  clr();resetScene(3);
+  hn('p3a');bl('p3b');
+
+  // Animate countdown: 300 → 0 over 3000ms
+  let startT=null;
+  const dur=3000;
+  const circ=283;
+  let counting=true;
+
+  function countDown(ts){
+    if(!startT)startT=ts;
+    let p=Math.min((ts-startT)/dur,1);
+    let val=Math.round(300*(1-p));
+    let offset=Math.round(circ*p);
+
+    let ring=document.getElementById('ttl-ring');
+    let num=document.getElementById('ttl-num');
+    if(ring)ring.setAttribute('stroke-dashoffset',String(offset));
+    if(num)num.textContent=String(val);
+
+    // colour shift: green → amber → red
+    let col= p<0.5 ? '#4eff9a' : p<0.8 ? '#e8a020' : '#e85050';
+    if(ring)ring.setAttribute('stroke',col);
+    if(num)num.setAttribute('fill',col);
+
+    if(p<1 && counting)requestAnimationFrame(countDown);
+    else if(p>=1){
+      // expired!
+      if(ring)ring.style.opacity='0';
+      sh('expired-x');
+      af(600,()=>{
+        sh('cache-miss');
+        af(600,()=>{
+          sh('c3beam');
+          af(400,()=>{hd('c3beam');sh('db-fetch');});
+          af(1200,()=>{sh('s3result');bl('p3c');});
+          af(1800,()=>sh('golden'));
+        });
+      });
+    }
+  }
+  af(400,()=>requestAnimationFrame(countDown));
+}
+
+/* ─── SCENE 4 ─── */
+function play4(){
+  clr();resetScene(4);
+  af(300,()=>{sh('row1');});
+  af(900,()=>{sh('row2');});
+  af(1500,()=>{sh('row3');});
+  af(2100,()=>{sh('row4');});
+  af(2700,()=>{sh('golden4');hn('p4a');bl('p4b');bl('p4c');});
+}
+</script>
+</body>
+</html>

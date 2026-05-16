@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>VLSM — Variable Length Subnet Masking</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+
+/* HEADER 90px */
+.hdr{
+  height:90px;flex-shrink:0;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:8px;padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+
+/* SCENE LABEL 28px */
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+/* ANIMATION AREA */
+.anim{flex:1;position:relative;overflow:hidden;min-height:280px}
+.floor{position:absolute;bottom:0;left:0;right:0;height:16px;
+  background:repeating-linear-gradient(90deg,#2a1f3d 0,#2a1f3d 38px,#231830 38px,#231830 76px);
+  border-top:1px solid #4a3a6a}
+.floor-b{
+  background:repeating-linear-gradient(90deg,#0f2240 0,#0f2240 38px,#0c1c38 38px,#0c1c38 76px);
+  border-top-color:#1e4080}
+.star{position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;animation:twk 2s infinite alternate}
+@keyframes twk{from{opacity:.1}to{opacity:.5}}
+
+/* INFO PANEL 110px */
+.info{
+  height:110px;flex-shrink:0;margin:0 12px;
+  border:2px solid #4ec9e1;padding:10px 14px;
+  display:flex;flex-direction:column;justify-content:center;gap:7px;
+  font-size:9px;line-height:1.9;
+}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}
+
+/* STATS ROW 70px */
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#9a4ef8}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+
+/* CONTROLS 68px */
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* subnet card */
+.scard{
+  border:1px solid #2a1f3d;background:#0d0d1a;
+  padding:8px 10px;transition:all .35s;opacity:0;
+  margin-bottom:4px;flex-shrink:0;
+}
+.scard-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.scard-bar{height:7px;background:#1a1a2a;margin-bottom:4px;position:relative;overflow:hidden}
+.scard-fill{height:100%;width:0%;transition:width 1.1s ease-out}
+.scard-meta{display:flex;justify-content:space-between}
+.scard-det{font-size:6px;color:#666;line-height:1.8}
+
+/* step items */
+.step{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:8px 10px;border:1px solid #2a1f3d;background:#0d0d1a;
+  margin-bottom:4px;opacity:0;transition:opacity .4s;flex-shrink:0;
+}
+.step-num{
+  width:22px;height:22px;border:2px solid currentColor;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0;
+}
+.step-title{font-size:8px;margin-bottom:3px}
+.step-desc{font-size:6px;color:#888;line-height:1.8}
+
+/* bar segments */
+.vseg{
+  position:absolute;top:0;height:100%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  overflow:hidden;transition:opacity .45s;
+  border-right:2px solid #0a0a0f;
+  opacity:0;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — THE PROBLEM
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ONE BLOCK, FIVE NETWORKS</div>
+    <div class="hdr-sub">192.168.1.0/24 — 256 ADDRESSES TO SPLIT</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">WASTE</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div class="star" style="left:22px;top:8px;animation-delay:0s"></div>
+    <div class="star" style="left:80px;top:4px;animation-delay:.4s"></div>
+    <div class="star" style="left:165px;top:13px;animation-delay:.9s"></div>
+    <div class="star" style="left:265px;top:5px;animation-delay:.2s"></div>
+    <div class="star" style="left:335px;top:11px;animation-delay:1.1s"></div>
+    <div class="star" style="left:55px;top:35px;animation-delay:.7s"></div>
+    <div class="star" style="left:292px;top:32px;animation-delay:1.3s"></div>
+
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">AVAILABLE: 192.168.1.0/24 = 256 ADDRESSES</div>
+
+      <!-- Full /24 bar -->
+      <div style="position:relative;height:26px;background:#e8a02015;border:2px solid #e8a020;overflow:hidden;margin-bottom:10px;flex-shrink:0">
+        <div id="fullbar" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;color:#e8a020;opacity:0;transition:opacity .4s">256 addresses — one /24</div>
+      </div>
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">WHAT YOU ACTUALLY NEED:</div>
+
+      <!-- Req rows -->
+      <div id="r1" style="display:flex;align-items:center;border:1px solid #e8505040;background:#1a050590;padding:8px 10px;margin-bottom:4px;gap:10px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:30px;height:30px;border:2px solid #e85050;background:#1a0505;display:flex;align-items:center;justify-content:center;font-size:9px;color:#e85050;flex-shrink:0">HQ</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#e85050;margin-bottom:3px">100 hosts — Headquarters LAN</div>
+          <div style="height:6px;background:#1a0a0a;position:relative">
+            <div id="rb1" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e85050;transition:width 1s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#666;margin-top:2px">naive: burn full /24 → 154 addresses wasted</div>
+        </div>
+        <div style="font-size:8px;color:#e85050;flex-shrink:0">100</div>
+      </div>
+
+      <div id="r2" style="display:flex;align-items:center;border:1px solid #e8a02040;background:#10090090;padding:8px 10px;margin-bottom:4px;gap:10px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:30px;height:30px;border:2px solid #e8a020;background:#100900;display:flex;align-items:center;justify-content:center;font-size:9px;color:#e8a020;flex-shrink:0">FL1</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:3px">50 hosts — Floor 1 dept</div>
+          <div style="height:6px;background:#1a1000;position:relative">
+            <div id="rb2" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e8a020;transition:width 1s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#666;margin-top:2px">naive: burn full /24 → 204 addresses wasted</div>
+        </div>
+        <div style="font-size:8px;color:#e8a020;flex-shrink:0">50</div>
+      </div>
+
+      <div id="r3" style="display:flex;align-items:center;border:1px solid #4ec9e140;background:#001a2090;padding:8px 10px;margin-bottom:4px;gap:10px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:30px;height:30px;border:2px solid #4ec9e1;background:#001a20;display:flex;align-items:center;justify-content:center;font-size:9px;color:#4ec9e1;flex-shrink:0">FL2</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">25 hosts — Floor 2 dept</div>
+          <div style="height:6px;background:#001020;position:relative">
+            <div id="rb3" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4ec9e1;transition:width 1s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#666;margin-top:2px">naive: burn full /24 → 229 addresses wasted</div>
+        </div>
+        <div style="font-size:8px;color:#4ec9e1;flex-shrink:0">25</div>
+      </div>
+
+      <div id="r4" style="display:flex;align-items:center;border:1px solid #4eff9a40;background:#001a1090;padding:8px 10px;margin-bottom:8px;gap:10px;opacity:0;transition:opacity .4s;flex-shrink:0">
+        <div style="width:30px;height:30px;border:2px solid #4eff9a;background:#001a10;display:flex;align-items:center;justify-content:center;font-size:7px;color:#4eff9a;flex-shrink:0;text-align:center;line-height:1.3">P2P</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">2 hosts — Router P2P link</div>
+          <div style="height:6px;background:#001a00;position:relative">
+            <div id="rb4" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width 1s ease-out"></div>
+          </div>
+          <div style="font-size:6px;color:#666;margin-top:2px">naive: burn full /24 → 252 addresses wasted</div>
+        </div>
+        <div style="font-size:8px;color:#4eff9a;flex-shrink:0">2</div>
+      </div>
+
+      <!-- Waste callout -->
+      <div id="wastebox" style="border:1px solid #e8505060;background:#1a050590;padding:8px 10px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">NAIVE FIXED-SIZE APPROACH:</div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:7px;color:#aaa;line-height:1.9">4 × /24 used = 1024 addresses<br>Actually needed = 177 addresses</div>
+          <div style="text-align:right">
+            <div style="font-size:15px;color:#e85050">847</div>
+            <div style="font-size:6px;color:#888">WASTED</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="floor"></div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Fixed /24 per segment burns 847 IPs.</div>
+    <div class="il">VLSM fits ALL 4 nets in ONE /24.</div>
+    <div class="ih am">Assign largest subnets first. Always.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">256</div><div class="sl">TOTAL IN /24</div></div>
+    <div class="sc"><div class="sv rd">847</div><div class="sl">NAIVE WASTE</div></div>
+    <div class="sc"><div class="sv gn">177</div><div class="sl">ACTUALLY NEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — THE VLSM CARVE-UP
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VLSM CARVE-UP</div>
+    <div class="hdr-sub">ONE /24 → FOUR PRECISE SUBNETS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ZERO WASTE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">192.168.1.0/24 DIVIDED BY VLSM</div>
+
+      <!-- Big visual bar -->
+      <div style="position:relative;height:50px;background:#0a1a2e;border:2px solid #1e4080;overflow:hidden;margin-bottom:5px;flex-shrink:0">
+        <!-- /25 = 50% -->
+        <div id="v1" class="vseg" style="left:0%;width:50%;background:#e8505025;border-right-color:#1e4080">
+          <div style="font-size:7px;color:#e85050;font-weight:bold">/25</div>
+          <div style="font-size:6px;color:#e85050">128 addr</div>
+        </div>
+        <!-- /26 = 25% -->
+        <div id="v2" class="vseg" style="left:50%;width:25%;background:#e8a02025;border-right-color:#1e4080">
+          <div style="font-size:7px;color:#e8a020;font-weight:bold">/26</div>
+          <div style="font-size:6px;color:#e8a020">64 addr</div>
+        </div>
+        <!-- /27 = 12.5% -->
+        <div id="v3" class="vseg" style="left:75%;width:12.5%;background:#4ec9e125;border-right-color:#1e4080">
+          <div style="font-size:7px;color:#4ec9e1;font-weight:bold">/27</div>
+          <div style="font-size:6px;color:#4ec9e1">32</div>
+        </div>
+        <!-- /30 = ~1.6%, enlarged for visibility -->
+        <div id="v4" class="vseg" style="left:87.5%;width:3%;background:#4eff9a25;border-right-color:#1e4080">
+          <div style="font-size:5px;color:#4eff9a;font-weight:bold">/30</div>
+        </div>
+        <!-- unused -->
+        <div id="v5" class="vseg" style="left:90.5%;width:9.5%;background:#1a1a2a;border-right:none">
+          <div style="font-size:5px;color:#333;text-align:center">free<br>24B</div>
+        </div>
+      </div>
+
+      <!-- Tick labels -->
+      <div style="position:relative;height:12px;margin-bottom:8px;flex-shrink:0">
+        <span style="position:absolute;left:0;font-size:5px;color:#445">.0</span>
+        <span style="position:absolute;left:50%;transform:translateX(-50%);font-size:5px;color:#445">.128</span>
+        <span style="position:absolute;left:75%;transform:translateX(-50%);font-size:5px;color:#445">.192</span>
+        <span style="position:absolute;left:87.5%;transform:translateX(-50%);font-size:5px;color:#445">.224</span>
+        <span style="position:absolute;right:0;font-size:5px;color:#445">.255</span>
+      </div>
+
+      <!-- Subnet cards -->
+      <div id="sc1" class="scard" style="border-color:#e85050;color:#e85050">
+        <div class="scard-top">
+          <span style="font-size:9px;color:#e85050">192.168.1.0/25</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e85050;color:#e85050">HQ LAN</span>
+        </div>
+        <div class="scard-bar"><div class="scard-fill" id="sf1" style="background:#e85050"></div></div>
+        <div class="scard-meta">
+          <span class="scard-det">Hosts: .1–.126 · Usable: 126 ✓ (need 100)</span>
+          <span class="scard-det" style="text-align:right">waste: 26</span>
+        </div>
+      </div>
+
+      <div id="sc2" class="scard" style="border-color:#e8a020;color:#e8a020">
+        <div class="scard-top">
+          <span style="font-size:9px;color:#e8a020">192.168.1.128/26</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e8a020;color:#e8a020">FLOOR 1</span>
+        </div>
+        <div class="scard-bar"><div class="scard-fill" id="sf2" style="background:#e8a020"></div></div>
+        <div class="scard-meta">
+          <span class="scard-det">Hosts: .129–.190 · Usable: 62 ✓ (need 50)</span>
+          <span class="scard-det" style="text-align:right">waste: 12</span>
+        </div>
+      </div>
+
+      <div id="sc3" class="scard" style="border-color:#4ec9e1;color:#4ec9e1">
+        <div class="scard-top">
+          <span style="font-size:9px;color:#4ec9e1">192.168.1.192/27</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4ec9e1;color:#4ec9e1">FLOOR 2</span>
+        </div>
+        <div class="scard-bar"><div class="scard-fill" id="sf3" style="background:#4ec9e1"></div></div>
+        <div class="scard-meta">
+          <span class="scard-det">Hosts: .193–.222 · Usable: 30 ✓ (need 25)</span>
+          <span class="scard-det" style="text-align:right">waste: 5</span>
+        </div>
+      </div>
+
+      <div id="sc4" class="scard" style="border-color:#4eff9a;color:#4eff9a">
+        <div class="scard-top">
+          <span style="font-size:9px;color:#4eff9a">192.168.1.228/30</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a">P2P LINK</span>
+        </div>
+        <div class="scard-bar"><div class="scard-fill" id="sf4" style="background:#4eff9a"></div></div>
+        <div class="scard-meta">
+          <span class="scard-det">Hosts: .229–.230 · Usable: 2 ✓ (exact!)</span>
+          <span class="scard-det" style="text-align:right">waste: 0 🎯</span>
+        </div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">All 4 networks fit in 192.168.1.0/24.</div>
+    <div class="il">232 addresses used, 24 remain free.</div>
+    <div class="ih">vs 847 wasted with fixed /24 each. ⚡</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">SUBNETS</div></div>
+    <div class="sc"><div class="sv gn">232</div><div class="sl">ADDRS USED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">24</div><div class="sl">LEFT OVER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — THE VLSM ALGORITHM
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VLSM ALGORITHM</div>
+    <div class="hdr-sub">ALWAYS ASSIGN LARGEST SUBNET FIRST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOW TO DO IT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PROCESS</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:8px;flex-shrink:0">STEP-BY-STEP VLSM PROCESS</div>
+
+      <div id="st1" class="step" style="color:#e85050">
+        <div class="step-num" style="color:#e85050">1</div>
+        <div style="flex:1">
+          <div class="step-title" style="color:#e85050">SORT BY SIZE — largest first</div>
+          <div class="step-desc">100 → 50 → 25 → 2<br>Prevents fragmentation of address space</div>
+        </div>
+      </div>
+
+      <div id="st2" class="step" style="color:#e8a020">
+        <div class="step-num" style="color:#e8a020">2</div>
+        <div style="flex:1">
+          <div class="step-title" style="color:#e8a020">FIND SMALLEST BLOCK THAT FITS</div>
+          <div class="step-desc">100 hosts → 2⁷=128 → use /25 (126 usable)<br>50 hosts → 2⁶=64 → use /26 (62 usable)<br>25 hosts → 2⁵=32 → use /27 (30 usable)<br>2 hosts → 2²=4 → use /30 (2 usable, exact)</div>
+        </div>
+      </div>
+
+      <div id="st3" class="step" style="color:#4ec9e1">
+        <div class="step-num" style="color:#4ec9e1">3</div>
+        <div style="flex:1">
+          <div class="step-title" style="color:#4ec9e1">ASSIGN ON BLOCK BOUNDARIES</div>
+          <div class="step-desc">/25 starts at .0 → next boundary at .128<br>/26 starts at .128 → next at .192<br>/27 starts at .192 → next at .224<br>Start addr must be divisible by block size</div>
+        </div>
+      </div>
+
+      <div id="st4" class="step" style="color:#4eff9a">
+        <div class="step-num" style="color:#4eff9a">4</div>
+        <div style="flex:1">
+          <div class="step-title" style="color:#4eff9a">VERIFY & DOCUMENT REMAINING</div>
+          <div class="step-desc">Track next free address after each block<br>.232 onward still available for expansion<br>Keep a subnet table — future-you will thank you</div>
+        </div>
+      </div>
+
+      <!-- Formula box -->
+      <div id="fbox" style="border:1px solid #4ec9e150;background:#001a2080;padding:9px 11px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px;letter-spacing:1px">THE FORMULA</div>
+        <div style="font-size:8px;color:#fff;line-height:2.3">
+          hosts needed → next power of 2<br>
+          <span style="color:#4eff9a">prefix = 32 − log₂(block size)</span><br>
+          usable hosts = block size − 2
+        </div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">Sort large→small. Round up to 2ⁿ.</div>
+    <div class="il">Align each subnet to its block boundary.</div>
+    <div class="ih">prefix = 32 − log₂(block). Done.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">LARGE</div><div class="sl">FIRST RULE</div></div>
+    <div class="sc"><div class="sv gn">2ⁿ</div><div class="sl">ROUND UP TO</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">32-n</div><div class="sl">PREFIX LENGTH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — CLOUD RELEVANCE & CHEATSHEET
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VLSM IN THE CLOUD</div>
+    <div class="hdr-sub">VPC SUBNETS = VLSM IN DISGUISE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">AWS / GCP</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="position:absolute;top:10px;left:12px;right:12px;bottom:20px;display:flex;flex-direction:column">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:7px;flex-shrink:0">AWS VPC EXAMPLE — 10.0.0.0/16</div>
+
+      <!-- VPC diagram -->
+      <div id="vpc" style="border:2px solid #4ec9e150;background:#001a2040;padding:8px;opacity:0;transition:opacity .4s;margin-bottom:8px;flex-shrink:0">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">VPC: 10.0.0.0/16 (65,536 addresses)</div>
+        <div style="display:flex;gap:4px;margin-bottom:5px">
+          <div id="vp1" style="flex:2;border:1px solid #4eff9a60;background:#001a1080;padding:6px;opacity:0;transition:opacity .4s">
+            <div style="font-size:7px;color:#4eff9a">PUBLIC /24</div>
+            <div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">10.0.1.0/24<br>web servers<br>254 hosts</div>
+          </div>
+          <div id="vp2" style="flex:2;border:1px solid #4ec9e160;background:#001a2080;padding:6px;opacity:0;transition:opacity .4s">
+            <div style="font-size:7px;color:#4ec9e1">PRIVATE /22</div>
+            <div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">10.0.4.0/22<br>app servers<br>1022 hosts</div>
+          </div>
+          <div id="vp3" style="flex:2;border:1px solid #e8a02060;background:#100c0080;padding:6px;opacity:0;transition:opacity .4s">
+            <div style="font-size:7px;color:#e8a020">DB /26</div>
+            <div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">10.0.8.0/26<br>RDS cluster<br>62 hosts</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px">
+          <div id="vp4" style="flex:1;border:1px solid #9a4ef860;background:#0a082080;padding:5px;opacity:0;transition:opacity .4s">
+            <div style="font-size:6px;color:#9a4ef8">MGMT /28</div>
+            <div style="font-size:6px;color:#666;margin-top:2px;line-height:1.5">10.0.9.0/28<br>bastions</div>
+          </div>
+          <div id="vp5" style="flex:1;border:1px solid #e8505060;background:#1a050580;padding:5px;opacity:0;transition:opacity .4s">
+            <div style="font-size:6px;color:#e85050">FUTURE /20</div>
+            <div style="font-size:6px;color:#666;margin-top:2px;line-height:1.5">10.0.16.0/20<br>reserved</div>
+          </div>
+          <div id="vp6" style="flex:1;border:1px dashed #2a4060;background:#050e1a80;padding:5px;opacity:0;transition:opacity .4s">
+            <div style="font-size:6px;color:#2a4060">FREE</div>
+            <div style="font-size:6px;color:#333;margin-top:2px;line-height:1.5">remaining<br>space</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cheatsheet -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:6px;flex-shrink:0">PREFIX CHEATSHEET</div>
+      <div style="display:flex;gap:2px;margin-bottom:2px;flex-shrink:0">
+        <div id="cs1" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#e85050">/25</div>
+          <div style="font-size:6px;color:#666">126 hosts</div>
+        </div>
+        <div id="cs2" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#e8a020">/26</div>
+          <div style="font-size:6px;color:#666">62 hosts</div>
+        </div>
+        <div id="cs3" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#4ec9e1">/27</div>
+          <div style="font-size:6px;color:#666">30 hosts</div>
+        </div>
+        <div id="cs4" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#4eff9a">/28</div>
+          <div style="font-size:6px;color:#666">14 hosts</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:2px;margin-bottom:7px;flex-shrink:0">
+        <div id="cs5" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#9a4ef8">/29</div>
+          <div style="font-size:6px;color:#666">6 hosts</div>
+        </div>
+        <div id="cs6" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#4eff9a">/30</div>
+          <div style="font-size:6px;color:#666">2 (P2P)</div>
+        </div>
+        <div id="cs7" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#e85050">/24</div>
+          <div style="font-size:6px;color:#666">254 hosts</div>
+        </div>
+        <div id="cs8" style="flex:1;border:1px solid #2a4060;background:#050e1a;padding:5px 3px;opacity:0;transition:opacity .4s;text-align:center">
+          <div style="font-size:8px;color:#e8a020">/22</div>
+          <div style="font-size:6px;color:#666">1022 hosts</div>
+        </div>
+      </div>
+
+      <!-- Final rule -->
+      <div id="final" style="border:2px solid #4eff9a50;background:#001a1080;padding:9px 11px;opacity:0;transition:opacity .5s;flex-shrink:0">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px;letter-spacing:1px">VLSM IS VPC DESIGN</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">AWS/GCP/Azure all use VLSM logic.<br>Plan subnets before you click "Create VPC".<br>Changing later = downtime.</div>
+      </div>
+    </div>
+    <div class="floor floor-b"></div>
+  </div>
+
+  <div class="info">
+    <div class="il">VPC subnetting IS VLSM. Same rules.</div>
+    <div class="il">Plan first. Changing subnets = pain.</div>
+    <div class="ih">Largest first. Power of 2. Align. ✓</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">/30</div><div class="sl">P2P (2 hosts)</div></div>
+    <div class="sc"><div class="sv am">/24</div><div class="sl">254 HOSTS</div></div>
+    <div class="sc"><div class="sv pu">/16</div><div class="sl">65K HOSTS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var T=[];
+function tm(fn,ms){T.push(setTimeout(fn,ms))}
+function clr(){T.forEach(clearTimeout);T=[]}
+
+function go(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(function(s,i){s.classList.toggle('active',i+1===n)});
+  setTimeout(function(){[playS1,playS2,playS3,playS4][n-1]()},200);
+}
+
+function playS1(){
+  clr();
+  var reqs=['r1','r2','r3','r4'];
+  var bars=[['rb1',39],['rb2',20],['rb3',10],['rb4',1]];
+  reqs.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  bars.forEach(function(b){document.getElementById(b[0]).style.width='0%'});
+  document.getElementById('fullbar').style.opacity='0';
+  document.getElementById('wastebox').style.opacity='0';
+
+  tm(function(){document.getElementById('fullbar').style.opacity='1'},300);
+  reqs.forEach(function(id,i){
+    tm(function(){
+      document.getElementById(id).style.opacity='1';
+      setTimeout(function(){document.getElementById(bars[i][0]).style.width=bars[i][1]+'%'},100);
+    },700+i*480);
+  });
+  tm(function(){document.getElementById('wastebox').style.opacity='1'},700+reqs.length*480+300);
+}
+
+function playS2(){
+  clr();
+  var segs=['v1','v2','v3','v4','v5'];
+  var cards=['sc1','sc2','sc3','sc4'];
+  var fills=[['sf1',78],['sf2',78],['sf3',83],['sf4',50]];
+  segs.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  cards.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  fills.forEach(function(f){document.getElementById(f[0]).style.width='0%'});
+
+  segs.forEach(function(id,i){tm(function(){document.getElementById(id).style.opacity='1'},300+i*330)});
+  cards.forEach(function(id,i){
+    tm(function(){
+      document.getElementById(id).style.opacity='1';
+      setTimeout(function(){document.getElementById(fills[i][0]).style.width=fills[i][1]+'%'},150);
+    },300+segs.length*330+i*430);
+  });
+}
+
+function playS3(){
+  clr();
+  var steps=['st1','st2','st3','st4'];
+  steps.forEach(function(id){document.getElementById(id).style.opacity='0'});
+  document.getElementById('fbox').style.opacity='0';
+  steps.forEach(function(id,i){tm(function(){document.getElementById(id).style.opacity='1'},300+i*520)});
+  tm(function(){document.getElementById('fbox').style.opacity='1'},300+steps.length*520+200);
+}
+
+function playS4(){
+  clr();
+  var vpc=['vpc','vp1','vp2','vp3','vp4','vp5','vp6'];
+  var cs=['cs1','cs2','cs3','cs4','cs5','cs6','cs7','cs8','final'];
+  var all=vpc.concat(cs);
+  all.forEach(function(id){document.getElementById(id).style.opacity='0'});
+
+  vpc.forEach(function(id,i){tm(function(){document.getElementById(id).style.opacity='1'},300+i*260)});
+  cs.forEach(function(id,i){tm(function(){document.getElementById(id).style.opacity='1'},300+vpc.length*260+i*140)});
+}
+
+setTimeout(playS1,350);
+</script>
+</body>
+</html>

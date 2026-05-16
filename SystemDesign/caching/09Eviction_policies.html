@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Cache Eviction Policies</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323:wght@400&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:#0a0a0f;overflow:hidden;touch-action:manipulation}
+#app{width:100%;height:100vh;max-width:430px;margin:0 auto;display:flex;flex-direction:column;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:0 14px;flex-shrink:0;border-bottom:1px solid #1a1a2a}
+.hdr-title{font-family:'Press Start 2P';font-size:13px;color:#e8a020;text-align:center;line-height:1.5;text-shadow:0 0 10px #e8a02066}
+.hdr-sub{font-family:'Press Start 2P';font-size:9px;color:#555;text-align:center}
+.dots{display:flex;gap:9px}
+.dot{width:11px;height:11px;background:#1a1a2e;border:1px solid #333;border-radius:1px}
+.dot.on{background:#e8a020;border-color:#e8a020;box-shadow:0 0 6px #e8a020}
+.dot.done{background:#4ec9e1;border-color:#4ec9e1}
+.canvas{flex:1;position:relative;overflow:hidden;min-height:0}
+.sc-label{position:absolute;top:10px;left:12px;font-family:'Press Start 2P';font-size:13px;z-index:5}
+.sc-badge{position:absolute;top:10px;right:12px;font-family:'Press Start 2P';font-size:10px;padding:4px 9px;border:2px solid;z-index:5}
+.panel{height:84px;border-top:2px solid;border-bottom:2px solid;flex-shrink:0;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+.pl{font-family:'Press Start 2P';font-size:9px;line-height:1.7}
+.stats{height:68px;display:flex;gap:8px;padding:0 12px;align-items:center;flex-shrink:0}
+.stat{flex:1;border:1px solid #2a2a3a;padding:7px 4px;text-align:center;background:#0a0a14}
+.stat-val{font-family:'Press Start 2P';font-size:14px;display:block}
+.stat-lbl{font-family:'Press Start 2P';font-size:8px;color:#555;display:block;margin-top:4px}
+.btns{height:58px;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;flex-shrink:0;background:#05050a;border-top:1px solid #181828}
+.btn{font-family:'Press Start 2P';font-size:10px;padding:9px 13px;border:2px solid;cursor:pointer;background:transparent;touch-action:manipulation}
+.btn:active{opacity:.6}
+.btn-play{color:#4eff9a;border-color:#4eff9a}
+.btn-prev{color:#555;border-color:#333}
+.btn-next{color:#4ec9e1;border-color:#4ec9e1}
+.btn-restart{color:#e8a020;border-color:#e8a020}
+.star{position:absolute;width:2px;height:2px;background:#fff;animation:twinkle var(--d,2s) var(--delay,0s) infinite alternate}
+@keyframes twinkle{from{opacity:.07}to{opacity:.45}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1 · HOOK ═══ -->
+<div class="scene active" id="s1">
+  <div class="hdr">
+    <div class="hdr-title">EVICTION POLICIES</div>
+    <div class="hdr-sub">WHO GETS KICKED WHEN CACHE IS FULL?</div>
+    <div class="dots"><div class="dot on"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">THE PROBLEM</div>
+    <div class="sc-badge" style="color:#e85050;border-color:#e85050">FULL CACHE</div>
+    <div class="star" style="top:3%;left:7%;--d:2.1s;--delay:.3s"></div>
+    <div class="star" style="top:7%;left:23%;--d:1.8s;--delay:.7s"></div>
+    <div class="star" style="top:4%;left:45%;--d:2.4s;--delay:.1s"></div>
+    <div class="star" style="top:11%;left:65%;--d:1.7s;--delay:.9s"></div>
+    <div class="star" style="top:6%;left:83%;--d:2.2s;--delay:.4s"></div>
+    <div class="star" style="top:16%;left:91%;--d:1.6s;--delay:.8s"></div>
+    <div class="star" style="top:18%;left:13%;--d:2.5s;--delay:.2s"></div>
+    <div class="star" style="top:3%;left:96%;--d:1.9s;--delay:.6s"></div>
+    <div class="star" style="top:20%;left:55%;--d:2.0s;--delay:.5s"></div>
+    <div class="star" style="top:13%;left:37%;--d:1.5s;--delay:1.1s"></div>
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- Hook statement -->
+      <g id="h1q" opacity="0">
+        <rect x="15" y="4" width="360" height="60" fill="#12081e" stroke="#e8a020" stroke-width="2.5" rx="4"/>
+        <text x="195" y="24" font-family="'Press Start 2P'" font-size="8.5" fill="#888"    text-anchor="middle">YOUR CACHE IS FULL.</text>
+        <text x="195" y="42" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">WHO GETS KICKED OUT?</text>
+        <text x="195" y="58" font-family="'Press Start 2P'" font-size="8"   fill="#555"    text-anchor="middle">DEPENDS ON YOUR POLICY.</text>
+      </g>
+
+      <!-- Full cache visual -->
+      <g id="h1cache" opacity="0">
+        <!-- cache bar label -->
+        <text x="195" y="88" font-family="'Press Start 2P'" font-size="8" fill="#555" text-anchor="middle">CACHE  [ 4 / 4 SLOTS FULL ]</text>
+        <!-- 4 slots packed -->
+        <rect x="8"   y="94" width="88" height="48" fill="#1a0e2e" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="52"  y="113" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">user:42</text>
+        <text x="52"  y="129" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">3 min ago</text>
+        <rect x="102" y="94" width="88" height="48" fill="#1a0e2e" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="146" y="113" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">cart:99</text>
+        <text x="146" y="129" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">8 min ago</text>
+        <rect x="196" y="94" width="88" height="48" fill="#1a0e2e" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="240" y="113" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">promo:x</text>
+        <text x="240" y="129" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">20 min ago</text>
+        <rect x="290" y="94" width="92" height="48" fill="#1a0e2e" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="336" y="113" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">config</text>
+        <text x="336" y="129" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">45 min ago</text>
+        <!-- NEW entry knocking -->
+        <text x="195" y="158" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">▼ NEW ENTRY NEEDS A SLOT</text>
+        <rect x="140" y="166" width="110" height="36" fill="#1a0505" stroke="#e85050" stroke-width="2.5"/>
+        <text x="195" y="183" font-family="'Press Start 2P'" font-size="8" fill="#e85050" text-anchor="middle">session:new</text>
+        <text x="195" y="197" font-family="'Press Start 2P'" font-size="7" fill="#888"    text-anchor="middle">just arrived</text>
+      </g>
+
+      <!-- 3 policy pills -->
+      <g id="h1pills" opacity="0">
+        <rect x="8"   y="216" width="114" height="86" fill="#0a1a08" stroke="#4eff9a" stroke-width="2"/>
+        <text x="65"  y="236" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a" text-anchor="middle">LRU</text>
+        <text x="65"  y="252" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Least</text>
+        <text x="65"  y="265" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Recently</text>
+        <text x="65"  y="278" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Used</text>
+        <text x="65"  y="295" font-family="'Press Start 2P'" font-size="7"   fill="#4eff9a" text-anchor="middle">DEFAULT</text>
+
+        <rect x="138" y="216" width="114" height="86" fill="#051020" stroke="#4ec9e1" stroke-width="2"/>
+        <text x="195" y="236" font-family="'Press Start 2P'" font-size="9"   fill="#4ec9e1" text-anchor="middle">LFU</text>
+        <text x="195" y="252" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Least</text>
+        <text x="195" y="265" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Frequently</text>
+        <text x="195" y="278" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">Used</text>
+        <text x="195" y="295" font-family="'Press Start 2P'" font-size="7"   fill="#4ec9e1" text-anchor="middle">CDN/VIRAL</text>
+
+        <rect x="268" y="216" width="114" height="86" fill="#1a0e00" stroke="#e8a020" stroke-width="2"/>
+        <text x="325" y="236" font-family="'Press Start 2P'" font-size="9"   fill="#e8a020" text-anchor="middle">FIFO</text>
+        <text x="325" y="252" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">First</text>
+        <text x="325" y="265" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">In</text>
+        <text x="325" y="278" font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">First Out</text>
+        <text x="325" y="295" font-family="'Press Start 2P'" font-size="7"   fill="#e8a020" text-anchor="middle">SIMPLEST</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p1a">▶ PRESS PLAY TO START</div>
+    <div class="pl" style="color:#aaa;display:none" id="p1b">3 POLICIES. EACH EVICTS A DIFFERENT VICTIM.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">LRU</span><span class="stat-lbl">MOST COMMON</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">LFU</span><span class="stat-lbl">FREQUENCY</span></div>
+    <div class="stat"><span class="stat-val" style="color:#e8a020">FIFO</span><span class="stat-lbl">SIMPLEST</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play1()">▶ PLAY</button>
+    <button class="btn btn-prev" style="opacity:.3" disabled>◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 · LRU ═══ -->
+<div class="scene" id="s2">
+  <div class="hdr">
+    <div class="hdr-title">LRU</div>
+    <div class="hdr-sub">LEAST RECENTLY USED — THE DEFAULT</div>
+    <div class="dots"><div class="dot done"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0a1a0a">
+    <div class="sc-label" style="color:#4eff9a">LRU POLICY</div>
+    <div class="sc-badge" style="color:#4eff9a;border-color:#4eff9a">DEFAULT</div>
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- Rule label -->
+      <rect x="8" y="4" width="374" height="28" fill="#051a05" stroke="#4eff9a" stroke-width="2" rx="2"/>
+      <text x="195" y="22" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">RULE: EVICT THE COLDEST KEY</text>
+
+      <!-- Recency axis label -->
+      <text x="8"   y="50" font-family="'Press Start 2P'" font-size="7" fill="#4eff9a">HOT (recent)</text>
+      <text x="382" y="50" font-family="'Press Start 2P'" font-size="7" fill="#e85050" text-anchor="end">COLD (old)</text>
+      <line x1="8" y1="54" x2="382" y2="54" stroke="#222" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+      <!-- 4 cache slots ranked by recency -->
+      <!-- Slot 1: hottest, left -->
+      <rect id="l1" x="8"   y="60" width="84" height="72" fill="#0a2a10" stroke="#4eff9a" stroke-width="2.5"/>
+      <text x="50"  y="81"  font-family="'Press Start 2P'" font-size="7"   fill="#4eff9a" text-anchor="middle">user:42</text>
+      <text x="50"  y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">🔥 3s ago</text>
+      <text x="50"  y="110" font-family="'Press Start 2P'" font-size="6"   fill="#4eff9a" text-anchor="middle">HOTTEST</text>
+      <text x="50"  y="124" font-family="'Press Start 2P'" font-size="6"   fill="#555"    text-anchor="middle">rank #1</text>
+
+      <rect id="l2" x="98"  y="60" width="84" height="72" fill="#0a1e0a" stroke="#4ec9e1" stroke-width="2"/>
+      <text x="140" y="81"  font-family="'Press Start 2P'" font-size="7"   fill="#4ec9e1" text-anchor="middle">cart:99</text>
+      <text x="140" y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">45s ago</text>
+      <text x="140" y="110" font-family="'Press Start 2P'" font-size="6"   fill="#888"    text-anchor="middle">WARM</text>
+      <text x="140" y="124" font-family="'Press Start 2P'" font-size="6"   fill="#555"    text-anchor="middle">rank #2</text>
+
+      <rect id="l3" x="188" y="60" width="84" height="72" fill="#0a140a" stroke="#888" stroke-width="2"/>
+      <text x="230" y="81"  font-family="'Press Start 2P'" font-size="7"   fill="#888"    text-anchor="middle">promo:x</text>
+      <text x="230" y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#888"    text-anchor="middle">5 min ago</text>
+      <text x="230" y="110" font-family="'Press Start 2P'" font-size="6"   fill="#888"    text-anchor="middle">COOL</text>
+      <text x="230" y="124" font-family="'Press Start 2P'" font-size="6"   fill="#555"    text-anchor="middle">rank #3</text>
+
+      <rect id="l4" x="278" y="60" width="104" height="72" fill="#1a0505" stroke="#e85050" stroke-width="2.5"/>
+      <text x="330" y="81"  font-family="'Press Start 2P'" font-size="7"   fill="#e85050" text-anchor="middle">config</text>
+      <text x="330" y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">🧊 45m ago</text>
+      <text x="330" y="110" font-family="'Press Start 2P'" font-size="6"   fill="#e85050" text-anchor="middle">COLDEST</text>
+      <text x="330" y="124" font-family="'Press Start 2P'" font-size="6"   fill="#e85050" text-anchor="middle">← EVICT</text>
+
+      <!-- Eviction arrow -->
+      <g id="lru-evict" opacity="0">
+        <line x1="330" y1="132" x2="330" y2="150" stroke="#e85050" stroke-width="3"/>
+        <polygon points="330,158 322,146 338,146" fill="#e85050"/>
+        <text x="330" y="174" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">EVICTED! ✗</text>
+      </g>
+
+      <!-- New entry slides in -->
+      <g id="lru-new" opacity="0">
+        <rect x="278" y="60" width="104" height="72" fill="#051a08" stroke="#4eff9a" stroke-width="2.5"/>
+        <text x="330" y="81"  font-family="'Press Start 2P'" font-size="7"   fill="#4eff9a" text-anchor="middle">session:new</text>
+        <text x="330" y="95"  font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">just now</text>
+        <text x="330" y="110" font-family="'Press Start 2P'" font-size="6"   fill="#4eff9a" text-anchor="middle">PLACED ✓</text>
+      </g>
+
+      <!-- How LRU works -->
+      <g id="lru-how" opacity="0">
+        <rect x="8" y="190" width="374" height="112" fill="#051a05" stroke="#4eff9a" stroke-width="1.5" rx="3"/>
+        <text x="195" y="210" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a" text-anchor="middle">HOW LRU WORKS:</text>
+        <text x="195" y="230" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">Track last-access time per key</text>
+        <text x="195" y="250" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">On eviction → drop oldest access</text>
+        <text x="195" y="270" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">Implementation: doubly-linked list</text>
+        <text x="195" y="290" font-family="'Press Start 2P'" font-size="8"   fill="#555"    text-anchor="middle">Redis default · O(1) per operation</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#0a200a;border-top:2px solid #1a4a1a"></div><div style="flex:1;background:#081808;border-top:2px solid #1a4a1a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4eff9a;background:#001a05ee">
+    <div class="pl" style="color:#4eff9a" id="p2a">▶ PRESS PLAY TO SEE LRU EVICTION</div>
+    <div class="pl" style="color:#e85050;display:none" id="p2b">COLDEST KEY (45m ago) GETS EVICTED FIRST</div>
+    <div class="pl" style="color:#888;display:none"    id="p2c">RECENTLY USED = STAYS. COLD = GONE.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">COLD</span><span class="stat-lbl">VICTIM</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">TIME</span><span class="stat-lbl">TRACKED BY</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">O(1)</span><span class="stat-lbl">COMPLEXITY</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play2()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 · LFU ═══ -->
+<div class="scene" id="s3">
+  <div class="hdr">
+    <div class="hdr-title">LFU</div>
+    <div class="hdr-sub">LEAST FREQUENTLY USED</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div><div class="dot"></div></div>
+  </div>
+  <div class="canvas" style="background:#0d1a2e">
+    <div class="sc-label" style="color:#4ec9e1">LFU POLICY</div>
+    <div class="sc-badge" style="color:#4ec9e1;border-color:#4ec9e1">CDN / VIRAL</div>
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <rect x="8" y="4" width="374" height="28" fill="#051020" stroke="#4ec9e1" stroke-width="2" rx="2"/>
+      <text x="195" y="22" font-family="'Press Start 2P'" font-size="8.5" fill="#4ec9e1" text-anchor="middle">RULE: EVICT THE LEAST HIT KEY</text>
+
+      <!-- Frequency bars visual — 4 keys with hit counters -->
+      <!-- key labels row -->
+      <text x="52"  y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">video:A</text>
+      <text x="146" y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">video:B</text>
+      <text x="240" y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">img:logo</text>
+      <text x="334" y="50" font-family="'Press Start 2P'" font-size="7" fill="#888" text-anchor="middle">page:404</text>
+
+      <!-- Bar chart — heights proportional to hit count -->
+      <!-- video:A — 980 hits — tallest -->
+      <rect id="f1bg" x="18"  y="56" width="68" height="110" fill="#0a1828" stroke="#1a3a5a" stroke-width="1"/>
+      <rect id="f1bar" x="22"  y="56" width="60" height="0" fill="#4eff9a"/>
+      <text id="f1cnt" x="52"  y="76"  font-family="'Press Start 2P'" font-size="9" fill="#4eff9a" text-anchor="middle" opacity="0">980</text>
+      <text x="52"  y="172" font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">HITS</text>
+
+      <!-- video:B — 640 hits -->
+      <rect id="f2bg" x="112" y="56" width="68" height="110" fill="#0a1828" stroke="#1a3a5a" stroke-width="1"/>
+      <rect id="f2bar" x="116" y="56" width="60" height="0" fill="#4ec9e1"/>
+      <text id="f2cnt" x="146" y="76"  font-family="'Press Start 2P'" font-size="9" fill="#4ec9e1" text-anchor="middle" opacity="0">640</text>
+      <text x="146" y="172" font-family="'Press Start 2P'" font-size="6.5" fill="#4ec9e1" text-anchor="middle">HITS</text>
+
+      <!-- img:logo — 210 hits -->
+      <rect id="f3bg" x="206" y="56" width="68" height="110" fill="#0a1828" stroke="#1a3a5a" stroke-width="1"/>
+      <rect id="f3bar" x="210" y="56" width="60" height="0" fill="#e8a020"/>
+      <text id="f3cnt" x="240" y="76"  font-family="'Press Start 2P'" font-size="9" fill="#e8a020" text-anchor="middle" opacity="0">210</text>
+      <text x="240" y="172" font-family="'Press Start 2P'" font-size="6.5" fill="#e8a020" text-anchor="middle">HITS</text>
+
+      <!-- page:404 — 3 hits — shortest, evicted -->
+      <rect id="f4bg" x="300" y="56" width="82" height="110" fill="#1a0505" stroke="#e85050" stroke-width="2"/>
+      <rect id="f4bar" x="304" y="56" width="74" height="0" fill="#e85050"/>
+      <text id="f4cnt" x="341" y="76"  font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle" opacity="0">3</text>
+      <text x="341" y="164" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">HITS</text>
+      <text x="341" y="175" font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">← EVICT</text>
+
+      <!-- Eviction -->
+      <g id="lfu-evict" opacity="0">
+        <line x1="341" y1="166" x2="341" y2="185" stroke="#e85050" stroke-width="3"/>
+        <polygon points="341,193 333,181 349,181" fill="#e85050"/>
+        <text x="341" y="208" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">EVICTED! ✗</text>
+      </g>
+
+      <!-- How LFU works -->
+      <g id="lfu-how" opacity="0">
+        <rect x="8" y="220" width="374" height="82" fill="#051020" stroke="#4ec9e1" stroke-width="1.5" rx="3"/>
+        <text x="195" y="240" font-family="'Press Start 2P'" font-size="9"   fill="#4ec9e1" text-anchor="middle">HOW LFU WORKS:</text>
+        <text x="195" y="260" font-family="'Press Start 2P'" font-size="8.5" fill="#aaa"    text-anchor="middle">Count total hits per key lifetime</text>
+        <text x="195" y="278" font-family="'Press Start 2P'" font-size="8.5" fill="#4ec9e1" text-anchor="middle">Evict key with lowest hit count</text>
+        <text x="195" y="296" font-family="'Press Start 2P'" font-size="8"   fill="#555"    text-anchor="middle">Best for: CDN · viral content · media</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0f2240;border-top:2px solid #1e4080"></div><div style="flex:1;background:#0c1c38;border-top:2px solid #1e4080"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#4ec9e1;background:#001a20ee">
+    <div class="pl" style="color:#4ec9e1" id="p3a">▶ PRESS PLAY TO SEE LFU EVICTION</div>
+    <div class="pl" style="color:#e85050;display:none" id="p3b">page:404 WITH ONLY 3 HITS GETS EVICTED</div>
+    <div class="pl" style="color:#888;display:none"    id="p3c">POPULAR CONTENT STAYS. OBSCURE = GONE.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e85050">LOW HIT</span><span class="stat-lbl">VICTIM</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">COUNT</span><span class="stat-lbl">TRACKED BY</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">CDN</span><span class="stat-lbl">BEST USE</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play3()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn btn-next" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 · FIFO + COMPARISON ═══ -->
+<div class="scene" id="s4">
+  <div class="hdr">
+    <div class="hdr-title">FIFO + COMPARISON</div>
+    <div class="hdr-sub">OLDEST IN, FIRST OUT — THEN: PICK ONE</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot on"></div></div>
+  </div>
+  <div class="canvas" style="background:#1a1025">
+    <div class="sc-label" style="color:#e8a020">FIFO + GUIDE</div>
+    <div class="sc-badge" style="color:#e8a020;border-color:#e8a020">CHOOSE</div>
+    <svg style="position:absolute;top:36px;left:0;width:100%;height:calc(100% - 40px)" viewBox="0 0 390 310" preserveAspectRatio="xMidYMid meet">
+
+      <!-- FIFO section -->
+      <g id="fi1" opacity="0">
+        <rect x="8" y="4" width="374" height="28" fill="#1a0e00" stroke="#e8a020" stroke-width="2" rx="2"/>
+        <text x="195" y="22" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">FIFO: EVICT THE OLDEST ENTRY</text>
+      </g>
+
+      <!-- FIFO queue visual — 4 entries, left=oldest -->
+      <g id="fi2" opacity="0">
+        <!-- Queue pipe -->
+        <rect x="8" y="40" width="374" height="52" fill="#100a00" stroke="#e8a020" stroke-width="1.5"/>
+        <!-- Entry 1: oldest LEFT -->
+        <rect id="fi-e1" x="12"  y="44" width="84" height="44" fill="#2a1500" stroke="#e85050" stroke-width="2"/>
+        <text x="54"  y="62"  font-family="'Press Start 2P'" font-size="7"   fill="#e85050" text-anchor="middle">log:jan</text>
+        <text x="54"  y="78"  font-family="'Press Start 2P'" font-size="6.5" fill="#e85050" text-anchor="middle">OLDEST ✗</text>
+        <!-- Entry 2 -->
+        <rect x="101" y="44" width="84" height="44" fill="#1a1000" stroke="#888" stroke-width="1.5"/>
+        <text x="143" y="62"  font-family="'Press Start 2P'" font-size="7"   fill="#888" text-anchor="middle">log:feb</text>
+        <text x="143" y="78"  font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">2nd</text>
+        <!-- Entry 3 -->
+        <rect x="190" y="44" width="84" height="44" fill="#1a1000" stroke="#888" stroke-width="1.5"/>
+        <text x="232" y="62"  font-family="'Press Start 2P'" font-size="7"   fill="#888" text-anchor="middle">log:mar</text>
+        <text x="232" y="78"  font-family="'Press Start 2P'" font-size="6.5" fill="#555" text-anchor="middle">3rd</text>
+        <!-- Entry 4: newest RIGHT -->
+        <rect x="279" y="44" width="99" height="44" fill="#0a1a08" stroke="#4eff9a" stroke-width="1.5"/>
+        <text x="328" y="62"  font-family="'Press Start 2P'" font-size="7"   fill="#4eff9a" text-anchor="middle">log:apr</text>
+        <text x="328" y="78"  font-family="'Press Start 2P'" font-size="6.5" fill="#4eff9a" text-anchor="middle">NEWEST</text>
+        <!-- direction labels -->
+        <text x="54"  y="100" font-family="'Press Start 2P'" font-size="7" fill="#e85050" text-anchor="middle">← EXIT</text>
+        <text x="328" y="100" font-family="'Press Start 2P'" font-size="7" fill="#4eff9a" text-anchor="middle">ENTER →</text>
+      </g>
+
+      <!-- FIFO eviction animation -->
+      <g id="fi-evict" opacity="0">
+        <rect x="12" y="44" width="84" height="44" fill="#1a0505" stroke="#e85050" stroke-width="3"/>
+        <text x="54" y="116" font-family="'Press Start 2P'" font-size="9" fill="#e85050" text-anchor="middle">EVICTED! ✗</text>
+        <text x="195" y="132" font-family="'Press Start 2P'" font-size="8" fill="#aaa" text-anchor="middle">ORDER IN = ORDER OUT. NO TRACKING.</text>
+      </g>
+
+      <!-- Comparison table -->
+      <g id="fi3" opacity="0">
+        <!-- Header -->
+        <rect x="8"   y="148" width="110" height="22" fill="#060610" stroke="#333" stroke-width="1"/>
+        <text x="63"  y="163" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">POLICY</text>
+        <rect x="122" y="148" width="120" height="22" fill="#060610" stroke="#333" stroke-width="1"/>
+        <text x="182" y="163" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">EVICTS</text>
+        <rect x="246" y="148" width="136" height="22" fill="#060610" stroke="#333" stroke-width="1"/>
+        <text x="314" y="163" font-family="'Press Start 2P'" font-size="7" fill="#555" text-anchor="middle">BEST FOR</text>
+        <!-- LRU row -->
+        <rect x="8"   y="170" width="110" height="32" fill="#0a2010" stroke="#4eff9a" stroke-width="1.5"/>
+        <text x="63"  y="191" font-family="'Press Start 2P'" font-size="8.5" fill="#4eff9a" text-anchor="middle">LRU</text>
+        <rect x="122" y="170" width="120" height="32" fill="#0a1a08" stroke="#4eff9a" stroke-width="1"/>
+        <text x="182" y="191" font-family="'Press Start 2P'" font-size="7.5" fill="#aaa"    text-anchor="middle">Coldest time</text>
+        <rect x="246" y="170" width="136" height="32" fill="#0a1a08" stroke="#4eff9a" stroke-width="1"/>
+        <text x="314" y="191" font-family="'Press Start 2P'" font-size="7.5" fill="#4eff9a" text-anchor="middle">APIs · sessions</text>
+        <!-- LFU row -->
+        <rect x="8"   y="202" width="110" height="32" fill="#051020" stroke="#4ec9e1" stroke-width="1.5"/>
+        <text x="63"  y="223" font-family="'Press Start 2P'" font-size="8.5" fill="#4ec9e1" text-anchor="middle">LFU</text>
+        <rect x="122" y="202" width="120" height="32" fill="#050e18" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="182" y="223" font-family="'Press Start 2P'" font-size="7.5" fill="#aaa"    text-anchor="middle">Lowest hits</text>
+        <rect x="246" y="202" width="136" height="32" fill="#050e18" stroke="#4ec9e1" stroke-width="1"/>
+        <text x="314" y="223" font-family="'Press Start 2P'" font-size="7.5" fill="#4ec9e1" text-anchor="middle">CDN · viral</text>
+        <!-- FIFO row -->
+        <rect x="8"   y="234" width="110" height="32" fill="#1a1000" stroke="#e8a020" stroke-width="1.5"/>
+        <text x="63"  y="255" font-family="'Press Start 2P'" font-size="8.5" fill="#e8a020" text-anchor="middle">FIFO</text>
+        <rect x="122" y="234" width="120" height="32" fill="#120e00" stroke="#e8a020" stroke-width="1"/>
+        <text x="182" y="255" font-family="'Press Start 2P'" font-size="7.5" fill="#aaa"    text-anchor="middle">Oldest added</text>
+        <rect x="246" y="234" width="136" height="32" fill="#120e00" stroke="#e8a020" stroke-width="1"/>
+        <text x="314" y="255" font-family="'Press Start 2P'" font-size="7.5" fill="#e8a020" text-anchor="middle">Simple queues</text>
+      </g>
+
+      <!-- Default rule -->
+      <g id="fi4" opacity="0">
+        <rect x="8" y="276" width="374" height="32" fill="#0a0520" stroke="#4eff9a" stroke-width="2.5" rx="3"/>
+        <text x="195" y="290" font-family="'Press Start 2P'" font-size="9"   fill="#4eff9a" text-anchor="middle">DEFAULT: LRU — unless you know better</text>
+        <text x="195" y="303" font-family="'Press Start 2P'" font-size="7.5" fill="#555"    text-anchor="middle">Redis: allkeys-lru or volatile-lfu</text>
+      </g>
+    </svg>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:38px;display:flex">
+      <div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#2a1f3d;border-top:2px solid #4a3a6a"></div><div style="flex:1;background:#231830;border-top:2px solid #4a3a6a"></div>
+    </div>
+  </div>
+  <div class="panel" style="border-color:#e8a020;background:#100c00ee">
+    <div class="pl" style="color:#e8a020" id="p4a">▶ PRESS PLAY TO SEE FIFO + TABLE</div>
+    <div class="pl" style="color:#e8a020;display:none" id="p4b">FIFO: OLDEST ENTRY EXITS FIRST. NO TRACKING.</div>
+    <div class="pl" style="color:#4eff9a;display:none" id="p4c">USE LRU BY DEFAULT. LFU FOR VIRAL CONTENT.</div>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val" style="color:#e8a020">ORDER</span><span class="stat-lbl">FIFO TRACKS</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4eff9a">LRU</span><span class="stat-lbl">DEFAULT PICK</span></div>
+    <div class="stat"><span class="stat-val" style="color:#4ec9e1">LFU</span><span class="stat-lbl">FOR CDN</span></div>
+  </div>
+  <div class="btns">
+    <button class="btn btn-play" onclick="play4()">▶ PLAY</button>
+    <button class="btn btn-prev" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn btn-restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let T=[];
+function clr(){T.forEach(clearTimeout);T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function op(id,v){let e=document.getElementById(id);if(e)e.style.opacity=String(v);}
+function sh(id){op(id,1);}
+function hd(id){op(id,0);}
+function bl(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function hn(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function attr(id,a,v){let e=document.getElementById(id);if(e)e.setAttribute(a,v);}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+}
+function resetScene(n){
+  if(n===1){['h1q','h1cache','h1pills'].forEach(hd);bl('p1a');hn('p1b');}
+  if(n===2){
+    ['lru-evict','lru-new','lru-how'].forEach(hd);
+    bl('p2a');hn('p2b');hn('p2c');
+  }
+  if(n===3){
+    ['lfu-evict','lfu-how'].forEach(hd);
+    // reset bars to 0 height
+    ['f1bar','f2bar','f3bar','f4bar'].forEach(id=>{attr(id,'height','0');attr(id,'y','166');});
+    ['f1cnt','f2cnt','f3cnt','f4cnt'].forEach(hd);
+    bl('p3a');hn('p3b');hn('p3c');
+  }
+  if(n===4){
+    ['fi1','fi2','fi-evict','fi3','fi4'].forEach(hd);
+    bl('p4a');hn('p4b');hn('p4c');
+  }
+}
+
+/* ── SCENE 1 ── */
+function play1(){
+  clr();resetScene(1);
+  af(300,()=>sh('h1q'));
+  af(1100,()=>sh('h1cache'));
+  af(2100,()=>sh('h1pills'));
+  af(2400,()=>{hn('p1a');bl('p1b');});
+}
+
+/* ── SCENE 2 LRU ── */
+function play2(){
+  clr();resetScene(2);
+  // cold slot flashes red
+  af(400,()=>{hn('p2a');bl('p2b');bl('p2c');});
+  af(700,()=>sh('lru-evict'));
+  af(1600,()=>{hd('lru-evict');sh('lru-new');});
+  af(2200,()=>sh('lru-how'));
+}
+
+/* ── SCENE 3 LFU ── */
+function play3(){
+  clr();resetScene(3);
+  hn('p3a');bl('p3b');bl('p3c');
+  // animate bars growing — heights proportional to hits
+  // total bar zone y:56–166 = 110px
+  // video:A 980 → 106px tall → y = 166-106=60
+  // video:B 640 → 72px → y=94
+  // img:logo 210 → 24px → y=142
+  // page:404 3 → 3px → y=163
+  const bars=[
+    {id:'f1bar',cnt:'f1cnt',maxH:106,col:'#4eff9a'},
+    {id:'f2bar',cnt:'f2cnt',maxH:72, col:'#4ec9e1'},
+    {id:'f3bar',cnt:'f3cnt',maxH:24, col:'#e8a020'},
+    {id:'f4bar',cnt:'f4cnt',maxH:4,  col:'#e85050'},
+  ];
+  const baseY=166;
+  bars.forEach((b,i)=>{
+    af(300+i*200,()=>{
+      let el=document.getElementById(b.id);
+      if(el){el.setAttribute('height',String(b.maxH));el.setAttribute('y',String(baseY-b.maxH));}
+      sh(b.cnt);
+    });
+  });
+  af(1500,()=>sh('lfu-evict'));
+  af(2300,()=>sh('lfu-how'));
+}
+
+/* ── SCENE 4 FIFO ── */
+function play4(){
+  clr();resetScene(4);
+  af(200,()=>{sh('fi1');hn('p4a');bl('p4b');bl('p4c');});
+  af(800,()=>sh('fi2'));
+  af(1500,()=>sh('fi-evict'));
+  af(2300,()=>sh('fi3'));
+  af(3100,()=>sh('fi4'));
+}
+</script>
+</body>
+</html>
