@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Cache Penetration & Avalanche</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.row-lbl{font-size:7px;color:#666;letter-spacing:1px;margin-bottom:3px}
+/* arrow lanes */
+.lane{position:relative;height:44px;overflow:hidden;background:#0a0814;border:1px solid #1a1030;border-radius:2px;margin-bottom:3px}
+.arrow-fill{position:absolute;top:50%;transform:translateY(-50%);left:0;width:0;height:3px;border-radius:2px}
+.arrow-lbl{position:absolute;top:6px;left:6px;font-size:6px;white-space:nowrap}
+.arrow-tip{position:absolute;top:50%;right:0;transform:translateY(-50%) translateX(100%);font-size:9px}
+/* bloom filter dots */
+.bloom-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:2px}
+.bloom-cell{height:10px;border-radius:1px;background:#1a1030;transition:background .2s}
+.bloom-cell.set{background:#4eff9a}
+.bloom-cell.hit{background:#e85050}
+/* timeline bars */
+.tbar{height:20px;border-radius:2px 2px 0 0;width:0;transition:width 0s;display:inline-block;vertical-align:bottom}
+/* circuit breaker */
+.cb-state{padding:8px 12px;border:2px solid;border-radius:2px;text-align:center;font-size:9px;transition:all .3s}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1 · HOOK ══════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">PENETRATION &<br>AVALANCHE</div>
+    <div class="hdr-sub">TWO WAYS YOUR CACHE KILLS YOUR DB</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE SILENT KILLERS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ADVANCED</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="h1hook" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="color:#e85050;font-size:9px;line-height:1.9;margin-bottom:6px">"TWO WAYS ATTACKERS (AND BAD TTLs)</div>
+        <div style="color:#fff;font-size:9px;line-height:1.9">CAN TAKE DOWN YOUR DATABASE<br>THROUGH YOUR CACHE."</div>
+        <div style="color:#888;font-size:7px;margin-top:8px;line-height:1.8">Seen in: DDoS attacks, flash sales,<br>rolling deployments at scale.</div>
+      </div>
+
+      <!-- Problem 1 card -->
+      <div class="fade" id="h1p1" style="border:2px solid #e8a020;background:#120a00;padding:12px;border-radius:2px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="font-size:20px">🔫</div>
+          <div style="font-size:10px;color:#e8a020">CACHE PENETRATION</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Querying keys that <span style="color:#e85050">don't exist</span> anywhere.<br>
+          Cache: miss. DB: miss. DB still gets hammered.<br>
+          <span style="color:#e8a020">Used by attackers to DDOS your DB.</span>
+        </div>
+      </div>
+
+      <!-- Problem 2 card -->
+      <div class="fade" id="h1p2" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="font-size:20px">🌊</div>
+          <div style="font-size:10px;color:#e85050">CACHE AVALANCHE</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Mass expiry or <span style="color:#e85050">cache node crash</span> → all<br>
+          requests flood DB simultaneously.<br>
+          <span style="color:#e85050">Kills DB even without an attacker.</span>
+        </div>
+      </div>
+
+      <!-- Difference table -->
+      <div class="fade" id="h1diff">
+        <div class="row-lbl">KEY DIFFERENCE</div>
+        <div style="border:1px solid #2a1f3d;border-radius:2px;overflow:hidden">
+          <div style="display:flex;background:#0e0a18">
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#555;border-right:1px solid #1a1a2a">TYPE</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#555;border-right:1px solid #1a1a2a">TRIGGER</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#555">VICTIM</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a1a2a">
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;border-right:1px solid #1a1a2a">Penetration</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#aaa;border-right:1px solid #1a1a2a">Non-existent keys</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#e85050">DB every req</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a1a2a">
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e85050;border-right:1px solid #1a1a2a">Avalanche</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#aaa;border-right:1px solid #1a1a2a">Mass expiry/crash</div>
+            <div style="flex:1.5;padding:7px 8px;font-size:7px;color:#e85050">DB all at once</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO START</div>
+    <div class="ih rd" id="s1i2" style="display:none">TWO ATTACK VECTORS. BOTH BYPASS THE CACHE.</div>
+    <div class="il" id="s1i3" style="display:none">BOTH RESULT IN DB FLOODING AND OUTAGE.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2</div><div class="sl">FAILURE<br>MODES</div></div>
+    <div class="sc"><div class="sv am">BOTH</div><div class="sl">FLOOD<br>THE DB</div></div>
+    <div class="sc"><div class="sv rd">SENIOR</div><div class="sl">LEVEL<br>TOPIC</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2 · PENETRATION ATTACK ══════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CACHE PENETRATION</div>
+    <div class="hdr-sub">BOT FIRES NON-EXISTENT IDs → DB DIES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE ATTACK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PENETRATION</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="row-lbl">BOT FIRES RANDOM NON-EXISTENT IDs</div>
+
+      <!-- Bot + arrows visual -->
+      <div style="background:#0e0a14;border:1px solid #2a1030;border-radius:2px;padding:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <div style="font-size:18px">🤖</div>
+          <div style="font-size:8px;color:#e85050">ATTACKER BOT</div>
+          <div id="s2_reqcount" style="margin-left:auto;font-size:8px;color:#e8a020;border:1px solid #e8a020;padding:3px 7px">REQ: 0</div>
+        </div>
+        <!-- Lanes -->
+        <div id="s2_lanes">
+          <div class="lane"><div class="arrow-fill" id="a2_1" style="background:#e8a020"></div><span class="arrow-lbl" style="color:#e8a020">user:99999 → </span></div>
+          <div class="lane"><div class="arrow-fill" id="a2_2" style="background:#e85050"></div><span class="arrow-lbl" style="color:#e85050">product:-1 → </span></div>
+          <div class="lane"><div class="arrow-fill" id="a2_3" style="background:#e8a020"></div><span class="arrow-lbl" style="color:#e8a020">order:AAAA → </span></div>
+          <div class="lane"><div class="arrow-fill" id="a2_4" style="background:#e85050"></div><span class="arrow-lbl" style="color:#e85050">item:????  → </span></div>
+        </div>
+      </div>
+
+      <!-- Cache + DB side by side -->
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div id="s2_cache" style="flex:1;background:#0e0a14;border:2px solid #333;border-radius:2px;padding:10px;text-align:center">
+          <div style="font-size:8px;color:#555;margin-bottom:6px">CACHE</div>
+          <div id="s2_cache_icon" style="font-size:22px">💤</div>
+          <div id="s2_cache_msg" style="font-size:7px;color:#555;margin-top:5px">waiting</div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:center;font-size:11px;color:#555;padding:0 2px">→</div>
+        <div id="s2_db" style="flex:1;background:#0e0a14;border:2px solid #333;border-radius:2px;padding:10px;text-align:center">
+          <div style="font-size:8px;color:#555;margin-bottom:6px">DATABASE</div>
+          <div id="s2_db_icon" style="font-size:22px">😴</div>
+          <div id="s2_db_msg" style="font-size:7px;color:#555;margin-top:5px">idle</div>
+        </div>
+      </div>
+
+      <!-- Miss counter -->
+      <div style="display:flex;gap:6px">
+        <div style="flex:1;background:#1a0505;border:1px solid #3a1010;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">CACHE MISS</div>
+          <div id="s2_cmiss" style="font-size:13px;color:#e85050">0</div>
+        </div>
+        <div style="flex:1;background:#1a0505;border:1px solid #3a1010;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">DB MISS</div>
+          <div id="s2_dmiss" style="font-size:13px;color:#e85050">0</div>
+        </div>
+        <div style="flex:1;background:#1a0a00;border:1px solid #3a2000;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:4px">DB QUERIES</div>
+          <div id="s2_dq" style="font-size:13px;color:#e8a020">0</div>
+        </div>
+      </div>
+
+      <!-- Result -->
+      <div class="fade" id="s2_result" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#e85050">💥 DB OVERLOADED!</div>
+        <div style="font-size:8px;color:#aaa;margin-top:6px;line-height:1.9">
+          Cache always MISSES — key never exists.<br>
+          Every request falls through to DB.<br>
+          DB does full lookup on garbage IDs.
+        </div>
+      </div>
+
+      <!-- Why cache doesn't help -->
+      <div class="fade" id="s2_why" style="background:#0e0a14;border:1px solid #2a1030;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:6px">WHY CACHE DOESN'T HELP:</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Cache only stores <span style="color:#4eff9a">results that exist</span>.<br>
+          Non-existent keys → no entry → miss.<br>
+          Bot generates new fake IDs each time.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO SEE THE ATTACK</div>
+    <div class="ih rd" id="s2i2" style="display:none">FAKE IDs → CACHE MISS EVERY TIME → DB HIT</div>
+    <div class="il" id="s2i3" style="display:none">DB GETS 100% OF REQUESTS. CACHE USELESS.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">CACHE<br>MISS RATE</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">REQUESTS<br>HIT DB</div></div>
+    <div class="sc"><div class="sv rd">DDoS</div><div class="sl">ATTACK<br>TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3 · PENETRATION FIX ══════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title" style="color:#4eff9a">FIX: BLOOM FILTER<br>+ NULL CACHE</div>
+    <div class="hdr-sub">BLOCK FAKES BEFORE THEY REACH DB</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">PENETRATION FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Fix 1: Bloom filter -->
+      <div class="fade" id="s3b_intro" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">FIX 1: BLOOM FILTER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          A probabilistic data structure that answers:<br>
+          <span style="color:#4eff9a">"Has this key EVER been inserted into DB?"</span><br>
+          If NO → reject immediately. Never hits cache or DB.
+        </div>
+      </div>
+
+      <!-- Bloom filter grid visualization -->
+      <div style="background:#040e08;border:1px solid #0a3018;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#666;margin-bottom:7px;letter-spacing:1px">BLOOM FILTER BIT ARRAY (simplified)</div>
+        <div class="bloom-grid" id="bloom_grid">
+          <!-- 32 cells, filled by JS -->
+        </div>
+        <div style="display:flex;gap:8px;margin-top:7px;font-size:7px">
+          <span style="color:#4eff9a">■ SET (valid key hashed here)</span>
+          <span style="color:#e85050">■ HIT (fake key collides)</span>
+        </div>
+      </div>
+
+      <!-- Request flow with bloom -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px">REQUEST FLOW WITH BLOOM FILTER</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div id="s3_flow1" class="fade" style="display:flex;align-items:center;gap:6px;background:#1a0505;border:1px solid #3a1010;padding:8px">
+          <div style="font-size:9px">🤖</div>
+          <div style="font-size:7px;color:#e85050;flex:1">user:99999 (fake ID)</div>
+          <div style="font-size:7px;color:#e85050;background:#2a0808;padding:3px 6px">BLOOM: NO</div>
+          <div style="font-size:7px;color:#e85050">→ BLOCKED ✗</div>
+        </div>
+        <div id="s3_flow2" class="fade" style="display:flex;align-items:center;gap:6px;background:#1a0505;border:1px solid #3a1010;padding:8px">
+          <div style="font-size:9px">🤖</div>
+          <div style="font-size:7px;color:#e85050;flex:1">product:-1 (fake ID)</div>
+          <div style="font-size:7px;color:#e85050;background:#2a0808;padding:3px 6px">BLOOM: NO</div>
+          <div style="font-size:7px;color:#e85050">→ BLOCKED ✗</div>
+        </div>
+        <div id="s3_flow3" class="fade" style="display:flex;align-items:center;gap:6px;background:#041408;border:1px solid #0a3018;padding:8px">
+          <div style="font-size:9px">👤</div>
+          <div style="font-size:7px;color:#4eff9a;flex:1">user:42 (real user)</div>
+          <div style="font-size:7px;color:#4eff9a;background:#041a08;padding:3px 6px">BLOOM: YES</div>
+          <div style="font-size:7px;color:#4eff9a">→ ALLOWED ✓</div>
+        </div>
+      </div>
+
+      <!-- Fix 2: Null caching -->
+      <div class="fade" id="s3_null" style="border:2px solid #4ec9e1;background:#040e1a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:7px">FIX 2: CACHE NULL RESULTS</div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          If DB returns nothing → cache <span style="color:#4eff9a">"NULL"</span> with short TTL.<br>
+          Same fake key repeated → cache HIT.<br>
+          DB never queried again for that key.
+        </div>
+        <div style="background:#060e1a;border:1px solid #1a3050;padding:8px;font-size:8px;color:#4ec9e1;line-height:2">
+          result = db.query(key)<br>
+          <span style="color:#4eff9a">if result == null:</span><br>
+          &nbsp;&nbsp;cache.set(key, <span style="color:#e8a020">"__NULL__"</span>, ttl=<span style="color:#e8a020">30</span>)
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE THE FIX</div>
+    <div class="ih" id="s3i2" style="display:none">BLOOM FILTER BLOCKS FAKES BEFORE CACHE/DB</div>
+    <div class="il" id="s3i3" style="display:none">NULL CACHING STOPS REPEAT FAKE LOOKUPS.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">BLOOM</div><div class="sl">FILTER<br>BLOCKS</div></div>
+    <div class="sc"><div class="sv gn">NULL</div><div class="sl">RESULT<br>CACHED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">0</div><div class="sl">DB HITS<br>FROM BOT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4 · AVALANCHE ATTACK ══════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CACHE AVALANCHE</div>
+    <div class="hdr-sub">MASS EXPIRY → DB FLOOD WAVE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE AVALANCHE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="row-lbl">ALL KEYS SET WITH SAME TTL=3600s</div>
+
+      <!-- Cache with expiring keys -->
+      <div id="s4_cache" style="background:#0e0a14;border:2px solid #4ec9e1;border-radius:2px;padding:10px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">CACHE — t=3599s (1 second before expiry)</div>
+        <div id="s4_keys" style="display:flex;flex-direction:column;gap:4px">
+          <div class="s4key" style="display:flex;justify-content:space-between;align-items:center;background:#0a1828;border:1px solid #1a3a5a;padding:6px 8px">
+            <span style="font-size:8px;color:#4ec9e1">trending_posts</span><span id="s4t1" style="font-size:7px;color:#4eff9a">TTL: 1s</span>
+          </div>
+          <div class="s4key" style="display:flex;justify-content:space-between;align-items:center;background:#0a1828;border:1px solid #1a3a5a;padding:6px 8px">
+            <span style="font-size:8px;color:#4ec9e1">homepage_data</span><span id="s4t2" style="font-size:7px;color:#4eff9a">TTL: 1s</span>
+          </div>
+          <div class="s4key" style="display:flex;justify-content:space-between;align-items:center;background:#0a1828;border:1px solid #1a3a5a;padding:6px 8px">
+            <span style="font-size:8px;color:#4ec9e1">user_feed:all</span><span id="s4t3" style="font-size:7px;color:#4eff9a">TTL: 1s</span>
+          </div>
+          <div class="s4key" style="display:flex;justify-content:space-between;align-items:center;background:#0a1828;border:1px solid #1a3a5a;padding:6px 8px">
+            <span style="font-size:8px;color:#4ec9e1">product_list</span><span id="s4t4" style="font-size:7px;color:#4eff9a">TTL: 1s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expiry event -->
+      <div class="fade" id="s4_exp" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:11px;color:#e85050">⚡ t=3600 — ALL KEYS EXPIRE!</div>
+        <div style="font-size:8px;color:#888;margin-top:5px">4 keys expired simultaneously.</div>
+      </div>
+
+      <!-- DB flood animation -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px">DB QUERY FLOOD (each key had 2,500 waiting requests)</div>
+      <div style="background:#0e0a14;border:1px solid #2a1030;padding:10px;border-radius:2px">
+        <!-- stacked bar chart -->
+        <div style="display:flex;align-items:flex-end;height:60px;gap:3px" id="s4_bars">
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar1" class="tbar" style="background:#4ec9e1;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar2" class="tbar" style="background:#4ec9e1;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative">
+            <div id="s4bar3" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .5s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar4" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar5" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar6" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar7" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+            <div id="s4bar8" class="tbar" style="background:#e85050;width:100%;height:0;transition:height .4s ease-out"></div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:4px">
+          <span>t=3598</span><span style="color:#e85050">t=3600 EXPIRY</span><span>t=3602</span>
+        </div>
+        <div style="font-size:7px;color:#e85050;margin-top:5px;text-align:center" id="s4_spike_lbl" style="opacity:0">10,000 queries in &lt;100ms → DB collapse</div>
+      </div>
+
+      <div class="fade" id="s4_result" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#e85050">💀 DATABASE DOWN</div>
+        <div style="font-size:8px;color:#aaa;margin-top:6px;line-height:1.9">All 4 keys × 2,500 requests = 10,000 queries.<br>Happens even without any attacker.<br>Bad deployment or TTL setting triggers it.</div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE THE AVALANCHE</div>
+    <div class="ih rd" id="s4i2" style="display:none">ALL KEYS EXPIRE TOGETHER → MASS DB FLOOD</div>
+    <div class="il" id="s4i3" style="display:none">10,000 SIMULTANEOUS DB QUERIES → OUTAGE.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4</div><div class="sl">KEYS<br>EXPIRE</div></div>
+    <div class="sc"><div class="sv rd">10K</div><div class="sl">DB QUERIES<br>AT ONCE</div></div>
+    <div class="sc"><div class="sv rd">DOWN</div><div class="sl">SERVICE<br>STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 5 · AVALANCHE FIX ══════════════════ -->
+<div class="scene" id="s5">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title" style="color:#4eff9a">FIX: JITTER +<br>CIRCUIT BREAKER</div>
+    <div class="hdr-sub">SPREAD THE LOAD. STOP THE CHAIN REACTION.</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">AVALANCHE FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Fix 1: Jitter -->
+      <div class="fade" id="s5_jitter" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">FIX 1: TTL JITTER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          Add randomness to TTL so keys don't all<br>expire at the same second.
+        </div>
+        <div style="background:#020a04;border:1px solid #0a2810;padding:8px;font-size:8px;color:#4eff9a;line-height:2">
+          <span style="color:#555">// BEFORE — synchronized (dangerous):</span><br>
+          cache.set(key, val, ttl=<span style="color:#e85050">3600</span>);<br><br>
+          <span style="color:#555">// AFTER — with jitter (safe):</span><br>
+          jitter = random(0, 600);  <span style="color:#555">// ±10min</span><br>
+          cache.set(key, val, ttl=<span style="color:#4eff9a">3600 + jitter</span>);
+        </div>
+      </div>
+
+      <!-- Jitter expiry distribution -->
+      <div class="fade" id="s5_jdist">
+        <div class="row-lbl">EXPIRY DISTRIBUTION WITH JITTER</div>
+        <div style="background:#040e08;border:1px solid #0a3018;padding:10px;border-radius:2px">
+          <div style="display:flex;align-items:flex-end;height:46px;gap:2px">
+            <div id="jf1" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf2" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf3" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf4" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf5" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf6" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf7" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf8" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf9" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+            <div id="jf10" style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0;transition:height .3s ease-out"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:4px">
+            <span>t=3600</span><span style="color:#4eff9a">spread evenly over 600s</span><span>t=4200</span>
+          </div>
+          <div style="font-size:8px;color:#4eff9a;margin-top:5px;text-align:center">✓ ~7 expirations/sec instead of 10,000 at once</div>
+        </div>
+      </div>
+
+      <!-- Fix 2: Circuit Breaker -->
+      <div class="fade" id="s5_cb" style="border:2px solid #4ec9e1;background:#040e1a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:7px">FIX 2: CIRCUIT BREAKER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          If DB error rate exceeds threshold,<br>
+          <span style="color:#4ec9e1">trip the breaker</span> — reject requests fast,<br>
+          let DB recover before re-enabling.
+        </div>
+        <!-- Circuit breaker state machine -->
+        <div style="display:flex;gap:6px;align-items:center">
+          <div id="cb_closed" class="cb-state" style="flex:1;border-color:#4eff9a;color:#4eff9a;font-size:7px">
+            CLOSED<br><span style="color:#888;font-size:6px">Normal</span>
+          </div>
+          <div style="font-size:8px;color:#555">→</div>
+          <div id="cb_open" class="cb-state" style="flex:1;border-color:#333;color:#333;font-size:7px">
+            OPEN<br><span style="color:#555;font-size:6px">Rejecting</span>
+          </div>
+          <div style="font-size:8px;color:#555">→</div>
+          <div id="cb_half" class="cb-state" style="flex:1;border-color:#333;color:#333;font-size:7px">
+            HALF<br><span style="color:#555;font-size:6px">Testing</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="fade" id="s5_sum" style="background:#041408;border:2px solid #4eff9a;padding:11px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:8px">FULL DEFENSE PLAYBOOK</div>
+        <div style="font-size:8px;color:#aaa;line-height:2.1">
+          <span style="color:#4eff9a">🔵 Penetration:</span> Bloom filter + cache null<br>
+          <span style="color:#4eff9a">🌊 Avalanche:</span> TTL jitter + circuit breaker<br>
+          <span style="color:#4ec9e1">🔒 Both:</span> Mutex lock on cache rebuild<br>
+          <span style="color:#e8a020">⚡ Monitor:</span> Cache hit rate + DB error rate
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s5i1">▶ PRESS PLAY TO SEE THE FIXES</div>
+    <div class="ih" id="s5i2" style="display:none">JITTER SPREADS EXPIRY. BREAKER STOPS CASCADE.</div>
+    <div class="il" id="s5i3" style="display:none">COMBINE ALL FOUR FIXES FOR FULL PROTECTION.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">JITTER</div><div class="sl">SPREADS<br>EXPIRY</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">BREAKER</div><div class="sl">STOPS<br>CASCADE</div></div>
+    <div class="sc"><div class="sv gn">SAFE</div><div class="sl">DB STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play5()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clr(){timers.forEach(t=>{clearTimeout(t);clearInterval(t);});timers=[];}
+function wait(ms,fn){let t=setTimeout(fn,ms);timers.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function reset(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+function txt(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+function stl(id,p,v){let e=document.getElementById(id);if(e)e.style[p]=v;}
+function attr(id,a,v){let e=document.getElementById(id);if(e)e.setAttribute(a,v);}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  fullReset();
+}
+
+function fullReset(){
+  // s1
+  reset(['h1hook','h1p1','h1p2','h1diff']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+  // s2
+  reset(['s2_result','s2_why']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+  ['a2_1','a2_2','a2_3','a2_4'].forEach(id=>{stl(id,'transition','none');stl(id,'width','0');});
+  txt('s2_reqcount','REQ: 0');txt('s2_cmiss','0');txt('s2_dmiss','0');txt('s2_dq','0');
+  stl('s2_cache','borderColor','#333');stl('s2_cache','background','#0e0a14');
+  txt('s2_cache_icon','💤');txt('s2_cache_msg','waiting');stl('s2_cache_msg','color','#555');
+  stl('s2_db','borderColor','#333');
+  txt('s2_db_icon','😴');txt('s2_db_msg','idle');stl('s2_db_msg','color','#555');
+  // s3
+  reset(['s3b_intro','s3_flow1','s3_flow2','s3_flow3','s3_null']);
+  hide('s3i2');hide('s3i3');show('s3i1');
+  let bg=document.getElementById('bloom_grid');
+  if(bg)bg.innerHTML='';
+  // s4
+  reset(['s4_exp','s4_result']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+  ['s4bar1','s4bar2','s4bar3','s4bar4','s4bar5','s4bar6','s4bar7','s4bar8'].forEach(id=>{
+    let e=document.getElementById(id);if(e){e.style.transition='none';e.style.height='0';}
+  });
+  stl('s4_cache','borderColor','#4ec9e1');
+  ['s4t1','s4t2','s4t3','s4t4'].forEach(id=>{
+    let e=document.getElementById(id);if(e){e.textContent='TTL: 1s';e.style.color='#4eff9a';}
+  });
+  // s5
+  reset(['s5_jitter','s5_jdist','s5_cb','s5_sum']);
+  hide('s5i2');hide('s5i3');show('s5i1');
+  for(let i=1;i<=10;i++){let e=document.getElementById('jf'+i);if(e){e.style.transition='none';e.style.height='0';}}
+  stl('cb_closed','borderColor','#4eff9a');stl('cb_closed','color','#4eff9a');
+  stl('cb_open','borderColor','#333');stl('cb_open','color','#333');
+  stl('cb_half','borderColor','#333');stl('cb_half','color','#333');
+}
+
+/* ── S1 ── */
+function play1(){
+  clr();fullReset();
+  wait(300,()=>fin('h1hook'));
+  wait(900,()=>{fin('h1p1');hide('s1i1');show('s1i2');});
+  wait(1600,()=>fin('h1p2'));
+  wait(2300,()=>{fin('h1diff');show('s1i3');});
+}
+
+/* ── S2 ── */
+function play2(){
+  clr();fullReset();
+  let req=0,cmiss=0,dmiss=0,dq=0;
+  hide('s2i1');show('s2i2');
+  // fire arrows one by one with counter
+  const fireArrow=(id,delay)=>{
+    wait(delay,()=>{
+      let e=document.getElementById(id);
+      if(e){e.style.transition='width .5s ease-out';e.style.width='calc(100% - 12px)';}
+      req++;cmiss++;dmiss++;dq++;
+      txt('s2_reqcount','REQ: '+req);
+      txt('s2_cmiss',cmiss);txt('s2_dmiss',dmiss);txt('s2_dq',dq);
+    });
+  };
+  fireArrow('a2_1',400);
+  wait(500,()=>{stl('s2_cache','borderColor','#e8a020');txt('s2_cache_icon','❌');txt('s2_cache_msg','MISS');stl('s2_cache_msg','color','#e8a020');});
+  wait(700,()=>{stl('s2_db','borderColor','#e85050');txt('s2_db_icon','⚡');txt('s2_db_msg','QUERY #1');stl('s2_db_msg','color','#e8a020');});
+  fireArrow('a2_2',1000);
+  wait(1100,()=>{txt('s2_db_msg','QUERY #2');dq=2;txt('s2_dq',dq);});
+  fireArrow('a2_3',1600);
+  wait(1700,()=>{txt('s2_db_msg','QUERY #3');});
+  fireArrow('a2_4',2200);
+  wait(2300,()=>{txt('s2_db_icon','🔥');txt('s2_db_msg','OVERLOADED');stl('s2_db_msg','color','#e85050');show('s2i3');});
+  wait(2800,()=>{fin('s2_result');});
+  wait(3400,()=>fin('s2_why'));
+}
+
+/* ── S3 ── */
+function play3(){
+  clr();fullReset();
+  hide('s3i1');show('s3i2');
+  wait(300,()=>fin('s3b_intro'));
+  // build bloom filter grid
+  wait(800,()=>{
+    let bg=document.getElementById('bloom_grid');
+    if(!bg)return;
+    bg.innerHTML='';
+    const setPositions=[1,3,5,7,9,11,14,16,18,20,22,25,28,30];
+    for(let i=0;i<32;i++){
+      let d=document.createElement('div');
+      d.className='bloom-cell';
+      d.id='bc'+i;
+      bg.appendChild(d);
+    }
+    // animate setting bits
+    setPositions.forEach((pos,idx)=>{
+      wait(idx*80,()=>{
+        let cell=document.getElementById('bc'+pos);
+        if(cell)cell.classList.add('set');
+      });
+    });
+  });
+  wait(2000,()=>fin('s3_flow1'));
+  wait(2500,()=>fin('s3_flow2'));
+  wait(3000,()=>{fin('s3_flow3');show('s3i3');});
+  wait(3600,()=>fin('s3_null'));
+}
+
+/* ── S4 ── */
+function play4(){
+  clr();fullReset();
+  hide('s4i1');
+  // TTL countdown
+  wait(300,()=>{
+    ['s4t1','s4t2','s4t3','s4t4'].forEach(id=>{
+      let e=document.getElementById(id);if(e){e.textContent='TTL: 0s';e.style.color='#e85050';}
+    });
+    stl('s4_cache','borderColor','#e85050');
+    show('s4i2');
+  });
+  wait(800,()=>fin('s4_exp'));
+  // bars animate — spike at t=3600
+  const barHeights=[4,6,6,48,52,56,58,10];
+  const barIds=['s4bar1','s4bar2','s4bar3','s4bar4','s4bar5','s4bar6','s4bar7','s4bar8'];
+  wait(1300,()=>{
+    barIds.forEach((id,i)=>{
+      let e=document.getElementById(id);
+      if(e){e.style.transition='height '+(.3+i*.05)+'s ease-out';e.style.height=barHeights[i]+'px';}
+    });
+  });
+  wait(2000,()=>{
+    let lbl=document.getElementById('s4_spike_lbl');if(lbl)lbl.style.opacity='1';
+    show('s4i3');
+  });
+  wait(2600,()=>fin('s4_result'));
+}
+
+/* ── S5 ── */
+function play5(){
+  clr();fullReset();
+  hide('s5i1');show('s5i2');
+  wait(300,()=>fin('s5_jitter'));
+  wait(1100,()=>{
+    fin('s5_jdist');
+    const jHeights=[28,36,22,40,18,34,26,44,20,30];
+    for(let i=1;i<=10;i++){
+      wait(i*120,()=>{
+        let e=document.getElementById('jf'+i);
+        if(e){e.style.transition='height .3s ease-out';e.style.height=jHeights[i-1]+'px';}
+      });
+    }
+  });
+  wait(2400,()=>{
+    fin('s5_cb');
+    // animate circuit breaker state transitions
+    wait(600,()=>{
+      stl('cb_closed','borderColor','#e85050');stl('cb_closed','color','#e85050');
+    });
+    wait(1100,()=>{
+      stl('cb_open','borderColor','#e85050');stl('cb_open','color','#e85050');
+    });
+    wait(1800,()=>{
+      stl('cb_half','borderColor','#e8a020');stl('cb_half','color','#e8a020');
+      show('s5i3');
+    });
+    wait(2400,()=>{
+      stl('cb_closed','borderColor','#4eff9a');stl('cb_closed','color','#4eff9a');
+    });
+  });
+  wait(4200,()=>fin('s5_sum'));
+}
+
+fullReset();
+</script>
+</body>
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>TCP State Machine</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* State node */
+.state-node{
+  border:2px solid #2a1f3d;background:#0d0d1a;
+  padding:7px 10px;display:flex;align-items:center;gap:8px;
+  transition:border-color .35s,background .35s,transform .2s;
+  position:relative;
+}
+.state-node.active-state{border-color:#4ec9e1;background:#001a2080;transform:scale(1.02)}
+.state-node.done-state{border-color:#4eff9a80;background:#001a1040}
+.state-node.warn-state{border-color:#e8a020;background:#10090060}
+.state-node.danger-state{border-color:#e85050;background:#1a050560;animation:dng .8s ease-in-out infinite}
+.state-node.gray-state{border-color:#444;background:#0a0a14}
+@keyframes dng{0%,100%{border-color:#e85050}50%{border-color:#e8505060}}
+
+.state-dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;border:2px solid #2a1f3d;transition:all .35s}
+.state-label{font-size:9px;flex:1}
+.state-sub{font-size:6px;color:#555;margin-top:3px;line-height:1.6;transition:color .35s}
+
+/* Arrow between states */
+.tr-row{display:flex;align-items:center;padding:0 10px;height:24px;gap:0;position:relative}
+.tr-line{flex:1;height:2px;background:#1a1a2a;position:relative;overflow:hidden}
+.tr-fill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .5s ease-out}
+.tr-head{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:8px solid #1a1a2a;flex-shrink:0;transition:border-left-color .35s}
+.tr-lbl{position:absolute;top:-13px;right:14px;font-size:5px;white-space:nowrap;opacity:0;transition:opacity .35s;font-family:'Press Start 2P',monospace}
+
+/* Packet chip */
+.pkt{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border:1px solid;font-size:6px;border-radius:2px;font-family:'Press Start 2P',monospace}
+
+/* Counter bar */
+.cbar{height:10px;background:#0d0d1a;border:1px solid #2a1f3d;position:relative;overflow:hidden;border-radius:1px}
+.cbfill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width 1.1s ease-out;border-radius:1px}
+
+@keyframes slideUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{opacity:0;transition:opacity .4s}
+.slide-up{animation:slideUp .4s ease-out forwards}
+
+/* Packet float animation */
+@keyframes floatRight{0%{transform:translateX(0);opacity:1}100%{transform:translateX(220px);opacity:0}}
+@keyframes floatLeft{0%{transform:translateX(0);opacity:1}100%{transform:translateX(-220px);opacity:0}}
+.float-r{animation:floatRight .6s ease-out forwards}
+.float-l{animation:floatLeft .6s ease-out forwards}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — FULL STATE DIAGRAM OVERVIEW
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TCP STATE MACHINE</div>
+    <div class="hdr-sub">EVERY STATE A CONNECTION CAN BE IN</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE FULL MAP</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">11 STATES</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:0">
+
+      <!-- State nodes with transitions between them -->
+
+      <!-- CLOSED -->
+      <div class="state-node gray-state" id="sn-closed" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-closed" style="background:#444;border-color:#666"></div>
+        <div style="flex:1">
+          <div class="state-label" style="color:#888">CLOSED</div>
+          <div class="state-sub" id="ss-closed">no connection exists</div>
+        </div>
+        <div class="pkt" style="color:#888;border-color:#444;opacity:0" id="pk-closed">–</div>
+      </div>
+
+      <div class="tr-row" id="tr1">
+        <div class="tr-line"><div class="tr-fill" id="tf1" style="background:#4eff9a"></div><div class="tr-lbl" id="tl1" style="color:#4eff9a">passive open / bind()</div></div>
+        <div class="tr-head" id="th1"></div>
+      </div>
+
+      <!-- LISTEN -->
+      <div class="state-node" id="sn-listen" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-listen" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-listen" style="color:#888">LISTEN</div>
+          <div class="state-sub" id="ss-listen">server waiting for SYN</div>
+        </div>
+        <div class="pkt" style="color:#4eff9a;border-color:#4eff9a;opacity:0" id="pk-listen">SERVER</div>
+      </div>
+
+      <div class="tr-row" id="tr2">
+        <div class="tr-line"><div class="tr-fill" id="tf2" style="background:#4ec9e1"></div><div class="tr-lbl" id="tl2" style="color:#4ec9e1">rcv SYN → send SYN-ACK</div></div>
+        <div class="tr-head" id="th2"></div>
+      </div>
+
+      <!-- SYN_RCVD -->
+      <div class="state-node" id="sn-synrcv" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-synrcv" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-synrcv" style="color:#888">SYN_RCVD</div>
+          <div class="state-sub" id="ss-synrcv">half-open — awaiting ACK</div>
+        </div>
+        <div class="pkt" style="color:#e8a020;border-color:#e8a020;opacity:0" id="pk-synrcv">SYN-ACK</div>
+      </div>
+
+      <div class="tr-row" id="tr3">
+        <div class="tr-line"><div class="tr-fill" id="tf3" style="background:#4eff9a"></div><div class="tr-lbl" id="tl3" style="color:#4eff9a">rcv ACK → handshake done</div></div>
+        <div class="tr-head" id="th3"></div>
+      </div>
+
+      <!-- ESTABLISHED -->
+      <div class="state-node" id="sn-estab" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-estab" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-estab" style="color:#888">ESTABLISHED</div>
+          <div class="state-sub" id="ss-estab">data flows both ways</div>
+        </div>
+        <div class="pkt" style="color:#4eff9a;border-color:#4eff9a;opacity:0" id="pk-estab">DATA ⟷</div>
+      </div>
+
+      <div class="tr-row" id="tr4">
+        <div class="tr-line"><div class="tr-fill" id="tf4" style="background:#e8a020"></div><div class="tr-lbl" id="tl4" style="color:#e8a020">active close / send FIN</div></div>
+        <div class="tr-head" id="th4"></div>
+      </div>
+
+      <!-- FIN_WAIT_1 -->
+      <div class="state-node" id="sn-fw1" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-fw1" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-fw1" style="color:#888">FIN_WAIT_1</div>
+          <div class="state-sub" id="ss-fw1">sent FIN, wait for ACK</div>
+        </div>
+        <div class="pkt" style="color:#e8a020;border-color:#e8a020;opacity:0" id="pk-fw1">FIN</div>
+      </div>
+
+      <div class="tr-row" id="tr5">
+        <div class="tr-line"><div class="tr-fill" id="tf5" style="background:#e8a020"></div><div class="tr-lbl" id="tl5" style="color:#e8a020">rcv ACK</div></div>
+        <div class="tr-head" id="th5"></div>
+      </div>
+
+      <!-- FIN_WAIT_2 -->
+      <div class="state-node" id="sn-fw2" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-fw2" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-fw2" style="color:#888">FIN_WAIT_2</div>
+          <div class="state-sub" id="ss-fw2">wait for remote FIN</div>
+        </div>
+        <div class="pkt" style="color:#e8a020;border-color:#e8a020;opacity:0" id="pk-fw2">ACK</div>
+      </div>
+
+      <div class="tr-row" id="tr6">
+        <div class="tr-line"><div class="tr-fill" id="tf6" style="background:#e8a020"></div><div class="tr-lbl" id="tl6" style="color:#e8a020">rcv FIN → send ACK</div></div>
+        <div class="tr-head" id="th6"></div>
+      </div>
+
+      <!-- TIME_WAIT -->
+      <div class="state-node" id="sn-tw" style="margin-bottom:2px">
+        <div class="state-dot" id="sd-tw" style="background:#2a1f3d"></div>
+        <div style="flex:1">
+          <div class="state-label" id="sl-tw" style="color:#888">TIME_WAIT</div>
+          <div class="state-sub" id="ss-tw">hold 2×MSL ≈ 60s · absorb late pkts</div>
+        </div>
+        <div class="pkt" style="color:#4ec9e1;border-color:#4ec9e1;opacity:0" id="pk-tw">2×MSL</div>
+      </div>
+
+      <div class="tr-row" id="tr7">
+        <div class="tr-line"><div class="tr-fill" id="tf7" style="background:#4eff9a"></div><div class="tr-lbl" id="tl7" style="color:#4eff9a">timer expires → CLOSED</div></div>
+        <div class="tr-head" id="th7"></div>
+      </div>
+
+      <!-- CLOSED again -->
+      <div class="state-node gray-state" id="sn-closed2">
+        <div class="state-dot" style="background:#444;border-color:#4eff9a"></div>
+        <div style="flex:1">
+          <div class="state-label" style="color:#4eff9a;font-size:9px">CLOSED</div>
+          <div class="state-sub" style="color:#4eff9a80">connection fully terminated ✓</div>
+        </div>
+      </div>
+
+      <!-- Color legend -->
+      <div style="margin-top:8px;border:1px solid #2a1f3d;background:#0a0a14;padding:7px 10px;display:flex;gap:10px;flex-wrap:wrap;opacity:0;transition:opacity .4s" id="legend">
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:8px;height:8px;background:#4eff9a;border-radius:50%"></div><div style="font-size:6px;color:#aaa">normal path</div></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:8px;height:8px;background:#e8a020;border-radius:50%"></div><div style="font-size:6px;color:#aaa">close path</div></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:8px;height:8px;background:#e85050;border-radius:50%"></div><div style="font-size:6px;color:#aaa">attack / bug</div></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:8px;height:8px;background:#4ec9e1;border-radius:50%"></div><div style="font-size:6px;color:#aaa">wait state</div></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">11 states. 1 happy path through them all.</div>
+    <div class="il">Most debugging = identifying wrong state counts.</div>
+    <div class="ih am">ss -tan shows every socket's current state.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">11</div><div class="sl">TCP STATES</div></div>
+    <div class="sc"><div class="sv gn">3-WAY</div><div class="sl">OPEN SHAKE</div></div>
+    <div class="sc"><div class="sv">4-WAY</div><div class="sl">CLOSE SHAKE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — 3-WAY HANDSHAKE ANIMATED
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">CLOSED → LISTEN → SYN_RCVD → ESTABLISHED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CONNECTION OPEN</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">NORMAL</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- Two actors side by side -->
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <div style="text-align:center;width:100px">
+          <div id="cli-box" style="border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 4px;font-size:8px;color:#888;transition:all .35s">💻<br><span style="font-size:6px">CLIENT</span></div>
+          <div id="cli-state" style="font-size:6px;color:#555;margin-top:4px;min-height:12px;transition:all .35s">CLOSED</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;position:relative;padding-top:10px">
+          <!-- Packet lanes (animated) -->
+          <div id="seq-area" style="width:100%;position:relative;height:140px">
+            <!-- SYN -->
+            <div id="pkt-syn" style="position:absolute;top:8px;left:0;font-size:6px;font-family:'Press Start 2P',monospace;padding:3px 7px;border:1px solid #4ec9e1;background:#001a20;color:#4ec9e1;opacity:0;transition:opacity .3s,left .55s ease-out;white-space:nowrap">SYN→</div>
+            <div id="lbl-syn" style="position:absolute;top:-2px;left:0;right:0;text-align:center;font-size:5px;color:#4ec9e160;opacity:0;transition:opacity .3s">seq=100 ctl=SYN</div>
+
+            <!-- SYN-ACK -->
+            <div id="pkt-synack" style="position:absolute;top:48px;right:0;font-size:6px;font-family:'Press Start 2P',monospace;padding:3px 7px;border:1px solid #e8a020;background:#100900;color:#e8a020;opacity:0;transition:opacity .3s,right .55s ease-out;white-space:nowrap">←SYN-ACK</div>
+            <div id="lbl-synack" style="position:absolute;top:38px;left:0;right:0;text-align:center;font-size:5px;color:#e8a02060;opacity:0;transition:opacity .3s">seq=200 ack=101</div>
+
+            <!-- ACK -->
+            <div id="pkt-ack" style="position:absolute;top:90px;left:0;font-size:6px;font-family:'Press Start 2P',monospace;padding:3px 7px;border:1px solid #4eff9a;background:#001a10;color:#4eff9a;opacity:0;transition:opacity .3s,left .55s ease-out;white-space:nowrap">ACK→</div>
+            <div id="lbl-ack" style="position:absolute;top:80px;left:0;right:0;text-align:center;font-size:5px;color:#4eff9a60;opacity:0;transition:opacity .3s">ack=201</div>
+
+            <!-- Established line -->
+            <div id="estab-banner" style="position:absolute;top:120px;left:0;right:0;border:1px solid #4eff9a;background:#001a1080;padding:4px;text-align:center;font-size:6px;color:#4eff9a;opacity:0;transition:opacity .4s">⟷ ESTABLISHED — DATA FLOWS ⟷</div>
+          </div>
+        </div>
+        <div style="text-align:center;width:100px">
+          <div id="srv-box" style="border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 4px;font-size:8px;color:#888;transition:all .35s">🖥<br><span style="font-size:6px">SERVER</span></div>
+          <div id="srv-state" style="font-size:6px;color:#555;margin-top:4px;min-height:12px;transition:all .35s">LISTEN</div>
+        </div>
+      </div>
+
+      <!-- State timeline -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">STATE TRANSITIONS</div>
+
+      <div style="display:flex;gap:4px" id="timeline">
+        <div style="flex:1;border:1px solid #2a1f3d;background:#0a0a14;padding:5px 4px;text-align:center;opacity:0;transition:opacity .35s" id="tl-closed"><div style="font-size:6px;color:#888">CLOSED</div><div style="font-size:5px;color:#555;margin-top:2px">→ SYN sent</div></div>
+        <div style="font-size:8px;color:#2a1f3d;display:flex;align-items:center;opacity:0;transition:opacity .35s" id="ta1">▶</div>
+        <div style="flex:1;border:1px solid #2a1f3d;background:#0a0a14;padding:5px 4px;text-align:center;opacity:0;transition:opacity .35s" id="tl-synsent"><div style="font-size:6px;color:#4ec9e1">SYN_SENT</div><div style="font-size:5px;color:#555;margin-top:2px">→ rcv SYN-ACK</div></div>
+        <div style="font-size:8px;color:#2a1f3d;display:flex;align-items:center;opacity:0;transition:opacity .35s" id="ta2">▶</div>
+        <div style="flex:1;border:1px solid #2a1f3d;background:#0a0a14;padding:5px 4px;text-align:center;opacity:0;transition:opacity .35s" id="tl-estab"><div style="font-size:6px;color:#4eff9a">ESTAB</div><div style="font-size:5px;color:#555;margin-top:2px">data flows</div></div>
+      </div>
+
+      <!-- SYN_RCVD note -->
+      <div class="fade-in" id="synrcv-note" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">SERVER SIDE: SYN_RCVD</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Between rcv SYN and rcv final ACK, the server holds the socket in SYN_RCVD. This is stored in the SYN backlog queue.<br><span style="color:#e85050">Too many SYN_RCVD = SYN flood (see scene 3).</span></div>
+      </div>
+
+      <div class="fade-in" id="flag-note" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">TCP FLAGS IN THIS EXCHANGE</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <div style="font-size:6px;padding:3px 7px;border:1px solid #4ec9e1;color:#4ec9e1">SYN=1 ACK=0</div>
+          <div style="font-size:6px;padding:3px 7px;border:1px solid #e8a020;color:#e8a020">SYN=1 ACK=1</div>
+          <div style="font-size:6px;padding:3px 7px;border:1px solid #4eff9a;color:#4eff9a">SYN=0 ACK=1</div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:5px;line-height:1.7">Wireshark filter: tcp.flags.syn==1</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">SYN → SYN-ACK → ACK. Three packets.</div>
+    <div class="il">Client: CLOSED → SYN_SENT → ESTABLISHED.</div>
+    <div class="ih">Server: LISTEN → SYN_RCVD → ESTABLISHED.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3</div><div class="sl">PACKETS</div></div>
+    <div class="sc"><div class="sv gn">~1 RTT</div><div class="sl">OPEN TIME</div></div>
+    <div class="sc"><div class="sv am">BACKLOG</div><div class="sl">SYN QUEUE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — SYN FLOOD + TIME_WAIT
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ATTACK STATES</div>
+    <div class="hdr-sub">SYN FLOOD · TIME_WAIT · CLOSE_WAIT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">DANGER STATES</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DEBUG</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- SYN FLOOD -->
+      <div style="border:2px solid #e85050;background:#1a050590;padding:8px 10px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">☠ SYN FLOOD — SYN_RCVD OVERFLOW</div>
+
+        <!-- Animated SYN packet flood -->
+        <div style="position:relative;height:52px;background:#0a0a14;border:1px solid #e8505040;overflow:hidden;margin-bottom:6px" id="flood-zone">
+          <div style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:14px">🖥</div>
+          <div id="flood-pkts" style="position:absolute;left:0;top:0;right:0;bottom:0"></div>
+        </div>
+
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          Attacker sends thousands of SYN with spoofed src IPs.<br>
+          Server replies SYN-ACK, waits for ACK that never arrives.<br>
+          SYN backlog fills → <span style="color:#e85050">legit connections refused (ECONNREFUSED)</span><br>
+          Fix: SYN cookies / syncookies=1
+        </div>
+
+        <!-- SYN_RCVD counter bar -->
+        <div style="margin-top:7px">
+          <div style="font-size:6px;color:#e85050;margin-bottom:3px">SYN_RCVD queue filling...</div>
+          <div class="cbar"><div class="cbfill" id="syn-flood-bar" style="background:#e85050"></div></div>
+          <div id="syn-count" style="font-size:6px;color:#e85050;text-align:right;margin-top:2px;opacity:0;transition:opacity .3s">0 / 128</div>
+        </div>
+      </div>
+
+      <!-- TIME_WAIT -->
+      <div style="border:2px solid #4ec9e1;background:#001a2080;padding:8px 10px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:6px">⏱ TIME_WAIT — NOT A BUG</div>
+
+        <!-- Visual timer countdown -->
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:28px;color:#4ec9e1;opacity:0;transition:opacity .4s" id="tw-icon">⏲</div>
+          <div style="flex:1">
+            <div style="font-size:6px;color:#888;margin-bottom:3px">2×MSL countdown (≈60s)</div>
+            <div class="cbar"><div class="cbfill" id="tw-bar" style="background:#4ec9e1"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:5px;color:#555;margin-top:2px"><span>0s</span><span>30s</span><span>60s ✓</span></div>
+          </div>
+        </div>
+
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          After 4-way close, initiating side holds state 2×MSL.<br>
+          MSL = Maximum Segment Lifetime ≈ 30s → 2×MSL = 60s.<br>
+          Purpose: absorb delayed/duplicate packets from old connection.<br>
+          <span style="color:#4ec9e1">10,000 TIME_WAIT entries = normal for busy server.</span>
+        </div>
+      </div>
+
+      <!-- CLOSE_WAIT -->
+      <div style="border:2px solid #e8a020;background:#10090080;padding:8px 10px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:6px">⚠ CLOSE_WAIT — APP BUG</div>
+
+        <!-- State flow showing stuck CLOSE_WAIT -->
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px;font-size:6px">
+          <div style="padding:4px 6px;border:1px solid #4eff9a;color:#4eff9a">ESTAB</div>
+          <div style="color:#888">→ rcv FIN →</div>
+          <div style="padding:4px 6px;border:2px solid #e8a020;color:#e8a020;animation:dng .8s ease-in-out infinite" id="cw-node">CLOSE_WAIT</div>
+          <div style="color:#555;font-size:5px">app must call<br>close() here!</div>
+        </div>
+
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          Remote sent FIN. Your app received it but hasn't called close().<br>
+          State stays CLOSE_WAIT indefinitely → <span style="color:#e8a020">file descriptor leak</span><br>
+          Many CLOSE_WAIT = application bug, not kernel bug.<br>
+          Debug: <span style="color:#e8a020">ss -tanp | grep CLOSE_WAIT</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">SYN_RCVD filling up = SYN flood attack.</div>
+    <div class="il">TIME_WAIT is normal — 10K entries is fine.</div>
+    <div class="ih rd">CLOSE_WAIT = your app forgot to call close().</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">128</div><div class="sl">SYN BACKLOG</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">60s</div><div class="sl">TIME_WAIT</div></div>
+    <div class="sc"><div class="sv am">FD LEAK</div><div class="sl">CLOSE_WAIT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — DEBUG COMMANDS + CHEATSHEET
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DEBUG CHEATSHEET</div>
+    <div class="hdr-sub">READ YOUR SERVER'S TCP STATE IN SECONDS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ENGINEER TOOLS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LIVE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- ss output simulation -->
+      <div style="border:1px solid #1e4080;background:#050e1a;padding:7px 10px" class="fade-in" id="ss-box">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">$ ss -tan | awk '{print $1}' | sort | uniq -c</div>
+        <div id="ss-output" style="font-family:monospace;font-size:8px;line-height:2.2">
+          <!-- Animated output lines -->
+        </div>
+      </div>
+
+      <!-- State count bars -->
+      <div style="display:flex;flex-direction:column;gap:4px" id="state-bars">
+        <div class="fade-in" id="bar-estab" style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#4eff9a;min-width:80px">ESTABLISHED</div>
+          <div class="cbar" style="flex:1"><div class="cbfill" id="cb-estab" style="background:#4eff9a"></div></div>
+          <div style="font-size:7px;color:#4eff9a;min-width:32px;text-align:right" id="cv-estab">0</div>
+        </div>
+        <div class="fade-in" id="bar-tw" style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#4ec9e1;min-width:80px">TIME_WAIT</div>
+          <div class="cbar" style="flex:1"><div class="cbfill" id="cb-tw" style="background:#4ec9e1"></div></div>
+          <div style="font-size:7px;color:#4ec9e1;min-width:32px;text-align:right" id="cv-tw">0</div>
+        </div>
+        <div class="fade-in" id="bar-listen" style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#9a4ef8;min-width:80px">LISTEN</div>
+          <div class="cbar" style="flex:1"><div class="cbfill" id="cb-listen" style="background:#9a4ef8"></div></div>
+          <div style="font-size:7px;color:#9a4ef8;min-width:32px;text-align:right" id="cv-listen">0</div>
+        </div>
+        <div class="fade-in" id="bar-cw" style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#e8a020;min-width:80px">CLOSE_WAIT</div>
+          <div class="cbar" style="flex:1"><div class="cbfill" id="cb-cw" style="background:#e8a020"></div></div>
+          <div style="font-size:7px;color:#e8a020;min-width:32px;text-align:right" id="cv-cw">0</div>
+        </div>
+        <div class="fade-in" id="bar-syn" style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#e85050;min-width:80px">SYN_RCVD</div>
+          <div class="cbar" style="flex:1"><div class="cbfill" id="cb-syn" style="background:#e85050"></div></div>
+          <div style="font-size:7px;color:#e85050;min-width:32px;text-align:right" id="cv-syn">0</div>
+        </div>
+      </div>
+
+      <!-- Diagnosis table -->
+      <div class="fade-in" id="diag-table" style="border:1px solid #1e4080;background:#050e1a;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">WHAT THE COUNTS MEAN</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:7px;font-size:6px;color:#aaa"><span style="color:#e85050;min-width:68px">SYN_RCVD↑↑</span><span>SYN flood — check syncookies, firewall</span></div>
+          <div style="display:flex;gap:7px;font-size:6px;color:#aaa"><span style="color:#4ec9e1;min-width:68px">TIME_WAIT↑↑</span><span>Normal — many short-lived connections</span></div>
+          <div style="display:flex;gap:7px;font-size:6px;color:#aaa"><span style="color:#e8a020;min-width:68px">CLOSE_WAIT↑</span><span>App bug — not calling close() on socket</span></div>
+          <div style="display:flex;gap:7px;font-size:6px;color:#aaa"><span style="color:#4eff9a;min-width:68px">ESTABLISHED</span><span>Active connections — normal range varies</span></div>
+        </div>
+      </div>
+
+      <!-- Quick commands -->
+      <div class="fade-in" id="cmds" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">QUICK COMMANDS</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;line-height:2.2;background:#000a06;padding:6px;border:1px solid #4eff9a20">
+          # count by state<br>
+          ss -tan | awk '{print $1}' | sort | uniq -c<br><br>
+          # show TIME_WAIT with ports<br>
+          ss -tan state time-wait<br><br>
+          # show CLOSE_WAIT with process<br>
+          ss -tanp state close-wait<br><br>
+          # enable SYN cookies<br>
+          sysctl net.ipv4.tcp_syncookies=1
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">ss -tan gives real-time socket state table.</div>
+    <div class="il">Count anomalies → diagnose attack or bug.</div>
+    <div class="ih">SYN cookies protect against SYN floods.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">ss</div><div class="sl">MAIN TOOL</div></div>
+    <div class="sc"><div class="sv am">-tan</div><div class="sl">FLAGS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">uniq-c</div><div class="sl">COUNT STATES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){timers.forEach(clearTimeout);timers=[]}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>{[play1,play2,play3,play4][n-1]()},200);
+}
+
+/* helpers */
+function show(id,delay){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},delay)}
+function hide(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function setClass(id,cls){T(()=>{const e=document.getElementById(id);if(e)e.className='state-node '+cls;},0)}
+function nodeAct(id,delay,cls){T(()=>{const e=document.getElementById(id);if(e)e.className='state-node '+(cls||'active-state');},delay)}
+function nodeDone(id,delay){T(()=>{const e=document.getElementById(id);if(e)e.className='state-node done-state';},delay)}
+function setTxt(id,txt,delay){T(()=>{const e=document.getElementById(id);if(e)e.textContent=txt;},delay)}
+function setColor(id,col,delay){T(()=>{const e=document.getElementById(id);if(e)e.style.color=col;},delay)}
+function setDot(id,col,border,delay){T(()=>{const e=document.getElementById(id);if(e){e.style.background=col;e.style.borderColor=border||col;}},delay)}
+function fireArrow(fillId,headId,headCol,lblId,delay){
+  T(()=>{
+    const f=document.getElementById(fillId);
+    if(f){f.style.transition='none';f.style.width='0%';setTimeout(()=>{f.style.transition='width .5s ease-out';f.style.width='100%';},20);}
+    const h=document.getElementById(headId);
+    if(h)h.style.borderLeftColor=headCol;
+    if(lblId)T(()=>show(lblId,0),350);
+  },delay);
+}
+
+/* ── SCENE 1: State diagram reveal ── */
+function play1(){
+  clearT();
+  // Reset all nodes
+  ['sn-listen','sn-synrcv','sn-estab','sn-fw1','sn-fw2','sn-tw'].forEach(id=>{
+    const e=document.getElementById(id);if(e)e.className='state-node';
+  });
+  ['sd-listen','sd-synrcv','sd-estab','sd-fw1','sd-fw2','sd-tw'].forEach(id=>{
+    const e=document.getElementById(id);if(e){e.style.background='#2a1f3d';e.style.borderColor='#2a1f3d';}
+  });
+  ['sl-listen','sl-synrcv','sl-estab','sl-fw1','sl-fw2','sl-tw'].forEach(id=>setColor(id,'#888',0));
+  ['pk-closed','pk-listen','pk-synrcv','pk-estab','pk-fw1','pk-fw2','pk-tw'].forEach(id=>hide(id));
+  ['tf1','tf2','tf3','tf4','tf5','tf6','tf7'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .5s ease-out',30);}});
+  ['th1','th2','th3','th4','th5','th6','th7'].forEach((id,i)=>{const cols=['#4eff9a','#4ec9e1','#4eff9a','#e8a020','#e8a020','#e8a020','#4eff9a'];const e=document.getElementById(id);if(e)e.style.borderLeftColor='#1a1a2a';});
+  ['tl1','tl2','tl3','tl4','tl5','tl6','tl7'].forEach(id=>hide(id));
+  hide('legend');
+
+  const steps=[
+    {node:'sn-listen',dot:'sd-listen',lbl:'sl-listen',sub:'ss-listen',dotC:'#4eff9a',lblC:'#4eff9a',subTxt:'bind() + listen() called',pk:'pk-listen',arrowF:'tf1',arrowH:'th1',arrowC:'#4eff9a',arrowL:'tl1'},
+    {node:'sn-synrcv',dot:'sd-synrcv',lbl:'sl-synrcv',sub:'ss-synrcv',dotC:'#e8a020',lblC:'#e8a020',subTxt:'SYN in backlog queue',pk:'pk-synrcv',arrowF:'tf2',arrowH:'th2',arrowC:'#4ec9e1',arrowL:'tl2'},
+    {node:'sn-estab',dot:'sd-estab',lbl:'sl-estab',sub:'ss-estab',dotC:'#4eff9a',lblC:'#4eff9a',subTxt:'data transfer active',pk:'pk-estab',arrowF:'tf3',arrowH:'th3',arrowC:'#4eff9a',arrowL:'tl3'},
+    {node:'sn-fw1',dot:'sd-fw1',lbl:'sl-fw1',sub:'ss-fw1',dotC:'#e8a020',lblC:'#e8a020',subTxt:'FIN sent, waiting ACK',pk:'pk-fw1',arrowF:'tf4',arrowH:'th4',arrowC:'#e8a020',arrowL:'tl4'},
+    {node:'sn-fw2',dot:'sd-fw2',lbl:'sl-fw2',sub:'ss-fw2',dotC:'#e8a020',lblC:'#e8a020',subTxt:'ACK received, wait FIN',pk:'pk-fw2',arrowF:'tf5',arrowH:'th5',arrowC:'#e8a020',arrowL:'tl5'},
+    {node:'sn-tw',dot:'sd-tw',lbl:'sl-tw',sub:'ss-tw',dotC:'#4ec9e1',lblC:'#4ec9e1',subTxt:'2×MSL timer running',pk:'pk-tw',arrowF:'tf6',arrowH:'th6',arrowC:'#e8a020',arrowL:'tl6'},
+  ];
+  const last={arrowF:'tf7',arrowH:'th7',arrowC:'#4eff9a',arrowL:'tl7'};
+
+  steps.forEach((s,i)=>{
+    const delay=400+i*550;
+    T(()=>{
+      const e=document.getElementById(s.node);
+      if(e)e.className='state-node active-state';
+      const d=document.getElementById(s.dot);
+      if(d){d.style.background=s.dotC;d.style.borderColor=s.dotC;}
+      const l=document.getElementById(s.lbl);
+      if(l)l.style.color=s.lblC;
+      const ss=document.getElementById(s.sub);
+      if(ss){ss.textContent=s.subTxt;ss.style.color=s.dotC+'cc';}
+      const pk=document.getElementById(s.pk);
+      if(pk)pk.style.opacity='1';
+    },delay);
+    // Arrow after each node
+    if(s.arrowF) fireArrow(s.arrowF,s.arrowH,s.arrowC,s.arrowL,delay+220);
+  });
+
+  // Last arrow
+  fireArrow(last.arrowF,last.arrowH,last.arrowC,last.arrowL,400+steps.length*550);
+  show('legend',400+steps.length*550+400);
+}
+
+/* ── SCENE 2: 3-way handshake animation ── */
+function play2(){
+  clearT();
+  // Reset
+  ['pkt-syn','pkt-synack','pkt-ack','lbl-syn','lbl-synack','lbl-ack','estab-banner'].forEach(hide);
+  ['tl-closed','ta1','tl-synsent','ta2','tl-estab','synrcv-note','flag-note'].forEach(hide);
+  const cliBox=document.getElementById('cli-box');
+  const srvBox=document.getElementById('srv-box');
+  if(cliBox){cliBox.style.borderColor='#2a1f3d';cliBox.style.color='#888';}
+  if(srvBox){srvBox.style.borderColor='#2a1f3d';srvBox.style.color='#888';}
+  setTxt('cli-state','CLOSED',0); setColor('cli-state','#555',0);
+  setTxt('srv-state','LISTEN',0); setColor('srv-state','#4eff9a',0);
+  if(srvBox){srvBox.style.borderColor='#4eff9a40';}
+
+  // SYN
+  T(()=>{
+    const p=document.getElementById('pkt-syn');
+    const l=document.getElementById('lbl-syn');
+    if(p){p.style.opacity='1';p.style.left='0';}
+    if(l)l.style.opacity='1';
+    const cliBox=document.getElementById('cli-box');
+    if(cliBox){cliBox.style.borderColor='#4ec9e1';cliBox.style.color='#fff';}
+    setTxt('cli-state','SYN_SENT',0); setColor('cli-state','#4ec9e1',0);
+    T(()=>{if(p)p.style.left='calc(100% - 48px)';},30);
+  },400);
+
+  // SYN-ACK
+  T(()=>{
+    const p=document.getElementById('pkt-synack');
+    const l=document.getElementById('lbl-synack');
+    if(p){p.style.opacity='1';p.style.right='0';}
+    if(l)l.style.opacity='1';
+    const srvBox=document.getElementById('srv-box');
+    if(srvBox){srvBox.style.borderColor='#e8a020';srvBox.style.color='#fff';}
+    setTxt('srv-state','SYN_RCVD',0); setColor('srv-state','#e8a020',0);
+    T(()=>{if(p)p.style.right='calc(100% - 68px)';},30);
+  },1200);
+
+  // ACK
+  T(()=>{
+    const p=document.getElementById('pkt-ack');
+    const l=document.getElementById('lbl-ack');
+    if(p){p.style.opacity='1';p.style.left='0';}
+    if(l)l.style.opacity='1';
+    T(()=>{if(p)p.style.left='calc(100% - 36px)';},30);
+  },2100);
+
+  // ESTABLISHED
+  T(()=>{
+    show('estab-banner',0);
+    const cliBox=document.getElementById('cli-box');
+    const srvBox=document.getElementById('srv-box');
+    if(cliBox){cliBox.style.borderColor='#4eff9a';cliBox.style.color='#fff';}
+    if(srvBox){srvBox.style.borderColor='#4eff9a';srvBox.style.color='#fff';}
+    setTxt('cli-state','ESTABLISHED',0); setColor('cli-state','#4eff9a',0);
+    setTxt('srv-state','ESTABLISHED',0); setColor('srv-state','#4eff9a',0);
+  },2900);
+
+  // Timeline
+  show('tl-closed',3300); show('ta1',3500); show('tl-synsent',3700); show('ta2',3900); show('tl-estab',4100);
+  T(()=>{
+    ['tl-closed','tl-synsent','tl-estab'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.borderColor='#4eff9a40';}
+    });
+    ['ta1','ta2'].forEach(id=>setColor(id,'#4eff9a',0));
+    document.getElementById('tl-estab').querySelector('div').style.color='#4eff9a';
+  },4200);
+
+  show('synrcv-note',4600);
+  show('flag-note',5200);
+}
+
+/* ── SCENE 3: Attack states ── */
+let floodAnim=null;
+function play3(){
+  clearT();
+  if(floodAnim)clearInterval(floodAnim);
+
+  // Reset bars
+  ['syn-flood-bar','tw-bar'].forEach(id=>{
+    const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width 1.1s ease-out',30);}
+  });
+  hide('syn-count'); hide('tw-icon');
+
+  // SYN flood animation
+  T(()=>{
+    let count=0;
+    floodAnim=setInterval(()=>{
+      if(count>50){clearInterval(floodAnim);return;}
+      const zone=document.getElementById('flood-zone');
+      if(!zone)return;
+      const p=document.createElement('div');
+      const top=6+Math.floor(Math.random()*38);
+      p.style.cssText=`position:absolute;right:30px;top:${top}px;font-size:5px;font-family:'Press Start 2P',monospace;padding:2px 4px;border:1px solid #e85050;background:#1a0505;color:#e85050;opacity:0;transition:right .5s linear,opacity .15s;white-space:nowrap;`;
+      p.textContent='SYN';
+      zone.appendChild(p);
+      setTimeout(()=>{p.style.opacity='1';p.style.right='36px';},20);
+      setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},600);
+      count++;
+
+      // Update bar
+      const pct=Math.min(100,(count/50)*100);
+      const bar=document.getElementById('syn-flood-bar');
+      if(bar)bar.style.width=pct+'%';
+      const sc=document.getElementById('syn-count');
+      if(sc){sc.style.opacity='1';sc.textContent=Math.floor(count*2.5)+' / 128';}
+    },80);
+  },300);
+
+  // TIME_WAIT bar
+  T(()=>{
+    show('tw-icon',0);
+    const bar=document.getElementById('tw-bar');
+    if(bar)bar.style.width='100%';
+  },1500);
+}
+
+/* ── SCENE 4: Debug cheatsheet ── */
+function play4(){
+  clearT();
+  ['ss-box','bar-estab','bar-tw','bar-listen','bar-cw','bar-syn','diag-table','cmds'].forEach(hide);
+
+  const ssLines=[
+    {txt:'   8192 ESTABLISHED',color:'#4eff9a'},
+    {txt:'  10284 TIME_WAIT   ',color:'#4ec9e1'},
+    {txt:'     42 LISTEN      ',color:'#9a4ef8'},
+    {txt:'    341 CLOSE_WAIT  ',color:'#e8a020'},
+    {txt:'      3 SYN_RCVD    ',color:'#e85050'},
+  ];
+  const bars=[
+    {id:'cb-estab',val:'80%',cv:'cv-estab',cvTxt:'8192',fade:'bar-estab'},
+    {id:'cb-tw',val:'100%',cv:'cv-tw',cvTxt:'10284',fade:'bar-tw'},
+    {id:'cb-listen',val:'1%',cv:'cv-listen',cvTxt:'42',fade:'bar-listen'},
+    {id:'cb-cw',val:'4%',cv:'cv-cw',cvTxt:'341',fade:'bar-cw'},
+    {id:'cb-syn',val:'0.5%',cv:'cv-syn',cvTxt:'3',fade:'bar-syn'},
+  ];
+
+  show('ss-box',300);
+
+  const output=document.getElementById('ss-output');
+  if(output)output.innerHTML='';
+
+  ssLines.forEach((line,i)=>{
+    T(()=>{
+      if(!output)return;
+      const d=document.createElement('div');
+      d.style.cssText=`color:${line.color};opacity:0;transition:opacity .3s;`;
+      d.textContent=line.txt;
+      output.appendChild(d);
+      setTimeout(()=>d.style.opacity='1',30);
+
+      // Animate corresponding bar
+      const bar=bars[i];
+      T(()=>{
+        show(bar.fade,0);
+        const b=document.getElementById(bar.id);
+        if(b){b.style.transition='none';b.style.width='0%';setTimeout(()=>{b.style.transition='width 1.1s ease-out';b.style.width=bar.val;},30);}
+        setTxt(bar.cv,bar.cvTxt,600);
+      },200);
+    },700+i*400);
+  });
+
+  show('diag-table',700+ssLines.length*400+200);
+  show('cmds',700+ssLines.length*400+900);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

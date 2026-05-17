@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>OSI Model – Why 7 Layers?</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* OSI Layer blocks */
+.layer-block{
+  display:flex;align-items:center;
+  border:2px solid;border-radius:3px;
+  opacity:0;transform:translateY(-12px);
+  transition:opacity .35s ease,transform .35s ease;
+  overflow:hidden;
+}
+.layer-block.visible{opacity:1;transform:translateY(0)}
+.layer-num{
+  width:34px;min-height:52px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;
+}
+.layer-body{
+  flex:1;padding:6px 8px;min-height:52px;
+  display:flex;flex-direction:column;justify-content:center;gap:4px;
+  border-left:2px solid rgba(255,255,255,.08);
+}
+.layer-name{font-size:9px;letter-spacing:.5px;line-height:1.4}
+.layer-desc{font-size:7px;color:#aaa;line-height:1.6}
+.layer-badge{
+  font-size:7px;padding:2px 6px;border-radius:2px;
+  margin-left:auto;flex-shrink:0;margin-right:6px;
+  align-self:center;
+}
+
+/* Connector beam between layers */
+.connector{
+  height:6px;margin:0 50px;background:linear-gradient(90deg,transparent,#2a1f3d 30%,#2a1f3d 70%,transparent);
+  opacity:0;transition:opacity .2s;
+  display:flex;align-items:center;justify-content:center;
+}
+.connector.visible{opacity:1}
+.connector-dot{width:4px;height:4px;border-radius:50%;background:#2a2f4d}
+
+/* Scene 1 title card */
+.title-hero{
+  border:2px solid #e8a020;padding:18px 14px;margin:0;
+  opacity:0;transition:opacity .5s;
+  text-align:center;
+}
+.title-hero.visible{opacity:1}
+
+/* Pulse animation for active layer */
+@keyframes layerPulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(78,201,225,.0)}
+  50%{box-shadow:0 0 0 4px rgba(78,201,225,.25)}
+}
+.layer-block.pulse{animation:layerPulse 1s ease 2}
+
+/* Scene 4 message flow */
+.msg-block{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
+  border:1px solid #2a1f3d;border-radius:2px;
+  opacity:0;transition:opacity .4s;font-size:8px;
+}
+.msg-block.visible{opacity:1}
+.msg-arrow{color:#4ec9e1;font-size:10px;flex-shrink:0}
+.msg-label{color:#ccc;line-height:1.6;flex:1}
+.msg-tag{font-size:7px;padding:2px 6px;background:#1a1025;border:1px solid #4ec9e1;color:#4ec9e1;flex-shrink:0;border-radius:2px}
+
+/* Scene 2 why-layers cards */
+.why-card{
+  border:2px solid;border-radius:3px;padding:12px;
+  opacity:0;transform:scale(.92);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.why-card.visible{opacity:1;transform:scale(1)}
+.why-icon{font-size:18px;margin-bottom:8px}
+.why-title{font-size:9px;color:#4ec9e1;margin-bottom:6px;line-height:1.5}
+.why-body{font-size:7px;color:#aaa;line-height:1.8}
+
+/* Talk-to-neighbors anim */
+.neighbor-row{display:flex;align-items:center;gap:6px;padding:8px 10px}
+.neighbor-box{
+  flex:1;border:2px solid;border-radius:3px;padding:10px 6px;
+  text-align:center;font-size:8px;line-height:1.5;
+  opacity:0;transition:opacity .35s,border-color .3s,background .3s;
+}
+.neighbor-box.visible{opacity:1}
+.neighbor-box.active-n{background:#0d2040!important}
+.neighbor-arrow{
+  font-size:14px;flex-shrink:0;opacity:0;transition:opacity .3s;
+}
+.neighbor-arrow.visible{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════ SCENE 1: HOOK / TITLE ═══ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">OSI MODEL</div>
+    <div class="hdr-sub">NETWORKING FUNDAMENTALS · EP 01</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">INTRO</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hero question -->
+      <div class="title-hero" id="s1-hero">
+        <div style="font-size:8px;color:#888;letter-spacing:2px;margin-bottom:10px">THE BIG QUESTION</div>
+        <div style="font-size:11px;color:#e8a020;line-height:1.8;margin-bottom:10px">WHY DOES THE<br>INTERNET NEED<br>7 LAYERS?</div>
+        <div style="font-size:8px;color:#ccc;line-height:1.8">The answer is simpler<br>than you think.</div>
+      </div>
+
+      <!-- Mini stack teaser -->
+      <div id="s1-stack" style="display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity .5s .4s">
+        <div style="font-size:7px;color:#555;text-align:center;letter-spacing:2px;margin-bottom:4px">SNEAK PEEK ↓</div>
+        <!-- 7 tiny preview strips -->
+        <div style="display:flex;height:24px;border:1px solid #7c3a9d;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#7c3a9d;width:12px;text-align:center">7</span>
+          <span style="font-size:7px;color:#a060c0;flex:1">APPLICATION</span>
+          <span style="font-size:7px;color:#555">HTTP, DNS, FTP</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #4455bb;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#4455bb;width:12px;text-align:center">6</span>
+          <span style="font-size:7px;color:#6677dd;flex:1">PRESENTATION</span>
+          <span style="font-size:7px;color:#555">TLS, encoding</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #2277aa;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#2277aa;width:12px;text-align:center">5</span>
+          <span style="font-size:7px;color:#4499cc;flex:1">SESSION</span>
+          <span style="font-size:7px;color:#555">login sessions</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #208060;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#208060;width:12px;text-align:center">4</span>
+          <span style="font-size:7px;color:#4eff9a;flex:1">TRANSPORT</span>
+          <span style="font-size:7px;color:#555">TCP, UDP</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #808020;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#808020;width:12px;text-align:center">3</span>
+          <span style="font-size:7px;color:#e8e020;flex:1">NETWORK</span>
+          <span style="font-size:7px;color:#555">IP routing</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #a05010;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#a05010;width:12px;text-align:center">2</span>
+          <span style="font-size:7px;color:#e8a020;flex:1">DATA LINK</span>
+          <span style="font-size:7px;color:#555">Ethernet, MAC</span>
+        </div>
+        <div style="display:flex;height:24px;border:1px solid #992020;border-radius:2px;overflow:hidden;align-items:center;padding:0 8px;gap:8px">
+          <span style="font-size:7px;color:#992020;width:12px;text-align:center">1</span>
+          <span style="font-size:7px;color:#e85050;flex:1">PHYSICAL</span>
+          <span style="font-size:7px;color:#555">cables, signals</span>
+        </div>
+      </div>
+
+      <div id="s1-tag" style="opacity:0;transition:opacity .5s .8s;text-align:center;font-size:7px;color:#555;letter-spacing:1px;padding-top:4px">
+        TAP NEXT ▶ TO BUILD THE STACK
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am" id="s1-info">
+    <div class="il">THE OSI MODEL</div>
+    <div class="ih am">Open Systems Interconnection</div>
+    <div class="il" style="font-size:8px">A universal 7-layer blueprint for how all network communication works — from cable signals to your browser.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">1984</div><div class="sl">ISO published<br>OSI standard</div></div>
+    <div class="sc"><div class="sv gn">7</div><div class="sl">distinct<br>layers</div></div>
+    <div class="sc"><div class="sv" style="font-size:10px">∞</div><div class="sl">devices it<br>connects</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 2: WHY LAYERS EXIST ═══ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OSI MODEL</div>
+    <div class="hdr-sub">WHY DOES LAYERING EXIST?</div>
+    <div class="dots">
+      <div class="dot done" id="d2-1"></div>
+      <div class="dot active" id="d2-2"></div>
+      <div class="dot" id="d2-3"></div>
+      <div class="dot" id="d2-4"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CONCEPT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">WHY?</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;letter-spacing:2px;text-align:center;padding:4px 0">WITHOUT LAYERS...</div>
+
+      <!-- Chaos visual -->
+      <div id="s2-chaos" style="border:2px solid #e85050;border-radius:3px;padding:12px;opacity:0;transition:opacity .4s;text-align:center">
+        <div style="font-size:9px;color:#e85050;margin-bottom:8px">⚠ VENDOR CHAOS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px">
+          <div style="border:1px solid #442020;border-radius:2px;padding:6px;font-size:7px;color:#e87050;line-height:1.5">IBM<br>protocol</div>
+          <div style="border:1px solid #442020;border-radius:2px;padding:6px;font-size:7px;color:#e87050;line-height:1.5">Apple<br>protocol</div>
+          <div style="border:1px solid #442020;border-radius:2px;padding:6px;font-size:7px;color:#e87050;line-height:1.5">Cisco<br>protocol</div>
+        </div>
+        <div style="font-size:7px;color:#888;line-height:1.7">Each vendor used their own<br>incompatible system.<br>Devices couldn't talk to each other.</div>
+      </div>
+
+      <div id="s2-arrow" style="text-align:center;font-size:14px;color:#4eff9a;opacity:0;transition:opacity .3s">↓ OSI FIXES THIS</div>
+
+      <!-- 3 why cards -->
+      <div class="why-card" id="s2-c1" style="border-color:#4ec9e1">
+        <div class="why-icon">🔌</div>
+        <div class="why-title">VENDOR INTEROPERABILITY</div>
+        <div class="why-body">Any device from any vendor can talk to any other device — as long as both follow the OSI spec. Your iPhone connects to a Cisco router. No problem.</div>
+      </div>
+
+      <div class="why-card" id="s2-c2" style="border-color:#4eff9a">
+        <div class="why-icon">🔧</div>
+        <div class="why-title">MODULAR & REPLACEABLE</div>
+        <div class="why-body">Swap Wi-Fi for fiber at Layer 1 and nothing above changes. Upgrade TCP at Layer 4 without rewriting your browser. Each layer is independent.</div>
+      </div>
+
+      <div class="why-card" id="s2-c3" style="border-color:#e8a020">
+        <div class="why-icon">🐛</div>
+        <div class="why-title">EASY TO DEBUG</div>
+        <div class="why-body">Network broken? Check one layer at a time. Is the cable plugged in? (Layer 1). Can you ping? (Layer 3). Can you load a page? (Layer 7). Isolate fast.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">KEY IDEA</div>
+    <div class="ih">Layering = Separation of concerns</div>
+    <div class="il" style="font-size:8px">Each layer does ONE job well and hands off to its neighbor. Nobody has to know everything.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1970s</div><div class="sl">before OSI:<br>chaos</div></div>
+    <div class="sc"><div class="sv gn">1984</div><div class="sl">after OSI:<br>standard</div></div>
+    <div class="sc"><div class="sv am">∞</div><div class="sl">combos<br>possible</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 3: THE 7 LAYERS ═══ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OSI MODEL</div>
+    <div class="hdr-sub">THE 7 LAYERS — SNAP INTO PLACE</div>
+    <div class="dots">
+      <div class="dot done" id="d3-1"></div>
+      <div class="dot done" id="d3-2"></div>
+      <div class="dot active" id="d3-3"></div>
+      <div class="dot" id="d3-4"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE STACK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BUILDING</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:3px" id="s3-layers">
+
+      <!-- Layer 7 -->
+      <div class="layer-block" id="l7" style="border-color:#a060c0;background:#1a0d2e">
+        <div class="layer-num" style="color:#a060c0;background:#1f0d35">7</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#c080e0">APPLICATION</div>
+          <div class="layer-desc">What the user sees. HTTP, DNS, FTP, SMTP</div>
+        </div>
+        <div class="layer-badge" style="background:#1f0d35;color:#a060c0;border:1px solid #a060c0">USER</div>
+      </div>
+
+      <div class="connector" id="c76"><div class="connector-dot"></div></div>
+
+      <!-- Layer 6 -->
+      <div class="layer-block" id="l6" style="border-color:#6677dd;background:#0d1230">
+        <div class="layer-num" style="color:#6677dd;background:#111535">6</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#8899ee">PRESENTATION</div>
+          <div class="layer-desc">Encryption, encoding. TLS, JPEG, ASCII</div>
+        </div>
+        <div class="layer-badge" style="background:#111535;color:#6677dd;border:1px solid #6677dd">FORMAT</div>
+      </div>
+
+      <div class="connector" id="c65"><div class="connector-dot"></div></div>
+
+      <!-- Layer 5 -->
+      <div class="layer-block" id="l5" style="border-color:#4499cc;background:#0d1828">
+        <div class="layer-num" style="color:#4499cc;background:#101d2f">5</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#66bbee">SESSION</div>
+          <div class="layer-desc">Opens/closes connections. Login sessions</div>
+        </div>
+        <div class="layer-badge" style="background:#101d2f;color:#4499cc;border:1px solid #4499cc">DIALOG</div>
+      </div>
+
+      <div class="connector" id="c54"><div class="connector-dot"></div></div>
+
+      <!-- Layer 4 -->
+      <div class="layer-block" id="l4" style="border-color:#4eff9a;background:#0d1e18">
+        <div class="layer-num" style="color:#4eff9a;background:#0d2018">4</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#4eff9a">TRANSPORT</div>
+          <div class="layer-desc">Reliable delivery. TCP (reliable), UDP (fast)</div>
+        </div>
+        <div class="layer-badge" style="background:#0d2018;color:#4eff9a;border:1px solid #4eff9a">END-END</div>
+      </div>
+
+      <div class="connector" id="c43"><div class="connector-dot"></div></div>
+
+      <!-- Layer 3 -->
+      <div class="layer-block" id="l3" style="border-color:#d0d020;background:#1e1d0d">
+        <div class="layer-num" style="color:#d0d020;background:#202008">3</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#e8e040">NETWORK</div>
+          <div class="layer-desc">Routes packets. IP addresses, routers</div>
+        </div>
+        <div class="layer-badge" style="background:#202008;color:#d0d020;border:1px solid #d0d020">ROUTE</div>
+      </div>
+
+      <div class="connector" id="c32"><div class="connector-dot"></div></div>
+
+      <!-- Layer 2 -->
+      <div class="layer-block" id="l2" style="border-color:#e8a020;background:#1e1508">
+        <div class="layer-num" style="color:#e8a020;background:#201800">2</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#f0b840">DATA LINK</div>
+          <div class="layer-desc">Node-to-node. Ethernet, Wi-Fi, MAC addrs</div>
+        </div>
+        <div class="layer-badge" style="background:#201800;color:#e8a020;border:1px solid #e8a020">LOCAL</div>
+      </div>
+
+      <div class="connector" id="c21"><div class="connector-dot"></div></div>
+
+      <!-- Layer 1 -->
+      <div class="layer-block" id="l1" style="border-color:#e85050;background:#1e0d0d">
+        <div class="layer-num" style="color:#e85050;background:#200808">1</div>
+        <div class="layer-body">
+          <div class="layer-name" style="color:#ff7070">PHYSICAL</div>
+          <div class="layer-desc">Raw bits. Cables, fiber, radio waves, voltage</div>
+        </div>
+        <div class="layer-badge" style="background:#200808;color:#e85050;border:1px solid #e85050">BITS</div>
+      </div>
+
+      <div style="display:flex;gap:8px;padding:8px 0 0;opacity:0;transition:opacity .4s" id="s3-hint">
+        <div style="font-size:7px;color:#888;text-align:center;flex:1;line-height:1.8">↑ SOFTWARE<br>(programmable)</div>
+        <div style="width:1px;background:#2a1f3d"></div>
+        <div style="font-size:7px;color:#888;text-align:center;flex:1;line-height:1.8">↓ HARDWARE<br>(physical world)</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">MNEMONIC</div>
+    <div class="ih" style="font-size:9px">"All People Seem To Need Data Processing"</div>
+    <div class="il" style="font-size:7px">App · Presentation · Session · Transport · Network · Data Link · Physical</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a060c0">7</div><div class="sl">total<br>layers</div></div>
+    <div class="sc"><div class="sv rd">1–3</div><div class="sl">hardware<br>layers</div></div>
+    <div class="sc"><div class="sv am">5–7</div><div class="sl">software<br>layers</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 4: NEIGHBORS RULE ═══ -->
+<div class="scene" id="s4" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">OSI MODEL</div>
+    <div class="hdr-sub">LAYERS ONLY TALK TO NEIGHBORS</div>
+    <div class="dots">
+      <div class="dot done" id="d4-1"></div>
+      <div class="dot done" id="d4-2"></div>
+      <div class="dot done" id="d4-3"></div>
+      <div class="dot active" id="d4-4"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">KEY RULE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">NEIGHBORS</span>
+  </div>
+
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s4-intro" style="text-align:center;font-size:8px;color:#888;opacity:0;transition:opacity .4s;line-height:1.8;padding:4px 0">
+        Each layer only speaks to the layer<br>directly above and below it.
+      </div>
+
+      <!-- Neighbor demo stack -->
+      <div style="display:flex;flex-direction:column;gap:4px" id="s4-demo">
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r7">
+          <div style="width:22px;text-align:center;font-size:8px;color:#a060c0;flex-shrink:0">7</div>
+          <div class="neighbor-box" style="border-color:#a060c0;color:#c080e0;background:#1a0d2e">APPLICATION</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px" id="s4-a76">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam76">
+            <span style="color:#6677dd">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r6">
+          <div style="width:22px;text-align:center;font-size:8px;color:#6677dd;flex-shrink:0">6</div>
+          <div class="neighbor-box" style="border-color:#6677dd;color:#8899ee;background:#0d1230">PRESENTATION</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px" id="s4-a65">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam65">
+            <span style="color:#4499cc">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r5">
+          <div style="width:22px;text-align:center;font-size:8px;color:#4499cc;flex-shrink:0">5</div>
+          <div class="neighbor-box" style="border-color:#4499cc;color:#66bbee;background:#0d1828">SESSION</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center" id="s4-a54">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam54">
+            <span style="color:#4eff9a">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r4">
+          <div style="width:22px;text-align:center;font-size:8px;color:#4eff9a;flex-shrink:0">4</div>
+          <div class="neighbor-box" style="border-color:#4eff9a;color:#4eff9a;background:#0d1e18">TRANSPORT</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center" id="s4-a43">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam43">
+            <span style="color:#d0d020">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r3">
+          <div style="width:22px;text-align:center;font-size:8px;color:#d0d020;flex-shrink:0">3</div>
+          <div class="neighbor-box" style="border-color:#d0d020;color:#e8e040;background:#1e1d0d">NETWORK</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center" id="s4-a32">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam32">
+            <span style="color:#e8a020">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r2">
+          <div style="width:22px;text-align:center;font-size:8px;color:#e8a020;flex-shrink:0">2</div>
+          <div class="neighbor-box" style="border-color:#e8a020;color:#f0b840;background:#1e1508">DATA LINK</div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:center" id="s4-a21">
+          <div style="width:22px;flex-shrink:0"></div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:8px;opacity:0;transition:opacity .4s" id="s4-beam21">
+            <span style="color:#e85050">↕</span><span style="font-size:7px;color:#555">interface</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px" id="s4-r1">
+          <div style="width:22px;text-align:center;font-size:8px;color:#e85050;flex-shrink:0">1</div>
+          <div class="neighbor-box" style="border-color:#e85050;color:#ff7070;background:#1e0d0d">PHYSICAL</div>
+        </div>
+      </div>
+
+      <!-- Rule callout -->
+      <div id="s4-rule" style="border:2px solid #4eff9a;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s;margin-top:4px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">THE GOLDEN RULE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">Layer 7 cannot skip to Layer 3.<br>Data flows DOWN one layer at a time on the sender, and UP one layer at a time on the receiver.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">WHY THIS MATTERS</div>
+    <div class="ih" style="color:#4eff9a">Clean interfaces = swappable parts</div>
+    <div class="il" style="font-size:8px">Layer 3 doesn't care if Layer 1 is fiber or Wi-Fi. Abstraction is the superpower.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">6</div><div class="sl">interfaces<br>between layers</div></div>
+    <div class="sc"><div class="sv am">2-WAY</div><div class="sl">each interface<br>is bidirectional</div></div>
+    <div class="sc"><div class="sv" style="color:#a060c0">NO SKIP</div><div class="sl">must go layer<br>by layer</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene = 1;
+let timers = [];
+
+function clearTimers(){
+  timers.forEach(t=>clearTimeout(t));
+  timers=[];
+}
+
+function delay(fn,ms){
+  timers.push(setTimeout(fn,ms));
+}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    document.getElementById('s1-hero').classList.remove('visible');
+    document.getElementById('s1-hero').style.opacity='0';
+    document.getElementById('s1-stack').style.opacity='0';
+    document.getElementById('s1-tag').style.opacity='0';
+  }
+  if(n===2){
+    document.getElementById('s2-chaos').style.opacity='0';
+    document.getElementById('s2-arrow').style.opacity='0';
+    document.getElementById('s2-c1').classList.remove('visible');
+    document.getElementById('s2-c2').classList.remove('visible');
+    document.getElementById('s2-c3').classList.remove('visible');
+  }
+  if(n===3){
+    [7,6,5,4,3,2,1].forEach(i=>{
+      const el=document.getElementById('l'+i);
+      el.classList.remove('visible','pulse');
+    });
+    ['76','65','54','43','32','21'].forEach(p=>{
+      document.getElementById('c'+p).classList.remove('visible');
+    });
+    document.getElementById('s3-hint').style.opacity='0';
+  }
+  if(n===4){
+    document.getElementById('s4-intro').style.opacity='0';
+    ['76','65','54','43','32','21'].forEach(p=>{
+      document.getElementById('s4-beam'+p).style.opacity='0';
+    });
+    document.getElementById('s4-rule').style.opacity='0';
+    // reset neighbor boxes
+    document.querySelectorAll('#s4-demo .neighbor-box').forEach(b=>{
+      b.classList.remove('visible','active-n');
+      b.style.opacity='0';
+    });
+  }
+}
+
+function playScene(n){
+  clearTimers();
+  resetScene(n);
+
+  if(n===1){
+    delay(()=>{
+      document.getElementById('s1-hero').style.opacity='1';
+    },100);
+    delay(()=>{
+      document.getElementById('s1-stack').style.opacity='1';
+    },700);
+    delay(()=>{
+      document.getElementById('s1-tag').style.opacity='1';
+    },1400);
+  }
+
+  if(n===2){
+    delay(()=>{ document.getElementById('s2-chaos').style.opacity='1'; },200);
+    delay(()=>{ document.getElementById('s2-arrow').style.opacity='1'; },900);
+    delay(()=>{ document.getElementById('s2-c1').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('s2-c2').classList.add('visible'); },1700);
+    delay(()=>{ document.getElementById('s2-c3').classList.add('visible'); },2100);
+  }
+
+  if(n===3){
+    const layers = [7,6,5,4,3,2,1];
+    const connectors = ['76','65','54','43','32','21'];
+    layers.forEach((id,i)=>{
+      delay(()=>{
+        const el=document.getElementById('l'+id);
+        el.classList.add('visible');
+        el.classList.add('pulse');
+        delay(()=>el.classList.remove('pulse'),1000);
+        if(i<connectors.length){
+          delay(()=>{
+            document.getElementById('c'+connectors[i]).classList.add('visible');
+          },250);
+        }
+      },300 + i*350);
+    });
+    delay(()=>{ document.getElementById('s3-hint').style.opacity='1'; },300+7*350+200);
+  }
+
+  if(n===4){
+    delay(()=>{ document.getElementById('s4-intro').style.opacity='1'; },200);
+    // Show all neighbor boxes first
+    const rows = ['s4-r7','s4-r6','s4-r5','s4-r4','s4-r3','s4-r2','s4-r1'];
+    rows.forEach((id,i)=>{
+      delay(()=>{
+        const box = document.querySelector('#'+id+' .neighbor-box');
+        box.style.opacity='1';
+      },400+i*180);
+    });
+    // Then animate beams
+    const beams = ['76','65','54','43','32','21'];
+    beams.forEach((p,i)=>{
+      delay(()=>{
+        document.getElementById('s4-beam'+p).style.opacity='1';
+      },400+rows.length*180+i*200);
+    });
+    delay(()=>{
+      document.getElementById('s4-rule').style.opacity='1';
+    },400+rows.length*180+beams.length*200+300);
+  }
+}
+
+// Auto play scene 1 on load
+window.addEventListener('load',()=>{ playScene(1); });
+</script>
+</body>
+</html>

@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>TCP Flow Control</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Pipeline track */
+.pipe-track{position:relative;height:36px;background:#0a0a14;border:2px solid #2a1f3d;border-radius:3px;overflow:hidden}
+.pipe-fill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .5s ease-out;border-radius:1px}
+.pipe-limit{position:absolute;top:0;bottom:0;width:2px;background:#e85050;opacity:0;transition:opacity .3s}
+.pipe-label{position:absolute;top:50%;transform:translateY(-50%);font-size:6px;font-family:'Press Start 2P',monospace;right:6px;color:#fff;opacity:0;transition:opacity .3s}
+
+/* Packet segments inside pipe */
+.seg{position:absolute;top:4px;bottom:4px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:5px;font-family:'Press Start 2P',monospace;transition:all .4s ease-out;opacity:0}
+
+/* Recv buffer */
+.rbuf{position:relative;height:44px;background:#0a0a14;border:2px solid #2a1f3d;border-radius:3px;overflow:hidden}
+.rbuf-fill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .8s ease-out}
+.rbuf-label{position:absolute;top:50%;transform:translateY(-50%);right:8px;font-size:6px;font-family:'Press Start 2P',monospace;color:#fff;opacity:0;transition:opacity .3s}
+
+/* Window banner */
+.win-banner{border:2px solid currentColor;padding:6px 10px;text-align:center;opacity:0;transition:opacity .4s,border-color .4s}
+.win-val{font-size:18px;line-height:1.3}
+.win-lbl{font-size:6px;margin-top:2px}
+
+/* Sliding window cells */
+.sw-cell{display:inline-flex;align-items:center;justify-content:center;border:1px solid;font-size:6px;font-family:'Press Start 2P',monospace;transition:all .35s;opacity:0}
+
+/* zero window flash */
+@keyframes zwFlash{0%,100%{background:#1a0505;border-color:#e85050}50%{background:#3a0a0a;border-color:#ff8080}}
+.zw-flash{animation:zwFlash .6s ease-in-out 4}
+
+/* probe pulse */
+@keyframes probePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.95)}}
+
+/* packet float right */
+@keyframes pktRight{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(200px)}}
+@keyframes pktLeft{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(-200px)}}
+.pkt-r{animation:pktRight .55s ease-out forwards}
+.pkt-l{animation:pktLeft .55s ease-out forwards}
+
+.fade{opacity:0;transition:opacity .4s}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════
+     SCENE 1 — WHAT IS THE RECEIVE WINDOW
+════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TCP FLOW CONTROL</div>
+    <div class="hdr-sub">THE RECEIVE WINDOW — rwnd</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEP 1 — THE WINDOW</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CONCEPT</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px">THE CORE PROBLEM</div>
+
+      <!-- Speed mismatch visual -->
+      <div style="display:flex;gap:6px;align-items:stretch">
+        <div style="flex:1;border:2px solid #e85050;background:#1a050590;padding:8px 7px;text-align:center">
+          <div style="font-size:18px;margin-bottom:4px">🖥</div>
+          <div style="font-size:7px;color:#e85050">SENDER</div>
+          <div style="font-size:6px;color:#888;margin-top:3px;line-height:1.6">10 Gbps NIC<br>sends FAST</div>
+        </div>
+        <div style="display:flex;align-items:center;flex-direction:column;justify-content:center;gap:3px">
+          <div id="arrow-packets" style="font-size:9px;color:#e85050;opacity:0;transition:opacity .3s">▶▶▶</div>
+          <div style="font-size:5px;color:#555">rwnd</div>
+          <div style="font-size:9px;color:#e85050;opacity:0;transition:opacity .3s" id="arrow-packets2">▶▶▶</div>
+        </div>
+        <div style="flex:1;border:2px solid #4eff9a;background:#001a1090;padding:8px 7px;text-align:center">
+          <div style="font-size:18px;margin-bottom:4px">📱</div>
+          <div style="font-size:7px;color:#4eff9a">RECEIVER</div>
+          <div style="font-size:6px;color:#888;margin-top:3px;line-height:1.6">1 Mbps link<br>slow buffer</div>
+        </div>
+      </div>
+
+      <!-- rwnd concept -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-top:2px">RECEIVE BUFFER (rwnd)</div>
+
+      <div style="position:relative">
+        <div class="rbuf" id="rbuf1">
+          <div class="rbuf-fill" id="rbuf1-fill" style="background:#4eff9a"></div>
+          <div class="rbuf-label" id="rbuf1-lbl">rwnd = 65535B</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:5px;color:#555;margin-top:3px">
+          <span>buffer used ←</span><span>→ rwnd (free space)</span>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="fade" id="how-box" style="border:1px solid #4ec9e140;background:#001a2080;padding:8px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">HOW rwnd WORKS</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          Every TCP ACK carries a <span style="color:#4eff9a">Window field (16-bit)</span>.<br>
+          Receiver says: "I have this many bytes free."<br>
+          Sender MUST NOT have more than rwnd bytes<br>
+          unacknowledged in flight at any time.
+        </div>
+      </div>
+
+      <!-- ACK packet example -->
+      <div class="fade" id="ack-pkt" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">INSIDE EVERY ACK SEGMENT</div>
+        <div style="font-size:6px;color:#aaa;font-family:monospace;line-height:2.1">
+          ACK=5001 &nbsp;<span style="color:#4eff9a">WIN=32768</span> &nbsp;← rwnd<br>
+          ACK=5001 &nbsp;<span style="color:#e8a020">WIN=8192</span> &nbsp;&nbsp;← buffer filling<br>
+          ACK=5001 &nbsp;<span style="color:#e85050">WIN=0</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;← ZERO WINDOW!
+        </div>
+      </div>
+
+      <!-- Window size history -->
+      <div class="fade" id="win-history" style="border:1px solid #2a1f3d;background:#0a0a14;padding:7px 10px">
+        <div style="font-size:7px;color:#888;margin-bottom:6px">WINDOW SHRINKS AS BUFFER FILLS</div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:44px;padding:0 4px">
+          <div style="flex:1;background:#4eff9a;height:90%;border-radius:2px 2px 0 0;opacity:0;transition:opacity .3s,height .5s" id="wbar1"></div>
+          <div style="flex:1;background:#4eff9a;height:70%;border-radius:2px 2px 0 0;opacity:0;transition:opacity .3s,height .5s" id="wbar2"></div>
+          <div style="flex:1;background:#e8a020;height:45%;border-radius:2px 2px 0 0;opacity:0;transition:opacity .3s,height .5s" id="wbar3"></div>
+          <div style="flex:1;background:#e8a020;height:20%;border-radius:2px 2px 0 0;opacity:0;transition:opacity .3s,height .5s" id="wbar4"></div>
+          <div style="flex:1;background:#e85050;height:2%;border-radius:2px 2px 0 0;opacity:0;transition:opacity .3s,height .5s;min-height:3px" id="wbar5"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:5px;color:#555;margin-top:3px;padding:0 4px">
+          <span style="color:#4eff9a">full</span><span>▶ time ▶</span><span style="color:#e85050">ZERO WIN</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Receiver advertises free buffer space.</div>
+    <div class="il">Sender must respect this limit — always.</div>
+    <div class="ih am">Window=0 → sender must stop immediately.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">65535</div><div class="sl">MAX WIN (16-bit)</div></div>
+    <div class="sc"><div class="sv am">WIN</div><div class="sl">IN EVERY ACK</div></div>
+    <div class="sc"><div class="sv gn">WSCALE</div><div class="sl">EXTENDS TO 1GB</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     SCENE 2 — SLIDING WINDOW ANIMATION
+════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">SLIDING WINDOW</div>
+    <div class="hdr-sub">SENDER FILLS WINDOW — ACKs SLIDE IT FORWARD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STEP 2 — PIPELINE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">NORMAL FLOW</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">SEQUENCE SPACE — 12 SEGMENTS</div>
+
+      <!-- Sliding window cells -->
+      <div style="display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden" id="sw-row">
+        <!-- 12 cells: 1-4 acked, 5-8 in-flight, 9-12 not yet sent, based on window -->
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#2a1f3d;border:1px solid #555"></div><div style="font-size:6px;color:#aaa">acked</div></div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#001a2060;border:1px solid #4ec9e1"></div><div style="font-size:6px;color:#aaa">in flight</div></div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#001a1060;border:1px solid #4eff9a"></div><div style="font-size:6px;color:#aaa">window (sendable)</div></div>
+        <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#0d0d1a;border:1px solid #2a1f3d"></div><div style="font-size:6px;color:#aaa">outside window</div></div>
+      </div>
+
+      <!-- Pipeline visualization -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-top:2px">IN-FLIGHT PIPELINE</div>
+
+      <div class="pipe-track" id="pipe-s2">
+        <div class="pipe-fill" id="pipe-s2-fill" style="background:#4ec9e1"></div>
+        <div class="pipe-limit" id="pipe-s2-limit" style="left:100%"></div>
+        <div class="pipe-label" id="pipe-s2-lbl">0 / rwnd</div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:5px;color:#555">
+        <span>0B in flight</span>
+        <span id="pipe-s2-max" style="color:#e85050">rwnd limit</span>
+      </div>
+
+      <!-- Two actors -->
+      <div style="display:flex;justify-content:space-between;gap:6px;margin-top:2px">
+        <div style="flex:1;border:2px solid #2a1f3d;background:#0d0d1a;padding:7px 8px;text-align:center;transition:all .35s" id="s2-sender">
+          <div style="font-size:16px">🖥</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">SENDER</div>
+          <div style="font-size:6px;color:#555;margin-top:2px" id="s2-sstate">idle</div>
+        </div>
+
+        <!-- Packet animation lane -->
+        <div style="flex:2;position:relative;display:flex;align-items:center;justify-content:center;min-height:60px;overflow:hidden" id="s2-lane">
+          <div id="s2-pkts" style="position:absolute;left:0;right:0;top:0;bottom:0"></div>
+        </div>
+
+        <div style="flex:1;border:2px solid #2a1f3d;background:#0d0d1a;padding:7px 8px;text-align:center;transition:all .35s" id="s2-recv">
+          <div style="font-size:16px">📱</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">RECEIVER</div>
+          <div style="font-size:6px;color:#555;margin-top:2px" id="s2-rstate">waiting</div>
+        </div>
+      </div>
+
+      <!-- Window value display -->
+      <div class="win-banner fade" id="s2-winbanner" style="color:#4eff9a;border-color:#4eff9a">
+        <div class="win-val" id="s2-winval" style="color:#4eff9a">65535</div>
+        <div class="win-lbl" style="color:#888">bytes remaining in rwnd</div>
+      </div>
+
+      <!-- ACK process note -->
+      <div class="fade" id="s2-note" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">SLIDING WINDOW MECHANISM</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          As ACKs arrive, left edge slides right →<br>
+          New segments enter the window from right.<br>
+          Sender always fills up to <span style="color:#4eff9a">min(rwnd, cwnd)</span>.<br>
+          <span style="color:#4ec9e1">cwnd = congestion window (separate control)</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Window slides right as ACKs arrive.</div>
+    <div class="il">Sender keeps pipeline full up to rwnd.</div>
+    <div class="ih">min(rwnd, cwnd) is the actual send limit.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">FULL</div><div class="sl">PIPE GOAL</div></div>
+    <div class="sc"><div class="sv am">rwnd</div><div class="sl">FLOW CONTROL</div></div>
+    <div class="sc"><div class="sv" style="color:#9a4ef8">cwnd</div><div class="sl">CONGESTION CTL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     SCENE 3 — ZERO WINDOW EVENT
+════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ZERO WINDOW</div>
+    <div class="hdr-sub">SENDER PAUSED — BUFFER FULL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">STEP 3 — ZW EVENT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">HANG RISK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">TIMELINE — ZERO WINDOW EVENT</div>
+
+      <!-- Phase 1: Flowing -->
+      <div class="fade" id="ph1" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">① FLOWING — buffer has space</div>
+        <div class="pipe-track">
+          <div class="pipe-fill" id="zw-pipe1" style="background:#4ec9e1"></div>
+          <div class="pipe-label" id="zw-lbl1" style="color:#4ec9e1;opacity:1">DATA →→→</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;margin-top:4px">rwnd=32768 · sender sends freely</div>
+      </div>
+
+      <!-- Phase 2: Buffer fills, window shrinks -->
+      <div class="fade" id="ph2" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">② BUFFER FILLING — window shrinks</div>
+        <div style="position:relative;height:30px;background:#0a0a14;border:1px solid #2a1f3d;border-radius:2px;overflow:hidden;margin-bottom:4px">
+          <div id="buf-fill2" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e8a020;transition:width 1s ease-out;opacity:.7"></div>
+          <div id="buf-free2" style="position:absolute;right:0;top:0;bottom:0;width:100%;background:#001a10;transition:width 1s ease-out;border-left:2px solid #4eff9a;opacity:.4"></div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 6px;font-size:5px;font-family:'Press Start 2P',monospace">
+            <span style="color:#e8a020">USED</span>
+            <span style="color:#4eff9a" id="rwnd-shrink">rwnd→</span>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#aaa">ACK carries: <span id="shrink-win" style="color:#e8a020">WIN=32768</span> → shrinking</div>
+      </div>
+
+      <!-- Phase 3: Zero Window -->
+      <div class="fade" id="ph3" style="border:2px solid #e85050;background:#1a050590;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;animation:zwFlash .8s ease-in-out infinite" id="zw-title">☠ ZERO WINDOW — SENDER PAUSED</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:5px">
+          <div style="border:2px solid #e85050;background:#1a0505;padding:6px 8px;text-align:center;flex:1">
+            <div style="font-size:8px;color:#e85050">🖥</div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px">PAUSED</div>
+            <div style="font-size:5px;color:#555;margin-top:1px">cannot send</div>
+          </div>
+          <div style="font-size:6px;color:#e85050;text-align:center;line-height:2">
+            ACK<br><span style="font-size:10px">WIN=0</span><br>←←←
+          </div>
+          <div style="border:2px solid #e85050;background:#1a0505;padding:6px 8px;text-align:center;flex:1">
+            <div style="font-size:8px;color:#e85050">📱</div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px">BUFFER</div>
+            <div style="font-size:5px;color:#555;margin-top:1px">FULL ████</div>
+          </div>
+        </div>
+        <!-- ZW probe timeline -->
+        <div style="font-size:6px;color:#888;margin-bottom:3px">WINDOW PROBE sequence:</div>
+        <div style="display:flex;flex-direction:column;gap:3px" id="probe-steps">
+          <div class="fade" id="pr1" style="display:flex;gap:6px;font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:6px">sender sends 1-byte probe after 1s</div>
+          <div class="fade" id="pr2" style="display:flex;gap:6px;font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:6px">receiver ACKs with WIN=0 (still full)</div>
+          <div class="fade" id="pr3" style="display:flex;gap:6px;font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:6px">probe interval doubles (exponential)</div>
+          <div class="fade" id="pr4" style="display:flex;gap:6px;font-size:6px;color:#4eff9a;border-left:2px solid #4eff9a;padding-left:6px">app reads buffer → WIN=8192 → resume!</div>
+        </div>
+      </div>
+
+      <!-- Wireshark note -->
+      <div class="fade" id="ws-note" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">WIRESHARK — FIND ZERO WINDOWS</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;background:#000a0d;padding:5px;border:1px solid #4ec9e120;line-height:2">
+          tcp.analysis.zero_window<br>
+          tcp.analysis.window_full<br>
+          tcp.analysis.zero_window_probe
+        </div>
+        <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.8">These appear as Wireshark expert info entries. Zero Window events = silent app hang.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">WIN=0 in ACK → sender halts completely.</div>
+    <div class="il">Sender probes with 1-byte segment periodically.</div>
+    <div class="ih rd">Zero Window = invisible app hang in production.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">WIN=0</div><div class="sl">ZERO WINDOW</div></div>
+    <div class="sc"><div class="sv am">PROBE</div><div class="sl">1-BYTE CHECK</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">2×BACK</div><div class="sl">PROBE INTERVAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     SCENE 4 — FULL ANIMATION + DEBUG
+════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">FULL FLOW + DEBUG</div>
+    <div class="hdr-sub">SEND → PAUSE → PROBE → RESUME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">COMPLETE PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DEBUG</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- Live animation canvas -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">LIVE SIMULATION</div>
+
+      <!-- Sender + Receiver with animated pipe -->
+      <div style="border:1px solid #1e4080;background:#050e1a;padding:8px 10px">
+
+        <!-- Sender side -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:7px;color:#4ec9e1" id="phase-lbl">① SENDING DATA</div>
+          <div style="font-size:6px;padding:2px 6px;border:1px solid #4eff9a;color:#4eff9a" id="phase-badge">FLOWING</div>
+        </div>
+
+        <!-- rwnd meter -->
+        <div style="font-size:6px;color:#888;margin-bottom:3px">recv buffer (rwnd)</div>
+        <div class="rbuf" id="main-rbuf" style="height:32px;margin-bottom:4px">
+          <div class="rbuf-fill" id="main-rbuf-fill" style="background:#4eff9a20;border-right:2px solid #4eff9a"></div>
+          <div class="rbuf-label" id="main-rbuf-lbl" style="color:#4eff9a;opacity:1">rwnd=64KB</div>
+        </div>
+
+        <!-- Packet stream animation -->
+        <div style="font-size:6px;color:#888;margin-bottom:3px">in-flight packets</div>
+        <div style="position:relative;height:28px;background:#0a0a14;border:1px solid #1e4080;border-radius:2px;overflow:hidden;margin-bottom:4px" id="main-lane">
+          <div id="main-pkts"></div>
+          <div id="main-status" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:6px;font-family:'Press Start 2P',monospace;color:#555;opacity:0;transition:opacity .4s">— PAUSED —</div>
+        </div>
+
+        <!-- Window value -->
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:6px;color:#888">current rwnd:</div>
+          <div style="font-size:11px;font-family:'Press Start 2P',monospace" id="main-winval" style="color:#4eff9a">65535</div>
+        </div>
+      </div>
+
+      <!-- Phase timeline -->
+      <div style="display:flex;gap:3px" id="phase-timeline">
+        <div style="flex:3;border:1px solid #4eff9a40;background:#001a1060;padding:5px 4px;text-align:center;opacity:0;transition:opacity .4s" id="pt1">
+          <div style="font-size:6px;color:#4eff9a">① FLOW</div>
+          <div style="font-size:5px;color:#555;margin-top:2px">WIN=64K</div>
+        </div>
+        <div style="flex:2;border:1px solid #e8a02040;background:#10090060;padding:5px 4px;text-align:center;opacity:0;transition:opacity .4s" id="pt2">
+          <div style="font-size:6px;color:#e8a020">② SHRINK</div>
+          <div style="font-size:5px;color:#555;margin-top:2px">WIN↓</div>
+        </div>
+        <div style="flex:2;border:1px solid #e8505060;background:#1a050560;padding:5px 4px;text-align:center;opacity:0;transition:opacity .4s" id="pt3">
+          <div style="font-size:6px;color:#e85050">③ ZERO</div>
+          <div style="font-size:5px;color:#555;margin-top:2px">WIN=0</div>
+        </div>
+        <div style="flex:2;border:1px solid #e8a02040;background:#10090060;padding:5px 4px;text-align:center;opacity:0;transition:opacity .4s" id="pt4">
+          <div style="font-size:6px;color:#e8a020">④ PROBE</div>
+          <div style="font-size:5px;color:#555;margin-top:2px">1-byte</div>
+        </div>
+        <div style="flex:3;border:1px solid #4eff9a40;background:#001a1060;padding:5px 4px;text-align:center;opacity:0;transition:opacity .4s" id="pt5">
+          <div style="font-size:6px;color:#4eff9a">⑤ RESUME</div>
+          <div style="font-size:5px;color:#555;margin-top:2px">WIN↑</div>
+        </div>
+      </div>
+
+      <!-- Root causes -->
+      <div class="fade" id="rc-box" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">ROOT CAUSES OF ZERO WINDOW</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:7px;line-height:1.7">Slow app not reading socket — backpressure propagates to sender</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">Small socket buffer (SO_RCVBUF) — tune via sysctl</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">High latency link — buffer fills before ACKs return</div>
+        </div>
+      </div>
+
+      <!-- Tuning commands -->
+      <div class="fade" id="tune-box" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">TUNE SOCKET BUFFERS</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;line-height:2.2;background:#000a06;padding:5px;border:1px solid #4eff9a20">
+          # max recv buffer<br>
+          sysctl net.core.rmem_max=134217728<br><br>
+          # auto-tune buffers<br>
+          sysctl net.ipv4.tcp_rmem="4096 87380 134217728"<br><br>
+          # check zero window events<br>
+          ss -ti | grep rcv_space
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Flow: SEND → buffer fills → WIN shrinks.</div>
+    <div class="il">WIN=0 → pause → probe → resume on space.</div>
+    <div class="ih">Tune SO_RCVBUF to prevent Zero Window hangs.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">ZW</div><div class="sl">ZERO WINDOW</div></div>
+    <div class="sc"><div class="sv am">PROBE</div><div class="sl">RE-OPEN CHECK</div></div>
+    <div class="sc"><div class="sv gn">TUNE</div><div class="sl">SO_RCVBUF</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+let animLoops=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){
+  timers.forEach(clearTimeout);timers=[];
+  animLoops.forEach(clearInterval);animLoops=[];
+}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>{[play1,play2,play3,play4][n-1]()},200);
+}
+function show(id,d){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},d)}
+function hide(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function setTxt(id,t,d){T(()=>{const e=document.getElementById(id);if(e)e.textContent=t;},d)}
+function setStyle(id,prop,val,d){T(()=>{const e=document.getElementById(id);if(e)e.style[prop]=val;},d)}
+
+/* ── SCENE 1 ── */
+function play1(){
+  clearT();
+  ['how-box','ack-pkt','win-history'].forEach(hide);
+  ['wbar1','wbar2','wbar3','wbar4','wbar5'].forEach(id=>hide(id));
+  hide('arrow-packets'); hide('arrow-packets2');
+  const rbuf=document.getElementById('rbuf1-fill');
+  const rlbl=document.getElementById('rbuf1-lbl');
+  if(rbuf){rbuf.style.transition='none';rbuf.style.width='0%';setTimeout(()=>rbuf.style.transition='width .8s ease-out',30);}
+  if(rlbl)rlbl.style.opacity='0';
+
+  T(()=>{ show('arrow-packets',0); show('arrow-packets2',0); },400);
+  T(()=>{
+    if(rbuf)rbuf.style.width='100%';
+    if(rlbl){rlbl.style.opacity='1';rlbl.textContent='rwnd = 65535B';}
+  },600);
+  show('how-box',1400);
+  show('ack-pkt',2100);
+  show('win-history',2900);
+  ['wbar1','wbar2','wbar3','wbar4','wbar5'].forEach((id,i)=>{T(()=>show(id,0),3100+i*200);});
+}
+
+/* ── SCENE 2 ── */
+function buildSWRow(ackedUpTo, inFlightEnd, windowEnd){
+  const row=document.getElementById('sw-row');
+  row.innerHTML='';
+  const total=12;
+  const w=Math.floor((366-2*total)/total);
+  for(let i=1;i<=total;i++){
+    const c=document.createElement('div');
+    c.className='sw-cell';
+    c.style.width=w+'px';c.style.height='28px';c.style.fontSize='7px';c.style.lineHeight='1';
+    c.textContent=i;
+    if(i<=ackedUpTo){c.style.background='#2a1f3d';c.style.borderColor='#555';c.style.color='#555';}
+    else if(i<=inFlightEnd){c.style.background='#001a2060';c.style.borderColor='#4ec9e1';c.style.color='#4ec9e1';}
+    else if(i<=windowEnd){c.style.background='#001a1060';c.style.borderColor='#4eff9a';c.style.color='#4eff9a';}
+    else{c.style.background='#0d0d1a';c.style.borderColor='#2a1f3d';c.style.color='#333';}
+    row.appendChild(c);
+    setTimeout(()=>c.style.opacity='1',i*60);
+  }
+}
+
+function spawnPkt(laneId, dir, color, label, delay){
+  T(()=>{
+    const lane=document.getElementById(laneId);
+    if(!lane)return;
+    const p=document.createElement('div');
+    p.style.cssText=`position:absolute;top:4px;bottom:4px;${dir==='r'?'left:0':'right:0'};padding:0 5px;border:1px solid ${color};background:${color}20;color:${color};font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;white-space:nowrap;border-radius:2px;opacity:0;transition:opacity .2s,${dir==='r'?'left':'right'} .5s linear;`;
+    p.textContent=label;
+    lane.appendChild(p);
+    setTimeout(()=>{
+      p.style.opacity='1';
+      setTimeout(()=>{
+        if(dir==='r') p.style.left='calc(100% - 40px)';
+        else p.style.right='calc(100% - 40px)';
+        setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},550);
+      },30);
+    },20);
+  },delay);
+}
+
+function play2(){
+  clearT();
+  ['s2-winbanner','s2-note'].forEach(hide);
+  const fill=document.getElementById('pipe-s2-fill');
+  if(fill){fill.style.transition='none';fill.style.width='0%';setTimeout(()=>fill.style.transition='width .5s ease-out',30);}
+  hide('pipe-s2-lbl');
+
+  // Build initial window view
+  buildSWRow(0,0,8);
+
+  T(()=>{
+    // Fill pipe
+    if(fill)fill.style.width='70%';
+    const lbl=document.getElementById('pipe-s2-lbl');
+    if(lbl){lbl.style.opacity='1';lbl.textContent='in flight: 4 segs';}
+    // Spawn packets
+    [0,300,600,900].forEach((d,i)=>spawnPkt('s2-lane','r','#4ec9e1',`SEG${i+1}`,d));
+
+    // Update sender/receiver
+    const ss=document.getElementById('s2-sender');
+    if(ss)ss.style.borderColor='#4ec9e1';
+    const sr=document.getElementById('s2-recv');
+    if(sr)sr.style.borderColor='#4eff9a';
+    setTxt('s2-sstate','sending',0);
+    setTxt('s2-rstate','receiving',0);
+
+    // Rebuild with in-flight
+    setTimeout(()=>buildSWRow(2,6,8),400);
+  },400);
+
+  // ACK arrives, window slides
+  T(()=>{
+    spawnPkt('s2-lane','l','#4eff9a','ACK',0);
+    setTimeout(()=>buildSWRow(4,8,10),550);
+    const lbl=document.getElementById('pipe-s2-lbl');
+    if(lbl)lbl.textContent='ACK rcvd → window slides →';
+  },2000);
+
+  T(()=>{
+    spawnPkt('s2-lane','l','#4eff9a','ACK',0);
+    setTimeout(()=>buildSWRow(6,10,12),550);
+  },3000);
+
+  show('s2-winbanner',2200);
+  show('s2-note',3600);
+}
+
+/* ── SCENE 3 ── */
+function play3(){
+  clearT();
+  ['ph1','ph2','ph3','ws-note','pr1','pr2','pr3','pr4'].forEach(hide);
+  const bf=document.getElementById('buf-fill2');
+  const bfr=document.getElementById('buf-free2');
+  if(bf){bf.style.transition='none';bf.style.width='0%';setTimeout(()=>bf.style.transition='width 1s ease-out',30);}
+  if(bfr){bfr.style.transition='none';bfr.style.width='100%';setTimeout(()=>bfr.style.transition='width 1s ease-out',30);}
+
+  const pipe1=document.getElementById('zw-pipe1');
+  if(pipe1){pipe1.style.transition='none';pipe1.style.width='0%';setTimeout(()=>pipe1.style.transition='width .8s ease-out',30);}
+
+  show('ph1',400);
+  T(()=>{if(pipe1)pipe1.style.width='80%';const l=document.getElementById('zw-lbl1');if(l)l.textContent='DATA →→→';},500);
+
+  show('ph2',1400);
+  T(()=>{
+    if(bf)bf.style.width='85%';
+    if(bfr)bfr.style.width='15%';
+    let val=32768;
+    const shrink=document.getElementById('shrink-win');
+    const iv=setInterval(()=>{
+      val=Math.max(0,val-2000);
+      if(shrink)shrink.textContent='WIN='+val;
+      if(val<=0){clearInterval(iv);}
+    },150);
+    animLoops.push(iv);
+  },1600);
+
+  show('ph3',3200);
+  show('pr1',3700);
+  show('pr2',4100);
+  show('pr3',4500);
+  show('pr4',5000);
+  show('ws-note',5600);
+}
+
+/* ── SCENE 4 ── */
+function play4(){
+  clearT();
+  ['rc-box','tune-box','pt1','pt2','pt3','pt4','pt5'].forEach(hide);
+  const rbuf=document.getElementById('main-rbuf-fill');
+  const rlbl=document.getElementById('main-rbuf-lbl');
+  const status=document.getElementById('main-status');
+  const winval=document.getElementById('main-winval');
+  const phaseLbl=document.getElementById('phase-lbl');
+  const phaseBadge=document.getElementById('phase-badge');
+  if(rbuf){rbuf.style.transition='none';rbuf.style.width='0%';setTimeout(()=>rbuf.style.transition='width .5s ease-out',30);}
+  if(rlbl){rlbl.textContent='rwnd=64KB';rlbl.style.color='#4eff9a';rlbl.style.opacity='1';}
+  if(status)status.style.opacity='0';
+  if(winval){winval.textContent='65535';winval.style.color='#4eff9a';}
+  if(phaseLbl)phaseLbl.textContent='① SENDING DATA';
+  if(phaseBadge){phaseBadge.textContent='FLOWING';phaseBadge.style.color='#4eff9a';phaseBadge.style.borderColor='#4eff9a';}
+  document.getElementById('main-pkts').innerHTML='';
+
+  let pktLoop=null;
+
+  // Phase 1: flowing packets
+  T(()=>{
+    show('pt1',0);
+    let pktN=0;
+    pktLoop=setInterval(()=>{
+      const lane=document.getElementById('main-pkts');
+      if(!lane)return;
+      const p=document.createElement('div');
+      const top=4+Math.floor(Math.random()*12);
+      p.style.cssText=`position:absolute;left:0;top:${top}px;bottom:${top}px;padding:0 4px;border:1px solid #4ec9e1;background:#001a2080;color:#4ec9e1;font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;white-space:nowrap;border-radius:2px;opacity:0;transition:opacity .15s,left .5s linear;`;
+      p.textContent='PKT';
+      lane.appendChild(p);
+      setTimeout(()=>{p.style.opacity='1';p.style.left='calc(100% - 32px)';setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},500);},20);
+    },280);
+    animLoops.push(pktLoop);
+  },400);
+
+  // Phase 2: buffer filling, window shrinking
+  T(()=>{
+    show('pt2',0);
+    if(phaseLbl)phaseLbl.textContent='② BUFFER FILLING';
+    if(phaseBadge){phaseBadge.textContent='WIN↓↓';phaseBadge.style.color='#e8a020';phaseBadge.style.borderColor='#e8a020';}
+    if(rbuf)rbuf.style.width='70%';
+    if(rlbl){rlbl.style.color='#e8a020';rlbl.textContent='rwnd=16KB';}
+    let w=65535;
+    const wiv=setInterval(()=>{
+      w=Math.max(0,w-1800);
+      if(winval){winval.textContent=Math.max(0,w);winval.style.color=w<10000?'#e85050':w<30000?'#e8a020':'#4eff9a';}
+      if(w<=0)clearInterval(wiv);
+    },80);
+    animLoops.push(wiv);
+  },2000);
+
+  // Phase 3: Zero window
+  T(()=>{
+    show('pt3',0);
+    clearInterval(pktLoop);
+    if(phaseLbl)phaseLbl.textContent='③ ZERO WINDOW!';
+    if(phaseBadge){phaseBadge.textContent='PAUSED';phaseBadge.style.color='#e85050';phaseBadge.style.borderColor='#e85050';}
+    if(rbuf)rbuf.style.width='100%';
+    if(rlbl){rlbl.style.color='#e85050';rlbl.textContent='rwnd=0 FULL';}
+    if(winval){winval.textContent='0';winval.style.color='#e85050';}
+    if(status)status.style.opacity='1';
+  },3500);
+
+  // Phase 4: probe
+  T(()=>{
+    show('pt4',0);
+    if(phaseLbl)phaseLbl.textContent='④ WINDOW PROBE';
+    if(phaseBadge){phaseBadge.textContent='1-BYTE';phaseBadge.style.color='#e8a020';phaseBadge.style.borderColor='#e8a020';}
+    // Probe animation
+    const lane=document.getElementById('main-pkts');
+    const p=document.createElement('div');
+    p.style.cssText=`position:absolute;left:0;top:8px;bottom:8px;padding:0 4px;border:2px solid #e8a020;background:#10090080;color:#e8a020;font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;white-space:nowrap;border-radius:2px;opacity:0;transition:opacity .15s,left .5s linear;`;
+    p.textContent='PROBE';
+    lane.appendChild(p);
+    setTimeout(()=>{p.style.opacity='1';p.style.left='calc(100% - 44px)';setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},550);},20);
+  },4800);
+
+  // Phase 5: resume
+  T(()=>{
+    show('pt5',0);
+    if(phaseLbl)phaseLbl.textContent='⑤ WINDOW REOPENS';
+    if(phaseBadge){phaseBadge.textContent='RESUME';phaseBadge.style.color='#4eff9a';phaseBadge.style.borderColor='#4eff9a';}
+    if(rbuf)rbuf.style.width='30%';
+    if(rlbl){rlbl.style.color='#4eff9a';rlbl.textContent='rwnd=32KB';}
+    if(winval){winval.textContent='32768';winval.style.color='#4eff9a';}
+    if(status)status.style.opacity='0';
+    // Restart flow
+    let n=0;
+    const rl=setInterval(()=>{
+      if(n++>12){clearInterval(rl);return;}
+      const lane=document.getElementById('main-pkts');
+      if(!lane)return;
+      const p=document.createElement('div');
+      p.style.cssText=`position:absolute;left:0;top:4px;bottom:4px;padding:0 4px;border:1px solid #4eff9a;background:#001a1080;color:#4eff9a;font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;white-space:nowrap;border-radius:2px;opacity:0;transition:opacity .15s,left .5s linear;`;
+      p.textContent='PKT';
+      lane.appendChild(p);
+      setTimeout(()=>{p.style.opacity='1';p.style.left='calc(100% - 32px)';setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},500);},20);
+    },300);
+    animLoops.push(rl);
+  },6000);
+
+  show('rc-box',7000);
+  show('tune-box',7700);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>Encapsulation & Decapsulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Generic fade panel */
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* Nesting doll / encapsulation layers */
+.enc-wrap{display:flex;flex-direction:column;gap:0;width:100%}
+
+.enc-layer{
+  border-radius:3px;
+  opacity:0;
+  transition:opacity .4s, transform .4s;
+  transform:translateY(-8px);
+  position:relative;
+  padding:7px 9px;
+}
+.enc-layer.vis{opacity:1;transform:translateY(0)}
+
+.enc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.enc-num{font-size:8px;line-height:1}
+.enc-pdu{font-size:7px;padding:2px 7px;border-radius:2px;border:1px solid currentColor}
+.enc-name{font-size:8px;letter-spacing:.3px;line-height:1.4}
+.enc-desc{font-size:6.5px;color:#aaa;line-height:1.6;margin-top:3px}
+
+/* The stacked header bar inside each layer */
+.hdr-bar{display:flex;align-items:stretch;height:28px;border-radius:2px;overflow:hidden;margin-top:5px;font-size:6px}
+.hdr-seg{display:flex;align-items:center;justify-content:center;padding:0 4px;text-align:center;line-height:1.3;flex-shrink:0}
+.hdr-data{flex:1;display:flex;align-items:center;justify-content:center;font-size:6px;color:#555;letter-spacing:.5px}
+
+/* Layer color scheme — matches OSI postal */
+.lc7{border:2px solid #e8a020;background:#1e1408}
+.lc7 .enc-name{color:#e8a020}
+.lc7 .enc-num{color:#e8a020}
+
+.lc4{border:2px solid #7a9e30;background:#111c08}
+.lc4 .enc-name{color:#7a9e30}
+.lc4 .enc-num{color:#7a9e30}
+
+.lc3{border:2px solid #40b870;background:#0d1a12}
+.lc3 .enc-name{color:#40b870}
+.lc3 .enc-num{color:#40b870}
+
+.lc2{border:2px solid #30a890;background:#0c1b18}
+.lc2 .enc-name{color:#30a890}
+.lc2 .enc-num{color:#30a890}
+
+.lc1{border:2px solid #4ec9e1;background:#0d1a2e}
+.lc1 .enc-name{color:#4ec9e1}
+.lc1 .enc-num{color:#4ec9e1}
+
+/* Arrow between layers */
+.layer-arrow{
+  text-align:center;font-size:11px;
+  opacity:0;transition:opacity .25s;
+  padding:1px 0;color:#444;
+}
+.layer-arrow.vis{opacity:1}
+
+/* PDU name pill row (scene 3) */
+.pdu-row{display:flex;flex-direction:column;gap:5px}
+.pdu-item{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
+  border-radius:2px;
+  opacity:0;transform:translateX(-10px);
+  transition:opacity .35s, transform .35s;
+}
+.pdu-item.vis{opacity:1;transform:translateX(0)}
+.pdu-icon{font-size:18px;flex-shrink:0;width:30px;text-align:center}
+.pdu-label{font-size:8px;flex-shrink:0;width:68px;line-height:1.4}
+.pdu-desc{font-size:6.5px;color:#aaa;line-height:1.7;flex:1}
+
+/* Decap strip animation */
+.dec-row{display:flex;flex-direction:column;gap:0;width:100%}
+.dec-layer{
+  border-radius:3px;padding:7px 9px;position:relative;
+  transition:opacity .4s,transform .4s,max-height .5s;
+  opacity:0;
+}
+.dec-layer.vis{opacity:1}
+.dec-layer.strip{
+  opacity:0!important;
+  transform:translateX(30px)!important;
+  max-height:0!important;
+  padding:0!important;
+  margin:0!important;
+  overflow:hidden;
+  pointer-events:none;
+}
+.dec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px}
+.dec-name{font-size:8px;letter-spacing:.3px}
+.dec-badge{font-size:6.5px;padding:2px 6px;border-radius:2px;border:1px solid currentColor}
+.dec-bar{display:flex;align-items:stretch;height:26px;border-radius:2px;overflow:hidden;margin-top:4px;font-size:6px}
+
+/* Wireshark reference (scene 5) */
+.ws-row{
+  display:flex;align-items:stretch;gap:0;
+  border:1px solid #2a1f3d;border-radius:2px;overflow:hidden;
+  opacity:0;transition:opacity .4s;margin-bottom:4px;
+}
+.ws-row.vis{opacity:1}
+.ws-layer{padding:6px 8px;display:flex;flex-direction:column;justify-content:center;gap:2px;flex:1}
+.ws-num{font-size:6px;color:#555}
+.ws-name{font-size:7.5px;line-height:1.3}
+.ws-proto{font-size:6px;color:#aaa}
+.ws-arrow{display:flex;align-items:center;padding:0 5px;font-size:10px;color:#333;flex-shrink:0}
+
+/* Pulse on active strip */
+@keyframes stripPulse{0%,100%{opacity:1}50%{opacity:.5}}
+.strip-flash{animation:stripPulse .3s ease 2}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ENCAPSULATION</div>
+    <div class="hdr-sub">THE RUSSIAN NESTING DOLL OF NETWORKING</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">INTRO</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Nesting doll hero -->
+      <div class="panel vis" id="s1hero" style="border:2px solid #e8a020;background:#1e1408;text-align:center;padding:16px 12px">
+        <div style="font-size:9px;color:#888;letter-spacing:2px;margin-bottom:10px">THE BIG QUESTION</div>
+        <div style="font-size:36px;line-height:1;margin-bottom:10px">🪆</div>
+        <div style="font-size:10px;color:#e8a020;line-height:1.9;margin-bottom:8px">EVERY PACKET IS<br>A NESTING DOLL</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">Data gets wrapped in headers<br>layer by layer as it travels down.<br>Unwrapped layer by layer going up.</div>
+      </div>
+
+      <!-- The two processes -->
+      <div style="display:flex;gap:6px;opacity:0;transition:opacity .45s" id="s1twobox">
+        <div style="flex:1;background:#1e1408;border:1px solid #e8a020;border-radius:2px;padding:10px;text-align:center">
+          <div style="font-size:20px;margin-bottom:5px">⬇️</div>
+          <div style="font-size:8px;color:#e8a020;margin-bottom:5px">ENCAPSULATION</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">Sender wraps data<br>in headers going<br>DOWN the stack</div>
+        </div>
+        <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:10px;text-align:center">
+          <div style="font-size:20px;margin-bottom:5px">⬆️</div>
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:5px">DECAPSULATION</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">Receiver strips<br>headers going<br>UP the stack</div>
+        </div>
+      </div>
+
+      <!-- PDU names preview -->
+      <div style="background:#130d1e;border:1px solid #2a1f3d;border-radius:2px;padding:9px 10px;opacity:0;transition:opacity .45s" id="s1pdus">
+        <div style="font-size:7px;color:#555;margin-bottom:7px;letter-spacing:1px">PDU NAMES AT EACH LAYER</div>
+        <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;overflow:hidden">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:6px;padding:3px 2px;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px;margin-bottom:3px">DATA</div>
+            <div style="font-size:5.5px;color:#666">L7</div>
+          </div>
+          <div style="color:#444;font-size:8px">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:6px;padding:3px 2px;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px;margin-bottom:3px">SEGMENT</div>
+            <div style="font-size:5.5px;color:#666">L4</div>
+          </div>
+          <div style="color:#444;font-size:8px">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:6px;padding:3px 2px;background:#0d1a12;border:1px solid #40b870;color:#40b870;border-radius:2px;margin-bottom:3px">PACKET</div>
+            <div style="font-size:5.5px;color:#666">L3</div>
+          </div>
+          <div style="color:#444;font-size:8px">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:6px;padding:3px 2px;background:#0c1b18;border:1px solid #30a890;color:#30a890;border-radius:2px;margin-bottom:3px">FRAME</div>
+            <div style="font-size:5.5px;color:#666">L2</div>
+          </div>
+          <div style="color:#444;font-size:8px">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:6px;padding:3px 2px;background:#0d1a2e;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px;margin-bottom:3px">BITS</div>
+            <div style="font-size:5.5px;color:#666">L1</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="text-align:center;font-size:7px;color:#555;letter-spacing:1px;opacity:0;transition:opacity .4s" id="s1hint">
+        TAP NEXT ▶ TO BUILD THE DOLL
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">ENCAPSULATION:</div>
+    <div class="ih am">Data + headers = Protocol Data Unit</div>
+    <div class="il">Each layer adds its own wrapper going down.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:18px">🪆</div><div class="sl">NESTING<br>DOLL</div></div>
+    <div class="sc"><div class="sv am">⬇ ENC</div><div class="sl">WRAP<br>DOWN</div></div>
+    <div class="sc"><div class="sv gn">⬆ DEC</div><div class="sl">STRIP<br>UP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: ENCAPSULATION — WRAP DOWN ══════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ENCAPSULATION</div>
+    <div class="hdr-sub">SENDER — WRAPPING DOWN THE STACK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ENCAPSULATION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">⬇ WRAP</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:4px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s2intro">EACH LAYER ADDS A HEADER ↓</div>
+
+      <!-- L7 Application — DATA -->
+      <div class="enc-layer lc7" id="e7">
+        <div class="enc-hdr">
+          <span class="enc-num">L7 APPLICATION</span>
+          <span class="enc-pdu" style="color:#e8a020;border-color:#e8a020">DATA</span>
+        </div>
+        <div class="enc-name">Your message is born here</div>
+        <div class="enc-desc">Browser sends a GET request. This is the raw payload — no headers yet.</div>
+        <div class="hdr-bar" style="margin-top:6px">
+          <div class="hdr-data" style="background:#2a1808;color:#e8a020;font-size:6.5px">GET /index.html HTTP/1.1</div>
+        </div>
+      </div>
+
+      <div class="layer-arrow" id="a74">⬇ L4 adds TCP header</div>
+
+      <!-- L4 Transport — SEGMENT -->
+      <div class="enc-layer lc4" id="e4">
+        <div class="enc-hdr">
+          <span class="enc-num">L4 TRANSPORT</span>
+          <span class="enc-pdu" style="color:#7a9e30;border-color:#7a9e30">SEGMENT</span>
+        </div>
+        <div class="enc-name">TCP header wraps the data</div>
+        <div class="enc-desc">Adds source & dest port, sequence number, flags. Now it's a segment.</div>
+        <div class="hdr-bar">
+          <div class="hdr-seg" style="background:#1a2808;color:#7a9e30;width:72px">TCP HDR<br>SRC:52341<br>DST:443</div>
+          <div class="hdr-data" style="background:#1e1408;color:#e8a020">DATA</div>
+        </div>
+      </div>
+
+      <div class="layer-arrow" id="a43">⬇ L3 adds IP header</div>
+
+      <!-- L3 Network — PACKET -->
+      <div class="enc-layer lc3" id="e3">
+        <div class="enc-hdr">
+          <span class="enc-num">L3 NETWORK</span>
+          <span class="enc-pdu" style="color:#40b870;border-color:#40b870">PACKET</span>
+        </div>
+        <div class="enc-name">IP header wraps the segment</div>
+        <div class="enc-desc">Adds source & destination IP addresses. Now it's a packet — routable.</div>
+        <div class="hdr-bar">
+          <div class="hdr-seg" style="background:#0d2018;color:#40b870;width:72px">IP HDR<br>SRC IP<br>DST IP</div>
+          <div class="hdr-seg" style="background:#1a2808;color:#7a9e30;width:52px">TCP<br>HDR</div>
+          <div class="hdr-data" style="background:#1e1408;color:#e8a020">DATA</div>
+        </div>
+      </div>
+
+      <div class="layer-arrow" id="a32">⬇ L2 adds Frame header + trailer</div>
+
+      <!-- L2 Data Link — FRAME -->
+      <div class="enc-layer lc2" id="e2">
+        <div class="enc-hdr">
+          <span class="enc-num">L2 DATA LINK</span>
+          <span class="enc-pdu" style="color:#30a890;border-color:#30a890">FRAME</span>
+        </div>
+        <div class="enc-name">Frame header + trailer added</div>
+        <div class="enc-desc">Adds MAC src/dst addresses. Also adds a trailer (FCS checksum). Now a frame.</div>
+        <div class="hdr-bar">
+          <div class="hdr-seg" style="background:#0c2018;color:#30a890;width:58px">ETH HDR<br>SRC MAC<br>DST MAC</div>
+          <div class="hdr-seg" style="background:#0d2018;color:#40b870;width:40px">IP<br>HDR</div>
+          <div class="hdr-seg" style="background:#1a2808;color:#7a9e30;width:36px">TCP<br>HDR</div>
+          <div class="hdr-data" style="background:#1e1408;color:#e8a020;font-size:5.5px">DATA</div>
+          <div class="hdr-seg" style="background:#0c2018;color:#30a890;width:34px">FCS<br>TRAIL</div>
+        </div>
+      </div>
+
+      <div class="layer-arrow" id="a21">⬇ L1 converts to raw bits</div>
+
+      <!-- L1 Physical — BITS -->
+      <div class="enc-layer lc1" id="e1">
+        <div class="enc-hdr">
+          <span class="enc-num">L1 PHYSICAL</span>
+          <span class="enc-pdu" style="color:#4ec9e1;border-color:#4ec9e1">BITS</span>
+        </div>
+        <div class="enc-name">Everything becomes 0s and 1s</div>
+        <div class="enc-desc">The entire frame is converted to electrical signals, light pulses, or radio waves.</div>
+        <div class="hdr-bar" style="background:#0d1a2e;border:1px solid #1a3040">
+          <div class="hdr-data" style="font-size:7px;color:#4ec9e1;font-family:monospace;letter-spacing:2px">01001000 01100101 01101100…</div>
+        </div>
+      </div>
+
+      <div style="background:#0a1020;border:1px solid #4eff9a;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s;margin-top:2px" id="s2done">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">📡 NOW SENT OVER THE NETWORK</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">The bits travel as signals. The receiver reverses this whole process — stripping each header on the way back up.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">ENCAPSULATION:</div>
+    <div class="ih am">Headers added top → bottom.</div>
+    <div class="il">Each layer only reads its OWN header.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">⬇</div><div class="sl">GOING<br>DOWN</div></div>
+    <div class="sc"><div class="sv am">+HDR</div><div class="sl">EACH LAYER<br>ADDS ONE</div></div>
+    <div class="sc"><div class="sv" style="font-size:18px">🪆</div><div class="sl">WRAPPED<br>INSIDE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: PDU NAMES ══════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">ENCAPSULATION</div>
+    <div class="hdr-sub">PDU NAMES AT EACH LAYER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PDU NAMES</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">VOCAB</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s3intro">PDU = PROTOCOL DATA UNIT</div>
+
+      <div class="pdu-item" id="p7" style="background:#1e1408;border:1px solid #e8a020">
+        <div class="pdu-icon">📝</div>
+        <div class="pdu-label" style="color:#e8a020">L7 DATA</div>
+        <div class="pdu-desc">Raw application message. What you're actually sending. Could be an HTTP request, email body, or file content.</div>
+      </div>
+
+      <div style="text-align:center;font-size:9px;color:#333;opacity:0;transition:opacity .2s" id="arr43">↓</div>
+
+      <div class="pdu-item" id="p4" style="background:#111c08;border:1px solid #7a9e30">
+        <div class="pdu-icon">📦</div>
+        <div class="pdu-label" style="color:#7a9e30">L4 SEGMENT</div>
+        <div class="pdu-desc">Data + TCP/UDP header. Contains port numbers and sequence info. TCP splits big data into multiple segments.</div>
+      </div>
+
+      <div style="text-align:center;font-size:9px;color:#333;opacity:0;transition:opacity .2s" id="arr34">↓</div>
+
+      <div class="pdu-item" id="p3" style="background:#0d1a12;border:1px solid #40b870">
+        <div class="pdu-icon">📫</div>
+        <div class="pdu-label" style="color:#40b870">L3 PACKET</div>
+        <div class="pdu-desc">Segment + IP header. Contains IP addresses. Routers READ this layer — they examine the destination IP and forward accordingly.</div>
+      </div>
+
+      <div style="text-align:center;font-size:9px;color:#333;opacity:0;transition:opacity .2s" id="arr23">↓</div>
+
+      <div class="pdu-item" id="p2" style="background:#0c1b18;border:1px solid #30a890">
+        <div class="pdu-icon">🖼️</div>
+        <div class="pdu-label" style="color:#30a890">L2 FRAME</div>
+        <div class="pdu-desc">Packet + Ethernet header & FCS trailer. Contains MAC addresses. Switches READ this — they forward by MAC address on local network.</div>
+      </div>
+
+      <div style="text-align:center;font-size:9px;color:#333;opacity:0;transition:opacity .2s" id="arr12">↓</div>
+
+      <div class="pdu-item" id="p1" style="background:#0d1a2e;border:1px solid #4ec9e1">
+        <div class="pdu-icon">⚡</div>
+        <div class="pdu-label" style="color:#4ec9e1">L1 BITS</div>
+        <div class="pdu-desc">Everything as raw 0s and 1s. Transmitted as voltage, light or radio. No header — just the raw signal of all the layers stacked.</div>
+      </div>
+
+      <div style="background:#071410;border:1px solid #4eff9a;border-radius:2px;padding:8px 10px;margin-top:3px;opacity:0;transition:opacity .4s" id="s3mnemonic">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">MNEMONIC — READ BOTTOM TO TOP</div>
+        <div style="font-size:7px;color:#ccc;line-height:2;text-align:center"><span style="color:#4ec9e1">B</span>its · <span style="color:#30a890">F</span>rames · <span style="color:#40b870">P</span>ackets · <span style="color:#7a9e30">S</span>egments · <span style="color:#e8a020">D</span>ata</div>
+        <div style="font-size:6.5px;color:#555;text-align:center;margin-top:3px">"<span style="color:#aaa">Big Friendly People Seem Dependable</span>"</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">PDU = PROTOCOL DATA UNIT</div>
+    <div class="ih">Each layer has its own PDU name.</div>
+    <div class="il">Only that layer's device reads its header.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DATA</div><div class="sl">L7 PDU</div></div>
+    <div class="sc"><div class="sv" style="color:#40b870">PACKET</div><div class="sl">L3 PDU</div></div>
+    <div class="sc"><div class="sv" style="color:#30a890">FRAME</div><div class="sl">L2 PDU</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: DECAPSULATION ══════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DECAPSULATION</div>
+    <div class="hdr-sub">RECEIVER — STRIPPING UP THE STACK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DECAPSULATION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">⬆ STRIP</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:4px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s4intro">RECEIVER STRIPS HEADERS ⬆ ONE BY ONE</div>
+
+      <!-- Full frame arrives — start state -->
+      <div style="background:#0a1020;border:1px solid #333;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s4arrives">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">📡 BITS ARRIVE FROM THE WIRE</div>
+        <div style="display:flex;align-items:stretch;height:26px;border-radius:2px;overflow:hidden;font-size:6px">
+          <div style="display:flex;align-items:center;justify-content:center;background:#0c2018;color:#30a890;width:58px;padding:0 3px;text-align:center;flex-shrink:0">ETH<br>HDR</div>
+          <div style="display:flex;align-items:center;justify-content:center;background:#0d2018;color:#40b870;width:40px;flex-shrink:0">IP<br>HDR</div>
+          <div style="display:flex;align-items:center;justify-content:center;background:#1a2808;color:#7a9e30;width:40px;flex-shrink:0">TCP<br>HDR</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#1e1408;color:#e8a020;font-size:5.5px">DATA</div>
+          <div style="display:flex;align-items:center;justify-content:center;background:#0c2018;color:#30a890;width:34px;flex-shrink:0">FCS</div>
+        </div>
+      </div>
+
+      <!-- L1 strips -->
+      <div class="dec-layer lc1" id="d1" style="transition:opacity .4s,transform .5s">
+        <div class="dec-hdr">
+          <span class="dec-name" style="color:#4ec9e1">L1 PHYSICAL — reads bits</span>
+          <span class="dec-badge" style="color:#4ec9e1;border-color:#4ec9e1">CONVERTS</span>
+        </div>
+        <div class="dec-bar">
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#0d1a2e;color:#4ec9e1;font-size:6.5px;font-family:monospace;letter-spacing:1px">010110… → frames signal→electrical</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;margin-top:4px;line-height:1.7">Converts raw signal into binary. Passes frame up to L2.</div>
+      </div>
+
+      <div class="layer-arrow" id="da12">⬆ passes frame to L2</div>
+
+      <!-- L2 strips frame header -->
+      <div class="dec-layer lc2" id="d2" style="transition:opacity .4s,transform .5s">
+        <div class="dec-hdr">
+          <span class="dec-name" style="color:#30a890">L2 DATA LINK — reads frame</span>
+          <span class="dec-badge" style="color:#30a890;border-color:#30a890">STRIPS</span>
+        </div>
+        <div class="dec-bar">
+          <div style="display:flex;align-items:center;justify-content:center;background:#1c3028;color:#30a890;width:76px;font-size:6px;padding:0 4px;text-align:center;position:relative;flex-shrink:0">
+            <span id="d2hdr" style="transition:opacity .3s">ETH HDR<br>+ FCS ✓</span>
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#0d2018;color:#40b870;font-size:6px">IP HDR</div>
+          <div style="display:flex;align-items:center;justify-content:center;background:#1a2808;color:#7a9e30;width:40px;font-size:6px;flex-shrink:0">TCP<br>HDR</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#1e1408;color:#e8a020;font-size:5.5px">DATA</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;margin-top:4px;line-height:1.7">Reads MAC addresses, verifies FCS checksum. Strips frame header + trailer. Passes packet up.</div>
+      </div>
+
+      <div class="layer-arrow" id="da23">⬆ passes packet to L3</div>
+
+      <!-- L3 strips IP -->
+      <div class="dec-layer lc3" id="d3" style="transition:opacity .4s,transform .5s">
+        <div class="dec-hdr">
+          <span class="dec-name" style="color:#40b870">L3 NETWORK — reads packet</span>
+          <span class="dec-badge" style="color:#40b870;border-color:#40b870">STRIPS</span>
+        </div>
+        <div class="dec-bar">
+          <div style="display:flex;align-items:center;justify-content:center;background:#1a3020;color:#40b870;width:70px;font-size:6px;padding:0 4px;text-align:center;flex-shrink:0">
+            IP HDR<br>DST IP ✓
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#1a2808;color:#7a9e30;font-size:6px">TCP HDR</div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#1e1408;color:#e8a020;font-size:5.5px">DATA</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;margin-top:4px;line-height:1.7">Reads destination IP — confirms it's us. Strips IP header. Passes segment up to L4.</div>
+      </div>
+
+      <div class="layer-arrow" id="da34">⬆ passes segment to L4</div>
+
+      <!-- L4 strips TCP -->
+      <div class="dec-layer lc4" id="d4" style="transition:opacity .4s,transform .5s">
+        <div class="dec-hdr">
+          <span class="dec-name" style="color:#7a9e30">L4 TRANSPORT — reads segment</span>
+          <span class="dec-badge" style="color:#7a9e30;border-color:#7a9e30">STRIPS</span>
+        </div>
+        <div class="dec-bar">
+          <div style="display:flex;align-items:center;justify-content:center;background:#1c2c10;color:#7a9e30;width:76px;font-size:6px;padding:0 4px;text-align:center;flex-shrink:0">
+            TCP HDR<br>PORT 443 ✓
+          </div>
+          <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#1e1408;color:#e8a020;font-size:6px">DATA</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;margin-top:4px;line-height:1.7">Checks port number, reassembles segments in order. Strips TCP header. Passes data to L7 app.</div>
+      </div>
+
+      <div class="layer-arrow" id="da47">⬆ passes data to L7 application</div>
+
+      <!-- L7 gets clean data -->
+      <div class="dec-layer lc7" id="d7" style="transition:opacity .4s,transform .5s">
+        <div class="dec-hdr">
+          <span class="dec-name" style="color:#e8a020">L7 APPLICATION — data arrives!</span>
+          <span class="dec-badge" style="color:#4eff9a;border-color:#4eff9a">✓ DONE</span>
+        </div>
+        <div class="dec-bar">
+          <div class="hdr-data" style="background:#2a1808;color:#e8a020;font-size:6.5px">GET /index.html HTTP/1.1 ← clean data!</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;margin-top:4px;line-height:1.7">The browser receives the clean HTTP request — exactly what the sender's browser originally sent.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">DECAPSULATION:</div>
+    <div class="ih">Headers stripped bottom → top.</div>
+    <div class="il">Each device only removes its own header.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">⬆</div><div class="sl">GOING<br>UP</div></div>
+    <div class="sc"><div class="sv gn">−HDR</div><div class="sl">EACH LAYER<br>STRIPS ONE</div></div>
+    <div class="sc"><div class="sv am">DATA</div><div class="sl">ARRIVES<br>CLEAN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: WHY IT MATTERS / WIRESHARK ══════════════ -->
+<div class="scene" id="s5" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">ENCAPSULATION</div>
+    <div class="hdr-sub">WHY THIS MATTERS — WIRESHARK & ATTACKS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">WHY IT MATTERS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REAL WORLD</span>
+  </div>
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Wireshark -->
+      <div class="panel" id="s5a" style="border:1px solid #30a890;background:#071514">
+        <div style="font-size:8px;color:#30a890;margin-bottom:7px">🔬 READING WIRESHARK</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9;margin-bottom:7px">Wireshark shows you every layer of encapsulation. Each row IS a PDU at that layer.</div>
+
+        <div class="ws-row vis" style="background:#0c1b18">
+          <div class="ws-layer"><div class="ws-num">L2</div><div class="ws-name" style="color:#30a890">Ethernet II</div><div class="ws-proto">Src: aa:bb:cc  Dst: 11:22:33</div></div>
+        </div>
+        <div class="ws-row vis" style="background:#0d1a12">
+          <div class="ws-layer"><div class="ws-num">L3</div><div class="ws-name" style="color:#40b870">Internet Protocol v4</div><div class="ws-proto">Src: 192.168.1.2  Dst: 93.184.216.34</div></div>
+        </div>
+        <div class="ws-row vis" style="background:#111c08">
+          <div class="ws-layer"><div class="ws-num">L4</div><div class="ws-name" style="color:#7a9e30">Transmission Control Protocol</div><div class="ws-proto">Src Port: 52341  Dst Port: 443</div></div>
+        </div>
+        <div class="ws-row vis" style="background:#1e1408">
+          <div class="ws-layer"><div class="ws-num">L7</div><div class="ws-name" style="color:#e8a020">Hypertext Transfer Protocol</div><div class="ws-proto">GET /index.html HTTP/1.1</div></div>
+        </div>
+
+        <div style="font-size:6.5px;color:#555;margin-top:6px;line-height:1.8">↑ Each expandable row in Wireshark = one layer of encapsulation being decoded.</div>
+      </div>
+
+      <!-- Attacks -->
+      <div class="panel" id="s5b" style="border:1px solid #e85050;background:#1a0808">
+        <div style="font-size:8px;color:#e85050;margin-bottom:7px">⚠ ATTACKS TARGET SPECIFIC LAYERS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#240d0d;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;width:50px;flex-shrink:0">L3 — IP</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7;flex:1">IP spoofing — forge the source IP in the packet header to hide identity or impersonate.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#240d0d;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;width:50px;flex-shrink:0">L4 — TCP</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7;flex:1">SYN flood — send thousands of TCP SYN segments, never completing the handshake.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:6px 8px;background:#240d0d;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;width:50px;flex-shrink:0">L2 — MAC</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7;flex:1">ARP poisoning — send fake ARP frames to redirect traffic to the attacker's MAC.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Final summary -->
+      <div class="panel" id="s5c" style="border:1px solid #4eff9a;background:#071410;padding:9px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">🎓 COMPLETE PICTURE</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:2.1">
+          ⬇ ENCAPSULATION: <span style="color:#e8a020">DATA→SEGMENT→PACKET→FRAME→BITS</span><br>
+          ⬆ DECAPSULATION: <span style="color:#4eff9a">BITS→FRAME→PACKET→SEGMENT→DATA</span><br>
+          🔬 Wireshark decodes each layer for you.<br>
+          ⚠ Attacks target headers at specific layers.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">WHY IT MATTERS:</div>
+    <div class="ih">Debug = find which layer is broken.</div>
+    <div class="il">Attack = target a specific layer's header.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#30a890;font-size:9px">WIRE<br>SHARK</div><div class="sl">READS<br>LAYERS</div></div>
+    <div class="sc"><div class="sv rd">ATTACK</div><div class="sl">TARGETS<br>HEADERS</div></div>
+    <div class="sc"><div class="sv gn">DEBUG</div><div class="sl">LAYER<br>BY LAYER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    const ids=['s1twobox','s1pdus','s1hint'];
+    ids.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+  if(n===2){
+    const ids=['e7','e4','e3','e2','e1','a74','a43','a32','a21','s2intro','s2done'];
+    ids.forEach(id=>{
+      const e=document.getElementById(id);
+      if(e){e.style.opacity='0';e.classList.remove('vis');}
+    });
+  }
+  if(n===3){
+    const ids=['s3intro','p7','arr43','p4','arr34','p3','arr23','p2','arr12','p1','s3mnemonic'];
+    ids.forEach(id=>{
+      const e=document.getElementById(id);
+      if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-10px)';}
+    });
+  }
+  if(n===4){
+    const ids=['s4intro','s4arrives','d1','da12','d2','da23','d3','da34','d4','da47','d7'];
+    ids.forEach(id=>{
+      const e=document.getElementById(id);
+      if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateY(-8px)';}
+    });
+  }
+  if(n===5){
+    const ids=['s5a','s5b','s5c'];
+    ids.forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    af(200,()=>{const h=document.getElementById('s1hero');if(h)h.style.opacity='1';});
+    af(700,()=>{const e=document.getElementById('s1twobox');if(e)e.style.opacity='1';});
+    af(1300,()=>{const e=document.getElementById('s1pdus');if(e)e.style.opacity='1';});
+    af(2000,()=>{const e=document.getElementById('s1hint');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(100,()=>{const e=document.getElementById('s2intro');if(e){e.style.opacity='1';e.classList.add('vis');}});
+    const seq=[
+      ['e7',350],['a74',720],['e4',820],
+      ['a43',1180],['e3',1280],
+      ['a32',1650],['e2',1750],
+      ['a21',2120],['e1',2220],
+      ['s2done',2750]
+    ];
+    seq.forEach(([id,ms])=>{
+      af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+    });
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    const items=[
+      ['p7',300],['arr43',620],['p4',720],
+      ['arr34',1040],['p3',1140],
+      ['arr23',1460],['p2',1560],
+      ['arr12',1880],['p1',1980],
+      ['s3mnemonic',2500]
+    ];
+    items.forEach(([id,ms])=>{
+      af(ms,()=>{
+        const e=document.getElementById(id);
+        if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}
+      });
+    });
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    const seq=[
+      ['s4arrives',300],
+      ['d1',750],['da12',1100],
+      ['d2',1200],['da23',1550],
+      ['d3',1650],['da34',2000],
+      ['d4',2100],['da47',2450],
+      ['d7',2550]
+    ];
+    seq.forEach(([id,ms])=>{
+      af(ms,()=>{
+        const e=document.getElementById(id);
+        if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+      });
+    });
+  }
+
+  if(n===5){
+    show('s5a',200);
+    show('s5b',1000);
+    show('s5c',1800);
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>
