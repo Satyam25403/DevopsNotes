@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>DNS Resolution Chain</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* DNS node cards */
+.dns-node{
+  border:2px solid #2a1f3d;background:#0d0d1a;
+  padding:10px 12px;display:flex;align-items:center;gap:10px;
+  transition:border-color .35s,background .35s;
+}
+.dns-node.lit{border-color:#4ec9e1;background:#001a2060}
+.dns-node.done-node{border-color:#4eff9a;background:#001a1050}
+.dns-node.querying{border-color:#e8a020;background:#10090060}
+.dns-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.dns-name{font-size:8px;line-height:1.6}
+.dns-detail{font-size:6px;color:#555;line-height:1.7;margin-top:2px}
+.dns-badge{font-size:6px;padding:2px 6px;border:1px solid currentColor;border-radius:2px;margin-left:auto;flex-shrink:0;opacity:0;transition:opacity .35s}
+
+/* Arrow between nodes */
+.dns-arrow{
+  display:flex;align-items:center;gap:0;padding:0 14px;height:28px;position:relative;
+}
+.arrow-line{
+  height:2px;background:#2a1f3d;flex:1;position:relative;overflow:hidden;
+}
+.arrow-fill{
+  position:absolute;left:0;top:0;bottom:0;width:0%;
+  transition:width .55s ease-out;
+}
+.arrow-label{
+  position:absolute;top:-14px;left:50%;transform:translateX(-50%);
+  font-size:6px;white-space:nowrap;opacity:0;transition:opacity .35s;
+  font-family:'Press Start 2P',monospace;
+}
+.arrow-head{
+  width:0;height:0;
+  border-top:6px solid transparent;border-bottom:6px solid transparent;
+  border-left:10px solid #2a1f3d;transition:border-left-color .35s;flex-shrink:0;
+}
+.arrow-return{
+  display:flex;align-items:center;gap:0;padding:0 14px;height:22px;position:relative;
+}
+.ret-line{height:2px;background:#2a1f3d;flex:1;position:relative;overflow:hidden;}
+.ret-fill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .55s ease-out;}
+.ret-label{position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:6px;white-space:nowrap;opacity:0;transition:opacity .35s;font-family:'Press Start 2P',monospace;}
+.ret-head{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-right:8px solid #2a1f3d;transition:border-right-color .35s;flex-shrink:0;}
+
+/* timing chip */
+.timing-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  border:1px solid #2a1f3d;background:#0a0a14;
+  padding:3px 8px;font-size:6px;color:#555;
+  transition:all .35s;opacity:0;
+}
+.timing-chip.show{opacity:1;border-color:#e8a020;color:#e8a020;}
+
+/* cache bar */
+.cache-bar{height:10px;background:#1a1a2a;position:relative;overflow:hidden;border-radius:1px;}
+.cache-fill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:1px;transition:width 1.1s ease-out;}
+
+/* wireshark row */
+.ws-row{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border:1px solid #1e4080;background:#050e1a;
+  font-size:6px;font-family:monospace;opacity:0;transition:opacity .35s;
+}
+.ws-no{color:#555;min-width:20px}
+.ws-time{color:#4ec9e1;min-width:44px}
+.ws-src{color:#e8a020;flex:1}
+.ws-proto{color:#4eff9a;min-width:28px}
+.ws-info{color:#aaa;flex:2}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pulsing{animation:pulse .8s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1 — BROWSER CACHE & OS RESOLVER ═══ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DNS RESOLUTION CHAIN</div>
+    <div class="hdr-sub">300ms · 5 SERVERS · 1 DOMAIN NAME</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+      <div class="dot" id="d1-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEP 1 — LOCAL CACHES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">FASTEST</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">YOU TYPE: google.com — WHO ANSWERS?</div>
+
+      <!-- Browser node -->
+      <div class="dns-node" id="n1-browser">
+        <div class="dns-icon">🌐</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#4ec9e1">1 · BROWSER CACHE</div>
+          <div class="dns-detail">Chrome/Firefox keeps its own DNS cache.<br>Check: chrome://net-internals/#dns</div>
+        </div>
+        <div class="dns-badge" id="b1-browser" style="color:#4eff9a">HIT &lt;1ms</div>
+      </div>
+
+      <!-- Arrow down -->
+      <div class="dns-arrow">
+        <div class="arrow-line" id="al1">
+          <div class="arrow-fill" id="af1" style="background:#e8a020"></div>
+          <div class="arrow-label" id="albl1" style="color:#e8a020">MISS → ask OS</div>
+        </div>
+        <div class="arrow-head" id="ah1"></div>
+      </div>
+
+      <!-- OS resolver node -->
+      <div class="dns-node" id="n1-os">
+        <div class="dns-icon">🖥</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#4ec9e1">2 · OS RESOLVER</div>
+          <div class="dns-detail">Checks /etc/hosts first, then local DNS cache.<br>Windows: ipconfig /displaydns<br>macOS: sudo dscacheutil -cachedump</div>
+        </div>
+        <div class="dns-badge" id="b1-os" style="color:#4eff9a">HIT &lt;1ms</div>
+      </div>
+
+      <!-- Arrow down -->
+      <div class="dns-arrow">
+        <div class="arrow-line" id="al2">
+          <div class="arrow-fill" id="af2" style="background:#e8a020"></div>
+          <div class="arrow-label" id="albl2" style="color:#e8a020">MISS → ask resolver</div>
+        </div>
+        <div class="arrow-head" id="ah2"></div>
+      </div>
+
+      <!-- Recursive resolver node -->
+      <div class="dns-node" id="n1-rec">
+        <div class="dns-icon">🔁</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#e8a020">3 · RECURSIVE RESOLVER</div>
+          <div class="dns-detail">8.8.8.8 (Google) or your ISP's resolver.<br>Configured via DHCP Option 6.<br>If it has google.com cached → done!</div>
+        </div>
+        <div class="dns-badge" id="b1-rec" style="color:#e8a020">CACHE?</div>
+      </div>
+
+      <!-- Cache TTL bar -->
+      <div id="cache-block" style="border:1px solid #e8a02040;background:#10090080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">RESOLVER CACHE — TTL COUNTDOWN</div>
+        <div style="font-size:6px;color:#888;margin-bottom:4px">google.com A record — TTL 300s remaining</div>
+        <div class="cache-bar">
+          <div class="cache-fill" id="ttl-fill" style="background:#4eff9a"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:5px;color:#555;margin-top:3px">
+          <span>0s</span><span style="color:#4eff9a">↑ still valid</span><span>300s</span>
+        </div>
+      </div>
+
+      <!-- Miss path label -->
+      <div id="miss-label" style="border:1px solid #e8a02040;background:#10090060;padding:7px 10px;font-size:6px;color:#e8a020;line-height:1.9;opacity:0;transition:opacity .4s">
+        CACHE MISS → resolver must go ask the internet.<br>
+        Next scenes show the full recursive query chain.
+      </div>
+
+      <!-- Timing context -->
+      <div id="t1-chip" class="timing-chip" style="align-self:flex-start">⏱ CACHE HIT: &lt;1ms</div>
+      <div id="t2-chip" class="timing-chip" style="align-self:flex-start">⏱ FULL CHAIN: 100–300ms</div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Browser → OS → Recursive resolver.</div>
+    <div class="il">Each checks its cache before going further.</div>
+    <div class="ih am">Cache hit = &lt;1ms. Cache miss = full chain.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">&lt;1ms</div><div class="sl">CACHE HIT</div></div>
+    <div class="sc"><div class="sv">300ms</div><div class="sl">CACHE MISS</div></div>
+    <div class="sc"><div class="sv gn">UDP 53</div><div class="sl">DNS PORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 — ROOT NS ═══ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ROOT NAME SERVERS</div>
+    <div class="hdr-sub">13 CLUSTERS · ANYCAST · ALWAYS FIRST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEP 2 — ROOT NS QUERY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOP 1</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">RESOLVER ASKS: "WHO HANDLES .COM?"</div>
+
+      <!-- Resolver sends query -->
+      <div class="dns-node querying" id="n2-rec">
+        <div class="dns-icon">🔁</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#e8a020">RECURSIVE RESOLVER</div>
+          <div class="dns-detail">Cache miss. Must resolve from scratch.<br>Resolver has root hints file built-in.<br>Knows root server IPs without asking anyone.</div>
+        </div>
+      </div>
+
+      <!-- Query arrow -->
+      <div class="dns-arrow">
+        <div class="arrow-line" id="al3">
+          <div class="arrow-fill" id="af3" style="background:#4ec9e1"></div>
+          <div class="arrow-label" id="albl3" style="color:#4ec9e1">? "who handles .com?" UDP port 53</div>
+        </div>
+        <div class="arrow-head" id="ah3" style="border-left-color:#2a1f3d"></div>
+      </div>
+
+      <!-- Root NS node -->
+      <div class="dns-node" id="n2-root">
+        <div class="dns-icon">🌍</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#4ec9e1">ROOT NAME SERVER</div>
+          <div class="dns-detail">a.root-servers.net → m.root-servers.net<br>13 logical servers, hundreds of anycast IPs.<br>Does NOT know google.com's IP directly.</div>
+        </div>
+        <div class="dns-badge" id="b2-root" style="color:#4eff9a">REFERRAL</div>
+      </div>
+
+      <!-- Response arrow (return) -->
+      <div class="arrow-return">
+        <div class="ret-head" id="rh1"></div>
+        <div class="ret-line" id="rl1">
+          <div class="ret-fill" id="rf1" style="background:#4eff9a"></div>
+          <div class="ret-label" id="rlbl1" style="color:#4eff9a">→ "ask .com TLD servers"</div>
+        </div>
+      </div>
+
+      <!-- Root NS response card -->
+      <div id="root-resp" style="border:1px solid #4eff9a40;background:#001a1080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">ROOT NS RESPONSE (REFERRAL)</div>
+        <div style="font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          ;; AUTHORITY SECTION:<br>
+          com. &nbsp;&nbsp;&nbsp;172800 IN NS <span style="color:#4ec9e1">a.gtld-servers.net.</span><br>
+          com. &nbsp;&nbsp;&nbsp;172800 IN NS <span style="color:#4ec9e1">b.gtld-servers.net.</span><br>
+          <span style="color:#e8a020">;; Does not answer — only refers ↓</span>
+        </div>
+      </div>
+
+      <!-- Root facts -->
+      <div id="root-facts" style="border:1px solid #4ec9e140;background:#001a2080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">ROOT SERVER FACTS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4ec9e1;padding-left:7px;line-height:1.7">13 root server names (a–m) but 1500+ physical servers globally via anycast</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">Root hints file: built into every resolver — bootstraps the whole system</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">Round trip to root: ~20–40ms (anycast picks nearest)</div>
+        </div>
+      </div>
+
+      <div id="t3-chip" class="timing-chip" style="align-self:flex-start">⏱ ROOT RTT: ~20–40ms</div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Resolver asks root: "who handles .com?"</div>
+    <div class="il">Root returns referral to TLD servers.</div>
+    <div class="ih am">Root doesn't answer — it only delegates.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">13</div><div class="sl">ROOT NAMES</div></div>
+    <div class="sc"><div class="sv am">1500+</div><div class="sl">ANYCAST IPs</div></div>
+    <div class="sc"><div class="sv gn">~30ms</div><div class="sl">ROOT RTT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 — TLD NS ═══ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">TLD NAME SERVER</div>
+    <div class="hdr-sub">.COM · .NET · .ORG — VERISIGN RUNS .COM</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STEP 3 — TLD NS QUERY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HOP 2</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">RESOLVER ASKS: "WHO IS AUTHORITATIVE FOR GOOGLE.COM?"</div>
+
+      <!-- Resolver -->
+      <div class="dns-node querying" id="n3-rec" style="border-color:#e8a020">
+        <div class="dns-icon">🔁</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#e8a020">RECURSIVE RESOLVER</div>
+          <div class="dns-detail">Now has .com TLD server IPs from root.<br>Sends next query to a.gtld-servers.net.</div>
+        </div>
+      </div>
+
+      <!-- Query to TLD -->
+      <div class="dns-arrow">
+        <div class="arrow-line" id="al4">
+          <div class="arrow-fill" id="af4" style="background:#4ec9e1"></div>
+          <div class="arrow-label" id="albl4" style="color:#4ec9e1">? "who is auth NS for google.com?"</div>
+        </div>
+        <div class="arrow-head" id="ah4" style="border-left-color:#2a1f3d"></div>
+      </div>
+
+      <!-- TLD NS -->
+      <div class="dns-node" id="n3-tld">
+        <div class="dns-icon">🏛</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#4ec9e1">TLD NAME SERVER (.com)</div>
+          <div class="dns-detail">a.gtld-servers.net (Verisign)<br>Knows NS records for all .com domains.<br>Registered when you buy google.com.</div>
+        </div>
+        <div class="dns-badge" id="b3-tld" style="color:#4eff9a">NS REFERRAL</div>
+      </div>
+
+      <!-- Return arrow -->
+      <div class="arrow-return">
+        <div class="ret-head" id="rh2"></div>
+        <div class="ret-line" id="rl2">
+          <div class="ret-fill" id="rf2" style="background:#4eff9a"></div>
+          <div class="ret-label" id="rlbl2" style="color:#4eff9a">→ "ask ns1.google.com"</div>
+        </div>
+      </div>
+
+      <!-- TLD response -->
+      <div id="tld-resp" style="border:1px solid #4eff9a40;background:#001a1080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">TLD NS RESPONSE (REFERRAL)</div>
+        <div style="font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          ;; AUTHORITY SECTION:<br>
+          google.com. 172800 NS <span style="color:#4ec9e1">ns1.google.com.</span><br>
+          google.com. 172800 NS <span style="color:#4ec9e1">ns2.google.com.</span><br>
+          google.com. 172800 NS <span style="color:#4ec9e1">ns3.google.com.</span><br>
+          <span style="color:#e8a020">;; Still not the answer — one more hop ↓</span>
+        </div>
+      </div>
+
+      <!-- Glue records -->
+      <div id="glue-box" style="border:1px solid #9a4ef840;background:#0a082080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:4px">GLUE RECORDS — AVOIDING INFINITE LOOP</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">If NS is ns1.google.com, how do you find ns1.google.com without asking google.com? Glue: TLD includes A record for ns1.google.com in the additional section.</div>
+      </div>
+
+      <div id="t4-chip" class="timing-chip" style="align-self:flex-start">⏱ TLD RTT: ~30–60ms cumulative</div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">TLD server knows NS records for all .com domains.</div>
+    <div class="il">Returns referral to authoritative NS servers.</div>
+    <div class="ih">Glue records break the circular dependency.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">gtld</div><div class="sl">.COM SERVERS</div></div>
+    <div class="sc"><div class="sv am">172800</div><div class="sl">NS TTL (48h)</div></div>
+    <div class="sc"><div class="sv gn">GLUE</div><div class="sl">LOOP BREAKER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 — AUTHORITATIVE NS → ANSWER ═══ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">AUTHORITATIVE NS</div>
+    <div class="hdr-sub">THE FINAL ANSWER — IP RETURNED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 4 — FINAL ANSWER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">GOT IP</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">RESOLVER ASKS AUTH NS: "WHAT IS google.com's IP?"</div>
+
+      <!-- Resolver -->
+      <div class="dns-node querying" id="n4-rec" style="border-color:#e8a020">
+        <div class="dns-icon">🔁</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#e8a020">RECURSIVE RESOLVER</div>
+          <div class="dns-detail">Now contacts ns1.google.com directly.<br>This server is managed by Google.</div>
+        </div>
+      </div>
+
+      <!-- Query arrow -->
+      <div class="dns-arrow">
+        <div class="arrow-line" id="al5">
+          <div class="arrow-fill" id="af5" style="background:#4eff9a"></div>
+          <div class="arrow-label" id="albl5" style="color:#4eff9a">? "A record for google.com"</div>
+        </div>
+        <div class="arrow-head" id="ah5" style="border-left-color:#2a1f3d"></div>
+      </div>
+
+      <!-- Auth NS -->
+      <div class="dns-node" id="n4-auth">
+        <div class="dns-icon">🏆</div>
+        <div style="flex:1">
+          <div class="dns-name" style="color:#4eff9a">AUTHORITATIVE NS</div>
+          <div class="dns-detail">ns1.google.com — Google manages this.<br>Has the actual zone file with all records.<br>Returns ANSWER (not referral).</div>
+        </div>
+        <div class="dns-badge" id="b4-auth" style="color:#4eff9a">ANSWER ✓</div>
+      </div>
+
+      <!-- Return arrow -->
+      <div class="arrow-return">
+        <div class="ret-head" id="rh3"></div>
+        <div class="ret-line" id="rl3">
+          <div class="ret-fill" id="rf3" style="background:#4eff9a"></div>
+          <div class="ret-label" id="rlbl3" style="color:#4eff9a">→ 142.250.80.46 TTL=300</div>
+        </div>
+      </div>
+
+      <!-- Auth NS response -->
+      <div id="auth-resp" style="border:2px solid #4eff9a;background:#001a1090;padding:9px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">AUTHORITATIVE ANSWER 🎯</div>
+        <div style="font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          ;; ANSWER SECTION:<br>
+          google.com. 300 IN A <span style="color:#4eff9a;font-size:8px">142.250.80.46</span><br>
+          google.com. 300 IN A 142.250.80.110<br>
+          google.com. 300 IN A 142.250.80.138<br>
+          <span style="color:#e8a020">;; AA bit set — authoritative answer</span>
+        </div>
+      </div>
+
+      <!-- Resolver caches it -->
+      <div id="cache-resp" style="border:1px solid #4ec9e140;background:#001a2080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">RESOLVER CACHES ANSWER</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">
+          Stores google.com → 142.250.80.46 for 300s.<br>
+          Returns answer to your OS → browser → TCP connect.
+        </div>
+        <div style="margin-top:6px">
+          <div style="font-size:6px;color:#888;margin-bottom:3px">TTL countdown: 300s</div>
+          <div class="cache-bar"><div class="cache-fill" id="ttl2-fill" style="background:#4eff9a"></div></div>
+        </div>
+      </div>
+
+      <!-- Full chain summary -->
+      <div id="chain-sum" style="border:1px solid #e8a02040;background:#10090080;padding:8px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">FULL CHAIN SUMMARY</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa">
+            <span>Browser cache miss</span><span style="color:#e85050">+0ms</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa">
+            <span>Root NS query</span><span style="color:#e8a020">+30ms</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa">
+            <span>TLD NS query</span><span style="color:#e8a020">+60ms</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa">
+            <span>Auth NS query</span><span style="color:#e8a020">+100ms</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px;color:#4eff9a;border-top:1px solid #2a1f3d;padding-top:4px;margin-top:2px">
+            <span>TOTAL (first visit)</span><span>~150–300ms</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Auth NS returns the actual A record.</div>
+    <div class="il">Resolver caches it for TTL seconds.</div>
+    <div class="ih">Next visit: resolver cache hit = &lt;1ms.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">A</div><div class="sl">RECORD TYPE</div></div>
+    <div class="sc"><div class="sv am">300s</div><div class="sl">TTL CACHED</div></div>
+    <div class="sc"><div class="sv gn">~150ms</div><div class="sl">TOTAL TIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5 — WIRESHARK + TTL + FULL PICTURE ═══ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DNS IN WIRESHARK</div>
+    <div class="hdr-sub">UDP PORT 53 · TTL · FULL PICTURE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ENGINEER</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">WIRESHARK CAPTURE — DNS QUERIES ON PORT 53</div>
+
+      <!-- Wireshark header -->
+      <div style="background:#050e1a;border:1px solid #1e4080;padding:4px 8px;display:flex;gap:6px;font-size:5px;color:#2a4060">
+        <span style="min-width:20px">No.</span>
+        <span style="min-width:44px">Time</span>
+        <span style="flex:1">Source</span>
+        <span style="min-width:28px">Proto</span>
+        <span style="flex:2">Info</span>
+      </div>
+
+      <div class="ws-row" id="ws1">
+        <span class="ws-no">1</span>
+        <span class="ws-time">0.000000</span>
+        <span class="ws-src">192.168.1.5</span>
+        <span class="ws-proto">DNS</span>
+        <span class="ws-info">Std query A google.com</span>
+      </div>
+      <div class="ws-row" id="ws2">
+        <span class="ws-no">2</span>
+        <span class="ws-time">0.001200</span>
+        <span class="ws-src">8.8.8.8</span>
+        <span class="ws-proto">DNS</span>
+        <span class="ws-info">Std query response A 142.250.80.46</span>
+      </div>
+      <div class="ws-row" id="ws3" style="color:#555">
+        <span class="ws-no">3</span>
+        <span class="ws-time">0.001250</span>
+        <span class="ws-src" style="color:#555">8.8.8.8→a.root</span>
+        <span class="ws-proto" style="color:#555">DNS</span>
+        <span class="ws-info" style="color:#555">query NS .com [internal]</span>
+      </div>
+      <div class="ws-row" id="ws4" style="color:#555">
+        <span class="ws-no">4</span>
+        <span class="ws-time">0.032100</span>
+        <span class="ws-src" style="color:#555">root→gtld</span>
+        <span class="ws-proto" style="color:#555">DNS</span>
+        <span class="ws-info" style="color:#555">referral NS google.com [internal]</span>
+      </div>
+      <div class="ws-row" id="ws5">
+        <span class="ws-no">5</span>
+        <span class="ws-time">0.098400</span>
+        <span class="ws-src">ns1.google.com</span>
+        <span class="ws-proto">DNS</span>
+        <span class="ws-info">Auth answer A 142.250.80.46 TTL=300</span>
+      </div>
+
+      <div style="font-size:6px;color:#555;padding:2px 4px;line-height:1.7">
+        * Frames 3–4 are resolver-internal — not visible from your machine
+      </div>
+
+      <!-- TTL explanation -->
+      <div id="ttl-box" style="border:1px solid #e8a02050;background:#10090080;padding:9px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">TTL — TIME TO LIVE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">TTL=300: answer cached for 5 minutes. Second visit: &lt;1ms from resolver cache.</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:7px;line-height:1.7">Low TTL (60s): fast failover when IP changes. High DNS query load.</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">High TTL (86400s): cached for 24h. IP changes take 24h to propagate.</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4ec9e1;padding-left:7px;line-height:1.7">DNS TTL ≠ HTTP cache. Two separate caching systems.</div>
+        </div>
+      </div>
+
+      <!-- Quick debug commands -->
+      <div id="debug-box" style="border:1px solid #4ec9e140;background:#001a2080;padding:9px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">DEBUG COMMANDS</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;line-height:2.2;background:#000a0d;padding:6px;border:1px solid #1e4080">
+          dig google.com +trace<br>
+          nslookup -type=A google.com 8.8.8.8<br>
+          dig @a.root-servers.net google.com NS<br>
+          drill -T google.com  # full trace
+        </div>
+      </div>
+
+      <!-- Final summary -->
+      <div id="final-box" style="border:2px solid #4eff9a60;background:#001a1090;padding:9px 10px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">THE MENTAL MODEL</div>
+        <div style="font-size:7px;color:#fff;line-height:2.2">
+          Browser → OS → Recursive Resolver<br>
+          → Root NS → TLD NS → Auth NS<br>
+          <span style="color:#4eff9a">Answer cached at every level by TTL.</span><br>
+          <span style="color:#e8a020">All on UDP port 53. ~150–300ms cold.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Wireshark shows DNS as UDP port 53.</div>
+    <div class="il">dig +trace shows every hop explicitly.</div>
+    <div class="ih">TTL controls how long each answer lives.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">UDP 53</div><div class="sl">DNS WIRE</div></div>
+    <div class="sc"><div class="sv am">TTL</div><div class="sl">CACHE TIMER</div></div>
+    <div class="sc"><div class="sv gn">+trace</div><div class="sl">DIG FLAG</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="play5()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){timers.forEach(clearTimeout);timers=[]}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>{[play1,play2,play3,play4,play5][n-1]()},200);
+}
+
+function resetArrow(lineId,fillId,headId,lblId,headColor){
+  const f=document.getElementById(fillId);
+  if(f){f.style.transition='none';f.style.width='0%';}
+  const h=document.getElementById(headId);
+  if(h){h.style.borderLeftColor=headColor||'#2a1f3d';}
+  const l=document.getElementById(lblId);
+  if(l){l.style.opacity='0';}
+  setTimeout(()=>{if(f)f.style.transition='width .55s ease-out';},50);
+}
+function fireArrow(fillId,headId,headColor,lblId,delay){
+  T(()=>{
+    const f=document.getElementById(fillId);
+    if(f)f.style.width='100%';
+    const h=document.getElementById(headId);
+    if(h)h.style.borderLeftColor=headColor;
+    T(()=>{const l=document.getElementById(lblId);if(l)l.style.opacity='1';},300);
+  },delay);
+}
+function resetReturn(lineId,fillId,headId,lblId){
+  const f=document.getElementById(fillId);
+  if(f){f.style.transition='none';f.style.width='0%';}
+  const h=document.getElementById(headId);
+  if(h)h.style.borderRightColor='#2a1f3d';
+  const l=document.getElementById(lblId);
+  if(l)l.style.opacity='0';
+  setTimeout(()=>{if(f)f.style.transition='width .55s ease-out';},50);
+}
+function fireReturn(fillId,headId,headColor,lblId,delay){
+  T(()=>{
+    const f=document.getElementById(fillId);
+    if(f)f.style.width='100%';
+    const h=document.getElementById(headId);
+    if(h)h.style.borderRightColor=headColor;
+    T(()=>{const l=document.getElementById(lblId);if(l)l.style.opacity='1';},300);
+  },delay);
+}
+function hide(...ids){ids.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';})}
+function show(id,delay){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},delay)}
+function nodeClass(id,cls,delay){T(()=>{const e=document.getElementById(id);if(e){e.className='dns-node '+cls;}},delay)}
+function badgeShow(id,delay){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},delay)}
+function chipShow(id,delay){T(()=>{const e=document.getElementById(id);if(e)e.classList.add('show');},delay)}
+
+/* ── S1 ── */
+function play1(){
+  clearT();
+  hide('b1-browser','b1-os','b1-rec','cache-block','miss-label','t1-chip','t2-chip');
+  resetArrow('al1','af1','ah1','albl1');
+  resetArrow('al2','af2','ah2','albl2');
+  ['n1-browser','n1-os','n1-rec'].forEach(id=>{const e=document.getElementById(id);if(e)e.className='dns-node';});
+
+  T(()=>nodeClass('n1-browser','lit'),400);
+  T(()=>badgeShow('b1-browser'),800);
+  T(()=>nodeClass('n1-browser','done-node'),1100);
+
+  fireArrow('af1','ah1','#e8a020','albl1',1300);
+
+  T(()=>nodeClass('n1-os','lit'),1900);
+  T(()=>badgeShow('b1-os'),2300);
+  T(()=>nodeClass('n1-os','done-node'),2600);
+
+  fireArrow('af2','ah2','#e8a020','albl2',2800);
+
+  T(()=>nodeClass('n1-rec','querying'),3400);
+  T(()=>badgeShow('b1-rec'),3800);
+  show('cache-block',4000);
+  T(()=>{const f=document.getElementById('ttl-fill');if(f)f.style.width='65%';},4200);
+  show('miss-label',4800);
+  chipShow('t1-chip',5200);
+  chipShow('t2-chip',5600);
+}
+
+/* ── S2 ── */
+function play2(){
+  clearT();
+  hide('b2-root','root-resp','root-facts','t3-chip');
+  resetArrow('al3','af3','ah3','albl3');
+  resetReturn('rl1','rf1','rh1','rlbl1');
+  const rec=document.getElementById('n2-rec');if(rec)rec.className='dns-node querying';
+  const root=document.getElementById('n2-root');if(root)root.className='dns-node';
+
+  T(()=>{const e=document.getElementById('n2-rec');if(e){e.className='dns-node querying';}},300);
+  fireArrow('af3','ah3','#4ec9e1','albl3',500);
+  T(()=>nodeClass('n2-root','lit'),1200);
+  T(()=>badgeShow('b2-root'),1700);
+  fireReturn('rf1','rh1','#4eff9a','rlbl1',2000);
+  show('root-resp',2700);
+  show('root-facts',3300);
+  chipShow('t3-chip',3900);
+}
+
+/* ── S3 ── */
+function play3(){
+  clearT();
+  hide('b3-tld','tld-resp','glue-box','t4-chip');
+  resetArrow('al4','af4','ah4','albl4');
+  resetReturn('rl2','rf2','rh2','rlbl2');
+  const rec=document.getElementById('n3-rec');if(rec)rec.className='dns-node querying';
+  const tld=document.getElementById('n3-tld');if(tld)tld.className='dns-node';
+
+  fireArrow('af4','ah4','#4ec9e1','albl4',500);
+  T(()=>nodeClass('n3-tld','lit'),1200);
+  T(()=>badgeShow('b3-tld'),1700);
+  fireReturn('rf2','rh2','#4eff9a','rlbl2',2000);
+  show('tld-resp',2700);
+  show('glue-box',3400);
+  chipShow('t4-chip',4000);
+}
+
+/* ── S4 ── */
+function play4(){
+  clearT();
+  hide('b4-auth','auth-resp','cache-resp','chain-sum');
+  resetArrow('al5','af5','ah5','albl5');
+  resetReturn('rl3','rf3','rh3','rlbl3');
+  const rec=document.getElementById('n4-rec');if(rec)rec.className='dns-node querying';
+  const auth=document.getElementById('n4-auth');if(auth)auth.className='dns-node';
+
+  fireArrow('af5','ah5','#4eff9a','albl5',500);
+  T(()=>nodeClass('n4-auth','done-node'),1200);
+  T(()=>badgeShow('b4-auth'),1700);
+  fireReturn('rf3','rh3','#4eff9a','rlbl3',2000);
+  show('auth-resp',2700);
+  show('cache-resp',3300);
+  T(()=>{const f=document.getElementById('ttl2-fill');if(f)f.style.width='100%';},3500);
+  show('chain-sum',4200);
+}
+
+/* ── S5 ── */
+function play5(){
+  clearT();
+  ['ws1','ws2','ws3','ws4','ws5','ttl-box','debug-box','final-box'].forEach(id=>hide(id));
+
+  T(()=>show('ws1',0),300);
+  T(()=>show('ws2',0),700);
+  T(()=>show('ws3',0),1100);
+  T(()=>show('ws4',0),1500);
+  T(()=>show('ws5',0),1900);
+  show('ttl-box',2500);
+  show('debug-box',3200);
+  show('final-box',4000);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

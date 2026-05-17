@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>DNS Attacks</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* animated node */
+.node{border:2px solid #2a1f3d;background:#0d0d1a;padding:8px 10px;
+  display:flex;align-items:center;gap:8px;transition:border-color .3s,background .3s;}
+.node.red{border-color:#e85050;background:#1a050590}
+.node.amber{border-color:#e8a020;background:#10090060}
+.node.green{border-color:#4eff9a;background:#001a1060}
+.node.cyan{border-color:#4ec9e1;background:#001a2060}
+.node-ico{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.node-name{font-size:8px;line-height:1.5}
+.node-sub{font-size:6px;color:#666;margin-top:2px;line-height:1.6}
+
+/* horizontal arrow beam */
+.hbeam{height:26px;display:flex;align-items:center;padding:0 6px;gap:0;position:relative}
+.hline{flex:1;height:2px;background:#1a1a2a;position:relative;overflow:hidden}
+.hfill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .5s ease-out}
+.hhead{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-left:9px solid #1a1a2a;flex-shrink:0;transition:border-left-color .3s}
+.hlbl{position:absolute;top:-13px;left:50%;transform:translateX(-50%);font-size:6px;white-space:nowrap;opacity:0;transition:opacity .3s;font-family:'Press Start 2P',monospace}
+
+/* return arrow beam (right to left) */
+.rbeam{height:22px;display:flex;align-items:center;padding:0 6px;gap:0;position:relative}
+.rhead{width:0;height:0;border-top:5px solid transparent;border-bottom:5px solid transparent;border-right:9px solid #1a1a2a;flex-shrink:0;transition:border-right-color .3s}
+.rline{flex:1;height:2px;background:#1a1a2a;position:relative;overflow:hidden}
+.rfill{position:absolute;left:0;top:0;bottom:0;width:0%;transition:width .5s ease-out}
+.rlbl{position:absolute;top:4px;left:50%;transform:translateX(-50%);font-size:6px;white-space:nowrap;opacity:0;transition:opacity .3s;font-family:'Press Start 2P',monospace}
+
+/* Packet burst (Kaminsky flood) */
+.pkt{position:absolute;font-size:6px;font-family:'Press Start 2P',monospace;padding:2px 4px;border:1px solid;opacity:0;transition:opacity .2s,left .5s linear}
+
+/* progress bar */
+.pbar{height:10px;background:#1a1a2a;border-radius:1px;position:relative;overflow:hidden}
+.pfill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:1px;transition:width 1.1s ease-out}
+
+/* reveal */
+.rev{opacity:0;transition:opacity .4s}
+
+/* zone record row */
+.zrow{display:flex;gap:4px;padding:3px 8px;font-size:6px;font-family:monospace;border-bottom:1px solid #0d0d1a;opacity:0;transition:opacity .3s}
+.zname{color:#e8a020;flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.ztype{color:#4ec9e1;width:28px;flex-shrink:0}
+.zval{color:#aaa;flex:1;min-width:0;overflow:hidden;white-space:nowrap}
+
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+@keyframes flicker{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<!-- ═══════ SCENE 1 — CACHE POISONING ═══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DNS CACHE POISONING</div>
+    <div class="hdr-sub">INJECT FAKE RECORDS BEFORE THE REAL ANSWER</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK 1 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">POISONING</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <!-- The 3 actors -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">ACTORS IN THE ATTACK</div>
+
+      <div class="node" id="n1v"><div class="node-ico">💻</div><div><div class="node-name" style="color:#4ec9e1">VICTIM BROWSER</div><div class="node-sub">asks resolver: "where is bank.com?"</div></div></div>
+
+      <div class="hbeam" id="hb1">
+        <div class="hline"><div class="hfill" id="hf1" style="background:#4ec9e1"></div><div class="hlbl" id="hl1" style="color:#4ec9e1">DNS query: bank.com?</div></div>
+        <div class="hhead" id="hh1"></div>
+      </div>
+
+      <div class="node" id="n1r"><div class="node-ico">🔁</div><div><div class="node-name" style="color:#e8a020">RECURSIVE RESOLVER</div><div class="node-sub">forwards query to auth NS — waits for reply</div></div></div>
+
+      <!-- Race: legit vs attacker response -->
+      <div style="display:flex;gap:5px;margin-top:4px">
+        <div style="flex:1;border:1px solid #4eff9a40;background:#001a1080;padding:6px 8px;opacity:0;transition:opacity .4s" id="legit-side">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">LEGIT RESPONSE</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">from ns1.bank.com<br>bank.com A 1.2.3.4<br>TxID: 0x8A21 ✓</div>
+        </div>
+        <div style="flex:1;border:1px solid #e8505060;background:#1a050590;padding:6px 8px;opacity:0;transition:opacity .4s" id="atk-side">
+          <div style="font-size:6px;color:#e85050;margin-bottom:3px">FORGED RESPONSE</div>
+          <div style="font-size:6px;color:#e85050;line-height:1.8;animation:flicker 1s ease-in-out 3" id="forged-txt">from attacker 💀<br>bank.com A 5.5.5.5<br>TxID: 0x???? guess</div>
+        </div>
+      </div>
+
+      <!-- Race bar -->
+      <div style="border:1px solid #2a1f3d;background:#0a0a14;padding:7px 10px;opacity:0;transition:opacity .4s" id="race-box">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">THE RACE — WHO ARRIVES FIRST?</div>
+        <div style="font-size:6px;color:#888;margin-bottom:3px">Legit response</div>
+        <div class="pbar" style="margin-bottom:5px"><div class="pfill" id="legit-bar" style="background:#4eff9a"></div></div>
+        <div style="font-size:6px;color:#e85050;margin-bottom:3px">Attacker's forged flood</div>
+        <div class="pbar"><div class="pfill" id="atk-bar" style="background:#e85050"></div></div>
+      </div>
+
+      <!-- Forged record cached -->
+      <div style="border:2px solid #e85050;background:#1a050590;padding:7px 10px;opacity:0;transition:opacity .4s" id="poisoned-box">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;animation:flicker 1.5s ease-in-out infinite" id="poison-lbl">☠ CACHE POISONED</div>
+        <div style="font-size:6px;color:#aaa;font-family:monospace;line-height:2">
+          bank.com A → <span style="color:#e85050">5.5.5.5</span> (ATTACKER)<br>
+          TTL: 86400 (stuck for 24h)<br>
+          Victim visits bank.com → lands on <span style="color:#e85050">phishing site</span>
+        </div>
+      </div>
+
+      <!-- What attacker needed to guess -->
+      <div class="rev" id="txid-box" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">WHY IT WORKED: PREDICTABLE TxID</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">DNS query has a 16-bit Transaction ID.<br>Old resolvers used sequential IDs: 1,2,3…<br>Guess 1–65535 fast enough → eventually win.<br><span style="color:#e85050">Kaminsky: win reliably in &lt;10 seconds.</span></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Attacker races the legit DNS response.</div>
+    <div class="il">Forged reply with guessed TxID arrives first.</div>
+    <div class="ih">Poisoned cache redirects victims for hours.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">65535</div><div class="sl">TxID SPACE</div></div>
+    <div class="sc"><div class="sv am">&lt;10s</div><div class="sl">KAMINSKY WIN</div></div>
+    <div class="sc"><div class="sv">24h</div><div class="sl">POISON TTL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════ SCENE 2 — KAMINSKY ATTACK ═══════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">KAMINSKY 2008</div>
+    <div class="hdr-sub">THE RACE CONDITION THAT BROKE THE INTERNET</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK 2 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">KAMINSKY</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">DAN KAMINSKY'S INSIGHT — JULY 2008</div>
+
+      <!-- Stage display -->
+      <div style="border:1px solid #e8505060;background:#0a0a14;padding:8px 10px;position:relative;overflow:hidden;min-height:130px" id="stage-box">
+
+        <!-- Stage labels -->
+        <div id="st0" style="font-size:7px;color:#e8a020;margin-bottom:8px">STEP 1 · QUERY RANDOM SUBDOMAIN</div>
+        <div id="st0-body" style="font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          resolver asks: <span style="color:#4ec9e1">xk3f7.bank.com</span> A?<br>
+          (random subdomain — not cached)<br>
+          Forces resolver to query bank.com's NS<br>
+          → opens a window before reply arrives
+        </div>
+
+        <div id="st1" style="font-size:7px;color:#e85050;margin-bottom:8px;display:none">STEP 2 · FLOOD 65535 FAKE REPLIES</div>
+        <div id="st1-body" style="display:none;position:relative;height:80px;overflow:hidden" >
+          <!-- Animated flood packets rendered by JS -->
+          <div id="flood-canvas" style="position:relative;width:100%;height:80px;overflow:hidden"></div>
+          <div style="position:absolute;bottom:4px;left:0;right:0;text-align:center;font-size:6px;color:#e85050">each with TxID 0x0001 → 0xFFFF</div>
+        </div>
+
+        <div id="st2" style="font-size:7px;color:#4eff9a;margin-bottom:8px;display:none">STEP 3 · ONE ID MATCHES → POISONED!</div>
+        <div id="st2-body" style="display:none;font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          TxID <span style="color:#4eff9a">0x8A21</span> matched!<br>
+          Forged ANSWER section:<br>
+          xk3f7.bank.com A 5.5.5.5<br>
+          <span style="color:#e85050">+ADDITIONAL: bank.com NS → attacker!</span><br>
+          <span style="color:#e85050">Resolver caches the NS record too → </span><br>
+          <span style="color:#e85050;animation:flicker 1s ease-in-out 4">ALL OF bank.com hijacked!</span>
+        </div>
+      </div>
+
+      <!-- Stage buttons -->
+      <div style="display:flex;gap:6px">
+        <div id="stbtn0" style="flex:1;border:2px solid #e8a020;background:#10090060;padding:5px;text-align:center;font-size:6px;color:#e8a020;cursor:pointer" onclick="showStage(0)">① QUERY</div>
+        <div id="stbtn1" style="flex:1;border:1px solid #2a1f3d;background:#0d0d1a;padding:5px;text-align:center;font-size:6px;color:#555;cursor:pointer" onclick="showStage(1)">② FLOOD</div>
+        <div id="stbtn2" style="flex:1;border:1px solid #2a1f3d;background:#0d0d1a;padding:5px;text-align:center;font-size:6px;color:#555;cursor:pointer" onclick="showStage(2)">③ HIT</div>
+      </div>
+
+      <!-- Why it was so bad -->
+      <div class="rev" id="k-why" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">WHY KAMINSKY WAS DIFFERENT</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          Old attack: poison a specific record.<br>
+          Kaminsky: poison the NS delegation → hijack the entire domain zone.<br>
+          <span style="color:#e85050">Repeat loop: if miss → try again with new random subdomain. No cooldown.</span>
+        </div>
+      </div>
+
+      <!-- Fix -->
+      <div class="rev" id="k-fix" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">THE EMERGENCY FIX — AUG 2008</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">
+          Source port randomization: add 16 bits of entropy to TxID guessing space.<br>
+          65535 IDs × 65535 ports = <span style="color:#4eff9a">4 billion combos</span>.<br>
+          Coordinated patch: BIND, Windows, Cisco, all at once.<br>
+          <span style="color:#4ec9e1">Real fix: DNSSEC (see scene 5).</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Random subdomain opens a reply window.</div>
+    <div class="il">Flood all 65535 TxIDs — one will match.</div>
+    <div class="ih">NS record poisoned = whole zone hijacked.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">2008</div><div class="sl">DISCOVERED</div></div>
+    <div class="sc"><div class="sv am">4B</div><div class="sl">FIX ENTROPY</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">DNSSEC</div><div class="sl">REAL FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════ SCENE 3 — DNS TUNNELING ═══════ -->
+<div class="scene" id="s3" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DNS TUNNELING</div>
+    <div class="hdr-sub">C2 TRAFFIC HIDING INSIDE DNS QUERIES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK 3 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">TUNNELING</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">DATA EXFIL VIA SUBDOMAIN LABELS</div>
+
+      <!-- Tunnel flow -->
+      <div class="node" id="n3-victim"><div class="node-ico">💻</div><div><div class="node-name" style="color:#e85050">COMPROMISED HOST</div><div class="node-sub">malware installed, no HTTP/TCP outbound</div></div></div>
+
+      <!-- Animated query label -->
+      <div style="border:1px solid #e8505050;background:#0a0a14;padding:6px 10px;position:relative;overflow:hidden;min-height:36px">
+        <div id="tunnel-query" style="font-size:6px;color:#e85050;font-family:monospace;word-break:break-all;opacity:0;transition:opacity .4s">
+          Q: <span id="tq-val" style="color:#4ec9e1">aGVsbG8gd29ybGQ</span>.c2.evil.com A?
+        </div>
+        <div style="font-size:5px;color:#555;margin-top:3px;opacity:0;transition:opacity .4s" id="tunnel-decode">
+          └ base64("hello world") — payload smuggled as subdomain label
+        </div>
+      </div>
+
+      <!-- Through the internet arrow -->
+      <div class="hbeam">
+        <div class="hline"><div class="hfill" id="hf3" style="background:#e85050"></div><div class="hlbl" id="hl3" style="color:#e85050">DNS port 53 — allowed by firewall!</div></div>
+        <div class="hhead" id="hh3"></div>
+      </div>
+
+      <div class="node" id="n3-atk"><div class="node-ico">💀</div><div><div class="node-name" style="color:#e85050">ATTACKER'S NS</div><div class="node-sub">controls c2.evil.com — sees all queries</div></div></div>
+
+      <!-- Return tunnel -->
+      <div class="rbeam">
+        <div class="rhead" id="rh3"></div>
+        <div class="rline"><div class="rfill" id="rf3" style="background:#e85050"></div><div class="rlbl" id="rl3" style="color:#e85050">TXT reply: base64(command)</div></div>
+      </div>
+
+      <!-- Decode box -->
+      <div style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px;opacity:0;transition:opacity .4s" id="decode-box">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">BIDIRECTIONAL C2 CHANNEL</div>
+        <div style="font-size:6px;color:#aaa;line-height:2;font-family:monospace">
+          EXFIL → long subdomains, many queries<br>
+          <span style="color:#e85050">dGhpcyBpcyBleGZpbA==</span>.evil.com<br>
+          C2 IN ← TXT record payload:<br>
+          <span style="color:#e85050">cnVuIG5ldHN0YXQ=</span> = "run netstat"
+        </div>
+      </div>
+
+      <!-- Why it works -->
+      <div class="rev" id="tunnel-why" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHY FIREWALLS MISS IT</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          Port 53 UDP is nearly always permitted outbound.<br>
+          Looks like normal DNS to shallow inspection.<br>
+          Tools: <span style="color:#e85050">iodine, dnscat2, dns2tcp</span><br>
+          Detection: long labels (&gt;63 chars), high query rate, high entropy subdomains, TXT record answers.
+        </div>
+      </div>
+
+      <!-- Detection signals -->
+      <div class="rev" id="tunnel-detect" style="border:1px solid #e8505040;background:#1a050580;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">DETECTION SIGNALS</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:7px;line-height:1.6">&gt;50 queries/min to single external domain</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.6">Subdomain length &gt;52 chars (base64 payload)</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.6">High Shannon entropy in subdomain labels</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.6">Fix: DNS over HTTPS + RPZ blocking + query analytics</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Payload encoded as subdomain label.</div>
+    <div class="il">Port 53 allowed outbound — bypasses firewall.</div>
+    <div class="ih">Full C2 channel: iodine, dnscat2, dns2tcp.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">UDP 53</div><div class="sl">BYPASS PORT</div></div>
+    <div class="sc"><div class="sv am">63</div><div class="sl">MAX LABEL LEN</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">RPZ</div><div class="sl">BLOCK METHOD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════ SCENE 4 — ZONE TRANSFER AXFR ═══════ -->
+<div class="scene" id="s4" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ZONE TRANSFER (AXFR)</div>
+    <div class="hdr-sub">DUMP EVERY HOSTNAME IN ONE REQUEST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK 4 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">AXFR RECON</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">MISCONFIGURED NS REVEALS EVERYTHING</div>
+
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
+        <div class="node" style="flex:1;padding:7px 8px" id="n4-atk"><div class="node-ico">💀</div><div><div class="node-name" style="font-size:7px;color:#e85050">ATTACKER</div><div class="node-sub">runs: dig AXFR target.com</div></div></div>
+        <div style="width:30px;text-align:center;font-size:14px;color:#e85050;opacity:0;transition:opacity .3s" id="axfr-arrow">→</div>
+        <div class="node" style="flex:1;padding:7px 8px" id="n4-ns"><div class="node-ico">🖥</div><div><div class="node-name" style="font-size:7px;color:#e85050">OPEN NS</div><div class="node-sub">no ACL configured</div></div></div>
+      </div>
+
+      <!-- Zone dump animation area -->
+      <div style="border:1px solid #e8505050;background:#0a0a0f;padding:4px;min-height:180px" id="zone-box">
+        <div style="font-size:6px;color:#e8a020;padding:3px 6px;border-bottom:1px solid #1a1a2a;margin-bottom:2px">ZONE TRANSFER DUMP — target.com</div>
+        <div id="zone-rows"></div>
+      </div>
+
+      <!-- What attacker learns -->
+      <div style="border:2px solid #e85050;background:#1a050590;padding:7px 10px;opacity:0;transition:opacity .4s" id="axfr-damage">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">RECON GOLDMINE</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          ✗ All internal hostnames exposed<br>
+          ✗ Mail servers → spear phishing targets<br>
+          ✗ VPN / jump hosts → attack pivot points<br>
+          ✗ Dev/staging servers → softer targets<br>
+          <span style="color:#e85050">One command. Complete network map.</span>
+        </div>
+      </div>
+
+      <div class="rev" id="axfr-fix" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">FIX: RESTRICT AXFR</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;line-height:2.1;background:#000a04;padding:5px;border:1px solid #4eff9a20">
+          # BIND named.conf<br>
+          allow-transfer { 10.0.0.2; };  ← secondary NS only<br>
+          # Test if you're vulnerable:<br>
+          dig AXFR @ns1.target.com target.com
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">AXFR transfers full zone file to requester.</div>
+    <div class="il">Misconfigured NS answers from anyone.</div>
+    <div class="ih">Complete network map in one dig command.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">AXFR</div><div class="sl">TRANSFER TYPE</div></div>
+    <div class="sc"><div class="sv">TCP 53</div><div class="sl">ZONE XFER PORT</div></div>
+    <div class="sc"><div class="sv gn">ACL</div><div class="sl">THE FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════ SCENE 5 — DNSSEC ═══════ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DNSSEC — THE REAL FIX</div>
+    <div class="hdr-sub">CRYPTOGRAPHIC SIGNATURES FOR DNS RECORDS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">THE DEFENSE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DNSSEC</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">HOW DNSSEC CHAIN OF TRUST WORKS</div>
+
+      <!-- Chain of trust nodes with animated connectors -->
+      <div class="node" id="d5-root"><div class="node-ico">🔑</div><div><div class="node-name" style="color:#4eff9a">ROOT ZONE</div><div class="node-sub">self-signed trust anchor · IANA key signing key</div></div></div>
+
+      <div style="display:flex;justify-content:center;height:22px;align-items:center;opacity:0;transition:opacity .4s" id="sig1">
+        <div style="width:2px;height:22px;background:#4eff9a;position:relative">
+          <div style="position:absolute;bottom:-1px;left:-4px;font-size:8px;color:#4eff9a">↓</div>
+        </div>
+        <div style="font-size:5px;color:#4eff9a;margin-left:6px">signs DS record for .com</div>
+      </div>
+
+      <div class="node" id="d5-tld"><div class="node-ico">📋</div><div><div class="node-name" style="color:#4eff9a">TLD ZONE (.com)</div><div class="node-sub">signed by root · publishes DS for google.com</div></div></div>
+
+      <div style="display:flex;justify-content:center;height:22px;align-items:center;opacity:0;transition:opacity .4s" id="sig2">
+        <div style="width:2px;height:22px;background:#4eff9a;position:relative">
+          <div style="position:absolute;bottom:-1px;left:-4px;font-size:8px;color:#4eff9a">↓</div>
+        </div>
+        <div style="font-size:5px;color:#4eff9a;margin-left:6px">signs DS record for google.com</div>
+      </div>
+
+      <div class="node" id="d5-auth"><div class="node-ico">🏆</div><div><div class="node-name" style="color:#4eff9a">AUTH ZONE (google.com)</div><div class="node-sub">RRSIG signs every A record · verified by resolver</div></div></div>
+
+      <!-- Verification -->
+      <div style="border:1px solid #4eff9a40;background:#001a1090;padding:7px 10px;opacity:0;transition:opacity .4s" id="verify-box">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">RESOLVER VERIFIES</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9;font-family:monospace">
+          Receives: google.com A 142.250.80.46<br>
+          + RRSIG record (signature over the A record)<br>
+          Validates sig using DNSKEY → DS → root trust.<br>
+          <span style="color:#4eff9a">Forged record? Signature fails → SERVFAIL</span>
+        </div>
+      </div>
+
+      <!-- Adoption problem -->
+      <div class="rev" id="adopt-box" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">THE ADOPTION PROBLEM</div>
+        <div style="font-size:6px;color:#888;margin-bottom:5px">% of domains with DNSSEC enabled</div>
+        <div class="pbar" style="margin-bottom:4px"><div class="pfill" id="adopt-fill" style="background:#4eff9a"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:5px;color:#555;margin-bottom:8px"><span>0%</span><span style="color:#4eff9a">~20%</span><span>100%</span></div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">80% of domains unprotected. Complex to deploy.<br>Key rollover errors can break a domain entirely.<br><span style="color:#4ec9e1">DNS over HTTPS (DoH) = different problem: privacy not integrity.</span></div>
+      </div>
+
+      <!-- DNSSEC record types cheatsheet -->
+      <div class="rev" id="rec-types" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">DNSSEC RECORD TYPES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:6px;font-size:6px;color:#aaa"><span style="color:#4eff9a;min-width:48px">DNSKEY</span><span>Zone's public key — used to verify RRSIGs</span></div>
+          <div style="display:flex;gap:6px;font-size:6px;color:#aaa"><span style="color:#4eff9a;min-width:48px">RRSIG</span><span>Signature over each RRset</span></div>
+          <div style="display:flex;gap:6px;font-size:6px;color:#aaa"><span style="color:#4eff9a;min-width:48px">DS</span><span>Hash of child's DNSKEY — stored in parent</span></div>
+          <div style="display:flex;gap:6px;font-size:6px;color:#aaa"><span style="color:#4eff9a;min-width:48px">NSEC</span><span>Proves a name does NOT exist</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Chain of trust: root → TLD → auth zone.</div>
+    <div class="il">RRSIG signs every record — forgery impossible.</div>
+    <div class="ih gn">Only ~20% of domains use it. Deploy yours.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~20%</div><div class="sl">ADOPTION</div></div>
+    <div class="sc"><div class="sv cy">RRSIG</div><div class="sl">SIGNS RECORDS</div></div>
+    <div class="sc"><div class="sv gn">DS</div><div class="sl">CHAIN KEY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="play5()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){timers.forEach(clearTimeout);timers=[]}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>{[play1,play2,play3,play4,play5][n-1]()},200);
+}
+
+function oset(id,v){const e=document.getElementById(id);if(e)e.style.opacity=v;}
+function wset(id,w,delay){T(()=>{const e=document.getElementById(id);if(e)e.style.width=w;},delay);}
+function show(id,delay){T(()=>oset(id,'1'),delay);}
+function hide(id){oset(id,'0');}
+function nodeClass(id,cls){const e=document.getElementById(id);if(e)e.className='node '+cls;}
+
+/* ── S1 ── */
+function play1(){
+  clearT();
+  ['legit-side','atk-side','race-box','poisoned-box','txid-box','tunnel-decode'].forEach(hide);
+  oset('tunnel-query','0');
+  // reset arrow
+  ['hf1'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';}});
+  setTimeout(()=>document.getElementById('hf1').style.transition='width .5s ease-out',50);
+  oset('hl1','0');
+  document.getElementById('hh1').style.borderLeftColor='#1a1a2a';
+
+  nodeClass('n1v','cyan'); nodeClass('n1r','');
+
+  T(()=>{
+    const f=document.getElementById('hf1');if(f)f.style.width='100%';
+    document.getElementById('hh1').style.borderLeftColor='#4ec9e1';
+    T(()=>oset('hl1','1'),300);
+  },400);
+
+  T(()=>nodeClass('n1r','amber'),1000);
+  show('legit-side',1200);
+  show('atk-side',1600);
+  show('race-box',2000);
+  // animate bars
+  T(()=>{
+    wset('legit-bar','55%',100);
+    wset('atk-bar','100%',0);
+  },2200);
+  show('poisoned-box',3400);
+  show('txid-box',4200);
+}
+
+/* ── S2 ── */
+let floodTimer=null;
+function showStage(s){
+  ['st0','st0-body','st1','st1-body','st2','st2-body'].forEach(id=>{
+    const e=document.getElementById(id);if(e)e.style.display='none';
+  });
+  ['stbtn0','stbtn1','stbtn2'].forEach((id,i)=>{
+    const e=document.getElementById(id);
+    if(e){e.style.borderWidth='1px';e.style.borderColor='#2a1f3d';e.style.color='#555';}
+  });
+
+  const btn=document.getElementById('stbtn'+s);
+  if(btn){btn.style.borderWidth='2px';btn.style.borderColor=s===2?'#4eff9a':'#e85050';btn.style.color=s===2?'#4eff9a':'#e85050';}
+
+  document.getElementById('st'+s).style.display='block';
+  document.getElementById('st'+s+'-body').style.display='block';
+
+  if(s===1) startFlood();
+  else stopFlood();
+}
+
+let floodAnim=null;
+function startFlood(){
+  const canvas=document.getElementById('flood-canvas');
+  canvas.innerHTML='';
+  let count=0;
+  floodAnim=setInterval(()=>{
+    if(count>60){clearInterval(floodAnim);return;}
+    const p=document.createElement('div');
+    const txid=Math.floor(Math.random()*65535).toString(16).toUpperCase().padStart(4,'0');
+    p.style.cssText=`position:absolute;left:0;top:${Math.random()*60}px;font-size:5px;font-family:'Press Start 2P',monospace;color:#e85050;border:1px solid #e8505060;padding:1px 3px;background:#1a0505;opacity:0;transition:left .5s linear,opacity .2s;white-space:nowrap;`;
+    p.textContent='0x'+txid;
+    canvas.appendChild(p);
+    setTimeout(()=>{p.style.opacity='1';p.style.left='calc(100% - 60px)';},20);
+    setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},600);
+    count++;
+  },80);
+}
+function stopFlood(){if(floodAnim)clearInterval(floodAnim);}
+
+function play2(){
+  clearT();
+  stopFlood();
+  ['k-why','k-fix'].forEach(hide);
+  showStage(0);
+  T(()=>{oset('k-why','1');},800);
+  T(()=>{showStage(1);},1600);
+  T(()=>{showStage(2);},3200);
+  T(()=>{oset('k-fix','1');},4000);
+}
+
+/* ── S3 ── */
+function play3(){
+  clearT();
+  ['tunnel-query','tunnel-decode','decode-box','tunnel-why','tunnel-detect'].forEach(hide);
+  ['hf3','rf3'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .5s ease-out',50);}});
+  ['hl3','rl3'].forEach(id=>oset(id,'0'));
+  document.getElementById('hh3').style.borderLeftColor='#1a1a2a';
+  document.getElementById('rh3').style.borderRightColor='#1a1a2a';
+
+  nodeClass('n3-victim','red');
+  T(()=>{
+    oset('tunnel-query','1');
+    T(()=>oset('tunnel-decode','1'),400);
+  },400);
+
+  T(()=>{
+    const f=document.getElementById('hf3');if(f)f.style.width='100%';
+    document.getElementById('hh3').style.borderLeftColor='#e85050';
+    T(()=>oset('hl3','1'),300);
+  },1200);
+
+  T(()=>nodeClass('n3-atk','red'),1900);
+
+  T(()=>{
+    const f=document.getElementById('rf3');if(f)f.style.width='100%';
+    document.getElementById('rh3').style.borderRightColor='#e85050';
+    T(()=>oset('rl3','1'),300);
+  },2400);
+
+  show('decode-box',3100);
+  show('tunnel-why',3800);
+  show('tunnel-detect',4500);
+}
+
+/* ── S4 ── */
+const zoneData=[
+  ['@','SOA','ns1 admin 2024...'],
+  ['@','NS','ns1.target.com'],
+  ['@','NS','ns2.target.com'],
+  ['@','MX','mail.target.com'],
+  ['www','A','203.0.113.5'],
+  ['mail','A','203.0.113.10'],
+  ['vpn','A','203.0.113.20'],
+  ['dev','A','10.0.1.50'],
+  ['staging','A','10.0.1.55'],
+  ['admin','A','10.0.1.100'],
+  ['db-prod','A','10.0.2.20'],
+  ['jenkins','A','10.0.1.80'],
+  ['gitlab','CNAME','10.0.1.90'],
+];
+
+function play4(){
+  clearT();
+  ['axfr-damage','axfr-fix'].forEach(hide);
+  oset('axfr-arrow','0');
+  nodeClass('n4-atk',''); nodeClass('n4-ns','');
+  const zr=document.getElementById('zone-rows');zr.innerHTML='';
+
+  T(()=>nodeClass('n4-atk','red'),300);
+  T(()=>{oset('axfr-arrow','1');nodeClass('n4-ns','red');},700);
+
+  // Animate zone rows appearing
+  zoneData.forEach((row,i)=>{
+    T(()=>{
+      const d=document.createElement('div');
+      d.className='zrow';
+      d.innerHTML=`<span class="zname">${row[0]}</span><span class="ztype">${row[1]}</span><span class="zval">${row[2]}</span>`;
+      zr.appendChild(d);
+      setTimeout(()=>d.style.opacity='1',30);
+    },900+i*150);
+  });
+
+  show('axfr-damage',900+zoneData.length*150+200);
+  show('axfr-fix',900+zoneData.length*150+900);
+}
+
+/* ── S5 ── */
+function play5(){
+  clearT();
+  ['sig1','sig2','verify-box','adopt-box','rec-types'].forEach(hide);
+  document.getElementById('adopt-fill').style.transition='none';
+  document.getElementById('adopt-fill').style.width='0%';
+  setTimeout(()=>document.getElementById('adopt-fill').style.transition='width 1.1s ease-out',50);
+  ['d5-root','d5-tld','d5-auth'].forEach(id=>nodeClass(id,''));
+
+  T(()=>nodeClass('d5-root','green'),300);
+  show('sig1',700);
+  T(()=>nodeClass('d5-tld','green'),1000);
+  show('sig2',1400);
+  T(()=>nodeClass('d5-auth','green'),1700);
+  show('verify-box',2200);
+  show('adopt-box',2900);
+  T(()=>document.getElementById('adopt-fill').style.width='20%',3100);
+  show('rec-types',3800);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

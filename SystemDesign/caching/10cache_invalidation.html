@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Cache Invalidation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* shared components */
+.box{border:2px solid;border-radius:2px;padding:10px 12px;font-size:8px;line-height:1.8}
+.tag{display:inline-block;font-size:7px;padding:2px 7px;border:1px solid;border-radius:2px;margin:2px 0}
+.row-lbl{font-size:8px;color:#666;margin-bottom:3px;letter-spacing:1px}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.bar-wrap{background:#1a1a2e;border:1px solid #2a2a4a;height:18px;border-radius:1px;overflow:hidden;margin:2px 0}
+.bar-inner{height:100%;width:0;transition:width 1s ease-out}
+.timeline-line{height:3px;background:#2a2a3a;border-radius:2px;position:relative;margin:6px 0}
+.tl-dot{position:absolute;top:-6px;width:15px;height:15px;border-radius:50%;border:2px solid;transform:translateX(-50%)}
+.tl-dot-lbl{position:absolute;top:12px;font-size:6px;transform:translateX(-50%);white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ SCENE 1: HOOK ═══════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CACHE INVALIDATION</div>
+    <div class="hdr-sub">PHIL KARLTON'S HARDEST PROBLEM</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE QUOTE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FAMOUS BUG</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Quote -->
+      <div class="box fade" id="s1q" style="border-color:#e8a020;background:#120a00;text-align:center">
+        <div style="color:#888;font-size:7px;margin-bottom:8px">Phil Karlton, Netscape (1990s)</div>
+        <div style="color:#e8a020;font-size:9px;line-height:2">"There are only 2 hard problems in computer science:</div>
+        <div style="color:#4eff9a;font-size:10px;margin:6px 0">CACHE INVALIDATION</div>
+        <div style="color:#e8a020;font-size:9px">and naming things."</div>
+      </div>
+
+      <!-- What it means -->
+      <div class="fade" id="s1w" style="opacity:0">
+        <div class="row-lbl">WHAT IT MEANS</div>
+        <div class="box" style="border-color:#333;background:#0e0a18;font-size:8px;color:#aaa;line-height:2">
+          Your DB has fresh data.<br>Your cache has <span style="color:#e85050">stale data</span>.<br>
+          A user reads from cache and gets <span style="color:#e85050">wrong data</span>.<br>
+          Hard to reproduce. Hard to catch.
+        </div>
+      </div>
+
+      <!-- Real danger examples -->
+      <div class="fade" id="s1d" style="opacity:0">
+        <div class="row-lbl">REAL PRODUCTION DANGERS</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div class="box" style="border-color:#e85050;background:#1a0505;font-size:8px;line-height:1.9">
+            <span style="color:#e85050">💸 OLD PRICE</span> — item costs $29 in DB, cache says $49. User overcharged.
+          </div>
+          <div class="box" style="border-color:#e85050;background:#1a0505;font-size:8px;line-height:1.9">
+            <span style="color:#e85050">🔐 OLD PERMISSION</span> — user was banned, cache still says "admin".
+          </div>
+          <div class="box" style="border-color:#e85050;background:#1a0505;font-size:8px;line-height:1.9">
+            <span style="color:#e85050">📦 OLD INVENTORY</span> — 0 items in stock, cache says 5. Order placed.
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 strategies preview -->
+      <div class="fade" id="s1s" style="opacity:0">
+        <div class="row-lbl">3 STRATEGIES TO FIX IT</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#0a1a0a;border:2px solid #4eff9a;padding:9px 6px;text-align:center">
+            <div style="color:#4eff9a;font-size:8px">TTL</div>
+            <div style="color:#555;font-size:6px;margin-top:5px;line-height:1.8">Passive<br>Delayed fix</div>
+          </div>
+          <div style="flex:1;background:#0a1020;border:2px solid #4ec9e1;padding:9px 6px;text-align:center">
+            <div style="color:#4ec9e1;font-size:8px">DELETE</div>
+            <div style="color:#555;font-size:6px;margin-top:5px;line-height:1.8">Active<br>Fast fix</div>
+          </div>
+          <div style="flex:1;background:#1a0e00;border:2px solid #e8a020;padding:9px 6px;text-align:center">
+            <div style="color:#e8a020;font-size:8px">WRITE-THRU</div>
+            <div style="color:#555;font-size:6px;margin-top:5px;line-height:1.8">Always fresh<br>Slower</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO START</div>
+    <div class="ih am" id="s1i2" style="display:none">STALE CACHE DATA = WRONG DATA SERVED TO USERS</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">HARD</div><div class="sl">DIFFICULTY</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">STRATEGIES</div></div>
+    <div class="sc"><div class="sv rd">#1</div><div class="sl">PROD BUG</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 2: THE STALE DATA PROBLEM ═══════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">THE STALE DATA BUG</div>
+    <div class="hdr-sub">DB UPDATED. CACHE DIDN'T KNOW.</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">STALE</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Timeline header -->
+      <div class="row-lbl">TIMELINE — PRICE UPDATE SCENARIO</div>
+
+      <!-- T=0: DB updated -->
+      <div class="box fade" id="s2t0" style="border-color:#4eff9a;background:#051a08">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="background:#4eff9a;color:#000;font-size:7px;padding:2px 6px;border-radius:2px">t = 0s</div>
+          <div style="color:#4eff9a;font-size:8px">DB PRICE UPDATED</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#0a2010;border:1px solid #1a4a20;padding:7px;font-size:8px;color:#4eff9a;text-align:center">
+            DATABASE<br><span style="font-size:11px;color:#4eff9a">$29.99</span><br><span style="font-size:6px;color:#555">✓ FRESH</span>
+          </div>
+          <div style="flex:1;background:#1a0808;border:1px solid #4a2020;padding:7px;font-size:8px;color:#e85050;text-align:center">
+            CACHE<br><span style="font-size:11px;color:#e85050">$49.99</span><br><span style="font-size:6px;color:#e85050">✗ STALE</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- T=2: User reads from cache -->
+      <div class="box fade" id="s2t2" style="border-color:#e8a020;background:#120a00">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="background:#e8a020;color:#000;font-size:7px;padding:2px 6px;border-radius:2px">t = 2s</div>
+          <div style="color:#e8a020;font-size:8px">USER READS FROM CACHE</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          App checks cache first (cache-aside).<br>Cache HIT — returns <span style="color:#e85050">$49.99</span>.<br>
+          DB never queried. User sees wrong price.
+        </div>
+        <div style="margin-top:6px;background:#1a0505;border:1px solid #e85050;padding:6px;font-size:8px;color:#e85050;text-align:center">
+          ⚠ USER SEES: $49.99 (wrong!)
+        </div>
+      </div>
+
+      <!-- T=5: User purchases -->
+      <div class="box fade" id="s2t5" style="border-color:#e85050;background:#1a0505">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="background:#e85050;color:#fff;font-size:7px;padding:2px 6px;border-radius:2px">t = 5s</div>
+          <div style="color:#e85050;font-size:8px">PURCHASE — WRONG CHARGE</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          User clicks Buy. Charged <span style="color:#e85050">$49.99</span>.<br>
+          Should have paid <span style="color:#4eff9a">$29.99</span>.<br>
+          Refund, chargeback, angry customer.
+        </div>
+      </div>
+
+      <!-- Why hard label -->
+      <div class="box fade" id="s2why" style="border-color:#333;background:#0e0a18">
+        <div style="color:#888;font-size:8px;line-height:2">
+          WHY IT'S HARD TO CATCH:<br>
+          <span style="color:#aaa">• Only happens in the stale window</span><br>
+          <span style="color:#aaa">• Disappears on cache expiry</span><br>
+          <span style="color:#aaa">• Hard to reproduce in dev</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO SEE THE BUG</div>
+    <div class="ih rd" id="s2i2" style="display:none">DB UPDATED → CACHE STILL OLD → USER OVERCHARGED</div>
+    <div class="il" id="s2i3" style="display:none">CACHE HIT RETURNS STALE DATA. BUG IS SILENT.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">$20</div><div class="sl">OVERCHARGE</div></div>
+    <div class="sc"><div class="sv rd">SILENT</div><div class="sl">BUG TYPE</div></div>
+    <div class="sc"><div class="sv am">STALE</div><div class="sl">CACHE STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 3: TTL STRATEGY ═══════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">STRATEGY 1: TTL</div>
+    <div class="hdr-sub">TIME-TO-LIVE — PASSIVE EXPIRY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TTL METHOD</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">PASSIVE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- How it works -->
+      <div class="box fade" id="s3h" style="border-color:#4ec9e1;background:#051020">
+        <div style="color:#4ec9e1;font-size:9px;margin-bottom:8px">HOW TTL WORKS</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Every cache key gets an expiry time.<br>
+          Key auto-deletes when TTL hits zero.<br>
+          Next request: cache miss → fetch DB.
+        </div>
+        <div style="margin-top:8px;background:#060e1a;border:1px solid #1a3a5a;padding:7px;font-size:8px;color:#4ec9e1;font-family:'Press Start 2P',monospace">
+          SET price:42 "$29.99" EX 300
+        </div>
+        <div style="font-size:7px;color:#555;margin-top:4px">EX 300 = expires in 300 seconds</div>
+      </div>
+
+      <!-- TTL countdown visual -->
+      <div class="fade" id="s3c" style="opacity:0">
+        <div class="row-lbl">TTL COUNTDOWN (300s window)</div>
+        <div class="box" style="border-color:#2a2a4a;background:#080e18">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-size:8px;color:#4ec9e1">price:42</div>
+            <div style="font-size:8px;color:#e85050" id="s3countdown">TTL: 300s</div>
+          </div>
+          <div class="bar-wrap">
+            <div class="bar-inner" id="s3bar" style="background:#4ec9e1"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:7px;color:#555">
+            <span>t=0 SET</span><span>t=150s</span><span>t=300s EXPIRED</span>
+          </div>
+          <div style="margin-top:8px;font-size:8px;color:#e8a020">⏱ Stale window = up to 300s</div>
+        </div>
+      </div>
+
+      <!-- Pros/Cons -->
+      <div class="fade" id="s3p" style="opacity:0">
+        <div style="display:flex;gap:8px">
+          <div style="flex:1" class="box" style="border-color:#4eff9a;background:#051a08">
+            <div style="color:#4eff9a;font-size:8px;margin-bottom:7px">✓ PROS</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">Simple to set up<br>Zero extra code<br>Works everywhere</div>
+          </div>
+          <div style="flex:1" class="box" style="border-color:#e85050;background:#1a0505">
+            <div style="color:#e85050;font-size:8px;margin-bottom:7px">✗ CONS</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">Still stale until<br>TTL expires<br>Wrong TTL = pain</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- When to use -->
+      <div class="box fade" id="s3u" style="border-color:#4ec9e1;background:#040e1a">
+        <div style="color:#4ec9e1;font-size:8px;margin-bottom:7px">BEST USE CASES</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          <span style="color:#4eff9a">✓</span> Non-critical data (weather, blog posts)<br>
+          <span style="color:#4eff9a">✓</span> Reads far outnumber writes<br>
+          <span style="color:#e85050">✗</span> NOT for prices, permissions, stock
+        </div>
+      </div>
+
+      <!-- TTL cheatsheet -->
+      <div class="fade" id="s3cs" style="opacity:0">
+        <div class="row-lbl">TTL CHEATSHEET</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#080e18;border:1px solid #1a2a3a;padding:7px 10px">
+            <span style="font-size:7px;color:#888">Static assets / config</span>
+            <span style="font-size:8px;color:#4eff9a">7 days</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#080e18;border:1px solid #1a2a3a;padding:7px 10px">
+            <span style="font-size:7px;color:#888">Product details</span>
+            <span style="font-size:8px;color:#4ec9e1">5–30 min</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#080e18;border:1px solid #1a2a3a;padding:7px 10px">
+            <span style="font-size:7px;color:#888">Prices / inventory</span>
+            <span style="font-size:8px;color:#e8a020">30–60 sec</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:#1a0505;border:1px solid #3a1010;padding:7px 10px">
+            <span style="font-size:7px;color:#888">Permissions / auth</span>
+            <span style="font-size:8px;color:#e85050">DON'T TTL</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE TTL STRATEGY</div>
+    <div class="ih" id="s3i2" style="display:none">SET EXPIRY ON EVERY KEY — CACHE SELF-HEALS</div>
+    <div class="il" id="s3i3" style="display:none">SIMPLE BUT STILL STALE UNTIL TTL EXPIRES.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">300s</div><div class="sl">STALE WINDOW</div></div>
+    <div class="sc"><div class="sv gn">SIMPLE</div><div class="sl">COMPLEXITY</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">PASSIVE</div><div class="sl">STRATEGY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 4: DELETE-ON-WRITE + WRITE-THROUGH ═══════════ -->
+<div class="scene" id="s4" style="background:#0a1a10">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title">STRATEGIES 2 & 3</div>
+    <div class="hdr-sub">DELETE-ON-WRITE + WRITE-THROUGH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ACTIVE FIXES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BEST</span>
+  </div>
+
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Strategy 2: Delete on write -->
+      <div class="fade" id="s4s2" style="opacity:0">
+        <div class="row-lbl" style="color:#4eff9a">STRATEGY 2: DELETE ON WRITE</div>
+        <div class="box" style="border-color:#4eff9a;background:#051a08">
+          <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+            When DB is written → immediately<br>
+            delete (invalidate) the cache key.<br>
+            Next read = miss → fresh from DB.
+          </div>
+          <div style="background:#030e05;border:1px solid #1a4a20;padding:8px;font-size:8px;font-family:'Press Start 2P',monospace;color:#4eff9a;line-height:2">
+            db.update("price:42", 29.99)<br>
+            <span style="color:#e8a020">cache.del("price:42")</span>  ← key
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete flow visual -->
+      <div class="fade" id="s4df" style="opacity:0">
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <div style="flex:1;background:#051a08;border:2px solid #4eff9a;padding:8px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">DB WRITE</div>
+            <div style="font-size:9px;color:#4eff9a">$29.99</div>
+            <div style="font-size:6px;color:#555;margin-top:4px">✓ updated</div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center;padding:0 4px">
+            <div style="font-size:10px;color:#e8a020">→</div>
+          </div>
+          <div style="flex:1;background:#1a0505;border:2px solid #e85050;padding:8px;text-align:center">
+            <div style="font-size:7px;color:#e85050;margin-bottom:6px">CACHE DEL</div>
+            <div style="font-size:9px;color:#e85050">EVICTED</div>
+            <div style="font-size:6px;color:#555;margin-top:4px">✗ deleted</div>
+          </div>
+          <div style="display:flex;flex-direction:column;justify-content:center;padding:0 4px">
+            <div style="font-size:10px;color:#4ec9e1">→</div>
+          </div>
+          <div style="flex:1;background:#051020;border:2px solid #4ec9e1;padding:8px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">NEXT READ</div>
+            <div style="font-size:9px;color:#4ec9e1">$29.99</div>
+            <div style="font-size:6px;color:#555;margin-top:4px">✓ fresh!</div>
+          </div>
+        </div>
+        <div style="margin-top:6px;display:flex;gap:6px">
+          <div style="flex:1;font-size:6px;color:#555;text-align:center">1. DB updated</div>
+          <div style="flex:1;font-size:6px;color:#555;text-align:center">2. Key deleted</div>
+          <div style="flex:1;font-size:6px;color:#555;text-align:center">3. Fresh fetch</div>
+        </div>
+      </div>
+
+      <div class="fade" id="s4dc" style="opacity:0">
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#051a08;border:1px solid #4eff9a;padding:8px;font-size:7px;color:#aaa;line-height:1.9">
+            <div style="color:#4eff9a;margin-bottom:5px">✓ PROS</div>
+            Instant fix on write<br>No stale window<br>Simple to add
+          </div>
+          <div style="flex:1;background:#1a0505;border:1px solid #e85050;padding:8px;font-size:7px;color:#aaa;line-height:1.9">
+            <div style="color:#e85050;margin-bottom:5px">✗ CONS</div>
+            Easy to forget del<br>Miss = DB spike<br>Distributed: harder
+          </div>
+        </div>
+      </div>
+
+      <!-- Divider -->
+      <div style="height:2px;background:#1a2a1a;margin:4px 0"></div>
+
+      <!-- Strategy 3: Write-through -->
+      <div class="fade" id="s4s3" style="opacity:0">
+        <div class="row-lbl" style="color:#e8a020">STRATEGY 3: WRITE-THROUGH</div>
+        <div class="box" style="border-color:#e8a020;background:#120a00">
+          <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+            Every write goes to cache AND DB<br>
+            together. Cache always in sync.<br>
+            Reads always fast. Writes slower.
+          </div>
+          <div style="background:#080400;border:1px solid #3a2800;padding:8px;font-size:8px;font-family:'Press Start 2P',monospace;color:#e8a020;line-height:2">
+            <span style="color:#4eff9a">cache.set</span>("price:42", 29.99)<br>
+            <span style="color:#4eff9a">db.update</span>("price:42", 29.99)
+          </div>
+          <div style="margin-top:6px;font-size:7px;color:#555">Both happen in the same write operation</div>
+        </div>
+      </div>
+
+      <!-- Comparison table -->
+      <div class="fade" id="s4ct" style="opacity:0">
+        <div class="row-lbl">STRATEGY COMPARISON</div>
+        <div style="border:1px solid #2a2a3a;overflow:hidden">
+          <div style="display:flex;background:#0e0e1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#555;border-right:1px solid #1a1a2a">STRATEGY</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#555;text-align:center;border-right:1px solid #1a1a2a">STALE?</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#555;text-align:center">SPEED</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a1a2a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#4ec9e1;border-right:1px solid #1a1a2a">TTL</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center;border-right:1px solid #1a1a2a">YES (window)</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center">FAST</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a1a2a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#4eff9a;border-right:1px solid #1a1a2a">DEL ON WRITE</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center;border-right:1px solid #1a1a2a">NO</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center">FAST</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a1a2a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#e8a020;border-right:1px solid #1a1a2a">WRITE-THROUGH</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center;border-right:1px solid #1a1a2a">NO</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center">SLOWER</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The real answer -->
+      <div class="box fade" id="s4ans" style="border-color:#4eff9a;background:#051a08">
+        <div style="color:#4eff9a;font-size:9px;margin-bottom:8px">⚡ THE REAL ANSWER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Use <span style="color:#4eff9a">TTL + delete-on-write</span> together.<br>
+          TTL as safety net. DEL for instant fix.<br>
+          Write-through for critical money paths.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE THE FIXES</div>
+    <div class="ih" id="s4i2" style="display:none">DELETE ON WRITE = INSTANT FIX. NO STALE WINDOW.</div>
+    <div class="il" id="s4i3" style="display:none">USE TTL + DEL TOGETHER. BELT AND SUSPENDERS.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DEL</div><div class="sl">FASTEST FIX</div></div>
+    <div class="sc"><div class="sv am">W-THRU</div><div class="sl">ALWAYS FRESH</div></div>
+    <div class="sc"><div class="sv gn">BOTH</div><div class="sl">COMBINE IT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clr(){timers.forEach(clearTimeout);timers=[];}
+function wait(ms,fn){let t=setTimeout(fn,ms);timers.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.classList.add('in');e.style.opacity='1';}}
+function hide(id){let e=document.getElementById(id);if(e){e.style.display='none';}}
+function show(id){let e=document.getElementById(id);if(e){e.style.display='';}}
+function reset(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.classList.remove('in');e.style.opacity='0';}});}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+}
+
+function play1(){
+  clr();
+  reset(['s1q','s1w','s1d','s1s']);
+  hide('s1i2');show('s1i1');
+  wait(300,()=>fin('s1q'));
+  wait(900,()=>fin('s1w'));
+  wait(1600,()=>fin('s1d'));
+  wait(2600,()=>{fin('s1s');hide('s1i1');show('s1i2');});
+}
+
+function play2(){
+  clr();
+  reset(['s2t0','s2t2','s2t5','s2why']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+  wait(300,()=>{fin('s2t0');hide('s2i1');show('s2i2');});
+  wait(1200,()=>fin('s2t2'));
+  wait(2300,()=>{fin('s2t5');hide('s2i2');show('s2i3');});
+  wait(3400,()=>fin('s2why'));
+}
+
+function play3(){
+  clr();
+  reset(['s3h','s3c','s3p','s3u','s3cs']);
+  let bar=document.getElementById('s3bar');
+  if(bar){bar.style.width='0';bar.style.transition='none';}
+  let cd=document.getElementById('s3countdown');
+  hide('s3i2');hide('s3i3');show('s3i1');
+  wait(300,()=>fin('s3h'));
+  wait(900,()=>{fin('s3c');hide('s3i1');show('s3i2');
+    wait(100,()=>{
+      if(bar){bar.style.transition='width 2s ease-out';bar.style.width='100%';}
+      // countdown numbers
+      let v=300;let iv=setInterval(()=>{v-=6;if(cd)cd.textContent='TTL: '+Math.max(0,v)+'s';if(v<=0)clearInterval(iv);},100);
+      timers.push(iv);
+    });
+  });
+  wait(1800,()=>fin('s3p'));
+  wait(2600,()=>fin('s3u'));
+  wait(3400,()=>{fin('s3cs');hide('s3i2');show('s3i3');});
+}
+
+function play4(){
+  clr();
+  reset(['s4s2','s4df','s4dc','s4s3','s4ct','s4ans']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+  wait(300,()=>{fin('s4s2');hide('s4i1');show('s4i2');});
+  wait(1100,()=>fin('s4df'));
+  wait(1900,()=>fin('s4dc'));
+  wait(2700,()=>fin('s4s3'));
+  wait(3400,()=>fin('s4ct'));
+  wait(4200,()=>{fin('s4ans');hide('s4i2');show('s4i3');});
+}
+</script>
+</body>
+</html>

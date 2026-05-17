@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Thundering Herd</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;position:relative}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Arrow animation */
+.arrow-container{position:relative;height:54px;overflow:hidden;background:#0a0814;border:1px solid #1a1030;border-radius:2px;margin:2px 0}
+.arrow{position:absolute;top:50%;transform:translateY(-50%);width:0;height:3px;border-radius:2px;transition:width 0s}
+.arrow::after{content:'▶';position:absolute;right:-10px;top:-7px;font-size:11px}
+.db-box{border:3px solid;border-radius:3px;padding:10px;text-align:center;transition:all .3s;font-size:10px}
+.cache-box{border:2px solid;border-radius:3px;padding:8px 10px;transition:all .3s}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.bar-wrap{background:#1a1a2e;border:1px solid #2a2a4a;height:14px;border-radius:1px;overflow:hidden}
+.bar-inner{height:100%;width:0;transition:width 1.2s ease-out;border-radius:1px}
+/* jitter timeline bars */
+.jbar{height:22px;border-radius:2px;margin-bottom:4px;transition:width 0s}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SCENE 1: HOOK ════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title" style="color:#e85050">THUNDERING HERD</div>
+    <div class="hdr-sub">ONE EXPIRY. 10,000 SIMULTANEOUS HITS.</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">OUTAGE</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hook statement -->
+      <div class="fade" id="s1a" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="color:#e85050;font-size:9px;line-height:1.9;margin-bottom:6px">THIS SINGLE CACHE KEY EXPIRY</div>
+        <div style="color:#fff;font-size:10px;line-height:1.9">TOOK DOWN A SYSTEM<br>SERVING 1M USERS.</div>
+        <div style="color:#888;font-size:7px;margin-top:8px;line-height:1.8">Seen at: Facebook, Twitter, Reddit,<br>and dozens of startups at scale.</div>
+      </div>
+
+      <!-- The sequence -->
+      <div class="fade" id="s1b" style="font-size:8px;color:#888;letter-spacing:1px">WHAT HAPPENS:</div>
+
+      <div class="fade" id="s1c" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;align-items:center;gap:10px;background:#0e0a1a;border:1px solid #2a1f3d;padding:10px 12px;border-radius:2px">
+          <div style="font-size:16px">⏰</div>
+          <div style="font-size:8px;color:#aaa;line-height:1.9"><span style="color:#e8a020">Popular cache key expires</span><br>e.g. trending_posts — TTL hits 0</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0e0a1a;border:1px solid #2a1f3d;padding:10px 12px;border-radius:2px">
+          <div style="font-size:16px">💥</div>
+          <div style="font-size:8px;color:#aaa;line-height:1.9"><span style="color:#e85050">10,000 requests hit DB at once</span><br>All got MISS. All go to DB. Same time.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0e0a1a;border:1px solid #2a1f3d;padding:10px 12px;border-radius:2px">
+          <div style="font-size:16px">🔥</div>
+          <div style="font-size:8px;color:#aaa;line-height:1.9"><span style="color:#e85050">DB overwhelmed → 503 outage</span><br>All 10,000 queries land in &lt;10ms</div>
+        </div>
+      </div>
+
+      <!-- Scale visual -->
+      <div class="fade" id="s1d" style="background:#0e0a1a;border:1px solid #2a1a3a;padding:12px;border-radius:2px">
+        <div style="font-size:8px;color:#888;margin-bottom:8px">DB QUERY SPIKE (t=0 is cache expiry)</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:50px">
+          <div style="flex:1;background:#2a1f3d;border-radius:1px 1px 0 0" id="bar_b1"></div>
+          <div style="flex:1;background:#2a1f3d;border-radius:1px 1px 0 0" id="bar_b2"></div>
+          <div style="flex:1;background:#e85050;border-radius:1px 1px 0 0" id="bar_b3"></div>
+          <div style="flex:1;background:#e85050;border-radius:1px 1px 0 0" id="bar_b4"></div>
+          <div style="flex:1;background:#e85050;border-radius:1px 1px 0 0" id="bar_b5"></div>
+          <div style="flex:1;background:#2a1f3d;border-radius:1px 1px 0 0" id="bar_b6"></div>
+          <div style="flex:1;background:#2a1f3d;border-radius:1px 1px 0 0" id="bar_b7"></div>
+          <div style="flex:1;background:#2a1f3d;border-radius:1px 1px 0 0" id="bar_b8"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:4px">
+          <span>-3s</span><span style="color:#e85050">0 EXPIRY</span><span>+3s</span>
+        </div>
+        <div style="font-size:7px;color:#e85050;margin-top:6px;text-align:center">10,000× normal DB load at t=0</div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO SEE THE PROBLEM</div>
+    <div class="ih rd" id="s1i2" style="display:none">ONE EXPIRY → ALL REQUESTS HIT DB SIMULTANEOUSLY</div>
+    <div class="il" id="s1i3" style="display:none">DB CAN'T HANDLE 10,000× LOAD → OUTAGE</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">10K</div><div class="sl">SIMULTANEOUS<br>DB HITS</div></div>
+    <div class="sc"><div class="sv rd">&lt;10ms</div><div class="sl">SPIKE<br>DURATION</div></div>
+    <div class="sc"><div class="sv rd">503</div><div class="sl">RESULT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 2: THE HERD VISUALISED ════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title" style="color:#e85050">THE HERD STAMPEDE</div>
+    <div class="hdr-sub">CACHE MISS → ALL REQUESTS FLOOD DB</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">NO PROTECTION</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Cache key expires -->
+      <div id="s2_cache" class="cache-box" style="border-color:#333;background:#0e0a14">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:8px;color:#888">CACHE KEY</div>
+            <div style="font-size:10px;color:#4ec9e1;margin-top:4px">trending_posts</div>
+          </div>
+          <div id="s2_ttl" style="font-size:9px;color:#4eff9a;border:1px solid #4eff9a;padding:4px 8px">TTL: 300s</div>
+        </div>
+      </div>
+
+      <!-- EXPIRED label -->
+      <div id="s2_exp" class="fade" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:11px;color:#e85050">⚡ KEY EXPIRED!</div>
+        <div style="font-size:8px;color:#888;margin-top:5px">All requests → CACHE MISS</div>
+      </div>
+
+      <!-- Arrow lanes — 6 request arrows -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px">10,000 REQUESTS HIT SIMULTANEOUSLY</div>
+      <div id="s2_arrows" style="display:flex;flex-direction:column;gap:3px">
+        <div class="arrow-container"><div class="arrow" id="arr1" style="background:#e85050;left:0">
+          <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#e85050;white-space:nowrap">REQ #1</span>
+        </div></div>
+        <div class="arrow-container"><div class="arrow" id="arr2" style="background:#e85050;left:0">
+          <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#e85050;white-space:nowrap">REQ #2</span>
+        </div></div>
+        <div class="arrow-container"><div class="arrow" id="arr3" style="background:#e85050;left:0">
+          <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#e85050;white-space:nowrap">REQ #3</span>
+        </div></div>
+        <div class="arrow-container"><div class="arrow" id="arr4" style="background:#e85050;left:0">
+          <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#e85050;white-space:nowrap">REQ #4</span>
+        </div></div>
+        <div class="arrow-container"><div class="arrow" id="arr5" style="background:#e85050;left:0">
+          <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#e85050;white-space:nowrap">…+9,996 MORE</span>
+        </div></div>
+      </div>
+
+      <!-- DB -->
+      <div id="s2_db" class="db-box" style="border-color:#333;color:#888">
+        <div style="font-size:8px;margin-bottom:6px">DATABASE</div>
+        <div id="s2_dbload" style="font-size:20px">😴</div>
+        <div id="s2_dbmsg" style="font-size:7px;color:#555;margin-top:4px">idle</div>
+      </div>
+
+      <!-- Result -->
+      <div id="s2_result" class="fade" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:11px;color:#e85050">💥 DB OVERLOADED!</div>
+        <div style="font-size:8px;color:#aaa;margin-top:6px;line-height:1.8">All 10,000 queries execute in parallel.<br>DB connection pool exhausted.<br>→ Timeout → 503 for all users.</div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO SEE THE STAMPEDE</div>
+    <div class="ih rd" id="s2i2" style="display:none">EXPIRY → MISS → 10K REQUESTS FLOOD DB AT ONCE</div>
+    <div class="il" id="s2i3" style="display:none">DB DIES. ALL USERS SEE ERROR. OUTAGE BEGINS.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">10K</div><div class="sl">PARALLEL<br>DB QUERIES</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">DB CPU</div></div>
+    <div class="sc"><div class="sv rd">DOWN</div><div class="sl">SERVICE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 3: MUTEX FIX ════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title" style="color:#4eff9a">FIX 1: MUTEX LOCK</div>
+    <div class="hdr-sub">ONE REBUILDS. THE REST WAIT.</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">MUTEX PATTERN</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION 1</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Code snippet -->
+      <div class="fade" id="s3code" style="background:#060e1a;border:2px solid #4ec9e1;padding:11px;border-radius:2px;font-size:8px;line-height:2;color:#aaa">
+        <span style="color:#4ec9e1">const</span> lock = <span style="color:#4eff9a">await</span> redis.set(<br>
+        &nbsp;&nbsp;<span style="color:#e8a020">"lock:trending"</span>, 1,<br>
+        &nbsp;&nbsp;<span style="color:#e8a020">"NX"</span>, <span style="color:#e8a020">"EX"</span>, 10  <span style="color:#555">// 10s lock</span><br>
+        );<br>
+        <span style="color:#4ec9e1">if</span> (lock) {<br>
+        &nbsp;&nbsp;<span style="color:#555">// I won the lock — I rebuild</span><br>
+        &nbsp;&nbsp;data = <span style="color:#4eff9a">await</span> db.query(...);<br>
+        &nbsp;&nbsp;<span style="color:#4eff9a">await</span> cache.set(<span style="color:#e8a020">"trending"</span>, data);<br>
+        } <span style="color:#4ec9e1">else</span> {<br>
+        &nbsp;&nbsp;<span style="color:#555">// I lost lock — wait & retry</span><br>
+        &nbsp;&nbsp;<span style="color:#4eff9a">await</span> sleep(50); retry();<br>
+        }
+      </div>
+
+      <!-- Arrow lanes — mutex version -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px">SAME 10,000 REQUESTS — DIFFERENT OUTCOME:</div>
+
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <!-- Winner -->
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:1px">LOCK WINNER (1 request):</div>
+        <div class="arrow-container" style="border-color:#4eff9a30;background:#041408">
+          <div class="arrow" id="m_win" style="background:#4eff9a;left:0">
+            <span style="position:absolute;left:4px;top:-7px;font-size:7px;color:#4eff9a;white-space:nowrap">REQ #1 → QUERIES DB</span>
+          </div>
+        </div>
+        <!-- Waiters -->
+        <div style="font-size:7px;color:#e8a020;margin-top:4px;margin-bottom:1px">LOCK LOSERS (9,999 requests):</div>
+        <div class="arrow-container" style="border-color:#e8a02030;background:#100a00">
+          <div style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:100%;height:3px;background:repeating-linear-gradient(90deg,#e8a020 0px,#e8a020 8px,transparent 8px,transparent 14px)" id="m_wait1"></div>
+          <span style="position:absolute;left:8px;top:6px;font-size:7px;color:#e8a020">WAITING FOR LOCK…</span>
+        </div>
+        <div class="arrow-container" style="border-color:#e8a02030;background:#100a00">
+          <div style="position:absolute;left:0;top:50%;transform:translateY(-50%);width:100%;height:3px;background:repeating-linear-gradient(90deg,#e8a020 0px,#e8a020 8px,transparent 8px,transparent 14px)" id="m_wait2"></div>
+          <span style="position:absolute;left:8px;top:6px;font-size:7px;color:#e8a020">WAITING FOR LOCK…</span>
+        </div>
+        <div class="arrow-container" style="border-color:#e8a02030;background:#100a00">
+          <span style="position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:7px;color:#e8a020">…+9,997 WAITING (SLEEP+RETRY)</span>
+        </div>
+      </div>
+
+      <!-- DB -->
+      <div id="s3_db" class="db-box" style="border-color:#333;color:#888">
+        <div style="font-size:8px;margin-bottom:6px">DATABASE</div>
+        <div id="s3_dbload" style="font-size:20px">😴</div>
+        <div id="s3_dbmsg" style="font-size:7px;color:#555;margin-top:4px">idle</div>
+      </div>
+
+      <!-- Cache repopulated -->
+      <div id="s3_repop" class="fade" style="background:#041408;border:2px solid #4eff9a;padding:10px;text-align:center">
+        <div style="font-size:9px;color:#4eff9a">✓ CACHE REBUILT BY WINNER</div>
+        <div style="font-size:8px;color:#aaa;margin-top:6px;line-height:1.8">Waiters retry → cache HIT now.<br>DB gets exactly 1 query, not 10,000.</div>
+      </div>
+
+      <!-- Comparison -->
+      <div class="fade" id="s3cmp" style="display:flex;gap:8px">
+        <div style="flex:1;background:#1a0505;border:1px solid #e85050;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">WITHOUT MUTEX</div>
+          <div style="font-size:12px;color:#e85050">10,000</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">DB queries</div>
+        </div>
+        <div style="flex:1;background:#041408;border:1px solid #4eff9a;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">WITH MUTEX</div>
+          <div style="font-size:12px;color:#4eff9a">1</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">DB query</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE MUTEX FIX</div>
+    <div class="ih" id="s3i2" style="display:none">LOCK WINNER REBUILDS. 9,999 SLEEP + RETRY.</div>
+    <div class="il" id="s3i3" style="display:none">DB RECEIVES EXACTLY 1 QUERY INSTEAD OF 10,000.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">DB QUERY<br>SENT</div></div>
+    <div class="sc"><div class="sv am">~50ms</div><div class="sl">WAIT FOR<br>OTHERS</div></div>
+    <div class="sc"><div class="sv gn">SAFE</div><div class="sl">DB STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 4: TTL JITTER FIX ════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title" style="color:#4eff9a">FIX 2: TTL JITTER</div>
+    <div class="hdr-sub">SPREAD EXPIRATIONS. SPREAD THE LOAD.</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">JITTER PATTERN</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION 2</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- The problem vs fix -->
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:#1a0505;border:2px solid #e85050;padding:9px 8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:6px">WITHOUT JITTER</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">All keys: TTL=300s<br>All expire at t=300<br>→ Herd at t=300</div>
+        </div>
+        <div style="flex:1;background:#041408;border:2px solid #4eff9a;padding:9px 8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">WITH JITTER</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">TTL = 300 + random(0,60)<br>Spread over 60s<br>→ No spike!</div>
+        </div>
+      </div>
+
+      <!-- Code -->
+      <div class="fade" id="s4code" style="background:#040e08;border:2px solid #4ec9e1;padding:11px;border-radius:2px;font-size:8px;line-height:2;color:#aaa">
+        <span style="color:#555">// WITHOUT jitter (dangerous):</span><br>
+        redis.set(key, val, <span style="color:#e85050">"EX"</span>, <span style="color:#e85050">300</span>);<br><br>
+        <span style="color:#555">// WITH jitter (safe):</span><br>
+        <span style="color:#4ec9e1">const</span> jitter = Math.random() * 60;<br>
+        redis.set(key, val, <span style="color:#4eff9a">"EX"</span>, <span style="color:#4eff9a">300 + jitter</span>);
+      </div>
+
+      <!-- Timeline viz: expiry distribution -->
+      <div style="font-size:7px;color:#666;letter-spacing:1px;margin-bottom:2px">EXPIRY DISTRIBUTION OVER TIME</div>
+
+      <div style="font-size:7px;color:#e85050;margin-bottom:3px">WITHOUT JITTER — all expire at t=300:</div>
+      <div style="background:#0e0a14;border:1px solid #2a1030;padding:8px;border-radius:2px">
+        <div style="font-size:6px;color:#555;margin-bottom:5px">t=295s ──────────── t=305s</div>
+        <div style="display:flex;align-items:flex-end;height:36px;gap:1px">
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div class="jbar" id="jb0" style="flex:2;background:#e85050;border-radius:1px 1px 0 0;height:0;margin-bottom:0;align-self:flex-end"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+          <div style="flex:1;height:4px;background:#2a1f3d;border-radius:1px"></div>
+        </div>
+        <div style="font-size:8px;color:#e85050;margin-top:4px;text-align:center">💥 SPIKE: 10,000 expirations at once</div>
+      </div>
+
+      <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">WITH JITTER — spread over 60s:</div>
+      <div style="background:#040e08;border:1px solid #0a3018;padding:8px;border-radius:2px">
+        <div style="font-size:6px;color:#555;margin-bottom:5px">t=300s ──────────────────── t=360s</div>
+        <div style="display:flex;align-items:flex-end;height:36px;gap:2px" id="jitter_bars">
+          <div class="jbar" id="jb1" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb2" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb3" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb4" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb5" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb6" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb7" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+          <div class="jbar" id="jb8" style="flex:1;background:#4eff9a;height:0;align-self:flex-end;border-radius:1px 1px 0 0"></div>
+        </div>
+        <div style="font-size:8px;color:#4eff9a;margin-top:4px;text-align:center" id="s4jlbl">✓ SMOOTH: ~167 expirations/sec</div>
+      </div>
+
+      <!-- Summary comparison -->
+      <div class="fade" id="s4sum">
+        <div style="font-size:7px;color:#666;letter-spacing:1px;margin-bottom:6px">COMBINED DEFENSE STRATEGY</div>
+        <div style="background:#040e08;border:2px solid #4eff9a;padding:11px;border-radius:2px;font-size:8px;color:#aaa;line-height:2">
+          <span style="color:#4eff9a">✓ TTL Jitter</span> — prevents expiry synchronisation<br>
+          <span style="color:#4eff9a">✓ Mutex lock</span> — prevents rebuild stampede<br>
+          <span style="color:#4ec9e1">✓ Stale-while-revalidate</span> — serve stale, refresh bg<br>
+          <span style="color:#e8a020">⚡ Use all three for critical keys</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE JITTER FIX</div>
+    <div class="ih" id="s4i2" style="display:none">ADD RANDOM JITTER TO TTL — SPREAD EXPIRATIONS</div>
+    <div class="il" id="s4i3" style="display:none">COMBINE JITTER + MUTEX FOR FULL PROTECTION.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">60s</div><div class="sl">SPREAD<br>WINDOW</div></div>
+    <div class="sc"><div class="sv gn">167</div><div class="sl">EXPIRATIONS<br>PER SEC</div></div>
+    <div class="sc"><div class="sv gn">SAFE</div><div class="sl">DB LOAD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clr(){timers.forEach(t=>{clearTimeout(t);clearInterval(t);});timers=[];}
+function wait(ms,fn){let t=setTimeout(fn,ms);timers.push(t);return t;}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function reset(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  // reset each scene
+  resetAllScenes();
+}
+
+function resetAllScenes(){
+  // s1
+  reset(['s1a','s1b','s1c','s1d']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+  ['bar_b1','bar_b2','bar_b3','bar_b4','bar_b5','bar_b6','bar_b7','bar_b8'].forEach(id=>{
+    let e=document.getElementById(id);if(e)e.style.height='4px';
+  });
+  // s2
+  reset(['s2_exp','s2_result']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+  let c2=document.getElementById('s2_cache');if(c2){c2.style.borderColor='#333';c2.style.background='#0e0a14';}
+  let t2=document.getElementById('s2_ttl');if(t2){t2.textContent='TTL: 300s';t2.style.color='#4eff9a';t2.style.borderColor='#4eff9a';}
+  ['arr1','arr2','arr3','arr4','arr5'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  let db2=document.getElementById('s2_db');if(db2){db2.style.borderColor='#333';db2.style.color='#888';}
+  let dl2=document.getElementById('s2_dbload');if(dl2)dl2.textContent='😴';
+  let dm2=document.getElementById('s2_dbmsg');if(dm2){dm2.textContent='idle';dm2.style.color='#555';}
+  // s3
+  reset(['s3code','s3_repop','s3cmp']);
+  hide('s3i2');hide('s3i3');show('s3i1');
+  let mw=document.getElementById('m_win');if(mw){mw.style.transition='none';mw.style.width='0';}
+  let db3=document.getElementById('s3_db');if(db3){db3.style.borderColor='#333';db3.style.color='#888';}
+  let dl3=document.getElementById('s3_dbload');if(dl3)dl3.textContent='😴';
+  let dm3=document.getElementById('s3_dbmsg');if(dm3){dm3.textContent='idle';dm3.style.color='#555';}
+  // s4
+  reset(['s4code','s4sum']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+  let jb0=document.getElementById('jb0');if(jb0){jb0.style.transition='none';jb0.style.height='0';}
+  for(let i=1;i<=8;i++){let e=document.getElementById('jb'+i);if(e){e.style.transition='none';e.style.height='0';}}
+  let jl=document.getElementById('s4jlbl');if(jl)jl.style.opacity='0';
+}
+
+/* ── SCENE 1 ── */
+function play1(){
+  clr();resetAllScenes();
+  wait(300,()=>fin('s1a'));
+  wait(900,()=>{fin('s1b');hide('s1i1');show('s1i2');});
+  wait(1300,()=>fin('s1c'));
+  wait(2200,()=>{
+    fin('s1d');show('s1i3');
+    // animate bars
+    const heights=['8px','6px','34px','36px','36px','10px','7px','5px'];
+    const ids=['bar_b1','bar_b2','bar_b3','bar_b4','bar_b5','bar_b6','bar_b7','bar_b8'];
+    ids.forEach((id,i)=>{
+      wait(i*60,()=>{let e=document.getElementById(id);if(e){e.style.transition='height .4s ease-out';e.style.height=heights[i];}});
+    });
+  });
+}
+
+/* ── SCENE 2 ── */
+function play2(){
+  clr();resetAllScenes();
+  // step 1: TTL counts down
+  wait(400,()=>{
+    let t=document.getElementById('s2_ttl');
+    if(t){t.textContent='TTL: 5s';t.style.color='#e8a020';t.style.borderColor='#e8a020';}
+  });
+  wait(900,()=>{
+    let t=document.getElementById('s2_ttl');if(t){t.textContent='TTL: 0s';t.style.color='#e85050';t.style.borderColor='#e85050';}
+    let c=document.getElementById('s2_cache');if(c){c.style.borderColor='#e85050';c.style.background='#1a0505';}
+  });
+  wait(1200,()=>{fin('s2_exp');hide('s2i1');show('s2i2');});
+  // launch arrows simultaneously
+  wait(1800,()=>{
+    ['arr1','arr2','arr3','arr4','arr5'].forEach(id=>{
+      let e=document.getElementById(id);
+      if(e){e.style.transition='width 0.7s ease-out';e.style.width='calc(100% - 10px)';}
+    });
+  });
+  // DB lights up
+  wait(2100,()=>{
+    let db=document.getElementById('s2_db');if(db){db.style.borderColor='#e85050';db.style.color='#e85050';}
+    let dl=document.getElementById('s2_dbload');if(dl)dl.textContent='🔥';
+    let dm=document.getElementById('s2_dbmsg');if(dm){dm.textContent='OVERLOADED!';dm.style.color='#e85050';}
+    show('s2i3');
+  });
+  wait(2700,()=>fin('s2_result'));
+}
+
+/* ── SCENE 3 ── */
+function play3(){
+  clr();resetAllScenes();
+  wait(300,()=>{fin('s3code');hide('s3i1');show('s3i2');});
+  // winner arrow
+  wait(1000,()=>{
+    let mw=document.getElementById('m_win');
+    if(mw){mw.style.transition='width 0.8s ease-out';mw.style.width='calc(100% - 10px)';}
+  });
+  // DB gets 1 query
+  wait(1600,()=>{
+    let db=document.getElementById('s3_db');if(db){db.style.borderColor='#4eff9a';db.style.color='#4eff9a';}
+    let dl=document.getElementById('s3_dbload');if(dl)dl.textContent='⚡';
+    let dm=document.getElementById('s3_dbmsg');if(dm){dm.textContent='1 QUERY ONLY';dm.style.color='#4eff9a';}
+  });
+  wait(2400,()=>{fin('s3_repop');show('s3i3');});
+  wait(3100,()=>fin('s3cmp'));
+}
+
+/* ── SCENE 4 ── */
+function play4(){
+  clr();resetAllScenes();
+  wait(300,()=>{fin('s4code');hide('s4i1');show('s4i2');});
+  // spike bar (no jitter)
+  wait(1000,()=>{
+    let jb0=document.getElementById('jb0');
+    if(jb0){jb0.style.transition='height 0.5s ease-out';jb0.style.height='34px';}
+  });
+  // jitter bars animate one by one
+  const jitterHeights=[14,22,18,26,16,20,24,12];
+  for(let i=1;i<=8;i++){
+    wait(1700+i*160,()=>{
+      let e=document.getElementById('jb'+i);
+      if(e){e.style.transition='height 0.4s ease-out';e.style.height=jitterHeights[i-1]+'px';}
+    });
+  }
+  wait(3100,()=>{
+    let jl=document.getElementById('s4jlbl');if(jl)jl.style.opacity='1';
+    show('s4i3');
+  });
+  wait(3500,()=>fin('s4sum'));
+}
+
+resetAllScenes();
+</script>
+</body>
+</html>
