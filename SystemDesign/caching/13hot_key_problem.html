@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Hot Key Problem</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.rl{font-size:7px;color:#666;letter-spacing:1px;margin-bottom:4px}
+/* arrow beam */
+.beam-wrap{position:relative;height:10px;margin:2px 0}
+.beam{position:absolute;left:0;top:50%;transform:translateY(-50%);height:3px;width:0;border-radius:2px;transition:width 0s}
+/* node boxes */
+.rnode{border:2px solid;border-radius:3px;padding:8px 6px;text-align:center;transition:all .3s;position:relative}
+/* pulse animation */
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 #e8505088}50%{box-shadow:0 0 0 8px #e8505000}}
+@keyframes pulse-grn{0%,100%{box-shadow:0 0 0 0 #4eff9a44}50%{box-shadow:0 0 0 6px #4eff9a00}}
+.pulsed-red{animation:pulse-red 1s infinite}
+.pulsed-grn{animation:pulse-grn 1.2s infinite}
+/* load bar */
+.lbar-wrap{background:#1a1a2e;border:1px solid #2a2a4a;height:12px;border-radius:1px;overflow:hidden;margin-top:4px}
+.lbar{height:100%;width:0;transition:width 1s ease-out;border-radius:1px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1 · HOOK ══════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">THE HOT KEY PROBLEM</div>
+    <div class="hdr-sub">MORE REDIS NODES WON'T FIX THIS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE BOTTLENECK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ADVANCED</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="h1a" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="color:#fff;font-size:9px;line-height:1.9;margin-bottom:6px">"MORE REDIS NODES WON'T FIX THIS.<br>YOU NEED TO RETHINK THE KEY ITSELF."</div>
+        <div style="color:#888;font-size:7px;line-height:1.8">Seen at: Twitter, YouTube, TikTok,<br>any app with trending/leaderboard content.</div>
+      </div>
+
+      <div class="fade" id="h1b" style="border:2px solid #e8a020;background:#120a00;padding:12px;border-radius:2px">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:8px">WHAT IS A HOT KEY?</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          One Redis key receiving <span style="color:#e85050">500K+ reads/sec</span>.<br>
+          That key lives on <span style="color:#e85050">one shard, one node</span>.<br>
+          That node maxes out. <span style="color:#e85050">Other nodes sit idle.</span><br>
+          Adding nodes doesn't redistribute.
+        </div>
+      </div>
+
+      <div class="fade" id="h1c">
+        <div class="rl">REAL EXAMPLES OF HOT KEYS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">🏆</div>
+            <div><div style="font-size:8px;color:#e8a020">leaderboard:global</div><div style="font-size:7px;color:#888;margin-top:3px">Every player reads this on load</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">📈</div>
+            <div><div style="font-size:8px;color:#e8a020">trending:feed</div><div style="font-size:7px;color:#888;margin-top:3px">Celebrity post goes viral — millions read</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">🛒</div>
+            <div><div style="font-size:8px;color:#e8a020">product:iphone16</div><div style="font-size:7px;color:#888;margin-top:3px">Flash sale — 100K concurrent buyers</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="h1d" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">TWO FIXES:</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#020a04;border:1px solid #0a2810;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#4eff9a;margin-bottom:5px">L1 LOCAL<br>REPLICA</div>
+            <div style="font-size:7px;color:#888">App-level<br>1–5s TTL</div>
+          </div>
+          <div style="flex:1;background:#020a04;border:1px solid #0a2810;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#4ec9e1;margin-bottom:5px">KEY<br>SHARDING</div>
+            <div style="font-size:7px;color:#888">Split across<br>N shards</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO START</div>
+    <div class="ih rd" id="s1i2" style="display:none">ONE KEY. ONE NODE. 500K READS/SEC. NODE DIES.</div>
+    <div class="il" id="s1i3" style="display:none">HORIZONTAL SCALING CAN'T HELP A SINGLE KEY.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">500K</div><div class="sl">READS/SEC<br>ONE KEY</div></div>
+    <div class="sc"><div class="sv rd">1</div><div class="sl">NODE GETS<br>ALL TRAFFIC</div></div>
+    <div class="sc"><div class="sv rd">DOWN</div><div class="sl">NODE<br>STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2 · THE PROBLEM VISUALISED ══════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ALL ARROWS HIT<br>ONE NODE</div>
+    <div class="hdr-sub">REDIS CLUSTER — HOT KEY OVERLOAD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HOT KEY OVERLOAD</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BROKEN</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="rl">KEY: leaderboard:global — 500K reads/sec</div>
+
+      <!-- App servers row -->
+      <div style="display:flex;gap:6px">
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:7px;text-align:center;font-size:7px;color:#888">APP<br>SERVER 1</div>
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:7px;text-align:center;font-size:7px;color:#888">APP<br>SERVER 2</div>
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:7px;text-align:center;font-size:7px;color:#888">APP<br>SERVER 3</div>
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:7px;text-align:center;font-size:7px;color:#888">APP<br>SERVER 4</div>
+      </div>
+
+      <!-- beams converging -->
+      <div style="position:relative;height:28px">
+        <div id="b2_1" class="beam" style="background:#e85050;top:30%;left:10%;width:0;position:absolute;height:3px;transition:width .5s ease-out"></div>
+        <div id="b2_2" class="beam" style="background:#e85050;top:50%;left:30%;width:0;position:absolute;height:3px;transition:width .5s ease-out"></div>
+        <div id="b2_3" class="beam" style="background:#e85050;top:30%;left:55%;width:0;position:absolute;height:3px;transition:width .5s ease-out"></div>
+        <div id="b2_4" class="beam" style="background:#e85050;top:50%;left:72%;width:0;position:absolute;height:3px;transition:width .5s ease-out"></div>
+        <div style="position:absolute;right:0;top:50%;transform:translateY(-50%);font-size:11px;color:#e85050">↓</div>
+      </div>
+
+      <!-- Redis cluster — 3 nodes, hot one in middle -->
+      <div class="rl">REDIS CLUSTER (3 SHARDS)</div>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <div id="s2_n1" class="rnode" style="flex:1;border-color:#2a2a3a;background:#0e0a14">
+          <div style="font-size:7px;color:#555;margin-bottom:5px">SHARD 0</div>
+          <div style="font-size:8px;color:#444">user:*</div>
+          <div style="font-size:8px;color:#444">session:*</div>
+          <div class="lbar-wrap"><div class="lbar" id="lb1" style="background:#4eff9a"></div></div>
+          <div id="s2n1load" style="font-size:6px;color:#555;margin-top:3px">12%</div>
+        </div>
+        <div id="s2_n2" class="rnode pulsed-red" style="flex:1;border-color:#e85050;background:#1a0505">
+          <div style="font-size:7px;color:#e85050;margin-bottom:5px">SHARD 1 🔥</div>
+          <div style="font-size:9px;color:#e85050">leaderboard<br>:global</div>
+          <div class="lbar-wrap"><div class="lbar" id="lb2" style="background:#e85050"></div></div>
+          <div id="s2n2load" style="font-size:6px;color:#e85050;margin-top:3px">0%</div>
+        </div>
+        <div id="s2_n3" class="rnode" style="flex:1;border-color:#2a2a3a;background:#0e0a14">
+          <div style="font-size:7px;color:#555;margin-bottom:5px">SHARD 2</div>
+          <div style="font-size:8px;color:#444">product:*</div>
+          <div style="font-size:8px;color:#444">cart:*</div>
+          <div class="lbar-wrap"><div class="lbar" id="lb3" style="background:#4eff9a"></div></div>
+          <div id="s2n3load" style="font-size:6px;color:#555;margin-top:3px">8%</div>
+        </div>
+      </div>
+
+      <!-- Load summary -->
+      <div style="display:flex;gap:6px">
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#555;margin-bottom:3px">SHARD 0</div>
+          <div id="s2l1" style="font-size:11px;color:#4eff9a">12%</div>
+        </div>
+        <div style="flex:1;background:#1a0505;border:1px solid #3a1010;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">SHARD 1 🔥</div>
+          <div id="s2l2" style="font-size:11px;color:#e85050">0%</div>
+        </div>
+        <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:8px;text-align:center">
+          <div style="font-size:7px;color:#555;margin-bottom:3px">SHARD 2</div>
+          <div id="s2l3" style="font-size:11px;color:#4eff9a">8%</div>
+        </div>
+      </div>
+
+      <div class="fade" id="s2_res" style="background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center">
+        <div style="font-size:10px;color:#e85050">💥 SHARD 1 MAXED OUT!</div>
+        <div style="font-size:8px;color:#aaa;margin-top:6px;line-height:1.9">
+          Adding Shard 3, 4, 5 does NOTHING.<br>
+          leaderboard:global always hashes to Shard 1.<br>
+          The key, not the cluster, is the problem.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO SEE THE OVERLOAD</div>
+    <div class="ih rd" id="s2i2" style="display:none">ALL 4 SERVERS → SAME SHARD → 100% CPU</div>
+    <div class="il" id="s2i3" style="display:none">OTHER SHARDS IDLE. SCALING OUT WON'T HELP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">SHARD 1<br>CPU</div></div>
+    <div class="sc"><div class="sv am">~8%</div><div class="sl">OTHER<br>SHARDS</div></div>
+    <div class="sc"><div class="sv rd">USELESS</div><div class="sl">MORE<br>NODES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3 · FIX 1: L1 LOCAL REPLICA ══════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title" style="color:#4eff9a">FIX 1: L1 LOCAL<br>REPLICA</div>
+    <div class="hdr-sub">CACHE ON EACH APP SERVER — SKIP REDIS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">LOCAL REPLICA FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION 1</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s3intro" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">THE IDEA</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Each app server holds a <span style="color:#4eff9a">local in-process copy</span><br>
+          of the hot key (HashMap / Guava cache).<br>
+          TTL: 1–5 seconds. Redis hit rate: near 0.<br>
+          <span style="color:#e8a020">Slightly stale — acceptable for leaderboards.</span>
+        </div>
+      </div>
+
+      <!-- Code snippet -->
+      <div class="fade" id="s3code" style="background:#040e1a;border:2px solid #4ec9e1;padding:11px;border-radius:2px;font-size:8px;line-height:2;color:#aaa">
+        <span style="color:#555">// Each app server has its own L1 cache</span><br>
+        <span style="color:#4ec9e1">const</span> L1 = <span style="color:#4eff9a">new</span> LRUCache({ ttl: <span style="color:#e8a020">2000</span> }); <span style="color:#555">// 2s</span><br><br>
+        <span style="color:#4ec9e1">async function</span> <span style="color:#4eff9a">getLeaderboard</span>() {<br>
+        &nbsp;&nbsp;<span style="color:#4ec9e1">const</span> local = L1.get(<span style="color:#e8a020">"leaderboard"</span>);<br>
+        &nbsp;&nbsp;<span style="color:#4ec9e1">if</span> (local) <span style="color:#4ec9e1">return</span> local; <span style="color:#555">// L1 HIT</span><br>
+        &nbsp;&nbsp;<span style="color:#4ec9e1">const</span> data = <span style="color:#4eff9a">await</span> redis.get(<span style="color:#e8a020">"leaderboard"</span>);<br>
+        &nbsp;&nbsp;L1.set(<span style="color:#e8a020">"leaderboard"</span>, data); <span style="color:#555">// store</span><br>
+        &nbsp;&nbsp;<span style="color:#4ec9e1">return</span> data;<br>
+        }
+      </div>
+
+      <!-- Before / After diagram -->
+      <div class="fade" id="s3diag">
+        <div class="rl">REQUEST FLOW: BEFORE vs AFTER</div>
+        <div style="display:flex;gap:8px">
+          <!-- Before -->
+          <div style="flex:1;background:#1a0505;border:1px solid #3a1010;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:6px;text-align:center">BEFORE</div>
+            <div style="font-size:7px;color:#aaa;text-align:center;line-height:2">
+              APP<br>↓<br><span style="color:#e85050">REDIS</span><br>↓<br>500K req/s<br><span style="color:#e85050">NODE 🔥</span>
+            </div>
+          </div>
+          <!-- After -->
+          <div style="flex:1;background:#041408;border:1px solid #0a3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;text-align:center">AFTER</div>
+            <div style="font-size:7px;color:#aaa;text-align:center;line-height:2">
+              APP<br>↓<br><span style="color:#4eff9a">L1 LOCAL</span><br>↓ (miss every 2s)<br><span style="color:#4ec9e1">REDIS</span><br><span style="color:#4eff9a">~50 req/s ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Load reduction visual -->
+      <div class="fade" id="s3load">
+        <div class="rl">REDIS LOAD REDUCTION</div>
+        <div style="background:#040e1a;border:1px solid #0a2040;padding:10px;border-radius:2px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:7px;color:#e85050">WITHOUT L1 →</span>
+            <span style="font-size:8px;color:#e85050">500,000 req/s</span>
+          </div>
+          <div class="lbar-wrap"><div id="load_before" class="lbar" style="background:#e85050"></div></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;margin-bottom:6px">
+            <span style="font-size:7px;color:#4eff9a">WITH L1 →</span>
+            <span style="font-size:8px;color:#4eff9a">~50 req/s</span>
+          </div>
+          <div class="lbar-wrap"><div id="load_after" class="lbar" style="background:#4eff9a"></div></div>
+          <div style="font-size:8px;color:#4eff9a;margin-top:8px;text-align:center">99.99% reduction in Redis hot key reads</div>
+        </div>
+      </div>
+
+      <!-- Tradeoff -->
+      <div class="fade" id="s3trade" style="display:flex;gap:8px">
+        <div style="flex:1;background:#041408;border:1px solid #0a3018;padding:8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">✓ PROS</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.9">Zero Redis load<br>Sub-ms latency<br>No infra change</div>
+        </div>
+        <div style="flex:1;background:#120a00;border:1px solid #3a2000;padding:8px">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">⚠ CONS</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.9">1–5s stale data<br>Per-server memory<br>Cache inval harder</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE L1 FIX</div>
+    <div class="ih" id="s3i2" style="display:none">EACH APP SERVER CACHES LOCALLY — 2s TTL</div>
+    <div class="il" id="s3i3" style="display:none">500K req/s → 50 req/s TO REDIS. 99.99% DROP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">L1</div><div class="sl">IN-PROCESS<br>CACHE</div></div>
+    <div class="sc"><div class="sv gn">2s</div><div class="sl">LOCAL<br>TTL</div></div>
+    <div class="sc"><div class="sv gn">99.99%</div><div class="sl">REDIS<br>REDUCTION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4 · FIX 2: KEY SHARDING ══════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title" style="color:#4ec9e1">FIX 2: KEY SHARDING</div>
+    <div class="hdr-sub">SPLIT THE KEY ACROSS N REDIS NODES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">KEY SHARDING FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOLUTION 2</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s4intro" style="border:2px solid #4ec9e1;background:#040e1a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:7px">THE IDEA</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Instead of one key on one node,<br>
+          <span style="color:#4eff9a">create N copies</span> across N nodes.<br>
+          Each request picks a random shard.<br>
+          Load spreads evenly across the cluster.
+        </div>
+      </div>
+
+      <!-- Code -->
+      <div class="fade" id="s4code" style="background:#040e1a;border:2px solid #4ec9e1;padding:10px;border-radius:2px;font-size:8px;line-height:2;color:#aaa">
+        <span style="color:#555">// One key on one node — dangerous:</span><br>
+        GET <span style="color:#e85050">leaderboard:global</span><br><br>
+        <span style="color:#555">// Sharded across N=4 nodes:</span><br>
+        shard = Math.floor(Math.random() * <span style="color:#4eff9a">4</span>);<br>
+        GET <span style="color:#4eff9a">leaderboard:global:shard:</span>{shard}<br><br>
+        <span style="color:#555">// Write: update all N shards</span><br>
+        <span style="color:#4ec9e1">for</span> i <span style="color:#4ec9e1">in</span> range(<span style="color:#4eff9a">4</span>):<br>
+        &nbsp;&nbsp;SET leaderboard:global:shard:{i} data
+      </div>
+
+      <!-- Before: one node hot -->
+      <div class="fade" id="s4before">
+        <div class="rl">BEFORE — ONE HOT NODE</div>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <div class="rnode pulsed-red" style="flex:1.6;border-color:#e85050;background:#1a0505">
+            <div style="font-size:7px;color:#e85050;margin-bottom:4px">NODE 0 🔥</div>
+            <div style="font-size:7px;color:#e85050">leaderboard<br>:global</div>
+            <div class="lbar-wrap"><div id="bef_lb0" class="lbar" style="background:#e85050"></div></div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px" id="bef0p">0%</div>
+          </div>
+          <div class="rnode" style="flex:1;border-color:#1a1a2a;background:#0e0a14">
+            <div style="font-size:7px;color:#333;margin-bottom:4px">NODE 1</div>
+            <div style="font-size:7px;color:#222">idle</div>
+            <div class="lbar-wrap"><div id="bef_lb1" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#333;margin-top:2px" id="bef1p">0%</div>
+          </div>
+          <div class="rnode" style="flex:1;border-color:#1a1a2a;background:#0e0a14">
+            <div style="font-size:7px;color:#333;margin-bottom:4px">NODE 2</div>
+            <div style="font-size:7px;color:#222">idle</div>
+            <div class="lbar-wrap"><div id="bef_lb2" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#333;margin-top:2px" id="bef2p">0%</div>
+          </div>
+          <div class="rnode" style="flex:1;border-color:#1a1a2a;background:#0e0a14">
+            <div style="font-size:7px;color:#333;margin-bottom:4px">NODE 3</div>
+            <div style="font-size:7px;color:#222">idle</div>
+            <div class="lbar-wrap"><div id="bef_lb3" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#333;margin-top:2px" id="bef3p">0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- After: distributed -->
+      <div class="fade" id="s4after">
+        <div class="rl">AFTER — LOAD SPREAD ACROSS 4 SHARDS</div>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <div class="rnode pulsed-grn" style="flex:1;border-color:#4eff9a;background:#041408">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SHARD 0</div>
+            <div style="font-size:6px;color:#4eff9a">:shard:0</div>
+            <div class="lbar-wrap"><div id="aft_lb0" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px" id="aft0p">0%</div>
+          </div>
+          <div class="rnode pulsed-grn" style="flex:1;border-color:#4eff9a;background:#041408">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SHARD 1</div>
+            <div style="font-size:6px;color:#4eff9a">:shard:1</div>
+            <div class="lbar-wrap"><div id="aft_lb1" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px" id="aft1p">0%</div>
+          </div>
+          <div class="rnode pulsed-grn" style="flex:1;border-color:#4eff9a;background:#041408">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SHARD 2</div>
+            <div style="font-size:6px;color:#4eff9a">:shard:2</div>
+            <div class="lbar-wrap"><div id="aft_lb2" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px" id="aft2p">0%</div>
+          </div>
+          <div class="rnode pulsed-grn" style="flex:1;border-color:#4eff9a;background:#041408">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SHARD 3</div>
+            <div style="font-size:6px;color:#4eff9a">:shard:3</div>
+            <div class="lbar-wrap"><div id="aft_lb3" class="lbar" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px" id="aft3p">0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Combined summary -->
+      <div class="fade" id="s4sum" style="background:#041408;border:2px solid #4eff9a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:8px">USE BOTH FIXES TOGETHER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2.1">
+          <span style="color:#4eff9a">L1 local replica</span> — kills 99.99% of Redis reads<br>
+          <span style="color:#4ec9e1">Key sharding</span> — distributes remaining load<br>
+          <span style="color:#e8a020">Monitor with:</span> redis-cli --hotkeys<br>
+          <span style="color:#e8a020">Alert when:</span> one key &gt; 10% of total ops
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE KEY SHARDING</div>
+    <div class="ih" id="s4i2" style="display:none">ONE KEY → N SHARDED COPIES → LOAD SPREAD</div>
+    <div class="il" id="s4i3" style="display:none">COMBINE L1 + SHARDING FOR FULL PROTECTION.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">N=4</div><div class="sl">KEY<br>SHARDS</div></div>
+    <div class="sc"><div class="sv gn">25%</div><div class="sl">LOAD PER<br>NODE</div></div>
+    <div class="sc"><div class="sv gn">EVEN</div><div class="sl">CLUSTER<br>LOAD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clr(){timers.forEach(t=>{clearTimeout(t);clearInterval(t);});timers=[];}
+function wait(ms,fn){let t=setTimeout(fn,ms);timers.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function reset(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+function txt(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+function stl(id,p,v){let e=document.getElementById(id);if(e)e.style[p]=v;}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  fullReset();
+}
+
+function fullReset(){
+  reset(['h1a','h1b','h1c','h1d']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+
+  ['b2_1','b2_2','b2_3','b2_4'].forEach(id=>stl(id,'width','0'));
+  reset(['s2_res']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+  let lb2=document.getElementById('lb2');if(lb2){lb2.style.transition='none';lb2.style.width='0';}
+  txt('s2n2load','0%');txt('s2l2','0%');
+
+  reset(['s3intro','s3code','s3diag','s3load','s3trade']);
+  hide('s3i2');hide('s3i3');show('s3i1');
+  let lb_b=document.getElementById('load_before'),lb_a=document.getElementById('load_after');
+  if(lb_b){lb_b.style.transition='none';lb_b.style.width='0';}
+  if(lb_a){lb_a.style.transition='none';lb_a.style.width='0';}
+
+  reset(['s4intro','s4code','s4before','s4after','s4sum']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+  [['bef_lb0',100,'#e85050'],['bef_lb1',0,'#4eff9a'],['bef_lb2',0,'#4eff9a'],['bef_lb3',0,'#4eff9a'],
+   ['aft_lb0',0,'#4eff9a'],['aft_lb1',0,'#4eff9a'],['aft_lb2',0,'#4eff9a'],['aft_lb3',0,'#4eff9a'],
+   ['lb1',0,'#4eff9a'],['lb3',0,'#4eff9a']].forEach(([id,,c])=>{
+    let e=document.getElementById(id);
+    if(e){e.style.transition='none';e.style.width='0';e.style.background=c;}
+  });
+  txt('bef0p','0%');txt('bef1p','0%');txt('bef2p','0%');txt('bef3p','0%');
+  txt('aft0p','0%');txt('aft1p','0%');txt('aft2p','0%');txt('aft3p','0%');
+}
+
+function animBar(id,pct,dur,col){
+  let e=document.getElementById(id);
+  if(!e)return;
+  e.style.background=col||'#4eff9a';
+  wait(50,()=>{e.style.transition='width '+(dur||1)+'s ease-out';e.style.width=pct+'%';});
+}
+
+/* ── S1 ── */
+function play1(){
+  clr();fullReset();
+  wait(300,()=>fin('h1a'));
+  wait(900,()=>{fin('h1b');hide('s1i1');show('s1i2');});
+  wait(1600,()=>fin('h1c'));
+  wait(2400,()=>{fin('h1d');show('s1i3');});
+}
+
+/* ── S2 ── */
+function play2(){
+  clr();fullReset();
+  hide('s2i1');show('s2i2');
+  // beams animate in
+  wait(300,()=>{
+    ['b2_1','b2_2','b2_3','b2_4'].forEach((id,i)=>{
+      wait(i*120,()=>{
+        let e=document.getElementById(id);
+        if(e){e.style.transition='width .5s ease-out';e.style.width='90%';}
+      });
+    });
+  });
+  // shard 1 load animates up
+  wait(900,()=>{
+    let lb2=document.getElementById('lb2');
+    if(lb2){lb2.style.transition='width 1.5s ease-out';lb2.style.width='100%';}
+    animBar('lb1',12,1.2,'#4eff9a');
+    animBar('lb3',8,1,'#4eff9a');
+  });
+  // counter ticks up
+  let pct=0;
+  let iv=setInterval(()=>{
+    pct=Math.min(pct+4,100);
+    txt('s2n2load',pct+'%');txt('s2l2',pct+'%');
+    let col=pct>70?'#e85050':pct>40?'#e8a020':'#4eff9a';
+    stl('s2l2','color',col);
+    if(pct>=100)clearInterval(iv);
+  },60);
+  timers.push(iv);
+  wait(700,()=>{txt('s2n1load','12%');txt('s2n3load','8%');txt('s2l1','12%');txt('s2l3','8%');});
+  wait(2600,()=>{fin('s2_res');show('s2i3');});
+}
+
+/* ── S3 ── */
+function play3(){
+  clr();fullReset();
+  hide('s3i1');show('s3i2');
+  wait(300,()=>fin('s3intro'));
+  wait(1000,()=>fin('s3code'));
+  wait(1800,()=>fin('s3diag'));
+  wait(2500,()=>{
+    fin('s3load');
+    animBar('load_before',100,1.2,'#e85050');
+    wait(800,()=>animBar('load_after',1,1.2,'#4eff9a'));
+  });
+  wait(4000,()=>{fin('s3trade');show('s3i3');});
+}
+
+/* ── S4 ── */
+function play4(){
+  clr();fullReset();
+  hide('s4i1');show('s4i2');
+  wait(300,()=>fin('s4intro'));
+  wait(1000,()=>fin('s4code'));
+  wait(1800,()=>{
+    fin('s4before');
+    // animate hot node
+    let e=document.getElementById('bef_lb0');
+    if(e){e.style.transition='width 1s ease-out';e.style.width='100%';e.style.background='#e85050';}
+    txt('bef0p','100%');txt('bef1p','5%');txt('bef2p','3%');txt('bef3p','4%');
+    ['bef_lb1','bef_lb2','bef_lb3'].forEach(id=>animBar(id,4,1,'#4eff9a'));
+  });
+  wait(3000,()=>{
+    fin('s4after');
+    // all 4 shards get ~25%
+    ['aft_lb0','aft_lb1','aft_lb2','aft_lb3'].forEach((id,i)=>{
+      wait(i*150,()=>{
+        animBar(id,25,0.8,'#4eff9a');
+        let pids=['aft0p','aft1p','aft2p','aft3p'];
+        wait(200,()=>txt(pids[i],'25%'));
+      });
+    });
+    show('s4i3');
+  });
+  wait(4500,()=>fin('s4sum'));
+}
+
+fullReset();
+</script>
+</body>
+</html>

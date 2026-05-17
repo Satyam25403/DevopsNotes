@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Securing Layer 1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d2a0d}
+.hdr-title{font-size:11px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d2010;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.cy{border-color:#4ec9e1}
+.info.am{border-color:#e8a020}
+.il{color:#aaa}.ih{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060f06;border:1px solid #0d2010;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4eff9a;text-align:center}
+.sv.cy{color:#4ec9e1}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4ec9e1;color:#4ec9e1}.btn.play:hover{background:#4ec9e120}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Step blocks */
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d2010;border-radius:2px;border-left:3px solid #4eff9a;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4eff9a;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.cy{color:#4ec9e1}.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.step-text .hi{color:#4eff9a}
+.step-text .cy{color:#4ec9e1}
+.step-text .am{color:#e8a020}
+.step-text .rd{color:#e85050}
+
+/* hero card */
+.detail-hero{
+  border:2px solid;border-radius:3px;padding:12px;
+  opacity:0;transition:opacity .5s;
+}
+.detail-hero.visible{opacity:1}
+
+/* defend box */
+.defend-box{
+  border:1px solid;border-radius:2px;padding:10px;
+  opacity:0;transition:opacity .4s;
+}
+.defend-box.visible{opacity:1}
+
+/* shield layer */
+.shield-layer{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  border:2px solid;border-radius:3px;
+  opacity:0;transform:scale(.94);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.shield-layer.visible{opacity:1;transform:scale(1)}
+
+/* lock-pulse */
+@keyframes lockPulse{
+  0%,100%{filter:drop-shadow(0 0 0px #4eff9a)}
+  50%{filter:drop-shadow(0 0 6px #4eff9a)}
+}
+.lock-glow{animation:lockPulse 2s ease-in-out infinite}
+
+/* OTDR wave */
+@keyframes otdrScan{
+  0%{stroke-dashoffset:400}
+  100%{stroke-dashoffset:0}
+}
+.otdr-beam{
+  stroke-dasharray:400;
+  stroke-dashoffset:400;
+  animation:otdrScan 2.4s ease-out forwards;
+}
+
+/* port blink */
+@keyframes portBlink{
+  0%,100%{fill:#e85050}
+  50%{fill:#600}
+}
+.port-bad{animation:portBlink 1s step-end infinite}
+@keyframes portGood{
+  0%,100%{fill:#4eff9a}
+  50%{fill:#0a3010}
+}
+.port-ok{animation:portGood 2s ease-in-out infinite}
+
+/* MAC counter */
+@keyframes countUp{from{opacity:0}to{opacity:1}}
+
+/* config terminal */
+.terminal{
+  background:#060f06;border:1px solid #0d3010;border-radius:2px;
+  padding:10px;font-size:7px;line-height:2;color:#4eff9a;
+  opacity:0;transition:opacity .5s;
+}
+.terminal.visible{opacity:1}
+.t-prompt{color:#4ec9e1}
+.t-cmd{color:#fff}
+.t-comment{color:#2a5a2a}
+.t-out{color:#888}
+
+/* shield build scene */
+.shield-ring{
+  transition:stroke .5s,opacity .5s;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SCENE 1: HOOK ════════════════ -->
+<div class="scene active" id="s1" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title">SECURING LAYER 1</div>
+    <div class="hdr-sub">PHYSICAL SECURITY · DEFENSE-IN-DEPTH</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ REALITY CHECK</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hero callout -->
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:16px;opacity:0;transition:opacity .5s;text-align:center;background:#0f0606">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">THE UNCOMFORTABLE TRUTH</div>
+        <div style="font-size:10px;color:#ffcccc;line-height:1.9;margin-bottom:10px">YOUR $1M FIREWALL<br>IS USELESS IF SOMEONE<br>WALKS INTO YOUR<br>SERVER ROOM</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">No amount of software security<br>survives direct physical access.<br>Defense-in-depth starts at Layer 1.</div>
+      </div>
+
+      <!-- The gap most engineers skip -->
+      <div id="s1-gap" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:8px">WHERE ENGINEERS SPEND SECURITY BUDGET</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#aaa;width:90px;flex-shrink:0">SOFTWARE</div>
+            <div style="flex:1;height:14px;background:#0d2010;border:1px solid #1a4010;border-radius:2px;overflow:hidden">
+              <div id="s1-bar1" style="height:100%;width:0%;background:#4eff9a;transition:width 1s ease-out .2s;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a;width:28px;text-align:right">78%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#aaa;width:90px;flex-shrink:0">NETWORK</div>
+            <div style="flex:1;height:14px;background:#0d2010;border:1px solid #1a4010;border-radius:2px;overflow:hidden">
+              <div id="s1-bar2" style="height:100%;width:0%;background:#4ec9e1;transition:width 1s ease-out .4s;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#4ec9e1;width:28px;text-align:right">18%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#e85050;width:90px;flex-shrink:0">PHYSICAL</div>
+            <div style="flex:1;height:14px;background:#1a0808;border:1px solid #3a1010;border-radius:2px;overflow:hidden">
+              <div id="s1-bar3" style="height:100%;width:0%;background:#e85050;transition:width 1s ease-out .6s;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#e85050;width:28px;text-align:right">4%</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#444;margin-top:6px;text-align:right">source: Gartner security spend 2023</div>
+      </div>
+
+      <!-- 5 controls teaser -->
+      <div id="s1-controls" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:4px">5 CONTROLS COVERED ↓</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div style="border:1px solid #0d3010;border-radius:2px;padding:5px 8px;font-size:7px;color:#4eff9a">🔒 Server room lock</div>
+          <div style="border:1px solid #0d3010;border-radius:2px;padding:5px 8px;font-size:7px;color:#4eff9a">🔌 Disable ports</div>
+          <div style="border:1px solid #0d3010;border-radius:2px;padding:5px 8px;font-size:7px;color:#4ec9e1">💡 Fiber vs copper</div>
+          <div style="border:1px solid #0d3010;border-radius:2px;padding:5px 8px;font-size:7px;color:#e8a020">📡 OTDR detection</div>
+          <div style="border:1px solid #0d3010;border-radius:2px;padding:5px 8px;font-size:7px;color:#4ec9e1">🛡 Port security</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO BUILD YOUR DEFENSES
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">DEFENSE-IN-DEPTH</div>
+    <div class="ih">Physical is layer zero of security</div>
+    <div class="il" style="font-size:7px">Every software control assumes physical integrity. Touch the hardware — game over. Locks, sensors, and cable choices are your first line.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4%</div><div class="sl">budget spent<br>on physical</div></div>
+    <div class="sc"><div class="sv am">$1M</div><div class="sl">firewall made<br>irrelevant by</div></div>
+    <div class="sc"><div class="sv rd">1</div><div class="sl">unlocked<br>server room</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 2: PHYSICAL LOCKS + SEALS ════════════════ -->
+<div class="scene" id="s2" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title">CONTROL #1: LOCK IT DOWN</div>
+    <div class="hdr-sub">SERVER ROOMS · TAMPER SEALS · ACCESS LOGS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">PHYSICAL</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LAYER ZERO</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- server room diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#4eff9a;background:#060f06">
+        <div style="font-size:8px;color:#4eff9a;letter-spacing:2px;margin-bottom:10px;text-align:center">SERVER ROOM CONTROLS</div>
+        <svg width="330" height="130" viewBox="0 0 330 130">
+          <!-- room outline -->
+          <rect x="10" y="10" width="310" height="110" rx="6" fill="#060f06" stroke="#0d3010" stroke-width="2"/>
+          <!-- racks -->
+          <rect x="30" y="25" width="38" height="80" rx="3" fill="#0a1a0a" stroke="#1a4020" stroke-width="1.5"/>
+          <rect x="76" y="25" width="38" height="80" rx="3" fill="#0a1a0a" stroke="#1a4020" stroke-width="1.5"/>
+          <rect x="122" y="25" width="38" height="80" rx="3" fill="#0a1a0a" stroke="#1a4020" stroke-width="1.5"/>
+          <!-- rack units -->
+          <rect x="33" y="30" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <rect x="33" y="39" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <rect x="33" y="48" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <rect x="79" y="30" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <rect x="79" y="39" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <rect x="125" y="30" width="32" height="6" rx="1" fill="#0d2a10" stroke="#1a4020" stroke-width="1"/>
+          <!-- status LEDs -->
+          <circle cx="41" cy="33" r="2" fill="#4eff9a" class="port-ok"/>
+          <circle cx="41" cy="42" r="2" fill="#4eff9a"/>
+          <circle cx="87" cy="33" r="2" fill="#4eff9a" class="port-ok"/>
+          <circle cx="133" cy="33" r="2" fill="#e85050" class="port-bad"/>
+          <!-- DOOR with lock -->
+          <rect x="274" y="20" width="34" height="90" rx="3" fill="#0a180a" stroke="#4eff9a" stroke-width="2"/>
+          <text x="291" y="55" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="14" class="lock-glow">🔒</text>
+          <text x="291" y="100" text-anchor="middle" fill="#0d4010" font-family="'Press Start 2P'" font-size="5">BADGE</text>
+          <text x="291" y="110" text-anchor="middle" fill="#0d4010" font-family="'Press Start 2P'" font-size="5">+ PIN</text>
+          <!-- CCTV icon -->
+          <text x="310" y="22" text-anchor="end" fill="#e8a020" font-family="'Press Start 2P'" font-size="10">📷</text>
+          <!-- tamper seal label -->
+          <rect x="180" y="58" width="80" height="24" rx="3" fill="#0a2a0a" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="220" y="68" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">TAMPER</text>
+          <text x="220" y="77" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">SEAL ✓</text>
+        </svg>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text"><span class="hi">Locked server room</span> with badge + PIN 2FA. Tailgating is the #1 bypass — use mantraps (two-door airlocks) so only one person enters per auth event.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text"><span class="hi">Tamper-evident seals</span> on chassis screws, cable access panels, and SFP cages. If broken, the sticker shows visible destruction — cannot be resealed invisibly.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text"><span class="hi">Access logs</span> on every entry: badge swipe timestamps + CCTV. Correlate with change tickets. An engineer who entered at 2am but filed no ticket is an anomaly.</div>
+      </div>
+      <div class="step-block" id="s2-s4">
+        <div class="step-num">04</div>
+        <div class="step-text"><span class="hi">Rack-level locks</span> and cable locks on individual servers. Visitor access = escorted only. Cleaners and HVAC contractors are the most overlooked threat vector.</div>
+      </div>
+
+      <div class="defend-box" id="s2-def" style="border-color:#4eff9a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">✓ IMPLEMENTATION CHECKLIST</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Mantrap entry · Badge + PIN 2FA · CCTV at every rack aisle · Tamper seals on all chassis · Visitor log book · Rack-level cable locks · Motion sensors after-hours</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">PHYSICAL ACCESS CONTROL</div>
+    <div class="ih">Assume your attacker has a badge</div>
+    <div class="il" style="font-size:7px">80% of insider threats involve physical access. The mantrap and access log correlation catch what badge readers alone miss.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">80%</div><div class="sl">insider threats<br>need physical</div></div>
+    <div class="sc"><div class="sv am">2FA</div><div class="sl">minimum for<br>server room</div></div>
+    <div class="sc"><div class="sv">✓</div><div class="sl">tamper seal<br>= zero-cost IDS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 3: DISABLE UNUSED PORTS ════════════════ -->
+<div class="scene" id="s3" style="background:#080a1a">
+  <div class="hdr" style="background:#080a1a">
+    <div class="hdr-title" style="color:#4ec9e1">CONTROL #2: DARK PORTS</div>
+    <div class="hdr-sub">DISABLE UNUSED SWITCH PORTS + PORT SECURITY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SWITCH</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">CONFIG</span>
+  </div>
+
+  <div class="anim" style="background:#080a1a">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Switch port diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4ec9e1;background:#080a1a">
+        <div style="font-size:8px;color:#4ec9e1;letter-spacing:2px;margin-bottom:8px;text-align:center">24-PORT SWITCH — BEFORE / AFTER</div>
+        <svg width="330" height="110" viewBox="0 0 330 110">
+          <!-- switch body -->
+          <rect x="10" y="30" width="310" height="50" rx="5" fill="#080818" stroke="#1a1a3a" stroke-width="2"/>
+          <text x="170" y="92" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">CISCO 2960 · 24-PORT</text>
+          <!-- port grid: 24 ports -->
+          <!-- row 1 (1-12) -->
+          <rect id="p1"  x="22"  y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p2"  x="43"  y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p3"  x="64"  y="40" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p4"  x="85"  y="40" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p5"  x="106" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p6"  x="127" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p7"  x="148" y="40" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p8"  x="169" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p9"  x="190" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p10" x="211" y="40" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p11" x="232" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p12" x="253" y="40" width="18" height="14" rx="2" fill="#e85050"/>
+          <!-- row 2 (13-24) -->
+          <rect id="p13" x="22"  y="57" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p14" x="43"  y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p15" x="64"  y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p16" x="85"  y="57" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p17" x="106" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p18" x="127" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p19" x="148" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p20" x="169" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p21" x="190" y="57" width="18" height="14" rx="2" fill="#4eff9a"/>
+          <rect id="p22" x="211" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p23" x="232" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <rect id="p24" x="253" y="57" width="18" height="14" rx="2" fill="#e85050"/>
+          <!-- legend -->
+          <rect x="283" y="37" width="10" height="8" rx="1" fill="#4eff9a"/>
+          <text x="296" y="44" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">IN USE</text>
+          <rect x="283" y="50" width="10" height="8" rx="1" fill="#e85050"/>
+          <text x="296" y="57" fill="#e85050" font-family="'Press Start 2P'" font-size="4">OPEN!</text>
+        </svg>
+      </div>
+
+      <!-- terminal config block -->
+      <div class="terminal" id="s3-term">
+        <div><span class="t-prompt">SW01#</span> <span class="t-cmd">conf t</span></div>
+        <div><span class="t-comment">! Shutdown all unused ports</span></div>
+        <div><span class="t-prompt">SW01(config)#</span> <span class="t-cmd">int range fa0/1-24</span></div>
+        <div><span class="t-prompt">SW01(config-if)#</span> <span class="t-cmd">shutdown</span></div>
+        <div><span class="t-prompt">SW01(config)#</span> <span class="t-cmd">int fa0/3</span></div>
+        <div><span class="t-comment">! Enable only needed ports</span></div>
+        <div><span class="t-prompt">SW01(config-if)#</span> <span class="t-cmd">no shutdown</span></div>
+        <div><span class="t-prompt">SW01(config-if)#</span> <span class="t-cmd">switchport mode access</span></div>
+        <div><span class="t-prompt">SW01(config-if)#</span> <span class="t-cmd">switchport port-security</span></div>
+        <div><span class="t-prompt">SW01(config-if)#</span> <span class="t-cmd">switchport port-security max 1</span></div>
+        <div><span class="t-out">! Only 1 MAC allowed. New MAC = port shuts down.</span></div>
+      </div>
+
+      <div class="step-block cy" id="s3-s1">
+        <div class="step-num cy">01</div>
+        <div class="step-text"><span class="hi">Default: every port on a new switch is enabled.</span> An attacker plugs into any open port and is on your network instantly. No auth. No log.</div>
+      </div>
+      <div class="step-block cy" id="s3-s2">
+        <div class="step-num cy">02</div>
+        <div class="step-text"><span class="cy">Port security</span> limits the number of MAC addresses per port. Set to 1. If a second MAC appears (rogue device or hub), the port shuts down immediately.</div>
+      </div>
+      <div class="step-block cy" id="s3-s3">
+        <div class="step-num cy">03</div>
+        <div class="step-text">Violation modes: <span class="cy">shutdown</span> (port off, log generated) · <span class="am">restrict</span> (drop frames, log) · <span class="rd">protect</span> (drop silently — don't use this one).</div>
+      </div>
+
+      <div class="defend-box visible" id="s3-def" style="border-color:#4ec9e1;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">✓ RULE OF THUMB</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">If a port has no device plugged in, it must be <span style="color:#4eff9a">shutdown</span> in config. Review quarterly. 802.1X adds auth on top — MAC alone is spoofable.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">PORT SECURITY</div>
+    <div class="ih cy">Shut down every port you don't own</div>
+    <div class="il" style="font-size:7px">Default open ports are how laptop-in-a-closet attacks go undetected for months. One command per port, zero cost, massive reduction in attack surface.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0</div><div class="sl">auth needed<br>to plug in by default</div></div>
+    <div class="sc"><div class="sv cy">1</div><div class="sl">max MACs<br>per port</div></div>
+    <div class="sc"><div class="sv">&lt;1s</div><div class="sl">port shuts<br>on violation</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 4: FIBER vs COPPER + OTDR ════════════════ -->
+<div class="scene" id="s4" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title">CONTROL #3 + #4: FIBER + OTDR</div>
+    <div class="hdr-sub">TAP-RESISTANT CABLE · OPTICAL DETECTION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CABLE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">DETECTION</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Fiber vs copper comparison -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#e8a020;background:#060f06">
+        <div style="font-size:8px;color:#e8a020;letter-spacing:2px;margin-bottom:8px;text-align:center">FIBER vs COPPER — TAPABILITY</div>
+        <svg width="330" height="100" viewBox="0 0 330 100">
+          <!-- copper side -->
+          <rect x="10" y="10" width="140" height="82" rx="4" fill="#0f0808" stroke="#e85050" stroke-width="1.5"/>
+          <text x="80" y="25" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">COPPER</text>
+          <!-- copper wire cross section -->
+          <circle cx="80" cy="56" r="22" fill="#0a0505" stroke="#e85050" stroke-width="1"/>
+          <circle cx="80" cy="56" r="10" fill="#c87010" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="80" y="60" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">Cu</text>
+          <!-- tap arrow -->
+          <line x1="80" y1="78" x2="80" y2="90" stroke="#e85050" stroke-width="2" marker-end="url(#arrowRed)"/>
+          <text x="80" y="98" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4">EASY TAP</text>
+          <!-- fiber side -->
+          <rect x="178" y="10" width="142" height="82" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="249" y="25" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6">FIBER</text>
+          <!-- fiber cross section with glow -->
+          <circle cx="249" cy="56" r="22" fill="#030a03" stroke="#4eff9a" stroke-width="1"/>
+          <circle cx="249" cy="56" r="6" fill="#0a2010" stroke="#4eff9a" stroke-width="2"/>
+          <!-- light beam -->
+          <line x1="227" y1="56" x2="271" y2="56" stroke="#4eff9a" stroke-width="2" opacity="0.6"/>
+          <line x1="235" y1="48" x2="263" y2="64" stroke="#4eff9a" stroke-width="1" opacity="0.3"/>
+          <line x1="235" y1="64" x2="263" y2="48" stroke="#4eff9a" stroke-width="1" opacity="0.3"/>
+          <!-- must bend to tap - disrupts signal -->
+          <text x="249" y="90" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">BEND = LOSS</text>
+          <defs>
+            <marker id="arrowRed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- OTDR diagram -->
+      <div id="s4-otdr" style="border:2px solid #e8a020;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s;background:#0f0a00">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">OTDR — OPTICAL TIME-DOMAIN REFLECTOMETER</div>
+        <svg width="306" height="70" viewBox="0 0 306 70">
+          <!-- axis -->
+          <line x1="10" y1="55" x2="300" y2="55" stroke="#2a2010" stroke-width="1"/>
+          <line x1="10" y1="10" x2="10" y2="55" stroke="#2a2010" stroke-width="1"/>
+          <text x="155" y="66" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">DISTANCE ALONG FIBER →</text>
+          <text x="5" y="33" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" transform="rotate(-90,5,33)">SIGNAL</text>
+          <!-- normal signal decay line -->
+          <path id="s4-normal" d="M10,15 L200,35" stroke="#4eff9a" stroke-width="2" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <!-- tap anomaly spike -->
+          <path id="s4-spike" d="M200,35 L210,20 L220,45" stroke="#e85050" stroke-width="2" fill="none" stroke-dasharray="100" stroke-dashoffset="100"/>
+          <!-- post tap -->
+          <path id="s4-post" d="M220,45 L295,58" stroke="#4eff9a" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200" opacity="0.4"/>
+          <!-- labels -->
+          <text id="s4-lbl1" x="105" y="22" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">NORMAL DECAY</text>
+          <text id="s4-lbl2" x="213" y="14" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">TAP!</text>
+          <text id="s4-lbl3" x="213" y="8" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">ANOMALY</text>
+          <!-- OTDR box -->
+          <rect x="0" y="5" width="18" height="20" rx="2" fill="#0a1a0a" stroke="#e8a020" stroke-width="1"/>
+          <text x="9" y="12" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3">OT</text>
+          <text x="9" y="19" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3">DR</text>
+        </svg>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text"><span class="hi">Copper wire</span> can be tapped with a simple inductive clip — no cutting, no signal interruption. Takes 10 seconds and costs $20. Passive, silent.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text"><span class="am">Fiber optic</span> must be physically bent or cut to tap. Bending causes measurable light loss. The signal is a beam — not an electrical field — so it can't be picked up inductively.</div>
+      </div>
+      <div class="step-block am" id="s4-s3">
+        <div class="step-num am">03</div>
+        <div class="step-text"><span class="am">OTDR</span> sends a laser pulse down the fiber and times the reflections. Taps create anomalies in the reflection signature — detectable within centimeters. Run monthly.</div>
+      </div>
+      <div class="step-block am" id="s4-s4">
+        <div class="step-num am">04</div>
+        <div class="step-text">Set a <span class="am">baseline OTDR trace</span> on day-1 of installation. Any future deviation alerts your NOC. NSA-grade taps are still detectable — optical loss can't be hidden.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">FIBER ADVANTAGE</div>
+    <div class="ih am">Light leaks are measurable. Copper leaks are invisible.</div>
+    <div class="il" style="font-size:7px">OTDR is the closest thing to a Layer 1 IDS. Baseline on install, schedule monthly scans, alert on any deviation &gt;0.1 dB.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">$20</div><div class="sl">copper tap<br>cost</div></div>
+    <div class="sc"><div class="sv am">0.1dB</div><div class="sl">OTDR detection<br>threshold</div></div>
+    <div class="sc"><div class="sv">cm</div><div class="sl">precision of<br>anomaly location</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 5: LAYERED SHIELD SUMMARY ════════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title">LAYER 1 DEFENSE STACK</div>
+    <div class="hdr-sub">YOUR PHYSICAL SECURITY SHIELD</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDENED</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#555;letter-spacing:2px;opacity:0;transition:opacity .4s">BUILD YOUR SHIELD — LAYER BY LAYER</div>
+
+      <!-- Shield layers building from bottom -->
+      <div class="shield-layer" id="sl1" style="border-color:#e85050;background:#0f0606;margin-top:4px">
+        <div style="font-size:18px;width:30px;text-align:center;flex-shrink:0">🔒</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#ff8080;margin-bottom:4px">LAYER 0 — PHYSICAL LOCKS</div>
+          <div style="font-size:7px;color:#888;line-height:1.7">Mantrap · Badge+PIN · CCTV · Tamper seals · Rack locks</div>
+        </div>
+        <div style="font-size:7px;color:#e85050;flex-shrink:0;text-align:right;line-height:1.6">COST<br>LOW</div>
+      </div>
+
+      <div class="shield-layer" id="sl2" style="border-color:#e8a020;background:#0f0a00">
+        <div style="font-size:18px;width:30px;text-align:center;flex-shrink:0">🔌</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#f0b840;margin-bottom:4px">LAYER 1 — PORT LOCKDOWN</div>
+          <div style="font-size:7px;color:#888;line-height:1.7">Shutdown unused ports · Port security max 1 MAC · 802.1X auth</div>
+        </div>
+        <div style="font-size:7px;color:#e8a020;flex-shrink:0;text-align:right;line-height:1.6">COST<br>ZERO</div>
+      </div>
+
+      <div class="shield-layer" id="sl3" style="border-color:#4ec9e1;background:#060a10">
+        <div style="font-size:18px;width:30px;text-align:center;flex-shrink:0">💡</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#6ee0f0;margin-bottom:4px">LAYER 2 — FIBER RUNS</div>
+          <div style="font-size:7px;color:#888;line-height:1.7">Replace copper with fiber · Armored conduits · No wireless in secure zones</div>
+        </div>
+        <div style="font-size:7px;color:#4ec9e1;flex-shrink:0;text-align:right;line-height:1.6">COST<br>MED</div>
+      </div>
+
+      <div class="shield-layer" id="sl4" style="border-color:#e8a020;background:#0f0a00">
+        <div style="font-size:18px;width:30px;text-align:center;flex-shrink:0">📡</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#f0b840;margin-bottom:4px">LAYER 3 — OTDR MONITORING</div>
+          <div style="font-size:7px;color:#888;line-height:1.7">Baseline trace on install · Monthly scans · Alert on 0.1dB deviation</div>
+        </div>
+        <div style="font-size:7px;color:#e8a020;flex-shrink:0;text-align:right;line-height:1.6">COST<br>LOW</div>
+      </div>
+
+      <div class="shield-layer" id="sl5" style="border-color:#4eff9a;background:#060f06">
+        <div style="font-size:18px;width:30px;text-align:center;flex-shrink:0">🛡</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">LAYER 4 — 802.1X + NAC</div>
+          <div style="font-size:7px;color:#888;line-height:1.7">Certificate-based port auth · Network Access Control · Quarantine VLANs</div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;flex-shrink:0;text-align:right;line-height:1.6">COST<br>MED</div>
+      </div>
+
+      <!-- final hardened badge -->
+      <div id="s5-badge" style="border:2px solid #4eff9a;border-radius:3px;padding:12px;text-align:center;opacity:0;transition:opacity .5s;background:#060f06">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:2px;margin-bottom:6px">RESULT</div>
+        <div style="font-size:10px;color:#fff;line-height:1.9;margin-bottom:6px">LAYER 1 HARDENED</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">An attacker with physical access now faces:<br>locked room → dead port → fiber signal → OTDR alert → 802.1X block<br><span style="color:#4eff9a">5 independent controls. Each buys time.</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">DEFENSE-IN-DEPTH</div>
+    <div class="ih">No single control is enough. Stack them.</div>
+    <div class="il" style="font-size:7px">Each layer above assumes the previous one failed. That's the point. An attacker who bypasses locks still hits a dead port. Bypasses the port — hits OTDR. This is how real security works.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">5</div><div class="sl">independent<br>controls</div></div>
+    <div class="sc"><div class="sv gn">2</div><div class="sl">zero-cost<br>controls</div></div>
+    <div class="sc"><div class="sv cy">∞</div><div class="sl">time bought<br>per layer</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    document.getElementById('s1-hero').style.opacity='0';
+    document.getElementById('s1-gap').style.opacity='0';
+    document.getElementById('s1-controls').style.opacity='0';
+    document.getElementById('s1-cta').style.opacity='0';
+    document.getElementById('s1-bar1').style.width='0%';
+    document.getElementById('s1-bar2').style.width='0%';
+    document.getElementById('s1-bar3').style.width='0%';
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    ['s2-s1','s2-s2','s2-s3','s2-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    document.getElementById('s2-def').classList.remove('visible');
+    document.getElementById('s2-def').style.opacity='0';
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    document.getElementById('s3-term').classList.remove('visible');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    document.getElementById('s3-def').style.opacity='0';
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    document.getElementById('s4-otdr').style.opacity='0';
+    ['s4-s1','s4-s2','s4-s3','s4-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    // reset OTDR paths
+    ['s4-normal','s4-spike','s4-post'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){
+        const len=el.getTotalLength?el.getTotalLength():400;
+        el.style.transition='none';
+        el.style.strokeDashoffset=el.getAttribute('stroke-dasharray');
+      }
+    });
+    ['s4-lbl1','s4-lbl2','s4-lbl3'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.setAttribute('opacity','0');
+    });
+  }
+  if(n===5){
+    document.getElementById('s5-title').style.opacity='0';
+    ['sl1','sl2','sl3','sl4','sl5'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    document.getElementById('s5-badge').style.opacity='0';
+  }
+}
+
+function animateOTDR(){
+  const normal=document.getElementById('s4-normal');
+  const spike=document.getElementById('s4-spike');
+  const post=document.getElementById('s4-post');
+  if(normal){normal.style.transition='stroke-dashoffset 1.4s ease-out';normal.style.strokeDashoffset='0';}
+  delay(()=>{
+    document.getElementById('s4-lbl1').setAttribute('opacity','1');
+  },1200);
+  delay(()=>{
+    if(spike){spike.style.transition='stroke-dashoffset 0.5s ease-out';spike.style.strokeDashoffset='0';}
+    document.getElementById('s4-lbl2').setAttribute('opacity','1');
+    document.getElementById('s4-lbl3').setAttribute('opacity','1');
+  },1500);
+  delay(()=>{
+    if(post){post.style.transition='stroke-dashoffset 0.8s ease-out';post.style.strokeDashoffset='0';}
+  },2100);
+}
+
+function playScene(n){
+  clearTimers();
+  resetScene(n);
+
+  if(n===1){
+    delay(()=>{ document.getElementById('s1-hero').style.opacity='1'; },200);
+    delay(()=>{
+      document.getElementById('s1-gap').style.opacity='1';
+      delay(()=>{ document.getElementById('s1-bar1').style.width='78%'; },50);
+      delay(()=>{ document.getElementById('s1-bar2').style.width='18%'; },250);
+      delay(()=>{ document.getElementById('s1-bar3').style.width='4%'; },450);
+    },800);
+    delay(()=>{ document.getElementById('s1-controls').style.opacity='1'; },1800);
+    delay(()=>{ document.getElementById('s1-cta').style.opacity='1'; },2400);
+  }
+
+  if(n===2){
+    delay(()=>{ document.getElementById('s2-hero').classList.add('visible'); },200);
+    delay(()=>{ document.getElementById('s2-s1').classList.add('visible'); },600);
+    delay(()=>{ document.getElementById('s2-s2').classList.add('visible'); },1100);
+    delay(()=>{ document.getElementById('s2-s3').classList.add('visible'); },1600);
+    delay(()=>{ document.getElementById('s2-s4').classList.add('visible'); },2100);
+    delay(()=>{
+      document.getElementById('s2-def').style.opacity='1';
+    },2700);
+  }
+
+  if(n===3){
+    delay(()=>{ document.getElementById('s3-hero').classList.add('visible'); },200);
+    delay(()=>{ document.getElementById('s3-term').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('s3-s1').classList.add('visible'); },500);
+    delay(()=>{ document.getElementById('s3-s2').classList.add('visible'); },1100);
+    delay(()=>{ document.getElementById('s3-s3').classList.add('visible'); },1700);
+    delay(()=>{ document.getElementById('s3-def').style.opacity='1'; },2300);
+  }
+
+  if(n===4){
+    delay(()=>{ document.getElementById('s4-hero').classList.add('visible'); },200);
+    delay(()=>{ document.getElementById('s4-s1').classList.add('visible'); },500);
+    delay(()=>{ document.getElementById('s4-s2').classList.add('visible'); },1000);
+    delay(()=>{
+      document.getElementById('s4-otdr').style.opacity='1';
+      delay(()=>{ animateOTDR(); },300);
+    },1400);
+    delay(()=>{ document.getElementById('s4-s3').classList.add('visible'); },2000);
+    delay(()=>{ document.getElementById('s4-s4').classList.add('visible'); },2600);
+  }
+
+  if(n===5){
+    delay(()=>{ document.getElementById('s5-title').style.opacity='1'; },200);
+    delay(()=>{ document.getElementById('sl1').classList.add('visible'); },500);
+    delay(()=>{ document.getElementById('sl2').classList.add('visible'); },900);
+    delay(()=>{ document.getElementById('sl3').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('sl4').classList.add('visible'); },1700);
+    delay(()=>{ document.getElementById('sl5').classList.add('visible'); },2100);
+    delay(()=>{ document.getElementById('s5-badge').style.opacity='1'; },2700);
+  }
+}
+
+window.addEventListener('load',()=>{ playScene(1); });
+</script>
+</body>
+</html>

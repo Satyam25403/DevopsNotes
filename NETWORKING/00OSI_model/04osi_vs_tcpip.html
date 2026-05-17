@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>OSI vs TCP/IP Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* generic fade */
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── OSI block (left col) ── */
+.osi-block{
+  border-radius:2px;padding:6px 8px;
+  opacity:0;transition:opacity .35s,transform .35s;
+  transform:translateX(-8px);
+}
+.osi-block.vis{opacity:1;transform:translateX(0)}
+.osi-num{font-size:6px;color:#555;line-height:1;margin-bottom:2px}
+.osi-name{font-size:8px;line-height:1.3}
+.osi-sub{font-size:6px;color:#aaa;line-height:1.5;margin-top:2px}
+
+/* ── TCP/IP block (right col) ── */
+.tcp-block{
+  border-radius:2px;padding:8px 9px;
+  opacity:0;transition:opacity .4s,transform .4s;
+  transform:translateX(8px);
+  display:flex;flex-direction:column;justify-content:center;
+}
+.tcp-block.vis{opacity:1;transform:translateX(0)}
+.tcp-name{font-size:9px;line-height:1.4;margin-bottom:3px}
+.tcp-sub{font-size:6.5px;color:#aaa;line-height:1.6}
+.tcp-protos{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.tcp-proto{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid currentColor}
+
+/* ── mapping arrow ── */
+.map-arrow{
+  width:0;height:2px;border-radius:1px;
+  transition:width .45s ease-out;
+  align-self:center;flex-shrink:0;
+}
+
+/* ── side by side layout wrapper ── */
+.compare-grid{
+  display:grid;
+  grid-template-columns:1fr 18px 1fr;
+  gap:3px 0;
+  width:100%;
+}
+.cg-left{grid-column:1}
+.cg-mid{grid-column:2;display:flex;align-items:center;justify-content:center}
+.cg-right{grid-column:3}
+
+/* layer color tokens */
+.c-app   {border:1px solid #e8a020;background:#1e1408}.c-app   .osi-name,.c-app   .tcp-name{color:#e8a020}
+.c-pre   {border:1px solid #d47020;background:#1c1308}.c-pre   .osi-name{color:#d47020}
+.c-ses   {border:1px solid #c06820;background:#1a1208}.c-ses   .osi-name{color:#c06820}
+.c-trn   {border:1px solid #7a9e30;background:#111808}.c-trn   .osi-name,.c-trn   .tcp-name{color:#7a9e30}
+.c-net   {border:1px solid #40b870;background:#0d1a12}.c-net   .osi-name,.c-net   .tcp-name{color:#40b870}
+.c-dl    {border:1px solid #30a890;background:#0c1b18}.c-dl    .osi-name{color:#30a890}
+.c-phy   {border:1px solid #4ec9e1;background:#0d1a2e}.c-phy   .osi-name{color:#4ec9e1}
+.c-na    {border:1px solid #4ec9e1;background:#0d1428}.c-na    .tcp-name{color:#4ec9e1}
+.c-tcpapp{border:2px solid #e8a020;background:#1e1408}
+.c-tcptrn{border:2px solid #7a9e30;background:#111808}
+.c-tcpnet{border:2px solid #40b870;background:#0d1a12}
+.c-tcpna {border:2px solid #4ec9e1;background:#0d1428}
+
+/* bracket visual for merged layers */
+.bracket{
+  width:10px;align-self:stretch;
+  border-top:2px solid;border-right:2px solid;border-bottom:2px solid;
+  border-radius:0 3px 3px 0;
+  opacity:0;transition:opacity .4s;
+  margin-left:2px;
+}
+.bracket.vis{opacity:1}
+
+/* real-world mapping rows (scene 4-5) */
+.rw-row{
+  display:flex;align-items:stretch;gap:6px;padding:8px 9px;
+  border-radius:2px;margin-bottom:4px;
+  opacity:0;transition:opacity .4s;
+}
+.rw-row.vis{opacity:1}
+.rw-icon{font-size:22px;flex-shrink:0;width:32px;display:flex;align-items:center;justify-content:center}
+.rw-body{flex:1;display:flex;flex-direction:column;gap:3px}
+.rw-title{font-size:8px;line-height:1.4}
+.rw-desc{font-size:6.5px;color:#aaa;line-height:1.7}
+.rw-layers{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.rw-tag{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid currentColor}
+
+/* history timeline */
+.tl-item{
+  display:flex;gap:10px;align-items:flex-start;padding:7px 9px;
+  border-radius:2px;margin-bottom:4px;
+  opacity:0;transform:translateY(6px);
+  transition:opacity .38s,transform .38s;
+}
+.tl-item.vis{opacity:1;transform:translateY(0)}
+.tl-year{font-size:8px;flex-shrink:0;width:38px;line-height:1.4}
+.tl-desc{font-size:6.5px;color:#aaa;line-height:1.7;flex:1}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">OSI vs TCP/IP</div>
+    <div class="hdr-sub">THE TWO MODELS ENGINEERS ACTUALLY USE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">INTRO</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Hero -->
+      <div style="border:2px solid #e8a020;border-radius:2px;background:#1e1408;text-align:center;padding:15px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#888;letter-spacing:2px;margin-bottom:10px">THE REAL QUESTION</div>
+        <div style="font-size:10px;color:#e8a020;line-height:1.9;margin-bottom:9px">THE INTERNET<br>RUNS ON 4 LAYERS<br>NOT 7</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">OSI is the teaching model.<br>TCP/IP is what your computer<br>actually uses right now.</div>
+      </div>
+
+      <!-- Two-column mini preview -->
+      <div style="display:flex;gap:6px;opacity:0;transition:opacity .5s" id="s1cols">
+        <!-- OSI -->
+        <div style="flex:1;border:1px solid #444;border-radius:2px;overflow:hidden">
+          <div style="background:#2a1f3d;padding:6px 8px;font-size:8px;color:#a080c0;text-align:center">OSI MODEL</div>
+          <div style="padding:5px 7px;display:flex;flex-direction:column;gap:2px">
+            <div style="font-size:6px;padding:3px 5px;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px">7 APPLICATION</div>
+            <div style="font-size:6px;padding:3px 5px;background:#1c1308;border:1px solid #d47020;color:#d47020;border-radius:2px">6 PRESENTATION</div>
+            <div style="font-size:6px;padding:3px 5px;background:#1a1208;border:1px solid #c06820;color:#c06820;border-radius:2px">5 SESSION</div>
+            <div style="font-size:6px;padding:3px 5px;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px">4 TRANSPORT</div>
+            <div style="font-size:6px;padding:3px 5px;background:#0d1a12;border:1px solid #40b870;color:#40b870;border-radius:2px">3 NETWORK</div>
+            <div style="font-size:6px;padding:3px 5px;background:#0c1b18;border:1px solid #30a890;color:#30a890;border-radius:2px">2 DATA LINK</div>
+            <div style="font-size:6px;padding:3px 5px;background:#0d1a2e;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px">1 PHYSICAL</div>
+          </div>
+        </div>
+        <!-- Arrow -->
+        <div style="display:flex;align-items:center;font-size:14px;color:#4eff9a;flex-shrink:0">→</div>
+        <!-- TCP/IP -->
+        <div style="flex:1;border:1px solid #444;border-radius:2px;overflow:hidden">
+          <div style="background:#0d2035;padding:6px 8px;font-size:8px;color:#4ec9e1;text-align:center">TCP/IP MODEL</div>
+          <div style="padding:5px 7px;display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:6px;padding:7px 5px;background:#1e1408;border:2px solid #e8a020;color:#e8a020;border-radius:2px;text-align:center">APPLICATION</div>
+            <div style="font-size:6px;padding:5px 5px;background:#111808;border:2px solid #7a9e30;color:#7a9e30;border-radius:2px;text-align:center">TRANSPORT</div>
+            <div style="font-size:6px;padding:5px 5px;background:#0d1a12;border:2px solid #40b870;color:#40b870;border-radius:2px;text-align:center">INTERNET</div>
+            <div style="font-size:6px;padding:7px 5px;background:#0d1428;border:2px solid #4ec9e1;color:#4ec9e1;border-radius:2px;text-align:center">NETWORK ACCESS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Key point -->
+      <div style="background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:9px 10px;opacity:0;transition:opacity .5s" id="s1key">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">THE MAPPING IN ONE LINE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">OSI L5+L6+L7 → TCP Application<br>OSI L4 → TCP Transport<br>OSI L3 → TCP Internet<br>OSI L1+L2 → TCP Network Access</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">TWO MODELS, ONE INTERNET</div>
+    <div class="ih am">OSI = theory. TCP/IP = reality.</div>
+    <div class="il">Real tools use TCP/IP layer names.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">7</div><div class="sl">OSI<br>LAYERS</div></div>
+    <div class="sc"><div class="sv gn">4</div><div class="sl">TCP/IP<br>LAYERS</div></div>
+    <div class="sc"><div class="sv" style="color:#a080c0">1974</div><div class="sl">TCP/IP<br>CREATED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: SIDE-BY-SIDE MAPPING ══════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OSI vs TCP/IP</div>
+    <div class="hdr-sub">ANIMATED LAYER MAPPING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">LAYER MAP</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">MAPPING</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- Column headers -->
+      <div style="display:grid;grid-template-columns:1fr 14px 10px 1fr;gap:0;opacity:0;transition:opacity .3s" id="s2hdr">
+        <div style="font-size:7px;color:#a080c0;text-align:center;padding:4px 0;border-bottom:1px solid #2a1f3d">OSI MODEL</div>
+        <div></div><div></div>
+        <div style="font-size:7px;color:#4ec9e1;text-align:center;padding:4px 0;border-bottom:1px solid #2a1f3d">TCP/IP</div>
+      </div>
+
+      <!-- ROW GROUP 1: L7+L6+L5 → Application -->
+      <div style="display:flex;gap:0;align-items:stretch;opacity:0;transition:opacity .4s" id="s2g1">
+        <!-- OSI left stack -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+          <div class="osi-block c-app vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 7</div>
+            <div class="osi-name">APPLICATION</div>
+            <div class="osi-sub">HTTP, DNS, FTP</div>
+          </div>
+          <div class="osi-block c-pre vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 6</div>
+            <div class="osi-name">PRESENTATION</div>
+            <div class="osi-sub">TLS, encoding</div>
+          </div>
+          <div class="osi-block c-ses vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 5</div>
+            <div class="osi-name">SESSION</div>
+            <div class="osi-sub">sessions, sockets</div>
+          </div>
+        </div>
+        <!-- bracket + arrow -->
+        <div style="display:flex;flex-direction:column;align-items:center;width:28px;flex-shrink:0;padding:0 2px">
+          <div class="bracket vis" id="br1" style="border-color:#e8a020;flex:1;opacity:1"></div>
+        </div>
+        <!-- TCP/IP right -->
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="tcp-block c-tcpapp vis" id="tcp1" style="opacity:1;transform:none">
+            <div class="tcp-name">APPLICATION</div>
+            <div class="tcp-sub">Combines L5+L6+L7. Your apps live here.</div>
+            <div class="tcp-protos">
+              <span class="tcp-proto" style="color:#e8a020;border-color:#e8a020">HTTP</span>
+              <span class="tcp-proto" style="color:#e8a020;border-color:#e8a020">SMTP</span>
+              <span class="tcp-proto" style="color:#e8a020;border-color:#e8a020">DNS</span>
+              <span class="tcp-proto" style="color:#e8a020;border-color:#e8a020">SSH</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW GROUP 2: L4 → Transport -->
+      <div style="display:flex;gap:0;align-items:stretch;opacity:0;transition:opacity .4s" id="s2g2">
+        <div style="flex:1">
+          <div class="osi-block c-trn vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 4</div>
+            <div class="osi-name">TRANSPORT</div>
+            <div class="osi-sub">TCP, UDP, ports</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;width:28px;flex-shrink:0;padding:0 2px">
+          <div style="width:14px;height:2px;background:#7a9e30;border-radius:1px;margin:auto"></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="tcp-block c-tcptrn vis" id="tcp2" style="opacity:1;transform:none">
+            <div class="tcp-name">TRANSPORT</div>
+            <div class="tcp-sub">1:1 match. TCP = reliable. UDP = fast.</div>
+            <div class="tcp-protos">
+              <span class="tcp-proto" style="color:#7a9e30;border-color:#7a9e30">TCP</span>
+              <span class="tcp-proto" style="color:#7a9e30;border-color:#7a9e30">UDP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW GROUP 3: L3 → Internet -->
+      <div style="display:flex;gap:0;align-items:stretch;opacity:0;transition:opacity .4s" id="s2g3">
+        <div style="flex:1">
+          <div class="osi-block c-net vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 3</div>
+            <div class="osi-name">NETWORK</div>
+            <div class="osi-sub">IP, routers</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;width:28px;flex-shrink:0;padding:0 2px">
+          <div style="width:14px;height:2px;background:#40b870;border-radius:1px;margin:auto"></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="tcp-block c-tcpnet vis" id="tcp3" style="opacity:1;transform:none">
+            <div class="tcp-name">INTERNET</div>
+            <div class="tcp-sub">Renamed "Internet". Still IP routing.</div>
+            <div class="tcp-protos">
+              <span class="tcp-proto" style="color:#40b870;border-color:#40b870">IPv4</span>
+              <span class="tcp-proto" style="color:#40b870;border-color:#40b870">IPv6</span>
+              <span class="tcp-proto" style="color:#40b870;border-color:#40b870">ICMP</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROW GROUP 4: L1+L2 → Network Access -->
+      <div style="display:flex;gap:0;align-items:stretch;opacity:0;transition:opacity .4s" id="s2g4">
+        <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+          <div class="osi-block c-dl vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 2</div>
+            <div class="osi-name">DATA LINK</div>
+            <div class="osi-sub">Ethernet, MAC</div>
+          </div>
+          <div class="osi-block c-phy vis" style="opacity:1;transform:none">
+            <div class="osi-num">LAYER 1</div>
+            <div class="osi-name">PHYSICAL</div>
+            <div class="osi-sub">cables, signals</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;width:28px;flex-shrink:0;padding:0 2px">
+          <div class="bracket vis" id="br4" style="border-color:#4ec9e1;flex:1;opacity:1"></div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+          <div class="tcp-block c-tcpna vis" id="tcp4" style="opacity:1;transform:none">
+            <div class="tcp-name">NETWORK ACCESS</div>
+            <div class="tcp-sub">Combines L1+L2. Hardware layer.</div>
+            <div class="tcp-protos">
+              <span class="tcp-proto" style="color:#4ec9e1;border-color:#4ec9e1">Ethernet</span>
+              <span class="tcp-proto" style="color:#4ec9e1;border-color:#4ec9e1">Wi-Fi</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Callout -->
+      <div style="background:#071510;border:1px solid #4eff9a;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s2note">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">KEY DIFFERENCE</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">TCP/IP collapses 3 layers into one Application layer and merges Physical+DataLink into Network Access. The middle two (Transport, Internet) stay the same.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">THE MAPPING:</div>
+    <div class="ih">L5+L6+L7 → Application</div>
+    <div class="il">L1+L2 → Network Access. L3, L4 unchanged.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">3→1</div><div class="sl">TOP LAYERS<br>MERGED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">2→1</div><div class="sl">BOT LAYERS<br>MERGED</div></div>
+    <div class="sc"><div class="sv gn">L3 L4</div><div class="sl">UNCHANGED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: WHY TCP/IP WON ══════════════ -->
+<div class="scene" id="s3" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">OSI vs TCP/IP</div>
+    <div class="hdr-sub">WHY TCP/IP WON THE INTERNET</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">HISTORY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">WHY?</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s3intro">THE REAL STORY</div>
+
+      <div class="tl-item" id="t1" style="background:#1e1408;border:1px solid #e8a020">
+        <div class="tl-year" style="color:#e8a020">1974</div>
+        <div class="tl-desc">Vint Cerf & Bob Kahn publish TCP/IP. ARPANET (predecessor to the internet) adopts it immediately and starts running.</div>
+      </div>
+      <div class="tl-item" id="t2" style="background:#1a1208;border:1px solid #c06820">
+        <div class="tl-year" style="color:#c06820">1984</div>
+        <div class="tl-desc">ISO publishes the OSI model — a more thorough, 7-layer academic standard meant to replace TCP/IP. But the internet was already running TCP/IP.</div>
+      </div>
+      <div class="tl-item" id="t3" style="background:#0d1a12;border:1px solid #40b870">
+        <div class="tl-year" style="color:#40b870">1990s</div>
+        <div class="tl-desc">OSI protocols (X.25, CLNS) never gain traction. TCP/IP is already everywhere — impossible to replace. OSI becomes a teaching model only.</div>
+      </div>
+      <div class="tl-item" id="t4" style="background:#0d1a2e;border:1px solid #4ec9e1">
+        <div class="tl-year" style="color:#4ec9e1">TODAY</div>
+        <div class="tl-desc">Everyone uses TCP/IP. Engineers say "Layer 3 security group" or "Layer 7 WAF." OSI is used only for education and debugging conversations.</div>
+      </div>
+
+      <!-- OSI vs TCP/IP use case -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .4s" id="s3usecases">
+        <div style="flex:1;background:#1a0d2e;border:1px solid #a080c0;border-radius:2px;padding:9px">
+          <div style="font-size:8px;color:#a080c0;margin-bottom:5px">📚 OSI</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">Use for: learning, debugging, vendor-neutral discussions, certifications (CompTIA, CCNA).</div>
+        </div>
+        <div style="flex:1;background:#0a1a10;border:1px solid #4eff9a;border-radius:2px;padding:9px">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:5px">🌐 TCP/IP</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">Use for: actual networking, cloud docs, Wireshark, writing firewall rules, everything real.</div>
+        </div>
+      </div>
+
+      <div style="background:#071510;border:1px solid #555;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s3tip">
+        <div style="font-size:7px;color:#aaa;margin-bottom:4px">PRO TIP</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">When an AWS doc says "Layer 4 load balancer" — that IS OSI L4 (Transport). Both models agree at L3 and L4. The ambiguity is only at the top and bottom.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">THE VERDICT:</div>
+    <div class="ih am">TCP/IP ships. OSI teaches.</div>
+    <div class="il">Both say the same thing at L3 and L4.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080c0">OSI</div><div class="sl">TEACHING<br>MODEL</div></div>
+    <div class="sc"><div class="sv gn">TCP/IP</div><div class="sl">REAL<br>INTERNET</div></div>
+    <div class="sc"><div class="sv am">1974</div><div class="sl">TCP/IP<br>FIRST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: CLOUD / FIREWALL MAPPINGS ══════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OSI vs TCP/IP</div>
+    <div class="hdr-sub">REAL TOOLS MAP TO REAL LAYERS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CLOUD</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s4intro">EVERY TOOL LIVES AT A SPECIFIC LAYER</div>
+
+      <div class="rw-row" id="rw1" style="background:#111808;border:1px solid #7a9e30">
+        <div class="rw-icon">🔥</div>
+        <div class="rw-body">
+          <div class="rw-title" style="color:#7a9e30">FIREWALL (STATEFUL)</div>
+          <div class="rw-desc">Inspects TCP/UDP headers. Allows or blocks based on IP + port. Classic "port 22 = allow SSH."</div>
+          <div class="rw-layers">
+            <span class="rw-tag" style="color:#40b870;border-color:#40b870">OSI L3</span>
+            <span class="rw-tag" style="color:#7a9e30;border-color:#7a9e30">OSI L4</span>
+            <span class="rw-tag" style="color:#7a9e30;border-color:#7a9e30">TCP Transport</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rw-row" id="rw2" style="background:#1a0d20;border:1px solid #a080c0">
+        <div class="rw-icon">☁️</div>
+        <div class="rw-body">
+          <div class="rw-title" style="color:#a080c0">AWS SECURITY GROUP</div>
+          <div class="rw-desc">Rules like "allow TCP port 443 from 0.0.0.0/0" — that's L3 (IP range) + L4 (port). Classic cloud L3/L4 control.</div>
+          <div class="rw-layers">
+            <span class="rw-tag" style="color:#40b870;border-color:#40b870">OSI L3</span>
+            <span class="rw-tag" style="color:#7a9e30;border-color:#7a9e30">OSI L4</span>
+            <span class="rw-tag" style="color:#a080c0;border-color:#a080c0">AWS SG</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rw-row" id="rw3" style="background:#1e1408;border:1px solid #e8a020">
+        <div class="rw-icon">🛡️</div>
+        <div class="rw-body">
+          <div class="rw-title" style="color:#e8a020">WAF (WEB APP FIREWALL)</div>
+          <div class="rw-desc">Reads HTTP headers, URLs, cookies, request bodies. Can block SQLi, XSS. Only possible at L7 — must understand HTTP.</div>
+          <div class="rw-layers">
+            <span class="rw-tag" style="color:#e8a020;border-color:#e8a020">OSI L7</span>
+            <span class="rw-tag" style="color:#e8a020;border-color:#e8a020">TCP App</span>
+            <span class="rw-tag" style="color:#e8a020;border-color:#e8a020">AWS WAF</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rw-row" id="rw4" style="background:#0d1a12;border:1px solid #40b870">
+        <div class="rw-icon">⚖️</div>
+        <div class="rw-body">
+          <div class="rw-title" style="color:#40b870">LOAD BALANCER</div>
+          <div class="rw-desc">L4 LB routes by IP+port (faster). L7 LB routes by URL path, cookie, hostname (smarter). AWS NLB = L4. ALB = L7.</div>
+          <div class="rw-layers">
+            <span class="rw-tag" style="color:#40b870;border-color:#40b870">L4 = NLB</span>
+            <span class="rw-tag" style="color:#e8a020;border-color:#e8a020">L7 = ALB</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="rw-row" id="rw5" style="background:#0c1b18;border:1px solid #30a890">
+        <div class="rw-icon">🔌</div>
+        <div class="rw-body">
+          <div class="rw-title" style="color:#30a890">NETWORK SWITCH / NIC</div>
+          <div class="rw-desc">Operates at L2 (MAC addresses). Your home router does L2 + L3. Physical cables and NICs are pure L1.</div>
+          <div class="rw-layers">
+            <span class="rw-tag" style="color:#30a890;border-color:#30a890">OSI L2</span>
+            <span class="rw-tag" style="color:#4ec9e1;border-color:#4ec9e1">OSI L1</span>
+            <span class="rw-tag" style="color:#4ec9e1;border-color:#4ec9e1">TCP Net Access</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">CLOUD SECURITY:</div>
+    <div class="ih">Security Group = L3/L4. WAF = L7.</div>
+    <div class="il">Knowing the layer tells you its power & limits.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">WAF</div><div class="sl">L7 TCP<br>APP</div></div>
+    <div class="sc"><div class="sv" style="color:#40b870">SG</div><div class="sl">L3/L4<br>INTERNET</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">NIC</div><div class="sl">NET<br>ACCESS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: CHEAT SHEET ══════════════ -->
+<div class="scene" id="s5" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">OSI vs TCP/IP</div>
+    <div class="hdr-sub">COMPLETE CHEAT SHEET</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">CHEAT SHEET</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <!-- Full comparison table -->
+      <div style="opacity:0;transition:opacity .4s" id="s5table">
+        <!-- table header -->
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:2px;margin-bottom:3px">
+          <div></div>
+          <div style="font-size:6.5px;color:#a080c0;padding:3px 5px;text-align:center;background:#1a0d2e;border-radius:2px">OSI LAYER</div>
+          <div style="font-size:6.5px;color:#4ec9e1;padding:3px 5px;text-align:center;background:#0d1a2e;border-radius:2px">TCP/IP</div>
+          <div style="font-size:6.5px;color:#4eff9a;padding:3px 5px;text-align:center;background:#071510;border-radius:2px">TOOL / PDU</div>
+        </div>
+        <!-- rows -->
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#e8a020;font-weight:bold">7</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px;line-height:1.4">APPLICATION</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px;line-height:1.4;grid-row:span 3">APPLICATION</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px;line-height:1.4">HTTP/WAF</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#d47020">6</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1c1308;border:1px solid #d47020;color:#d47020;border-radius:2px;line-height:1.4">PRESENTATION</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1c1308;border:1px solid #d47020;color:#d47020;border-radius:2px;line-height:1.4">TLS/SSL</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr;gap:2px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#c06820">5</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1a1208;border:1px solid #c06820;color:#c06820;border-radius:2px;line-height:1.4">SESSION</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#1a1208;border:1px solid #c06820;color:#c06820;border-radius:2px;line-height:1.4">Sockets</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:2px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#7a9e30">4</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px;line-height:1.4">TRANSPORT</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px;line-height:1.4">TRANSPORT</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px;line-height:1.4">TCP/NLB</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:2px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#40b870">3</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1a12;border:1px solid #40b870;color:#40b870;border-radius:2px;line-height:1.4">NETWORK</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1a12;border:1px solid #40b870;color:#40b870;border-radius:2px;line-height:1.4">INTERNET</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1a12;border:1px solid #40b870;color:#40b870;border-radius:2px;line-height:1.4">IP/SG</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#30a890">2</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0c1b18;border:1px solid #30a890;color:#30a890;border-radius:2px;line-height:1.4">DATA LINK</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0c1b18;border:1px solid #30a890;color:#30a890;border-radius:2px;line-height:1.4">Ethernet/Switch</div>
+        </div>
+        <div style="display:grid;grid-template-columns:18px 1fr 1fr 1fr;gap:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:7px;color:#4ec9e1">1</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1a2e;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px;line-height:1.4">PHYSICAL</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1428;border:2px solid #4ec9e1;color:#4ec9e1;border-radius:2px;line-height:1.4">NET ACCESS</div>
+          <div style="font-size:6.5px;padding:5px 5px;background:#0d1a2e;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px;line-height:1.4">Cables/NIC</div>
+        </div>
+      </div>
+
+      <!-- Final callout -->
+      <div style="background:#071510;border:2px solid #4eff9a;border-radius:2px;padding:10px 11px;opacity:0;transition:opacity .4s" id="s5final">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">🎓 THE GOLDEN RULES</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:2.1">
+          📚 Exam says "L7 WAF" → both models agree.<br>
+          ☁️ AWS "L4 security group" → TCP Transport.<br>
+          🔬 Wireshark uses OSI names for each frame.<br>
+          🌐 Your OS uses TCP/IP — not OSI — always.<br>
+          💡 L3 + L4 are the same in BOTH models.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">REMEMBER:</div>
+    <div class="ih">L3 & L4 are identical in both models.</div>
+    <div class="il">Top 3 and bottom 2 get collapsed in TCP/IP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">7→4</div><div class="sl">LAYERS<br>COLLAPSED</div></div>
+    <div class="sc"><div class="sv gn">L3 L4</div><div class="sl">SAME IN<br>BOTH</div></div>
+    <div class="sc"><div class="sv" style="color:#a080c0">OSI</div><div class="sl">STILL USED<br>TO TALK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){
+  af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1cols','s1key'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.opacity='0';
+    });
+  }
+  if(n===2){
+    ['s2hdr','s2g1','s2g2','s2g3','s2g4','s2note'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.opacity='0';
+    });
+  }
+  if(n===3){
+    ['s3intro','t1','t2','t3','t4','s3usecases','s3tip'].forEach(id=>{
+      const e=document.getElementById(id);
+      if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateY(6px)';}
+    });
+  }
+  if(n===4){
+    ['s4intro','rw1','rw2','rw3','rw4','rw5'].forEach(id=>{
+      const e=document.getElementById(id);
+      if(e){e.style.opacity='0';e.classList.remove('vis');}
+    });
+  }
+  if(n===5){
+    ['s5table','s5final'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.opacity='0';
+    });
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    show('s1hero',150);
+    af(700,()=>{const e=document.getElementById('s1cols');if(e)e.style.opacity='1';});
+    af(1400,()=>{const e=document.getElementById('s1key');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    show('s2hdr',100);
+    af(300,()=>{const e=document.getElementById('s2g1');if(e)e.style.opacity='1';});
+    af(750,()=>{const e=document.getElementById('s2g2');if(e)e.style.opacity='1';});
+    af(1100,()=>{const e=document.getElementById('s2g3');if(e)e.style.opacity='1';});
+    af(1450,()=>{const e=document.getElementById('s2g4');if(e)e.style.opacity='1';});
+    af(2000,()=>{const e=document.getElementById('s2note');if(e)e.style.opacity='1';});
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    [['t1',300],['t2',750],['t3',1200],['t4',1650],['s3usecases',2200],['s3tip',2800]].forEach(([id,ms])=>{
+      af(ms,()=>{
+        const e=document.getElementById(id);
+        if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+      });
+    });
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    [['rw1',280],['rw2',680],['rw3',1080],['rw4',1480],['rw5',1880]].forEach(([id,ms])=>{
+      af(ms,()=>{
+        const e=document.getElementById(id);
+        if(e){e.style.opacity='1';e.classList.add('vis');}
+      });
+    });
+  }
+
+  if(n===5){
+    show('s5table',200);
+    af(900,()=>{const e=document.getElementById('s5final');if(e)e.style.opacity='1';});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

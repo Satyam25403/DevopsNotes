@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>Layer 1 — The Physical Layer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Oscilloscope ── */
+.scope-wrap{
+  background:#050e0a;border:2px solid #1a3028;border-radius:3px;
+  padding:8px;position:relative;overflow:hidden;
+}
+.scope-grid{
+  position:absolute;inset:8px;
+  background-image:
+    linear-gradient(rgba(30,80,50,.25) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(30,80,50,.25) 1px, transparent 1px);
+  background-size:28px 28px;
+  pointer-events:none;
+}
+.scope-svg{width:100%;display:block;overflow:visible}
+.scope-label{font-size:6px;color:#1a6040;letter-spacing:1px;text-align:right;padding:2px 0 0;font-family:'Press Start 2P',monospace}
+
+/* bit pulse squares */
+.bit-row{display:flex;gap:3px;justify-content:center}
+.bit-sq{
+  width:30px;height:30px;border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;border:2px solid transparent;
+  transition:all .25s;
+}
+.bit-sq.hi{background:#0d2e1a;border-color:#4eff9a;color:#4eff9a}
+.bit-sq.lo{background:#1e0d0d;border-color:#e85050;color:#e85050}
+.bit-sq.idle{background:#130d1e;border-color:#2a1f3d;color:#333}
+
+/* device card */
+.dev-card{
+  display:flex;align-items:center;gap:9px;padding:8px 9px;
+  border-radius:2px;
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .35s,transform .35s;
+}
+.dev-card.vis{opacity:1;transform:translateX(0)}
+.dev-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.dev-body{flex:1}
+.dev-name{font-size:8px;line-height:1.4;margin-bottom:3px}
+.dev-desc{font-size:6.5px;color:#aaa;line-height:1.7}
+.dev-tag{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid currentColor;margin-top:4px;display:inline-block}
+
+/* duplex mode cards */
+.dup-card{
+  border-radius:2px;padding:9px 10px;
+  opacity:0;transition:opacity .38s,transform .38s;
+  transform:translateY(6px);
+}
+.dup-card.vis{opacity:1;transform:translateY(0)}
+.dup-title{font-size:8px;margin-bottom:5px;line-height:1.4}
+.dup-vis{display:flex;align-items:center;gap:6px;margin:6px 0}
+.dup-node{font-size:7px;padding:5px 7px;border-radius:2px;text-align:center;flex-shrink:0;line-height:1.4}
+.dup-arrow{flex:1;display:flex;flex-direction:column;gap:3px;align-items:center}
+.dup-beam{height:3px;border-radius:1px;width:0;transition:width .6s ease-out}
+.dup-desc{font-size:6.5px;color:#aaa;line-height:1.7}
+
+/* standards row */
+.std-row{
+  display:flex;gap:6px;
+  opacity:0;transition:opacity .4s;
+}
+.std-row.vis{opacity:1}
+.std-card{flex:1;border-radius:2px;padding:8px 9px;text-align:center}
+.std-num{font-size:7.5px;margin-bottom:4px;line-height:1.4}
+.std-name{font-size:6.5px;color:#aaa;line-height:1.6;margin-bottom:4px}
+.std-speeds{font-size:6px;line-height:1.8}
+
+/* signal type cards */
+.sig-card{
+  flex:1;border-radius:2px;padding:9px 8px;text-align:center;
+  opacity:0;transition:opacity .4s,transform .4s;
+  transform:scale(.92);
+}
+.sig-card.vis{opacity:1;transform:scale(1)}
+.sig-icon{font-size:24px;margin-bottom:5px}
+.sig-name{font-size:8px;margin-bottom:4px;line-height:1.4}
+.sig-desc{font-size:6px;color:#aaa;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#051209">
+  <div class="hdr" style="background:#051209">
+    <div class="hdr-title">PHYSICAL LAYER</div>
+    <div class="hdr-sub">LAYER 1 — THE BOTTOM OF THE STACK</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">INTRO</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LAYER 1</span>
+  </div>
+  <div class="anim" style="background:#051209">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Hook card -->
+      <div style="border:2px solid #4ec9e1;border-radius:2px;background:#071510;text-align:center;padding:15px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:10px">THE KEY INSIGHT</div>
+        <div style="font-size:24px;margin-bottom:10px">⚡</div>
+        <div style="font-size:10px;color:#4ec9e1;line-height:1.9;margin-bottom:9px">THIS LAYER HAS<br>NO IDEA WHAT<br>YOUR DATA MEANS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">It just pushes 0s and 1s across<br>a wire. Dumb, fast, and essential.<br>If you can touch it — it's Layer 1.</div>
+      </div>
+
+      <!-- Oscilloscope preview -->
+      <div class="scope-wrap" style="opacity:0;transition:opacity .5s" id="s1scope">
+        <div class="scope-grid"></div>
+        <div style="font-size:7px;color:#1a6040;margin-bottom:5px;letter-spacing:1px">VOLTAGE ON WIRE = BITS</div>
+        <svg class="scope-svg" height="64" viewBox="0 0 340 64" id="s1svg">
+          <line x1="0" y1="32" x2="340" y2="32" stroke="#1a3028" stroke-width="1"/>
+          <polyline id="s1wave" points="" fill="none" stroke="#4eff9a" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="scope-label">CHANNEL A — DIGITAL SIGNAL</div>
+      </div>
+
+      <!-- Bit stream display -->
+      <div style="opacity:0;transition:opacity .5s" id="s1bits">
+        <div style="font-size:7px;color:#555;margin-bottom:6px;letter-spacing:1px;text-align:center">RAW BIT STREAM</div>
+        <div class="bit-row" id="s1bitrow">
+          <div class="bit-sq idle" id="sq0">?</div>
+          <div class="bit-sq idle" id="sq1">?</div>
+          <div class="bit-sq idle" id="sq2">?</div>
+          <div class="bit-sq idle" id="sq3">?</div>
+          <div class="bit-sq idle" id="sq4">?</div>
+          <div class="bit-sq idle" id="sq5">?</div>
+          <div class="bit-sq idle" id="sq6">?</div>
+          <div class="bit-sq idle" id="sq7">?</div>
+        </div>
+        <div style="font-size:6.5px;color:#555;text-align:center;margin-top:5px">L1 sees ONLY this. No headers. No meaning.</div>
+      </div>
+
+      <!-- Stack position -->
+      <div style="background:#071510;border:1px solid #2a1f3d;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s1pos">
+        <div style="font-size:7px;color:#555;margin-bottom:5px;letter-spacing:1px">POSITION IN THE OSI STACK</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:6px;padding:3px 7px;background:#1e1408;border:1px solid #e8a020;color:#e8a02055;border-radius:2px">APPLICATION L7–L5</div>
+          <div style="font-size:6px;padding:3px 7px;background:#111808;border:1px solid #7a9e30;color:#7a9e3055;border-radius:2px">TRANSPORT L4</div>
+          <div style="font-size:6px;padding:3px 7px;background:#0d1a12;border:1px solid #40b870;color:#40b87055;border-radius:2px">NETWORK L3</div>
+          <div style="font-size:6px;padding:3px 7px;background:#0c1b18;border:1px solid #30a890;color:#30a89055;border-radius:2px">DATA LINK L2</div>
+          <div style="font-size:7px;padding:5px 7px;background:#0d2035;border:2px solid #4ec9e1;color:#4ec9e1;border-radius:2px;font-weight:bold">▶ PHYSICAL L1 ← YOU ARE HERE</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">LAYER 1 — PHYSICAL:</div>
+    <div class="ih cy">Bits in, bits out. Nothing more.</div>
+    <div class="il">Voltage, light pulses, or radio waves.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">L1</div><div class="sl">OSI<br>LAYER</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">0101</div><div class="sl">RAW<br>BITS</div></div>
+    <div class="sc"><div class="sv" style="font-size:18px">⚡</div><div class="sl">VOLTAGE<br>= BIT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: OSCILLOSCOPE — BITS AS SIGNALS ══════════════ -->
+<div class="scene" id="s2" style="background:#051209">
+  <div class="hdr" style="background:#051209">
+    <div class="hdr-title">PHYSICAL LAYER</div>
+    <div class="hdr-sub">HOW BITS TRAVEL — SIGNAL TYPES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SIGNALS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BITS ON WIRE</span>
+  </div>
+  <div class="anim" style="background:#051209">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Oscilloscope — full interactive -->
+      <div class="scope-wrap panel vis" id="s2scope" style="opacity:1;padding:10px">
+        <div class="scope-grid"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <div style="font-size:7px;color:#1a9060;letter-spacing:1px">OSCILLOSCOPE</div>
+          <div style="font-size:6px;color:#1a6040">5V/DIV · 1μs/DIV</div>
+        </div>
+        <!-- voltage labels -->
+        <div style="position:relative">
+          <div style="position:absolute;left:-2px;top:0;font-size:5.5px;color:#1a6040;line-height:1">+5V</div>
+          <div style="position:absolute;left:-2px;top:47%;font-size:5.5px;color:#1a6040;line-height:1">0V</div>
+          <svg class="scope-svg" height="80" viewBox="0 0 340 80" id="s2svg" style="margin-left:10px;width:calc(100% - 10px)">
+            <line x1="0" y1="40" x2="340" y2="40" stroke="#1a3028" stroke-width="1" stroke-dasharray="4,4"/>
+            <line x1="0" y1="10" x2="340" y2="10" stroke="#0d2018" stroke-width="1"/>
+            <polyline id="s2wave" points="" fill="none" stroke="#4eff9a" stroke-width="2.5" stroke-linecap="square" stroke-linejoin="miter"/>
+            <!-- bit labels will be drawn via JS -->
+            <g id="s2labels"></g>
+          </svg>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px">
+          <div class="scope-label" style="text-align:left;color:#1a7048">+5V = BIT 1 (HIGH)</div>
+          <div class="scope-label" style="color:#555">0V = BIT 0 (LOW)</div>
+        </div>
+      </div>
+
+      <!-- bit squares synced -->
+      <div class="panel vis" id="s2bitpanel" style="opacity:1;background:#071510;border:1px solid #1a3028;padding:8px 9px">
+        <div style="font-size:7px;color:#555;margin-bottom:6px;letter-spacing:1px;text-align:center">DECODED BITS</div>
+        <div class="bit-row" id="s2bitrow" style="justify-content:center">
+          <div class="bit-sq idle" id="b0">·</div>
+          <div class="bit-sq idle" id="b1">·</div>
+          <div class="bit-sq idle" id="b2">·</div>
+          <div class="bit-sq idle" id="b3">·</div>
+          <div class="bit-sq idle" id="b4">·</div>
+          <div class="bit-sq idle" id="b5">·</div>
+          <div class="bit-sq idle" id="b6">·</div>
+          <div class="bit-sq idle" id="b7">·</div>
+        </div>
+        <div style="font-size:6.5px;color:#555;text-align:center;margin-top:5px" id="s2decoded">waiting for signal…</div>
+      </div>
+
+      <!-- encoding explainer -->
+      <div class="panel" id="s2enc" style="border:1px solid #333;background:#071510">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">LINE ENCODING</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">Not all bits are sent as simple high/low voltage. Real cables use encoding schemes like <span style="color:#4eff9a">NRZ, Manchester, or 4B5B</span> to keep the signal clock-sync'd and reduce DC offset. But the principle is the same: voltage change = bit.</div>
+      </div>
+
+      <!-- three media types -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .4s" id="s2media">
+        <div class="sig-card vis" style="background:#0d1a2e;border:1px solid #4ec9e1;opacity:1;transform:scale(1)">
+          <div class="sig-icon">🔌</div>
+          <div class="sig-name" style="color:#4ec9e1">COPPER</div>
+          <div class="sig-desc">Voltage changes in copper wire. Up to 10 Gbps. Cheap, common, EMI-sensitive.</div>
+        </div>
+        <div class="sig-card vis" style="background:#0a1a10;border:1px solid #4eff9a;opacity:1;transform:scale(1)">
+          <div class="sig-icon">💡</div>
+          <div class="sig-name" style="color:#4eff9a">FIBRE</div>
+          <div class="sig-desc">Light pulses in glass. 100+ Gbps. Immune to EMI. Long distance. Expensive.</div>
+        </div>
+        <div class="sig-card vis" style="background:#1e1408;border:1px solid #e8a020;opacity:1;transform:scale(1)">
+          <div class="sig-icon">📡</div>
+          <div class="sig-name" style="color:#e8a020">RADIO</div>
+          <div class="sig-desc">EM waves through air. Wi-Fi, LTE, Bluetooth. Shared medium, interference possible.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">THE FUNDAMENTAL TRUTH:</div>
+    <div class="ih cy">+5V = 1. 0V = 0. That's it.</div>
+    <div class="il">Everything on the internet is just this.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a">+5V</div><div class="sl">BIT 1<br>HIGH</div></div>
+    <div class="sc"><div class="sv rd">0V</div><div class="sl">BIT 0<br>LOW</div></div>
+    <div class="sc"><div class="sv">GHz</div><div class="sl">CLOCK<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: KEY DEVICES ══════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">PHYSICAL LAYER</div>
+    <div class="hdr-sub">LAYER 1 DEVICES — WHAT THEY DO</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DEVICES</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HARDWARE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s3intro">THESE DEVICES ONLY SEE BITS — NEVER HEADERS</div>
+
+      <div class="dev-card" id="dc1" style="background:#0d1a2e;border:1px solid #4ec9e1">
+        <div class="dev-icon">🔁</div>
+        <div class="dev-body">
+          <div class="dev-name" style="color:#4ec9e1">REPEATER</div>
+          <div class="dev-desc">Amplifies and retransmits the raw signal. Fights signal decay over long distances. Operates on bits only — no intelligence.</div>
+          <div class="dev-tag" style="color:#4ec9e1;border-color:#4ec9e1">SIGNAL BOOST</div>
+        </div>
+      </div>
+
+      <div class="dev-card" id="dc2" style="background:#111808;border:1px solid #7a9e30">
+        <div class="dev-icon">🌐</div>
+        <div class="dev-body">
+          <div class="dev-name" style="color:#7a9e30">HUB</div>
+          <div class="dev-desc">A multi-port repeater. Receives a bit signal and blasts it to ALL ports. No filtering, no intelligence. Creates collision domains.</div>
+          <div class="dev-tag" style="color:#7a9e30;border-color:#7a9e30">BROADCAST ALL</div>
+        </div>
+      </div>
+
+      <div class="dev-card" id="dc3" style="background:#1e1408;border:1px solid #e8a020">
+        <div class="dev-icon">📡</div>
+        <div class="dev-body">
+          <div class="dev-name" style="color:#e8a020">MODEM</div>
+          <div class="dev-desc">MOdulator-DEModulator. Converts digital bits to analog signals (and back) for transmission over telephone or cable lines.</div>
+          <div class="dev-tag" style="color:#e8a020;border-color:#e8a020">DIGITAL ↔ ANALOG</div>
+        </div>
+      </div>
+
+      <div class="dev-card" id="dc4" style="background:#0a1a10;border:1px solid #4eff9a">
+        <div class="dev-icon">💻</div>
+        <div class="dev-body">
+          <div class="dev-name" style="color:#4eff9a">NIC (NETWORK INTERFACE CARD)</div>
+          <div class="dev-desc">Lives in your computer. Converts the OS's digital data to physical signals and vice versa. Has a MAC address (that's L2) but handles L1 signalling.</div>
+          <div class="dev-tag" style="color:#4eff9a;border-color:#4eff9a">L1 + L2 BRIDGE</div>
+        </div>
+      </div>
+
+      <div class="dev-card" id="dc5" style="background:#1a0d2e;border:1px solid #a080c0">
+        <div class="dev-icon">🔌</div>
+        <div class="dev-body">
+          <div class="dev-name" style="color:#a080c0">CABLES & CONNECTORS</div>
+          <div class="dev-desc">Cat5e / Cat6 (twisted pair), coaxial, fibre optic, RJ45 connectors. The physical medium itself IS the layer. Specs govern max length, bandwidth, shielding.</div>
+          <div class="dev-tag" style="color:#a080c0;border-color:#a080c0">THE MEDIUM</div>
+        </div>
+      </div>
+
+      <div style="background:#071510;border:1px solid #e85050;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s3note">
+        <div style="font-size:7px;color:#e85050;margin-bottom:4px">⚠ L1 DEVICES CAN'T BLOCK TRAFFIC</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Hubs and repeaters pass everything. A hub on your network = every device sees every packet. That's why switches (L2) replaced hubs.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">KEY RULE:</div>
+    <div class="ih cy">L1 devices can't filter or read data.</div>
+    <div class="il">They only amplify, repeat, or convert signals.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:16px">🔁</div><div class="sl">REPEATER</div></div>
+    <div class="sc"><div class="sv" style="font-size:16px">🌐</div><div class="sl">HUB</div></div>
+    <div class="sc"><div class="sv" style="font-size:16px">📡</div><div class="sl">MODEM</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: STANDARDS ══════════════ -->
+<div class="scene" id="s4" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">PHYSICAL LAYER</div>
+    <div class="hdr-sub">IEEE STANDARDS — THE RULES OF THE WIRE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STANDARDS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">IEEE</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s4intro">STANDARDS DEFINE WHAT "PHYSICAL" MEANS</div>
+
+      <!-- 802.3 Ethernet -->
+      <div class="panel" id="s4a" style="border:2px solid #e8a020;background:#1e1408">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">🔌</div>
+          <div>
+            <div style="font-size:9px;color:#e8a020">IEEE 802.3</div>
+            <div style="font-size:7px;color:#aaa;margin-top:2px">ETHERNET STANDARD</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9;margin-bottom:7px">Defines everything about wired Ethernet: cable type, connector (RJ45), signal encoding, voltage levels, and max cable length.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="background:#2a1a08;border:1px solid #e8a020;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#e8a020">10BASE-T</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">10 Mbps · Cat3 · 100m</div>
+          </div>
+          <div style="background:#2a1a08;border:1px solid #e8a020;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#e8a020">100BASE-TX</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">100 Mbps · Cat5 · 100m</div>
+          </div>
+          <div style="background:#2a1a08;border:1px solid #e8a020;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#e8a020">1000BASE-T</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">1 Gbps · Cat5e · 100m</div>
+          </div>
+          <div style="background:#2a1a08;border:1px solid #e8a020;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#e8a020">10GBASE-T</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">10 Gbps · Cat6a · 100m</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 802.11 Wi-Fi -->
+      <div class="panel" id="s4b" style="border:2px solid #4ec9e1;background:#0d1a2e">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">📶</div>
+          <div>
+            <div style="font-size:9px;color:#4ec9e1">IEEE 802.11</div>
+            <div style="font-size:7px;color:#aaa;margin-top:2px">WI-FI STANDARD</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9;margin-bottom:7px">Defines wireless Ethernet: radio frequency, channel width, modulation scheme (OFDM, DSSS), and transmission power limits.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="background:#0d2035;border:1px solid #4ec9e1;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#4ec9e1">802.11n</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">Wi-Fi 4 · 600 Mbps · 2.4/5 GHz</div>
+          </div>
+          <div style="background:#0d2035;border:1px solid #4ec9e1;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#4ec9e1">802.11ac</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">Wi-Fi 5 · 3.5 Gbps · 5 GHz</div>
+          </div>
+          <div style="background:#0d2035;border:1px solid #4ec9e1;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#4ec9e1">802.11ax</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">Wi-Fi 6 · 9.6 Gbps · 6 GHz</div>
+          </div>
+          <div style="background:#0d2035;border:1px solid #4ec9e1;border-radius:2px;padding:6px 7px">
+            <div style="font-size:7px;color:#4ec9e1">802.11be</div>
+            <div style="font-size:6px;color:#aaa;margin-top:2px">Wi-Fi 7 · 46 Gbps · multi-band</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Why standards matter -->
+      <div class="panel" id="s4c" style="border:1px solid #4eff9a;background:#071510">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">WHY STANDARDS MATTER</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Without IEEE standards, a Cisco NIC and an Intel NIC couldn't talk. Standards define the electrical contract — voltage, timing, modulation — so any two devices can physically exchange bits.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">IEEE STANDARDS:</div>
+    <div class="ih am">802.3 = Ethernet. 802.11 = Wi-Fi.</div>
+    <div class="il">Standards define the electrical contract.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am" style="font-size:9px">802.3</div><div class="sl">ETHERNET<br>WIRED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">802.11</div><div class="sl">WI-FI<br>WIRELESS</div></div>
+    <div class="sc"><div class="sv gn">100m</div><div class="sl">MAX CAT<br>CABLE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: DUPLEX MODES ══════════════ -->
+<div class="scene" id="s5" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">PHYSICAL LAYER</div>
+    <div class="hdr-sub">TRANSMISSION MODES — WHO TALKS WHEN</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DUPLEX MODES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DIRECTION</span>
+  </div>
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;padding:2px 0;letter-spacing:1px;opacity:0;transition:opacity .3s" id="s5intro">HOW BITS FLOW — ONE WAY OR BOTH?</div>
+
+      <!-- Simplex -->
+      <div class="dup-card" id="dup1" style="background:#1e0808;border:2px solid #e85050">
+        <div class="dup-title" style="color:#e85050">SIMPLEX — ONE DIRECTION ONLY</div>
+        <div class="dup-vis">
+          <div class="dup-node" style="background:#2a0d0d;border:1px solid #e85050;color:#e85050">TX</div>
+          <div class="dup-arrow">
+            <div class="dup-beam" id="db1a" style="background:#e85050;align-self:flex-start"></div>
+            <div style="font-size:6px;color:#555;margin:1px 0">send only →</div>
+          </div>
+          <div class="dup-node" style="background:#2a0d0d;border:1px solid #e85050;color:#e85050">RX</div>
+        </div>
+        <div class="dup-desc">Sender can only send. Receiver can only receive. Can never reply. Like a TV broadcast — the station transmits, you receive, you can't talk back.</div>
+        <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e85050;color:#e85050;border-radius:2px">TV BROADCAST</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e85050;color:#e85050;border-radius:2px">KEYBOARD → PC</span>
+        </div>
+      </div>
+
+      <!-- Half Duplex -->
+      <div class="dup-card" id="dup2" style="background:#1e1408;border:2px solid #e8a020">
+        <div class="dup-title" style="color:#e8a020">HALF-DUPLEX — BOTH WAYS, NOT AT ONCE</div>
+        <div class="dup-vis">
+          <div class="dup-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">A</div>
+          <div class="dup-arrow">
+            <div class="dup-beam" id="db2a" style="background:#e8a020;align-self:flex-start"></div>
+            <div style="font-size:6px;color:#555;margin:1px 0">take turns</div>
+            <div class="dup-beam" id="db2b" style="background:#e8a020;align-self:flex-end"></div>
+          </div>
+          <div class="dup-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">B</div>
+        </div>
+        <div class="dup-desc">Both sides can send and receive, but not at the same time. One must wait. Collisions possible — handled by CSMA/CD on old Ethernet hubs.</div>
+        <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e8a020;color:#e8a020;border-radius:2px">WALKIE-TALKIE</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #e8a020;color:#e8a020;border-radius:2px">OLD HUB NETWORK</span>
+        </div>
+      </div>
+
+      <!-- Full Duplex -->
+      <div class="dup-card" id="dup3" style="background:#071510;border:2px solid #4eff9a">
+        <div class="dup-title" style="color:#4eff9a">FULL-DUPLEX — BOTH WAYS SIMULTANEOUSLY</div>
+        <div class="dup-vis">
+          <div class="dup-node" style="background:#0a2010;border:1px solid #4eff9a;color:#4eff9a">A</div>
+          <div class="dup-arrow">
+            <div class="dup-beam" id="db3a" style="background:#4eff9a;align-self:flex-start"></div>
+            <div style="font-size:6px;color:#555;margin:1px 0">simultaneously</div>
+            <div class="dup-beam" id="db3b" style="background:#4ec9e1;align-self:flex-end"></div>
+          </div>
+          <div class="dup-node" style="background:#0a2010;border:1px solid #4eff9a;color:#4eff9a">B</div>
+        </div>
+        <div class="dup-desc">Both sides send and receive at the same time on separate channels. No collisions. Modern Ethernet switches create full-duplex links. This doubles effective throughput.</div>
+        <div style="display:flex;gap:5px;margin-top:6px;flex-wrap:wrap">
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">PHONE CALL</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">MODERN SWITCH</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">GIGABIT ETH</span>
+        </div>
+      </div>
+
+      <div style="background:#071510;border:1px solid #4ec9e1;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s5note">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">SECURITY NOTE</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">"If you can touch it, you own it." Physical access = game over. Layer 1 attacks: cutting cables, signal jamming (radio), tapping fibres, wiretapping copper. No software fix for physical access.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">DUPLEX MODES:</div>
+    <div class="ih">Full-duplex = modern default.</div>
+    <div class="il">Hubs = half-duplex. Switches = full-duplex.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">→</div><div class="sl">SIMPLEX<br>ONE WAY</div></div>
+    <div class="sc"><div class="sv am">↔</div><div class="sl">HALF<br>TAKE TURNS</div></div>
+    <div class="sc"><div class="sv gn">⇄</div><div class="sl">FULL<br>BOTH AT ONCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+// ── Waveform generator ──
+// bits: array of 0/1, w: svg width, h: height, baseline: y center
+function makeWave(bits, w, h, baseline){
+  const segW = w / bits.length;
+  const hi = baseline - h*0.36;
+  const lo = baseline + h*0.36;
+  let pts = [];
+  bits.forEach((b,i)=>{
+    const x = i * segW;
+    const xn = (i+1) * segW;
+    const y = b ? hi : lo;
+    const yn = bits[i+1] !== undefined ? (bits[i+1] ? hi : lo) : y;
+    if(i===0) pts.push(`${x},${y}`);
+    pts.push(`${xn-1},${y}`);
+    if(yn !== y) pts.push(`${xn},${yn}`);
+  });
+  return pts.join(' ');
+}
+
+// ── Animated waveform draw ──
+function animWave(svgId, bits, w, h, baseline, stepMs, startDelay){
+  const el = document.getElementById(svgId);
+  if(!el) return;
+  el.setAttribute('points','');
+  const segW = w / bits.length;
+  const hi = baseline - h*0.36;
+  const lo = baseline + h*0.36;
+  let pts = [];
+  bits.forEach((b,i)=>{
+    af(startDelay + i*stepMs, ()=>{
+      const x = i * segW;
+      const xn = (i+1) * segW;
+      const y = b ? hi : lo;
+      if(i===0) pts.push(`${x},${y}`);
+      pts.push(`${xn-1},${y}`);
+      const nextB = bits[i+1];
+      if(nextB !== undefined){
+        const yn = nextB ? hi : lo;
+        if(yn !== y) pts.push(`${xn},${yn}`);
+      }
+      el.setAttribute('points', pts.join(' '));
+    });
+  });
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1scope','s1bits','s1pos'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.opacity='0';
+    });
+    const w=document.getElementById('s1wave');if(w)w.setAttribute('points','');
+    for(let i=0;i<8;i++){const b=document.getElementById('sq'+i);if(b){b.className='bit-sq idle';b.textContent='?';}}
+  }
+  if(n===2){
+    const w=document.getElementById('s2wave');if(w)w.setAttribute('points','');
+    for(let i=0;i<8;i++){const b=document.getElementById('b'+i);if(b){b.className='bit-sq idle';b.textContent='·';}}
+    const d=document.getElementById('s2decoded');if(d)d.textContent='waiting for signal…';
+    const enc=document.getElementById('s2enc');if(enc)enc.style.opacity='0';
+    const med=document.getElementById('s2media');if(med)med.style.opacity='0';
+    const lb=document.getElementById('s2labels');if(lb)lb.innerHTML='';
+  }
+  if(n===3){
+    ['s3intro','dc1','dc2','dc3','dc4','dc5','s3note'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-8px)';}
+    });
+  }
+  if(n===4){
+    ['s4intro','s4a','s4b','s4c'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}
+    });
+  }
+  if(n===5){
+    ['s5intro','dup1','dup2','dup3','s5note'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateY(6px)';}
+    });
+    ['db1a','db2a','db2b','db3a','db3b'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.width='0';
+    });
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    const bits=[1,0,1,1,0,0,1,0];
+    af(150,()=>{const e=document.getElementById('s1hero');if(e)e.style.opacity='1';});
+    af(700,()=>{
+      const e=document.getElementById('s1scope');if(e)e.style.opacity='1';
+      animWave('s1wave', bits, 340, 64, 32, 220, 0);
+    });
+    af(800,()=>{
+      const e=document.getElementById('s1bits');if(e)e.style.opacity='1';
+      bits.forEach((b,i)=>{
+        af(i*220,()=>{
+          const sq=document.getElementById('sq'+i);
+          if(sq){sq.className='bit-sq '+(b?'hi':'lo');sq.textContent=b;}
+        });
+      });
+    });
+    af(2800,()=>{const e=document.getElementById('s1pos');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    const bits=[1,0,1,1,0,1,0,0];
+    const w=340, h=80, base=40;
+    const segW=w/bits.length;
+    const hi=base-h*0.36, lo=base+h*0.36;
+    let pts=[];
+
+    // animate waveform + bits together
+    bits.forEach((b,i)=>{
+      af(300+i*340,()=>{
+        // waveform
+        const x=i*segW, xn=(i+1)*segW;
+        const y=b?hi:lo;
+        if(i===0) pts.push(`${x},${y}`);
+        pts.push(`${xn-1},${y}`);
+        const nb=bits[i+1];
+        if(nb!==undefined){
+          const yn=nb?hi:lo;
+          if(yn!==y) pts.push(`${xn},${yn}`);
+        }
+        const wave=document.getElementById('s2wave');
+        if(wave)wave.setAttribute('points',pts.join(' '));
+
+        // label above/below
+        const lab=document.getElementById('s2labels');
+        if(lab){
+          const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+          tx.setAttribute('x', x+segW/2-4);
+          tx.setAttribute('y', b ? hi-6 : lo+14);
+          tx.setAttribute('fill', b ? '#4eff9a' : '#e85050');
+          tx.setAttribute('font-size','9');
+          tx.setAttribute('font-family','Press Start 2P, monospace');
+          tx.textContent=b;
+          lab.appendChild(tx);
+        }
+
+        // bit squares
+        const bsq=document.getElementById('b'+i);
+        if(bsq){bsq.className='bit-sq '+(b?'hi':'lo');bsq.textContent=b;}
+
+        // decoded text
+        const dec=document.getElementById('s2decoded');
+        if(dec){
+          const sofar=bits.slice(0,i+1).join('');
+          dec.textContent='bits: '+sofar+(i<bits.length-1?'…':'  → 0xB4');
+        }
+      });
+    });
+
+    af(300+bits.length*340+200,()=>{const e=document.getElementById('s2enc');if(e){e.style.opacity='1';e.classList.add('vis');}});
+    af(300+bits.length*340+800,()=>{const e=document.getElementById('s2media');if(e)e.style.opacity='1';});
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    [['dc1',280],['dc2',680],['dc3',1080],['dc4',1480],['dc5',1880],['s3note',2400]].forEach(([id,ms])=>{
+      af(ms,()=>{
+        const e=document.getElementById(id);
+        if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}
+      });
+    });
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    show('s4a',300);
+    show('s4b',1000);
+    show('s4c',1700);
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+
+    // Simplex
+    af(300,()=>{
+      const e=document.getElementById('dup1');
+      if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+      af(200,()=>{const b=document.getElementById('db1a');if(b)b.style.width='100%';});
+    });
+
+    // Half duplex
+    af(1000,()=>{
+      const e=document.getElementById('dup2');
+      if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+      af(200,()=>{const b=document.getElementById('db2a');if(b)b.style.width='100%';});
+      af(700,()=>{
+        const a=document.getElementById('db2a');if(a)a.style.width='0';
+        af(300,()=>{const b=document.getElementById('db2b');if(b)b.style.width='100%';});
+      });
+    });
+
+    // Full duplex
+    af(2000,()=>{
+      const e=document.getElementById('dup3');
+      if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+      af(200,()=>{
+        const a=document.getElementById('db3a');if(a)a.style.width='100%';
+        const b=document.getElementById('db3b');if(b)b.style.width='100%';
+      });
+    });
+
+    af(3000,()=>{const e=document.getElementById('s5note');if(e){e.style.opacity='1';e.classList.add('vis');}});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

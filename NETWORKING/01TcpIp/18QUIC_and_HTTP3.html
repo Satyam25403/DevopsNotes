@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>QUIC & HTTP/3</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+
+/* Stream lane */
+.stream-lane{position:relative;height:22px;background:#0d0d1a;border:1px solid #2a1f3d;border-radius:2px;overflow:hidden;margin-bottom:3px}
+.stream-fill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:2px;transition:width .6s ease-out}
+.stream-label{position:absolute;left:6px;top:50%;transform:translateY(-50%);font-size:6px;font-family:'Press Start 2P',monospace;white-space:nowrap}
+.stream-block{position:absolute;left:0;top:0;bottom:0;right:0;display:flex;align-items:center;justify-content:center;font-size:6px;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s}
+
+/* Packet chip */
+.pchip{display:inline-flex;align-items:center;padding:2px 6px;border:1px solid;font-size:6px;font-family:'Press Start 2P',monospace;border-radius:2px;white-space:nowrap}
+
+/* Timeline bar */
+.tbar{height:8px;background:#0d0d1a;border-radius:1px;position:relative;overflow:hidden}
+.tfill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:1px;transition:width .7s ease-out}
+
+/* QUIC layer stack */
+.qlayer{border:2px solid transparent;padding:7px 10px;text-align:center;font-size:7px;transition:all .4s;margin-bottom:2px;opacity:0}
+
+@keyframes blocked{0%,100%{opacity:1}50%{opacity:.2;background:#3a0505}}
+@keyframes flowRight{from{transform:translateX(-100%)}to{transform:translateX(400px)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1 — HTTP/2 HOL BLOCKING ═══ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">HTTP/2 HOL BLOCKING</div>
+    <div class="hdr-sub">ONE LOST SEGMENT FREEZES ALL STREAMS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">TCP HOL</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">HTTP/2 — ALL STREAMS OVER ONE TCP CONNECTION</div>
+
+      <!-- The TCP pipe visual -->
+      <div style="border:2px solid #e8505060;background:#0a0a14;padding:8px 10px;position:relative">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">SINGLE TCP CONNECTION</div>
+
+        <!-- Stream rows -->
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 1 (CSS)</div>
+        <div class="stream-lane" id="sl1">
+          <div class="stream-fill" id="sf1" style="background:#4eff9a"></div>
+          <div class="stream-label" style="color:#4eff9a">flowing…</div>
+          <div class="stream-block" id="sb1" style="background:#1a050590;color:#e85050">■ BLOCKED — waiting for segment</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 2 (JS) ← LOST SEGMENT HERE</div>
+        <div class="stream-lane" id="sl2" style="border-color:#e85050">
+          <div class="stream-fill" id="sf2" style="background:#e85050"></div>
+          <div class="stream-label" id="sl2-lbl" style="color:#e85050">▶ flowing</div>
+          <div class="stream-block" id="sb2" style="background:#1a050590;color:#e85050">✕ PACKET LOST — retransmitting</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 3 (HTML)</div>
+        <div class="stream-lane" id="sl3">
+          <div class="stream-fill" id="sf3" style="background:#4ec9e1"></div>
+          <div class="stream-label" style="color:#4ec9e1">flowing…</div>
+          <div class="stream-block" id="sb3" style="background:#1a050590;color:#e85050">■ BLOCKED — waiting for segment</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 4 (image)</div>
+        <div class="stream-lane" id="sl4">
+          <div class="stream-fill" id="sf4" style="background:#9a4ef8"></div>
+          <div class="stream-label" style="color:#9a4ef8">flowing…</div>
+          <div class="stream-block" id="sb4" style="background:#1a050590;color:#e85050">■ BLOCKED — waiting for segment</div>
+        </div>
+
+        <!-- Freeze banner -->
+        <div id="freeze-banner" style="position:absolute;inset:0;background:#1a050595;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s;border-radius:1px">
+          <div style="font-size:10px;color:#e85050;text-align:center;line-height:2;padding:8px;border:2px solid #e85050;background:#0a0505">
+            ☠ ALL STREAMS FROZEN<br>
+            <span style="font-size:7px;color:#e8a020">TCP must deliver in order</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Why this happens -->
+      <div class="fade" id="hol-why" style="border:1px solid #e8505050;background:#1a050580;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:4px">WHY TCP CAUSES HOL BLOCKING</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          HTTP/2 multiplexes streams over ONE TCP connection.<br>
+          TCP guarantees byte-stream order — if segment 5 lost,<br>
+          segments 6, 7, 8… sit in buffer <span style="color:#e85050">waiting for retransmit.</span><br>
+          ALL streams stall. Even unrelated ones.
+        </div>
+      </div>
+
+      <!-- Timeline showing the freeze -->
+      <div class="fade" id="hol-timeline" style="border:1px solid #2a1f3d;background:#0a0a14;padding:7px 10px">
+        <div style="font-size:7px;color:#888;margin-bottom:5px">TIME →</div>
+        <div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
+          <div style="font-size:5px;color:#888;min-width:48px">streams</div>
+          <div style="flex:1;height:8px;background:#4eff9a;border-radius:1px"></div>
+          <div id="tl-loss" style="font-size:7px;color:#e85050;padding:0 3px">✕</div>
+          <div id="tl-frozen" style="flex:1;height:8px;background:#e8505040;border:1px dashed #e85050;border-radius:1px;opacity:0;transition:opacity .3s"></div>
+          <div id="tl-retx" style="font-size:5px;color:#e8a020;padding:0 3px;opacity:0;transition:opacity .3s">RETX</div>
+          <div id="tl-resume" style="flex:1;height:8px;background:#4eff9a;border-radius:1px;opacity:0;transition:opacity .3s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:5px;color:#555">
+          <span>t=0</span><span style="color:#e85050">loss</span><span style="color:#e8a020">~200ms RTO</span><span style="color:#4eff9a">resume</span>
+        </div>
+      </div>
+
+      <!-- HOL vs no HOL comparison teaser -->
+      <div class="fade" id="hol-teaser" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">HTTP/3 SOLUTION → SCENE 2 ▶</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">QUIC moves reliability to userspace.<br>Each stream has independent packet ordering.<br>Stream 2 lost → only stream 2 pauses.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">HTTP/2: one TCP connection, many streams.</div>
+    <div class="il">Lost segment → ALL streams wait for retransmit.</div>
+    <div class="ih rd">1% packet loss → 3× worse than HTTP/1.1.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">HOL</div><div class="sl">BLOCKING</div></div>
+    <div class="sc"><div class="sv am">~200ms</div><div class="sl">RTO WAIT</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">STREAMS STALL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 — QUIC INDEPENDENT STREAMS ═══ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">QUIC — NO HOL BLOCKING</div>
+    <div class="hdr-sub">STREAMS INDEPENDENT · UDP FOUNDATION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">THE FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">QUIC</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">HTTP/3 — INDEPENDENT QUIC STREAMS OVER UDP</div>
+
+      <!-- QUIC streams — each independent -->
+      <div style="border:2px solid #4eff9a50;background:#050e1a;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">UDP — INDEPENDENT STREAMS</div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 1 (CSS)</div>
+        <div class="stream-lane" id="q1" style="border-color:#2a4060;background:#051018">
+          <div class="stream-fill" id="qf1" style="background:#4eff9a"></div>
+          <div class="stream-label" id="ql1" style="color:#4eff9a">▶ flowing</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 2 (JS) ← PACKET LOST</div>
+        <div class="stream-lane" id="q2" style="border-color:#e85050;background:#051018">
+          <div class="stream-fill" id="qf2" style="background:#e85050"></div>
+          <div class="stream-label" id="ql2" style="color:#e85050">▶ flowing</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 3 (HTML)</div>
+        <div class="stream-lane" id="q3" style="border-color:#2a4060;background:#051018">
+          <div class="stream-fill" id="qf3" style="background:#4ec9e1"></div>
+          <div class="stream-label" id="ql3" style="color:#4ec9e1">▶ flowing</div>
+        </div>
+
+        <div style="font-size:6px;color:#888;margin-bottom:3px">STREAM 4 (image)</div>
+        <div class="stream-lane" id="q4" style="border-color:#2a4060;background:#051018">
+          <div class="stream-fill" id="qf4" style="background:#9a4ef8"></div>
+          <div class="stream-label" id="ql4" style="color:#9a4ef8">▶ flowing</div>
+        </div>
+
+        <!-- Only stream 2 pauses banner -->
+        <div id="q2-pause" style="margin-top:4px;border:1px solid #e8a020;background:#10090080;padding:5px 8px;font-size:6px;color:#e8a020;text-align:center;opacity:0;transition:opacity .4s">
+          ⚠ Only stream 2 pauses — others CONTINUE ✓
+        </div>
+      </div>
+
+      <!-- Side-by-side comparison -->
+      <div class="fade" id="cmp-box" style="display:flex;gap:5px">
+        <div style="flex:1;border:1px solid #e8505050;background:#1a050580;padding:7px 8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">HTTP/2 + TCP</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">
+            1 loss →<br>
+            <span style="color:#e85050">ALL streams halt</span><br>
+            200ms+ freeze
+          </div>
+        </div>
+        <div style="flex:1;border:1px solid #4eff9a50;background:#001a1080;padding:7px 8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">HTTP/3 + QUIC</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">
+            1 loss →<br>
+            <span style="color:#4eff9a">1 stream pauses</span><br>
+            others continue
+          </div>
+        </div>
+      </div>
+
+      <!-- QUIC stack -->
+      <div class="fade" id="quic-stack" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">QUIC PROTOCOL STACK</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="font-size:7px;border:1px solid #4eff9a;color:#4eff9a;padding:4px 8px;background:#001a10;text-align:center">HTTP/3 (application)</div>
+          <div style="font-size:7px;border:1px solid #4ec9e1;color:#4ec9e1;padding:4px 8px;background:#001a20;text-align:center">QUIC (streams + reliability + TLS 1.3)</div>
+          <div style="font-size:7px;border:1px solid #9a4ef8;color:#9a4ef8;padding:4px 8px;background:#0a0820;text-align:center">UDP (userspace — no kernel changes)</div>
+          <div style="font-size:7px;border:1px solid #2a1f3d;color:#555;padding:4px 8px;background:#0a0a14;text-align:center">IP · Ethernet</div>
+        </div>
+      </div>
+
+      <!-- Why UDP not TCP? -->
+      <div class="fade" id="why-udp" style="border:1px solid #9a4ef850;background:#0a082080;padding:7px 10px">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:4px">WHY UDP AND NOT TCP?</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          TCP is in the kernel — can't change ordering behavior.<br>
+          UDP is raw datagrams — QUIC implements its own<br>
+          reliability, congestion control, and ordering<br>
+          <span style="color:#9a4ef8">per-stream in userspace. Deployable without OS updates.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">QUIC: each stream independently ordered.</div>
+    <div class="il">Lost packet only stalls that stream.</div>
+    <div class="ih">UDP in kernel; reliability in userspace (QUIC).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">STREAM PAUSES</div></div>
+    <div class="sc"><div class="sv gn">REST</div><div class="sl">KEEP FLOWING</div></div>
+    <div class="sc"><div class="sv" style="color:#9a4ef8">UDP</div><div class="sl">FOUNDATION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 — 0-RTT + TLS 1.3 BUILT-IN ═══ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">0-RTT CONNECTION</div>
+    <div class="hdr-sub">TLS 1.3 BUILT IN · SEND DATA IMMEDIATELY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STEP 3 — 0-RTT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">FAST CONNECT</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">CONNECTION SETUP COMPARISON</div>
+
+      <!-- TCP + TLS vs QUIC comparison -->
+      <div style="display:flex;gap:5px">
+
+        <!-- TCP + TLS timeline -->
+        <div style="flex:1;border:1px solid #e8a02050;background:#10090080;padding:7px 8px">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">HTTPS (TCP+TLS1.3)</div>
+          <div style="display:flex;flex-direction:column;gap:3px" id="tcp-steps">
+            <div class="fade" id="ts1" style="font-size:5px;color:#aaa;padding:2px 0;border-left:2px solid #e8a020;padding-left:5px;line-height:1.7">TCP SYN<br>TCP SYN-ACK<br>→ 1 RTT</div>
+            <div class="fade" id="ts2" style="font-size:5px;color:#aaa;padding:2px 0;border-left:2px solid #4ec9e1;padding-left:5px;line-height:1.7">TLS ClientHello<br>TLS ServerHello<br>→ 1 RTT</div>
+            <div class="fade" id="ts3" style="font-size:5px;color:#4eff9a;padding:2px 0;border-left:2px solid #4eff9a;padding-left:5px;line-height:1.7">HTTP GET /<br>→ 1 RTT</div>
+          </div>
+          <div class="fade" id="ts-total" style="font-size:7px;color:#e8a020;margin-top:5px;text-align:center;border:1px solid #e8a020;padding:3px">3 RTT total</div>
+        </div>
+
+        <!-- QUIC 0-RTT timeline -->
+        <div style="flex:1;border:1px solid #4eff9a50;background:#001a1080;padding:7px 8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">QUIC (0-RTT resume)</div>
+          <div style="display:flex;flex-direction:column;gap:3px" id="quic-steps">
+            <div class="fade" id="qs1" style="font-size:5px;color:#4eff9a;padding:2px 0;border-left:2px solid #4eff9a;padding-left:5px;line-height:1.7">QUIC Initial<br>+ TLS + HTTP GET<br>→ 0 RTT!</div>
+          </div>
+          <div class="fade" id="qs-total" style="font-size:7px;color:#4eff9a;margin-top:5px;text-align:center;border:1px solid #4eff9a;padding:3px">0 RTT resume ⚡</div>
+        </div>
+      </div>
+
+      <!-- RTT bar visual -->
+      <div class="fade" id="rtt-bars" style="border:1px solid #1e4080;background:#050e1a;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">ROUND TRIPS TO FIRST BYTE</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+          <div style="font-size:6px;color:#e8a020;min-width:70px">TCP+TLS 1.3</div>
+          <div style="flex:1;height:14px;background:#0a0a14;position:relative">
+            <div id="rbar-tcp" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#e8a020;transition:width .9s ease-out"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:5px;color:#fff">3 RTT</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">
+          <div style="font-size:6px;color:#4ec9e1;min-width:70px">QUIC new</div>
+          <div style="flex:1;height:14px;background:#0a0a14;position:relative">
+            <div id="rbar-quic1" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4ec9e1;transition:width .6s ease-out"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:5px;color:#fff">1 RTT</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="font-size:6px;color:#4eff9a;min-width:70px">QUIC 0-RTT</div>
+          <div style="flex:1;height:14px;background:#0a0a14;position:relative">
+            <div id="rbar-quic0" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width .2s ease-out"></div>
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:5px;color:#0a0a14">0 RTT ⚡</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 0-RTT replay risk -->
+      <div class="fade" id="replay-box" style="border:2px solid #e85050;background:#1a050590;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">⚠ 0-RTT REPLAY ATTACK RISK</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          0-RTT data is sent before server authenticates client.<br>
+          Attacker can replay 0-RTT packets to duplicate requests.<br>
+          <span style="color:#e85050">Rule: 0-RTT requests MUST be idempotent (GET, not POST).</span><br>
+          Server must deduplicate or reject non-idempotent 0-RTT.
+        </div>
+      </div>
+
+      <!-- How 0-RTT works -->
+      <div class="fade" id="psk-box" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">HOW 0-RTT WORKS</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          First visit: full handshake → server sends <span style="color:#4eff9a">session ticket (PSK)</span>.<br>
+          Second visit: client sends PSK + data in first packet.<br>
+          Server recognises PSK → decrypts data immediately.<br>
+          No round-trip needed for crypto setup.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">QUIC has TLS 1.3 baked in — no separate shake.</div>
+    <div class="il">0-RTT resume: send data before server acks.</div>
+    <div class="ih rd">0-RTT is replayable — only use for GET/HEAD.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3</div><div class="sl">TCP+TLS RTT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1</div><div class="sl">QUIC NEW RTT</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">QUIC RESUME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 — CONNECTION MIGRATION ═══ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">CONNECTION MIGRATION</div>
+    <div class="hdr-sub">SWITCH NETWORK WITHOUT RECONNECTING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STEP 4 — MIGRATION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">QUIC MAGIC</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:2px">WIFI → 4G HANDOFF</div>
+
+      <!-- Migration animation canvas -->
+      <div style="border:1px solid #1e4080;background:#050e1a;padding:8px 10px;position:relative">
+
+        <!-- Phone icon with network label -->
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="text-align:center">
+            <div style="font-size:28px" id="phone-icon">📱</div>
+            <div style="font-size:6px;margin-top:3px" id="net-label" style="color:#4ec9e1">WiFi</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px;padding:0 10px">
+            <!-- Connection beam -->
+            <div style="position:relative;height:16px">
+              <div id="beam-wifi" style="position:absolute;left:0;right:0;top:6px;height:3px;background:#4ec9e1;border-radius:2px;transition:opacity .5s"></div>
+              <div id="beam-4g" style="position:absolute;left:0;right:0;top:6px;height:3px;background:#4eff9a;border-radius:2px;opacity:0;transition:opacity .5s"></div>
+              <!-- Moving packet -->
+              <div id="migr-pkt" style="position:absolute;top:2px;left:0;width:24px;height:12px;border:1px solid #4ec9e1;background:#001a20;color:#4ec9e1;font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;justify-content:center;border-radius:2px;transition:left .5s linear,border-color .5s,color .5s,background .5s">PKT</div>
+            </div>
+            <!-- IP address labels -->
+            <div style="display:flex;justify-content:space-between;font-size:5px;color:#555">
+              <span id="src-ip" style="color:#4ec9e1">src: 192.168.1.5</span>
+              <span id="dst-ip" style="color:#888">→ server</span>
+            </div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:28px">🖥</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:3px">server</div>
+          </div>
+        </div>
+
+        <!-- Connection ID banner -->
+        <div id="conn-id-banner" style="border:1px solid #9a4ef8;background:#0a082080;padding:5px 8px;text-align:center;font-size:6px;color:#9a4ef8;transition:all .4s">
+          QUIC Connection ID: <span style="color:#fff">0x7F3A9B4C</span> — unchanged ✓
+        </div>
+
+        <!-- Migration event -->
+        <div id="migr-event" style="margin-top:6px;border:1px solid #e8a020;background:#10090080;padding:5px 8px;text-align:center;font-size:7px;color:#e8a020;opacity:0;transition:opacity .4s">
+          📶 WIFI LOST → switching to 4G…
+        </div>
+
+        <!-- Post-migration status -->
+        <div id="migr-ok" style="margin-top:4px;border:1px solid #4eff9a;background:#001a1080;padding:5px 8px;text-align:center;font-size:7px;color:#4eff9a;opacity:0;transition:opacity .4s">
+          ✓ MIGRATED — same session, new IP, zero interruption
+        </div>
+      </div>
+
+      <!-- TCP comparison -->
+      <div class="fade" id="tcp-migr" style="border:1px solid #e8505050;background:#1a050580;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:4px">TCP WOULD DO THIS INSTEAD</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">
+          TCP identifies connection by 4-tuple:<br>
+          <span style="color:#e85050">src-IP:src-port:dst-IP:dst-port</span><br>
+          Change WiFi → 4G = new src-IP = <span style="color:#e85050">connection broken</span>.<br>
+          Full TCP+TLS handshake required again (~3 RTT).
+        </div>
+      </div>
+
+      <!-- How QUIC migration works -->
+      <div class="fade" id="conn-id-explain" style="border:1px solid #9a4ef850;background:#0a082080;padding:7px 10px">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:5px">QUIC CONNECTION ID</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          QUIC identifies connections by <span style="color:#9a4ef8">Connection ID</span> in packet header, not IP:port 4-tuple.<br>
+          Client sends PATH_CHALLENGE on new IP.<br>
+          Server verifies and updates routing.<br>
+          <span style="color:#4eff9a">Stream continues seamlessly — zero re-handshake.</span>
+        </div>
+      </div>
+
+      <div class="fade" id="real-use" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">REAL-WORLD USES</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:6px;line-height:1.7">Video call in a car: WiFi → 4G → WiFi — call continues</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4ec9e1;padding-left:6px;line-height:1.7">File downloads survive network switches</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #9a4ef8;padding-left:6px;line-height:1.7">Gaming: low-latency UDP + migration = no reconnect on IP change</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">QUIC uses Connection ID, not IP:port tuple.</div>
+    <div class="il">Network change = same session continues.</div>
+    <div class="ih">TCP breaks on IP change. QUIC doesn't.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9a4ef8">CID</div><div class="sl">CONN IDENTITY</div></div>
+    <div class="sc"><div class="sv gn">0ms</div><div class="sl">MIGRATION</div></div>
+    <div class="sc"><div class="sv rd">3 RTT</div><div class="sl">TCP COST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5 — ENGINEER CHEATSHEET ═══ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">HTTP/3 IN PROD</div>
+    <div class="hdr-sub">DEPLOY · DEBUG · SECURITY CHECKLIST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ENGINEER GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SHIP IT</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- Adoption stats -->
+      <div class="fade" id="adopt" style="border:1px solid #1e4080;background:#050e1a;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">HTTP/3 ADOPTION (2025)</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#aaa;min-width:70px">Google</div>
+            <div style="flex:1;height:10px;background:#0a0a14;position:relative">
+              <div id="ab-google" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width .9s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a">100%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#aaa;min-width:70px">Cloudflare</div>
+            <div style="flex:1;height:10px;background:#0a0a14;position:relative">
+              <div id="ab-cf" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4eff9a;transition:width .9s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a">100%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#aaa;min-width:70px">Web total</div>
+            <div style="flex:1;height:10px;background:#0a0a14;position:relative">
+              <div id="ab-web" style="position:absolute;left:0;top:0;bottom:0;width:0%;background:#4ec9e1;transition:width .9s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#4ec9e1">~30%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enable HTTP/3 nginx/caddy -->
+      <div class="fade" id="enable-box" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">ENABLE HTTP/3</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;background:#000a06;padding:5px;border:1px solid #4eff9a20;line-height:2.2">
+          # nginx (1.25+)<br>
+          listen 443 quic reuseport;<br>
+          http3 on;<br>
+          add_header Alt-Svc 'h3=":443"; ma=86400';<br><br>
+          # Caddy (automatic)<br>
+          :443 { tls; }<br>
+          # QUIC enabled by default ✓
+        </div>
+      </div>
+
+      <!-- Security checklist -->
+      <div class="fade" id="sec-check" style="border:1px solid #e8505050;background:#1a050580;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">SECURITY CHECKLIST</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:6px;line-height:1.7"><span style="color:#e85050">0-RTT:</span> block POST/PUT/DELETE on 0-RTT — replay risk</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:6px;line-height:1.7"><span style="color:#e8a020">UDP DDoS:</span> QUIC amplification via Initial packets — rate-limit</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:6px;line-height:1.7"><span style="color:#e8a020">Firewall:</span> many corp firewalls block UDP 443 — fallback to TCP needed</div>
+          <div style="font-size:6px;color:#4eff9a;border-left:2px solid #4eff9a;padding-left:6px;line-height:1.7"><span style="color:#4eff9a">Alt-Svc:</span> advertise h3 in header → browser upgrades next visit</div>
+        </div>
+      </div>
+
+      <!-- Debug commands -->
+      <div class="fade" id="debug-box" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">DEBUG COMMANDS</div>
+        <div style="font-size:6px;color:#4ec9e1;font-family:monospace;background:#000a0d;padding:5px;border:1px solid #1e4080;line-height:2.2">
+          # check HTTP version used<br>
+          curl -I --http3 https://example.com<br>
+          curl --http3-only https://example.com<br><br>
+          # Chrome DevTools → Network<br>
+          # Protocol column: h3 = HTTP/3 ✓<br><br>
+          # Wireshark filter<br>
+          udp.port==443 and quic
+        </div>
+      </div>
+
+      <!-- Final summary -->
+      <div class="fade" id="summary" style="border:2px solid #4eff9a60;background:#001a1090;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">QUICK REFERENCE</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>Protocol</span><span style="color:#4eff9a">QUIC (UDP 443)</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>Security</span><span style="color:#4eff9a">TLS 1.3 always</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>Streams</span><span style="color:#4eff9a">independent HOL-free</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>Handshake</span><span style="color:#4eff9a">0-RTT or 1-RTT</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>Migration</span><span style="color:#4eff9a">built-in via CID</span></div>
+          <div style="display:flex;justify-content:space-between;font-size:6px;color:#aaa"><span>HOL blocking</span><span style="color:#4eff9a">eliminated</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">HTTP/3 = QUIC + UDP + TLS1.3 built in.</div>
+    <div class="il">No HOL, 0-RTT, migration — all in one protocol.</div>
+    <div class="ih">Alt-Svc header upgrades browsers automatically.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">h3</div><div class="sl">HTTP VERSION</div></div>
+    <div class="sc"><div class="sv" style="color:#9a4ef8">UDP</div><div class="sl">PORT 443</div></div>
+    <div class="sc"><div class="sv am">30%</div><div class="sl">WEB ADOPTION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="play5()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];let loops=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){timers.forEach(clearTimeout);timers=[];loops.forEach(clearInterval);loops=[]}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>[play1,play2,play3,play4,play5][n-1](),200);
+}
+function show(id,d){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},d)}
+function hide(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function setTxt(id,t,d){T(()=>{const e=document.getElementById(id);if(e)e.textContent=t;},d)}
+function setPct(id,w,delay){
+  T(()=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>{e.style.transition='width .7s ease-out';e.style.width=w;},30);}},delay);
+}
+function spawnPkt(laneId,col,label,delay){
+  T(()=>{
+    const lane=document.getElementById(laneId);if(!lane)return;
+    const p=document.createElement('div');
+    p.style.cssText=`position:absolute;left:0;top:3px;bottom:3px;padding:0 5px;border:1px solid ${col};background:${col}25;color:${col};font-size:5px;font-family:'Press Start 2P',monospace;display:flex;align-items:center;white-space:nowrap;border-radius:2px;opacity:0;transition:opacity .2s,left .5s linear;`;
+    p.textContent=label;lane.appendChild(p);
+    setTimeout(()=>{p.style.opacity='1';p.style.left='calc(100% - 36px)';setTimeout(()=>{p.style.opacity='0';setTimeout(()=>p.remove(),300);},540);},20);
+  },delay);
+}
+
+/* ── S1: HOL Blocking ── */
+function play1(){
+  clearT();
+  // Reset stream fills
+  ['sf1','sf2','sf3','sf4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .6s ease-out',30);}});
+  ['sb1','sb2','sb3','sb4'].forEach(id=>hide(id));
+  hide('freeze-banner');hide('hol-why');hide('hol-timeline');hide('hol-teaser');
+  ['tl-frozen','tl-retx','tl-resume'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  const sl2lbl=document.getElementById('sl2-lbl');if(sl2lbl)sl2lbl.textContent='▶ flowing';
+
+  // Phase 1: all streaming
+  T(()=>{
+    document.getElementById('sf1').style.width='55%';
+    document.getElementById('sf2').style.width='40%';
+    document.getElementById('sf3').style.width='70%';
+    document.getElementById('sf4').style.width='30%';
+  },400);
+
+  // Phase 2: packet loss on stream 2
+  T(()=>{
+    const sl2=document.getElementById('sl2');
+    if(sl2)sl2.style.animation='blocked .5s ease-in-out 3';
+    if(sl2lbl)sl2lbl.textContent='✕ LOST SEGMENT';
+    document.getElementById('sf2').style.width='42%';
+  },1800);
+
+  // Phase 3: all streams freeze
+  T(()=>{
+    show('freeze-banner',0);
+    ['sb1','sb3','sb4'].forEach(id=>show(id,0));
+    show('sb2',0);
+  },2600);
+
+  show('hol-why',3200);
+  show('hol-timeline',3900);
+  T(()=>{document.getElementById('tl-frozen').style.opacity='1';},4200);
+  T(()=>{document.getElementById('tl-retx').style.opacity='1';},4600);
+  T(()=>{document.getElementById('tl-resume').style.opacity='1';},5100);
+  show('hol-teaser',5600);
+}
+
+/* ── S2: QUIC streams ── */
+function play2(){
+  clearT();
+  ['qf1','qf2','qf3','qf4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .6s ease-out',30);}});
+  hide('q2-pause');hide('cmp-box');hide('quic-stack');hide('why-udp');
+  ['ql1','ql2','ql3','ql4'].forEach((id,i)=>{
+    const e=document.getElementById(id);
+    const cols=['#4eff9a','#e85050','#4ec9e1','#9a4ef8'];
+    if(e){e.textContent='▶ flowing';e.style.color=cols[i];}
+  });
+
+  // All streaming
+  T(()=>{
+    document.getElementById('qf1').style.width='60%';
+    document.getElementById('qf2').style.width='45%';
+    document.getElementById('qf3').style.width='75%';
+    document.getElementById('qf4').style.width='35%';
+    // Spawn packets
+    [0,200,400,600].forEach((d,i)=>{
+      const cols=['#4eff9a','#e85050','#4ec9e1','#9a4ef8'];
+      const ids=['q1','q2','q3','q4'];
+      spawnPkt(ids[i],cols[i],'PKT',d);
+    });
+  },400);
+
+  // Stream 2 loss — only it pauses
+  T(()=>{
+    const q2=document.getElementById('q2');
+    if(q2)q2.style.animation='blocked .5s ease-in-out 3';
+    const ql2=document.getElementById('ql2');
+    if(ql2)ql2.textContent='✕ RETRANSMITTING';
+    document.getElementById('qf2').style.width='47%';
+    // Others keep going
+    document.getElementById('qf1').style.width='80%';
+    document.getElementById('qf3').style.width='90%';
+    document.getElementById('qf4').style.width='65%';
+    spawnPkt('q1','#4eff9a','PKT',200);
+    spawnPkt('q3','#4ec9e1','PKT',400);
+    spawnPkt('q4','#9a4ef8','PKT',600);
+  },2000);
+
+  show('q2-pause',2800);
+  show('cmp-box',3400);
+  show('quic-stack',4100);
+  show('why-udp',4900);
+}
+
+/* ── S3: 0-RTT ── */
+function play3(){
+  clearT();
+  ['ts1','ts2','ts3','ts-total','qs1','qs-total','rtt-bars','replay-box','psk-box'].forEach(hide);
+  ['rbar-tcp','rbar-quic1','rbar-quic0'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .7s ease-out',30);}});
+
+  show('ts1',400);
+  show('ts2',1000);
+  show('ts3',1600);
+  show('ts-total',2200);
+  show('qs1',2500);
+  show('qs-total',3000);
+  show('rtt-bars',3300);
+  T(()=>{document.getElementById('rbar-tcp').style.width='100%';},3500);
+  T(()=>{document.getElementById('rbar-quic1').style.width='33%';},4000);
+  T(()=>{document.getElementById('rbar-quic0').style.width='5%';},4400);
+  show('replay-box',4800);
+  show('psk-box',5600);
+}
+
+/* ── S4: Connection migration ── */
+function play4(){
+  clearT();
+  hide('migr-event');hide('migr-ok');hide('tcp-migr');hide('conn-id-explain');hide('real-use');
+
+  const pkt=document.getElementById('migr-pkt');
+  const bwifi=document.getElementById('beam-wifi');
+  const b4g=document.getElementById('beam-4g');
+  const netLbl=document.getElementById('net-label');
+  const srcIp=document.getElementById('src-ip');
+  const connBanner=document.getElementById('conn-id-banner');
+
+  if(pkt){pkt.style.left='0';pkt.style.borderColor='#4ec9e1';pkt.style.color='#4ec9e1';pkt.style.background='#001a20';}
+  if(bwifi)bwifi.style.opacity='1';
+  if(b4g)b4g.style.opacity='0';
+  if(netLbl){netLbl.textContent='WiFi';netLbl.style.color='#4ec9e1';}
+  if(srcIp)srcIp.textContent='src: 192.168.1.5';
+  if(connBanner){connBanner.style.borderColor='#9a4ef8';connBanner.style.color='#9a4ef8';}
+
+  // Packet flowing on WiFi
+  const pktLoop=setInterval(()=>{
+    if(!pkt)return;
+    pkt.style.transition='left .5s linear';
+    pkt.style.left='calc(100% - 28px)';
+    setTimeout(()=>{pkt.style.transition='none';pkt.style.left='0';},520);
+  },700);
+  loops.push(pktLoop);
+
+  // Network switch event
+  T(()=>{
+    clearInterval(pktLoop);
+    show('migr-event',0);
+    if(pkt){pkt.style.transition='none';pkt.style.left='50%';}
+    // Visual switch
+    if(bwifi)bwifi.style.opacity='0.2';
+  },2500);
+
+  T(()=>{
+    if(b4g)b4g.style.opacity='1';
+    if(netLbl){netLbl.textContent='4G';netLbl.style.color='#4eff9a';}
+    if(srcIp){srcIp.textContent='src: 10.0.0.42';srcIp.style.color='#4eff9a';}
+    if(pkt){pkt.style.borderColor='#4eff9a';pkt.style.color='#4eff9a';pkt.style.background='#001a10';}
+    // Resume pkt flow
+    const newLoop=setInterval(()=>{
+      if(!pkt)return;
+      pkt.style.transition='left .5s linear';pkt.style.left='calc(100% - 28px)';
+      setTimeout(()=>{pkt.style.transition='none';pkt.style.left='0';},520);
+    },700);
+    loops.push(newLoop);
+  },3500);
+
+  show('migr-ok',3700);
+  show('tcp-migr',4400);
+  show('conn-id-explain',5200);
+  show('real-use',6000);
+}
+
+/* ── S5: Cheatsheet ── */
+function play5(){
+  clearT();
+  ['adopt','enable-box','sec-check','debug-box','summary'].forEach(hide);
+  ['ab-google','ab-cf','ab-web'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0%';setTimeout(()=>e.style.transition='width .9s ease-out',30);}});
+
+  show('adopt',300);
+  T(()=>{
+    document.getElementById('ab-google').style.width='100%';
+    document.getElementById('ab-cf').style.width='100%';
+    document.getElementById('ab-web').style.width='30%';
+  },500);
+  show('enable-box',1400);
+  show('sec-check',2200);
+  show('debug-box',3100);
+  show('summary',4000);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

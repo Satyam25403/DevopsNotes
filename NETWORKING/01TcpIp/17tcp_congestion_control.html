@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>TCP Congestion Control</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+
+/* cwnd bar */
+.cwnd-bar{height:10px;background:#0d0d1a;border-radius:1px;position:relative;overflow:hidden}
+.cwnd-fill{position:absolute;left:0;top:0;bottom:0;width:0%;border-radius:1px;transition:width .5s ease-out}
+
+/* Phase label strip */
+.phase-strip{display:flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid;font-size:7px;transition:all .3s}
+
+/* Canvas chart */
+canvas{display:block;border-radius:2px}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes drop{0%{transform:translateY(0);opacity:1}100%{transform:translateY(8px);opacity:0}}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ SCENE 1 — SLOW START & CONGESTION AVOIDANCE ════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CONGESTION CONTROL</div>
+    <div class="hdr-sub">SLOW START → AVOIDANCE → RECOVERY</div>
+    <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEP 1 — PHASES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CLASSIC TCP</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px">cwnd OVER TIME — CLASSIC TCP RENO</div>
+
+      <!-- Animated canvas chart -->
+      <canvas id="c1" width="366" height="160" style="background:#0a0a14;border:1px solid #2a1f3d"></canvas>
+
+      <!-- Phase annotations that appear -->
+      <div style="display:flex;gap:4px">
+        <div class="phase-strip fade" id="ph1-ss" style="flex:1;border-color:#4eff9a;color:#4eff9a;background:#001a1060">
+          <div>⬆</div><div><div style="font-size:7px">SLOW START</div><div style="font-size:5px;color:#888;margin-top:2px">×2 per RTT</div></div>
+        </div>
+        <div class="phase-strip fade" id="ph1-ca" style="flex:1;border-color:#4ec9e1;color:#4ec9e1;background:#001a2060">
+          <div>📈</div><div><div style="font-size:7px">CONG AVOID</div><div style="font-size:5px;color:#888;margin-top:2px">+1 per RTT</div></div>
+        </div>
+        <div class="phase-strip fade" id="ph1-loss" style="flex:1;border-color:#e85050;color:#e85050;background:#1a050560">
+          <div>💥</div><div><div style="font-size:7px">LOSS EVENT</div><div style="font-size:5px;color:#888;margin-top:2px">cwnd halved</div></div>
+        </div>
+      </div>
+
+      <!-- cwnd live value -->
+      <div class="fade" id="cwnd-live" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+          <div style="font-size:7px;color:#4ec9e1">CURRENT cwnd</div>
+          <div style="font-size:16px;color:#4eff9a;font-family:'Press Start 2P',monospace" id="cwnd-val">1</div>
+        </div>
+        <div class="cwnd-bar"><div class="cwnd-fill" id="cwnd-fill1" style="background:#4eff9a"></div></div>
+        <div style="font-size:6px;color:#555;margin-top:3px" id="cwnd-phase-lbl">phase: slow start</div>
+      </div>
+
+      <!-- ssthresh explanation -->
+      <div class="fade" id="ssthresh-box" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">ssthresh — THE THRESHOLD</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          <span style="color:#4eff9a">Slow Start:</span> cwnd &lt; ssthresh → double per RTT<br>
+          <span style="color:#4ec9e1">Cong Avoid:</span> cwnd ≥ ssthresh → +1 MSS per RTT<br>
+          <span style="color:#e85050">On loss:</span> ssthresh = cwnd/2 → restart
+        </div>
+      </div>
+
+      <!-- 3 dup ACKs fast retransmit -->
+      <div class="fade" id="dup-ack-box" style="border:1px solid #9a4ef850;background:#0a082080;padding:7px 10px">
+        <div style="font-size:7px;color:#9a4ef8;margin-bottom:5px">3 DUPLICATE ACKs → FAST RETRANSMIT</div>
+        <div style="display:flex;gap:4px;margin-bottom:5px">
+          <div style="font-size:6px;padding:3px 6px;border:1px solid #4eff9a;color:#4eff9a">ACK 5</div>
+          <div style="font-size:6px;padding:3px 6px;border:1px solid #e85050;color:#e85050">ACK 5</div>
+          <div style="font-size:6px;padding:3px 6px;border:1px solid #e85050;color:#e85050">ACK 5</div>
+          <div style="font-size:6px;padding:3px 6px;border:1px solid #e85050;color:#e85050">ACK 5</div>
+          <div style="font-size:6px;padding:3px 6px;border:1px solid #9a4ef8;color:#9a4ef8">RETX!</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">Don't wait for timeout. Retransmit immediately.<br>Faster recovery than RTO timeout (~200ms+).</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Slow Start doubles cwnd until ssthresh.</div>
+    <div class="il">3 dup ACKs = fast retransmit, no timeout wait.</div>
+    <div class="ih am">Loss halves ssthresh — avoidance restarts.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">×2</div><div class="sl">SLOW START</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">+1</div><div class="sl">CONG AVOID</div></div>
+    <div class="sc"><div class="sv am">÷2</div><div class="sl">ON LOSS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════ SCENE 2 — CUBIC ════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CUBIC ALGORITHM</div>
+    <div class="hdr-sub">LINUX DEFAULT SINCE KERNEL 2.6.19</div>
+    <div class="dots"><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEP 2 — CUBIC</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">DEFAULT</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px">CUBIC cwnd CURVE — LOSS-BASED</div>
+
+      <canvas id="c2" width="366" height="175" style="background:#0a0a14;border:1px solid #2a1f3d"></canvas>
+
+      <!-- CUBIC behavior annotations -->
+      <div style="display:flex;gap:4px">
+        <div class="phase-strip fade" id="c2-ann1" style="flex:1;border-color:#e8a020;color:#e8a020;background:#10090060">
+          <div style="font-size:7px">①</div>
+          <div><div style="font-size:6px">LOSS</div><div style="font-size:5px;color:#888;margin-top:1px">cwnd × 0.7</div></div>
+        </div>
+        <div class="phase-strip fade" id="c2-ann2" style="flex:1;border-color:#4ec9e1;color:#4ec9e1;background:#001a2060">
+          <div style="font-size:7px">②</div>
+          <div><div style="font-size:6px">CUBIC RISE</div><div style="font-size:5px;color:#888;margin-top:1px">t³ curve up</div></div>
+        </div>
+        <div class="phase-strip fade" id="c2-ann3" style="flex:1;border-color:#4eff9a;color:#4eff9a;background:#001a1060">
+          <div style="font-size:7px">③</div>
+          <div><div style="font-size:6px">PLATEAU</div><div style="font-size:5px;color:#888;margin-top:1px">near Wmax</div></div>
+        </div>
+      </div>
+
+      <div class="fade" id="cubic-explain" style="border:1px solid #e8a02050;background:#10090080;padding:7px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">HOW CUBIC WORKS</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          W(t) = C(t − K)³ + W<sub>max</sub><br>
+          After loss: set W<sub>max</sub> = cwnd, reduce by β=0.7<br>
+          Recovery: cubic curve — fast far from W<sub>max</sub>,<br>
+          slow near it (probing carefully for bandwidth).<br>
+          <span style="color:#e8a020">Problem: on high-latency links, recovery is slow.</span>
+        </div>
+      </div>
+
+      <div class="fade" id="cubic-weakness" style="border:1px solid #e8505050;background:#1a050580;padding:7px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:4px">CUBIC WEAKNESS</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e85050;padding-left:7px;line-height:1.7">Loss-triggered: needs packet drops to probe bandwidth — wastes capacity</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">High BDP links (100ms RTT, 1Gbps): pipe never fully utilized</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">Competing with BBR flows: CUBIC gets starved</div>
+        </div>
+      </div>
+
+      <div class="fade" id="cubic-check" style="border:1px solid #4ec9e140;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">CHECK YOUR CURRENT ALGO</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;background:#000a0d;padding:5px;border:1px solid #1e4080;line-height:2">
+          sysctl net.ipv4.tcp_congestion_control<br>
+          <span style="color:#e8a020"># likely: cubic</span><br>
+          cat /proc/sys/net/ipv4/tcp_available_congestion_control
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">CUBIC uses cubic function after loss event.</div>
+    <div class="il">Fast probe far from Wmax, slow near it.</div>
+    <div class="ih am">Loss-based: must drop packets to learn limit.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">t³</div><div class="sl">CUBIC CURVE</div></div>
+    <div class="sc"><div class="sv am">0.7×</div><div class="sl">LOSS FACTOR β</div></div>
+    <div class="sc"><div class="sv rd">DROP</div><div class="sl">NEEDS LOSS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════ SCENE 3 — BBR ════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">BBR — BOTTLENECK BW+RTT</div>
+    <div class="hdr-sub">GOOGLE 2016 · MODEL-BASED · NOT LOSS-BASED</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 3 — BBR</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">GOOGLE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px">BBR cwnd — MODEL-BASED PROBE</div>
+
+      <canvas id="c3" width="366" height="175" style="background:#050e1a;border:1px solid #1e4080"></canvas>
+
+      <!-- BBR phases -->
+      <div style="display:flex;gap:3px">
+        <div class="phase-strip fade" id="b3-ss" style="flex:1;border-color:#4eff9a;color:#4eff9a;background:#001a1060;font-size:6px">
+          <div>🚀</div><div>STARTUP<br><span style="font-size:5px;color:#888">×2 BtlBw</span></div>
+        </div>
+        <div class="phase-strip fade" id="b3-drain" style="flex:1;border-color:#4ec9e1;color:#4ec9e1;background:#001a2060;font-size:6px">
+          <div>📉</div><div>DRAIN<br><span style="font-size:5px;color:#888">clear queue</span></div>
+        </div>
+        <div class="phase-strip fade" id="b3-probe" style="flex:1;border-color:#9a4ef8;color:#9a4ef8;background:#0a082060;font-size:6px">
+          <div>🔍</div><div>PROBE BW<br><span style="font-size:5px;color:#888">cycle up/dn</span></div>
+        </div>
+        <div class="phase-strip fade" id="b3-rtt" style="flex:1;border-color:#e8a020;color:#e8a020;background:#10090060;font-size:6px">
+          <div>⏱</div><div>PROBE RTT<br><span style="font-size:5px;color:#888">min RTT</span></div>
+        </div>
+      </div>
+
+      <div class="fade" id="bbr-how" style="border:1px solid #4eff9a40;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">HOW BBR IS DIFFERENT</div>
+        <div style="font-size:6px;color:#aaa;line-height:2">
+          Tracks: BtlBw (bottleneck bandwidth) + RTprop<br>
+          Pacing rate = BtlBw · gain<br>
+          cwnd = BtlBw × RTprop (BDP)<br>
+          <span style="color:#4eff9a">Doesn't need loss to probe — uses RTT signals.</span><br>
+          Periodically probes for more BW then backs off.
+        </div>
+      </div>
+
+      <div class="fade" id="bbr-wins" style="border:1px solid #4ec9e150;background:#001a2080;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHERE BBR WINS</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">High BDP links (100ms+ RTT, 1Gbps): fully utilizes pipe</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">Lossy wireless: ignores random loss, only reacts to delay</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4ec9e1;padding-left:7px;line-height:1.7">GCP/YouTube: 4× higher throughput vs CUBIC on same links</div>
+          <div style="font-size:6px;color:#e8a020;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">Warning: BBR v1 can be aggressive with other CUBIC flows</div>
+        </div>
+      </div>
+
+      <div class="fade" id="bbr-enable" style="border:1px solid #4eff9a30;background:#001a1080;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">ENABLE BBR NOW</div>
+        <div style="font-size:6px;color:#4eff9a;font-family:monospace;background:#000a06;padding:5px;border:1px solid #4eff9a20;line-height:2.2">
+          # check if available<br>
+          modprobe tcp_bbr<br>
+          sysctl -w net.ipv4.tcp_congestion_control=bbr<br>
+          # make permanent<br>
+          echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">BBR models bandwidth × RTT — not loss.</div>
+    <div class="il">Maintains high throughput on lossy/long links.</div>
+    <div class="ih">4× vs CUBIC on high-latency paths (YouTube).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">BDP</div><div class="sl">BBR MODEL</div></div>
+    <div class="sc"><div class="sv gn">4×</div><div class="sl">THROUGHPUT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">NO DROP</div><div class="sl">NEEDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════ SCENE 4 — CUBIC vs BBR HEAD-TO-HEAD ════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">CUBIC vs BBR</div>
+    <div class="hdr-sub">SAME LOSSY LINK — HEAD TO HEAD</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FINAL — COMPARISON</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WINNER: BBR</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#888;letter-spacing:1px">THROUGHPUT — 100ms RTT · 1% RANDOM LOSS</div>
+
+      <!-- Head-to-head chart -->
+      <canvas id="c4" width="366" height="190" style="background:#050e1a;border:1px solid #1e4080"></canvas>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:10px">
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:14px;height:3px;background:#e85050"></div><div style="font-size:6px;color:#e85050">CUBIC</div></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:14px;height:3px;background:#4eff9a"></div><div style="font-size:6px;color:#4eff9a">BBR</div></div>
+        <div style="display:flex;align-items:center;gap:5px"><div style="width:10px;height:10px;background:#e8505030;border:1px solid #e85050"></div><div style="font-size:6px;color:#888">CUBIC drop</div></div>
+      </div>
+
+      <!-- Comparison table -->
+      <div class="fade" id="cmp-table" style="border:1px solid #1e4080;background:#050e1a;padding:7px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">COMPARISON TABLE</div>
+        <div style="display:flex;gap:0;font-size:6px;margin-bottom:3px;padding-bottom:3px;border-bottom:1px solid #1e4080">
+          <div style="flex:2;color:#888">METRIC</div>
+          <div style="flex:1;color:#e85050;text-align:center">CUBIC</div>
+          <div style="flex:1;color:#4eff9a;text-align:center">BBR</div>
+        </div>
+        <div class="fade" id="row1" style="display:flex;gap:0;font-size:6px;padding:3px 0;border-bottom:1px solid #0d0d1a">
+          <div style="flex:2;color:#888">Loss trigger</div>
+          <div style="flex:1;color:#e85050;text-align:center">✓ needed</div>
+          <div style="flex:1;color:#4eff9a;text-align:center">✗ no</div>
+        </div>
+        <div class="fade" id="row2" style="display:flex;gap:0;font-size:6px;padding:3px 0;border-bottom:1px solid #0d0d1a">
+          <div style="flex:2;color:#888">High latency</div>
+          <div style="flex:1;color:#e85050;text-align:center">poor</div>
+          <div style="flex:1;color:#4eff9a;text-align:center">excellent</div>
+        </div>
+        <div class="fade" id="row3" style="display:flex;gap:0;font-size:6px;padding:3px 0;border-bottom:1px solid #0d0d1a">
+          <div style="flex:2;color:#888">Lossy WiFi</div>
+          <div style="flex:1;color:#e85050;text-align:center">collapses</div>
+          <div style="flex:1;color:#4eff9a;text-align:center">resilient</div>
+        </div>
+        <div class="fade" id="row4" style="display:flex;gap:0;font-size:6px;padding:3px 0;border-bottom:1px solid #0d0d1a">
+          <div style="flex:2;color:#888">Short conn</div>
+          <div style="flex:1;color:#e8a020;text-align:center">fine</div>
+          <div style="flex:1;color:#e8a020;text-align:center">fine</div>
+        </div>
+        <div class="fade" id="row5" style="display:flex;gap:0;font-size:6px;padding:3px 0">
+          <div style="flex:2;color:#888">Fairness v1</div>
+          <div style="flex:1;color:#4eff9a;text-align:center">fair</div>
+          <div style="flex:1;color:#e8a020;text-align:center">aggressive</div>
+        </div>
+      </div>
+
+      <!-- When to use each -->
+      <div class="fade" id="verdict" style="border:2px solid #4eff9a60;background:#001a1090;padding:7px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">VERDICT</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">Use BBR: cloud servers, video streaming, high-RTT paths, CDN edges</div>
+          <div style="font-size:6px;color:#aaa;border-left:2px solid #e8a020;padding-left:7px;line-height:1.7">Keep CUBIC: local LAN, datacenter east-west, mixed BBR/CUBIC environments</div>
+          <div style="font-size:6px;color:#4eff9a;border-left:2px solid #4eff9a;padding-left:7px;line-height:1.7">BBR v2 fixes fairness issues — prefer v2 where available</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Same link: BBR 3–4× higher throughput.</div>
+    <div class="il">CUBIC drops repeatedly; BBR probes smoothly.</div>
+    <div class="ih">One sysctl. Immediate improvement. Ship it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">BBR</div><div class="sl">WINNER</div></div>
+    <div class="sc"><div class="sv am">v2</div><div class="sl">FAIRER BBR</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1 CMD</div><div class="sl">TO ENABLE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function T(fn,ms){timers.push(setTimeout(fn,ms))}
+function clearT(){timers.forEach(clearTimeout);timers=[]}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach((s,i)=>s.classList.toggle('active',i+1===n));
+  setTimeout(()=>[play1,play2,play3,play4][n-1](),200);
+}
+function show(id,d){T(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},d)}
+function hide(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function setTxt(id,t,d){T(()=>{const e=document.getElementById(id);if(e)e.textContent=t;},d)}
+
+/* ─── CANVAS HELPERS ─── */
+function clearCanvas(id){
+  const c=document.getElementById(id);
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,c.width,c.height);
+  return{c,ctx,W:c.width,H:c.height};
+}
+function drawGrid(ctx,W,H,padL,padB,maxX,maxY,gridColor){
+  ctx.strokeStyle=gridColor||'#1a1a2a';
+  ctx.lineWidth=1;
+  for(let y=0;y<=maxY;y+=maxY/4){
+    const py=H-padB-(y/maxY)*(H-padB-10);
+    ctx.beginPath();ctx.moveTo(padL,py);ctx.lineTo(W,py);ctx.stroke();
+  }
+  for(let x=0;x<=maxX;x+=maxX/6){
+    const px=padL+(x/maxX)*(W-padL);
+    ctx.beginPath();ctx.moveTo(px,10);ctx.lineTo(px,H-padB);ctx.stroke();
+  }
+}
+function drawAxes(ctx,W,H,padL,padB,label){
+  ctx.strokeStyle='#2a2a3a';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(padL,10);ctx.lineTo(padL,H-padB);ctx.lineTo(W,H-padB);ctx.stroke();
+  ctx.fillStyle='#555';ctx.font='5px Press Start 2P';
+  ctx.fillText('cwnd (MSS)',padL+4,18);
+  ctx.fillText('time (RTT)',W-70,H-padB+14);
+}
+function animLine(ctx,pts,color,W,padL,padB,maxX,maxY,lineW,onStep,totalMs){
+  const n=pts.length;
+  const step=totalMs/n;
+  let i=0;
+  function draw(){
+    if(i>=n)return;
+    const p=pts[i];
+    const px=padL+(p.x/maxX)*(W-padL);
+    const py=(H=>(H-padB-(p.y/maxY)*(H-padB-10)))(ctx.canvas.height);
+    if(i===0){ctx.beginPath();ctx.moveTo(px,py);}
+    else{ctx.lineTo(px,py);}
+    ctx.strokeStyle=color;ctx.lineWidth=lineW||2;ctx.stroke();
+    if(onStep)onStep(i,p);
+    i++;
+  }
+  const iv=setInterval(draw,step);
+  timers.push(iv);
+  return iv;
+}
+
+/* ─── SCENE 1: Classic Reno ─── */
+function buildRenoPoints(){
+  const pts=[];
+  let cwnd=1,ssthresh=16,rtt=0;
+  // Slow start
+  while(cwnd<ssthresh&&rtt<12){pts.push({x:rtt,y:Math.min(cwnd,32),phase:'ss'});cwnd*=2;rtt++;}
+  // Congestion avoidance up to loss
+  for(let i=0;i<10;i++){pts.push({x:rtt,y:Math.min(cwnd,32),phase:'ca'});cwnd+=1;rtt++;}
+  // Loss event
+  pts.push({x:rtt,y:Math.min(cwnd,32),phase:'loss'});
+  ssthresh=Math.floor(cwnd/2);cwnd=1;rtt++;
+  // Second slow start
+  while(cwnd<ssthresh&&rtt<30){pts.push({x:rtt,y:Math.min(cwnd,32),phase:'ss2'});cwnd*=2;rtt++;}
+  // Second avoidance
+  for(let i=0;i<8;i++){pts.push({x:rtt,y:Math.min(cwnd,32),phase:'ca2'});cwnd+=1;rtt++;}
+  return pts;
+}
+
+function play1(){
+  clearT();
+  ['ph1-ss','ph1-ca','ph1-loss','cwnd-live','ssthresh-box','dup-ack-box'].forEach(hide);
+  const {c,ctx,W,H}=clearCanvas('c1');
+  const padL=30,padB=20,maxX=35,maxY=32;
+  drawGrid(ctx,W,H,padL,padB,maxX,maxY);
+  drawAxes(ctx,W,H,padL,padB);
+  // Draw ssthresh line
+  const ssY=H-padB-(16/maxY)*(H-padB-10);
+  ctx.setLineDash([4,3]);ctx.strokeStyle='#e8a02060';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(padL,ssY);ctx.lineTo(W,ssY);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#e8a02080';ctx.font='5px Press Start 2P';ctx.fillText('ssthresh',padL+2,ssY-3);
+
+  const pts=buildRenoPoints();
+  let phase='ss';
+  const fill=document.getElementById('cwnd-fill1');
+  const val=document.getElementById('cwnd-val');
+  const phaseLbl=document.getElementById('cwnd-phase-lbl');
+  if(fill){fill.style.transition='none';fill.style.width='0%';setTimeout(()=>fill.style.transition='width .3s ease-out',30);}
+
+  let prevPt=null;
+  ctx.beginPath();
+  const n=pts.length;
+  const step=4800/n;
+  let i=0;
+  const iv=setInterval(()=>{
+    if(i>=n){clearInterval(iv);return;}
+    const p=pts[i];
+    const px=padL+(p.x/maxX)*(W-padL);
+    const py=H-padB-(p.y/maxY)*(H-padB-10);
+    const col=p.phase==='loss'?'#e85050':p.phase.startsWith('ss')?'#4eff9a':'#4ec9e1';
+    if(i===0){ctx.beginPath();ctx.moveTo(px,py);}
+    else{
+      // Color segment by phase
+      if(prevPt&&prevPt.phase!==p.phase){ctx.strokeStyle=col;ctx.stroke();ctx.beginPath();ctx.moveTo(padL+(prevPt.x/maxX)*(W-padL),H-padB-(prevPt.y/maxY)*(H-padB-10));}
+      ctx.lineTo(px,py);
+      ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(px,py);
+    }
+    // Dot at current pos
+    if(i>0){ctx.fillStyle=col;ctx.beginPath();ctx.arc(px,py,3,0,Math.PI*2);ctx.fill();}
+    // Loss marker
+    if(p.phase==='loss'){
+      ctx.fillStyle='#e85050';ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.font='bold 7px Press Start 2P';ctx.fillText('!',px-3,py+3);
+    }
+    // Update live cwnd
+    if(val)val.textContent=Math.round(p.y);
+    if(fill)fill.style.width=(p.y/maxY*100)+'%';
+    if(phaseLbl)phaseLbl.textContent='phase: '+(p.phase.startsWith('ss')?'slow start':p.phase==='loss'?'⚠ LOSS EVENT':'congestion avoidance');
+    prevPt=p;
+    i++;
+  },step);
+  timers.push(iv);
+
+  show('cwnd-live',300);
+  show('ph1-ss',600);
+  show('ph1-ca',2200);
+  show('ph1-loss',3400);
+  show('ssthresh-box',3800);
+  show('dup-ack-box',4600);
+}
+
+/* ─── SCENE 2: CUBIC ─── */
+function buildCubicPoints(){
+  const pts=[];
+  let t=0,Wmax=28,cwnd=28,beta=0.7;
+  // Initial state near Wmax
+  for(let i=0;i<6;i++){pts.push({x:t,y:Math.min(cwnd,32),phase:'ca'});cwnd+=.3;t++;}
+  // Loss
+  pts.push({x:t,y:cwnd,phase:'loss'});Wmax=cwnd;cwnd=cwnd*beta;t++;
+  // Cubic recovery: W(t)=C(t-K)^3 + Wmax, K = t_to_return
+  const C=0.4,K=Math.cbrt(Wmax*(1-beta)/C);
+  for(let dt=0;dt<22;dt++){
+    const w=C*Math.pow(dt-K,3)+Wmax;
+    const cw=Math.min(Math.max(1,w),32);
+    const ph=dt<K*0.6?'recover':dt<K*1.2?'plateau':'explore';
+    pts.push({x:t,y:cw,phase:ph});t++;
+  }
+  // Second loss
+  pts.push({x:t,y:Math.min(pts[pts.length-1].y,32),phase:'loss'});
+  cwnd=pts[pts.length-1].y*beta;Wmax=pts[pts.length-1].y;t++;
+  // Second recovery shorter
+  for(let dt=0;dt<10;dt++){
+    const w=C*Math.pow(dt-K*.8,3)+Wmax;
+    pts.push({x:t,y:Math.min(Math.max(1,w),32),phase:'recover'});t++;
+  }
+  return pts;
+}
+
+function play2(){
+  clearT();
+  ['c2-ann1','c2-ann2','c2-ann3','cubic-explain','cubic-weakness','cubic-check'].forEach(hide);
+  const {c,ctx,W,H}=clearCanvas('c2');
+  const padL=28,padB=20,maxX=40,maxY=32;
+  drawGrid(ctx,W,H,padL,padB,maxX,maxY,'#1a1025');
+  drawAxes(ctx,W,H,padL,padB);
+
+  const pts=buildCubicPoints();
+  const n=pts.length;
+  const step=4500/n;
+  let i=0,prevPt=null;
+  ctx.beginPath();
+  const iv=setInterval(()=>{
+    if(i>=n){clearInterval(iv);return;}
+    const p=pts[i];
+    const px=padL+(p.x/maxX)*(W-padL);
+    const py=H-padB-(p.y/maxY)*(H-padB-10);
+    const col=p.phase==='loss'?'#e85050':p.phase==='recover'?'#4ec9e1':p.phase==='plateau'?'#e8a020':'#4ec9e1';
+    if(i===0){ctx.beginPath();ctx.moveTo(px,py);}
+    else{
+      ctx.lineTo(px,py);
+      ctx.strokeStyle='#e85050';ctx.lineWidth=2.5;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(px,py);
+    }
+    if(p.phase==='loss'){
+      ctx.fillStyle='#e85050';ctx.beginPath();ctx.arc(px,py,6,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#fff';ctx.font='7px Press Start 2P';ctx.fillText('✕',px-4,py+3);
+      // Drop zone
+      ctx.fillStyle='#e8505018';ctx.fillRect(px-2,py,4,H-padB-py);
+    }
+    if(i>0&&p.phase!=='loss'){ctx.fillStyle='#e85050';ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
+    prevPt=p;i++;
+  },step);
+  timers.push(iv);
+
+  show('c2-ann1',500);
+  show('c2-ann2',1500);
+  show('c2-ann3',2800);
+  show('cubic-explain',3200);
+  show('cubic-weakness',4000);
+  show('cubic-check',4800);
+}
+
+/* ─── SCENE 3: BBR ─── */
+function buildBBRPoints(){
+  const pts=[];
+  let t=0,cwnd=1;
+  // Startup: double like slow start but smooth
+  while(cwnd<20&&t<8){pts.push({x:t,y:Math.min(cwnd,30),phase:'startup'});cwnd*=1.9;t++;}
+  // Drain: quick drop to BDP
+  for(let i=0;i<3;i++){pts.push({x:t,y:Math.max(16-i*3,12),phase:'drain'});t++;}
+  // Probe BW: cyclic gentle up/down with pacing — stays near BDP, no drops
+  const BDP=14;
+  for(let cycle=0;cycle<4;cycle++){
+    // Up probe
+    for(let i=0;i<4;i++){pts.push({x:t,y:BDP+2+Math.sin(i/2)*2,phase:'probe'});t++;}
+    // Back to BDP
+    for(let i=0;i<4;i++){pts.push({x:t,y:BDP+Math.cos(i)*1.5,phase:'probe'});t++;}
+    // Probe RTT occasionally
+    if(cycle===2){for(let i=0;i<2;i++){pts.push({x:t,y:BDP-3,phase:'rtt'});t++;}}
+  }
+  return pts;
+}
+
+function play3(){
+  clearT();
+  ['b3-ss','b3-drain','b3-probe','b3-rtt','bbr-how','bbr-wins','bbr-enable'].forEach(hide);
+  const {c,ctx,W,H}=clearCanvas('c3');
+  const padL=28,padB=20,maxX=36,maxY=32;
+  drawGrid(ctx,W,H,padL,padB,maxX,maxY,'#0a1a2e');
+  drawAxes(ctx,W,H,padL,padB);
+  // BDP line
+  const bdpY=H-padB-(14/maxY)*(H-padB-10);
+  ctx.setLineDash([4,3]);ctx.strokeStyle='#4eff9a50';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(padL,bdpY);ctx.lineTo(W,bdpY);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#4eff9a80';ctx.font='5px Press Start 2P';ctx.fillText('BDP (optimal)',padL+4,bdpY-3);
+
+  const pts=buildBBRPoints();
+  const n=pts.length;
+  const step=4200/n;
+  let i=0;
+  const phaseColors={startup:'#4eff9a',drain:'#4ec9e1',probe:'#9a4ef8',rtt:'#e8a020'};
+  ctx.beginPath();
+  const iv=setInterval(()=>{
+    if(i>=n){clearInterval(iv);return;}
+    const p=pts[i];
+    const px=padL+(p.x/maxX)*(W-padL);
+    const py=H-padB-(p.y/maxY)*(H-padB-10);
+    const col=phaseColors[p.phase]||'#4eff9a';
+    if(i===0){ctx.beginPath();ctx.moveTo(px,py);}
+    else{
+      ctx.lineTo(px,py);
+      ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.stroke();
+      ctx.beginPath();ctx.moveTo(px,py);
+    }
+    if(i>0){ctx.fillStyle=col;ctx.beginPath();ctx.arc(px,py,2.5,0,Math.PI*2);ctx.fill();}
+    i++;
+  },step);
+  timers.push(iv);
+
+  show('b3-ss',400);
+  show('b3-drain',1200);
+  show('b3-probe',1800);
+  show('b3-rtt',2600);
+  show('bbr-how',3000);
+  show('bbr-wins',3800);
+  show('bbr-enable',4600);
+}
+
+/* ─── SCENE 4: CUBIC vs BBR head-to-head ─── */
+function play4(){
+  clearT();
+  ['cmp-table','row1','row2','row3','row4','row5','verdict'].forEach(hide);
+  const {c,ctx,W,H}=clearCanvas('c4');
+  const padL=28,padB=22,maxX=40,maxY=30;
+  drawGrid(ctx,W,H,padL,padB,maxX,maxY,'#0a1a2e');
+  drawAxes(ctx,W,H,padL,padB);
+
+  // Axis labels
+  ctx.fillStyle='#555';ctx.font='5px Press Start 2P';
+  for(let v=0;v<=maxY;v+=10){
+    const py=H-padB-(v/maxY)*(H-padB-10);
+    ctx.fillText(v,2,py+3);
+  }
+  for(let x=0;x<=maxX;x+=10){
+    const px=padL+(x/maxX)*(W-padL);
+    ctx.fillText(x,px-4,H-padB+14);
+  }
+
+  // Build CUBIC points for lossy link
+  function cubicLossy(){
+    const pts=[];let t=0,cwnd=1,ssthresh=20;
+    // SS
+    while(cwnd<ssthresh&&t<8){pts.push({x:t,y:Math.min(cwnd,maxY)});cwnd*=2;t++;}
+    // CA then random losses
+    const lossTimes=[12,17,23,30,36];
+    let nextLoss=0;
+    while(t<=maxX){
+      if(nextLoss<lossTimes.length&&t>=lossTimes[nextLoss]){
+        pts.push({x:t,y:Math.min(cwnd,maxY),loss:true});
+        ssthresh=Math.max(Math.floor(cwnd/2),2);cwnd=1;nextLoss++;
+      } else {
+        if(cwnd<ssthresh)cwnd=Math.min(cwnd*2,maxY);
+        else cwnd=Math.min(cwnd+1,maxY);
+        pts.push({x:t,y:Math.min(cwnd,maxY)});
+      }
+      t++;
+    }
+    return pts;
+  }
+
+  // BBR — smooth around BDP, no big drops
+  function bbrLossy(){
+    const pts=[];const BDP=20;
+    for(let t=0;t<=maxX;t++){
+      if(t<6){pts.push({x:t,y:Math.min(Math.pow(2,t),maxY)});}
+      else if(t<10){pts.push({x:t,y:BDP+(Math.sin(t)*1.5)});}
+      else{pts.push({x:t,y:BDP+Math.sin(t*0.7)*2+(Math.random()*0.5-0.25)});}
+    }
+    return pts;
+  }
+
+  const cubicPts=cubicLossy();
+  const bbrPts=bbrLossy();
+
+  // Animate both simultaneously
+  const total=Math.max(cubicPts.length,bbrPts.length);
+  const stepMs=4800/total;
+  let i=0;
+  let cprev=null,bprev=null;
+
+  const iv=setInterval(()=>{
+    if(i>=total){clearInterval(iv);return;}
+    // CUBIC
+    if(i<cubicPts.length){
+      const p=cubicPts[i];
+      const px=padL+(p.x/maxX)*(W-padL);
+      const py=H-padB-(Math.max(0,p.y)/maxY)*(H-padB-10);
+      if(p.loss){
+        ctx.fillStyle='#e8505040';
+        if(cprev){const prevPy=H-padB-(Math.max(0,cprev.y)/maxY)*(H-padB-10);ctx.fillRect(px-2,Math.min(py,prevPy),4,Math.abs(prevPy-py)+1);}
+        ctx.fillStyle='#e85050';ctx.beginPath();ctx.arc(px,py,5,0,Math.PI*2);ctx.fill();
+        ctx.fillStyle='#fff';ctx.font='6px Press Start 2P';ctx.fillText('✕',px-4,py+3);
+      }
+      if(cprev){
+        const ppx=padL+(cprev.x/maxX)*(W-padL);
+        const ppy=H-padB-(Math.max(0,cprev.y)/maxY)*(H-padB-10);
+        ctx.beginPath();ctx.moveTo(ppx,ppy);ctx.lineTo(px,py);
+        ctx.strokeStyle='#e85050';ctx.lineWidth=2;ctx.stroke();
+      }
+      if(!p.loss){ctx.fillStyle='#e85050';ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
+      cprev=p;
+    }
+    // BBR
+    if(i<bbrPts.length){
+      const p=bbrPts[i];
+      const px=padL+(p.x/maxX)*(W-padL);
+      const py=H-padB-(Math.max(0,p.y)/maxY)*(H-padB-10);
+      if(bprev){
+        const ppx=padL+(bprev.x/maxX)*(W-padL);
+        const ppy=H-padB-(Math.max(0,bprev.y)/maxY)*(H-padB-10);
+        ctx.beginPath();ctx.moveTo(ppx,ppy);ctx.lineTo(px,py);
+        ctx.strokeStyle='#4eff9a';ctx.lineWidth=2.5;ctx.stroke();
+      }
+      ctx.fillStyle='#4eff9a';ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();
+      bprev=p;
+    }
+    i++;
+  },stepMs);
+  timers.push(iv);
+
+  // Reveal table rows
+  show('cmp-table',3800);
+  ['row1','row2','row3','row4','row5'].forEach((id,idx)=>show(id,4200+idx*200));
+  show('verdict',5400);
+}
+
+setTimeout(play1,300);
+</script>
+</body>
+</html>

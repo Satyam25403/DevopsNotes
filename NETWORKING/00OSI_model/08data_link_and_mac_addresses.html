@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Layer 2 — Data Link & MAC Addresses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1a2e}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a0a14;border:1px solid #1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.pu{color:#a060c0}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* step blocks */
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #1a1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.pu{color:#a060c0}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.hi{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* MAC address anatomy */
+.mac-seg{
+  display:inline-block;padding:6px 8px;
+  font-size:9px;text-align:center;line-height:1;
+  border:2px solid;border-radius:3px;
+  opacity:0;transform:translateY(-10px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.mac-seg.visible{opacity:1;transform:translateY(0)}
+.mac-label{
+  font-size:7px;text-align:center;margin-top:4px;
+  opacity:0;transition:opacity .3s .15s;
+}
+.mac-label.visible{opacity:1}
+
+/* frame anatomy */
+.frame-field{
+  border:2px solid;border-radius:2px;
+  opacity:0;transform:scaleX(0.6);transform-origin:left center;
+  transition:opacity .3s ease,transform .3s ease;
+}
+.frame-field.visible{opacity:1;transform:scaleX(1)}
+.frame-label{font-size:6px;text-align:center;padding:2px 0;color:#888}
+.frame-value{font-size:7px;text-align:center;padding:2px 0;line-height:1.5}
+
+/* node-to-node animation */
+@keyframes frameTravel{
+  0%{transform:translateX(0);opacity:1}
+  80%{transform:translateX(220px);opacity:1}
+  100%{transform:translateX(220px);opacity:0}
+}
+.traveling-frame{animation:frameTravel 1.2s ease-in-out forwards}
+
+/* broadcast ripple */
+@keyframes ripple{
+  0%{r:8;opacity:.8;stroke-width:2}
+  100%{r:60;opacity:0;stroke-width:.5}
+}
+.ripple1{animation:ripple 1.6s ease-out infinite}
+.ripple2{animation:ripple 1.6s ease-out .53s infinite}
+.ripple3{animation:ripple 1.6s ease-out 1.06s infinite}
+
+/* sublayer reveal */
+.sublayer{
+  opacity:0;transform:translateX(-14px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.sublayer.visible{opacity:1;transform:translateX(0)}
+
+/* blink cursor */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* OUI lookup */
+@keyframes typewriter{
+  from{width:0}to{width:100%}
+}
+.lookup-result{
+  overflow:hidden;white-space:nowrap;
+  animation:typewriter .8s steps(20) forwards;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════ SCENE 1: HOOK ════════════ -->
+<div class="scene active" id="s1" style="background:#0a0a14">
+  <div class="hdr" style="background:#0a0a14">
+    <div class="hdr-title">LAYER 2 — DATA LINK</div>
+    <div class="hdr-sub">OSI LAYER 2 · MAC ADDRESSES · FRAMES</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDWARE ID</span>
+  </div>
+
+  <div class="anim" style="background:#0a0a14">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero headline -->
+      <div id="s1-hero" style="border:2px solid #4ec9e1;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#080810">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px">THE BIG IDEA</div>
+        <div style="font-size:10px;color:#cce8ff;line-height:1.9;margin-bottom:10px">EVERY DEVICE HAS A<br>FINGERPRINT BURNED<br>INTO ITS HARDWARE</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">It's called a MAC address.<br>Layer 2 uses it for all<br>local network delivery.</div>
+      </div>
+
+      <!-- live MAC display -->
+      <div id="s1-mac" style="opacity:0;transition:opacity .5s;background:#080810;border:2px solid #1a1a3a;border-radius:3px;padding:14px">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:10px;text-align:center">REAL MAC ADDRESS — YOUR DEVICE HAS ONE OF THESE</div>
+        <div style="display:flex;justify-content:center;align-items:center;gap:3px;flex-wrap:nowrap;margin-bottom:10px">
+          <div style="text-align:center">
+            <div style="background:#1a0d2e;border:2px solid #a060c0;border-radius:3px;padding:8px 6px;font-size:10px;color:#d090f0;min-width:36px">A4</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">OUI</div>
+          </div>
+          <div style="font-size:8px;color:#333;padding-bottom:10px">:</div>
+          <div style="text-align:center">
+            <div style="background:#1a0d2e;border:2px solid #a060c0;border-radius:3px;padding:8px 6px;font-size:10px;color:#d090f0;min-width:36px">C3</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">OUI</div>
+          </div>
+          <div style="font-size:8px;color:#333;padding-bottom:10px">:</div>
+          <div style="text-align:center">
+            <div style="background:#1a0d2e;border:2px solid #a060c0;border-radius:3px;padding:8px 6px;font-size:10px;color:#d090f0;min-width:36px">F1</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">OUI</div>
+          </div>
+          <div style="font-size:8px;color:#333;padding-bottom:10px">:</div>
+          <div style="text-align:center">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;font-size:10px;color:#4eff9a;min-width:36px">2B</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">DEV</div>
+          </div>
+          <div style="font-size:8px;color:#333;padding-bottom:10px">:</div>
+          <div style="text-align:center">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;font-size:10px;color:#4eff9a;min-width:36px">7E</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">DEV</div>
+          </div>
+          <div style="font-size:8px;color:#333;padding-bottom:10px">:</div>
+          <div style="text-align:center">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;font-size:10px;color:#4eff9a;min-width:36px">09</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">DEV</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #2a1a3a;border-radius:2px;padding:7px;text-align:center">
+            <div style="font-size:7px;color:#a060c0;margin-bottom:3px">A4:C3:F1</div>
+            <div style="font-size:6px;color:#888;line-height:1.6">OUI · 24 bits<br>= APPLE INC.</div>
+          </div>
+          <div style="flex:1;border:1px solid #0d2a10;border-radius:2px;padding:7px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">2B:7E:09</div>
+            <div style="font-size:6px;color:#888;line-height:1.6">Device ID · 24 bits<br>= unique per NIC</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- quick stats -->
+      <div id="s1-facts" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#333;letter-spacing:2px;margin-bottom:2px">LAYER 2 GOVERNS ↓</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div style="border:1px solid #1a1a3a;border-radius:2px;padding:5px 8px;font-size:7px;color:#4ec9e1">📦 Framing</div>
+          <div style="border:1px solid #1a1a3a;border-radius:2px;padding:5px 8px;font-size:7px;color:#a060c0">🔖 MAC addressing</div>
+          <div style="border:1px solid #1a1a3a;border-radius:2px;padding:5px 8px;font-size:7px;color:#4eff9a">✓ Error detection</div>
+          <div style="border:1px solid #1a1a3a;border-radius:2px;padding:5px 8px;font-size:7px;color:#e8a020">📡 Broadcast</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO DECODE THE MAC ADDRESS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">DATA LINK LAYER</div>
+    <div class="ih">Node-to-node delivery on the same segment</div>
+    <div class="il" style="font-size:7px">While Layer 3 (IP) routes between networks, Layer 2 delivers within a single network segment using hardware addresses burned into each NIC.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">48</div><div class="sl">bits per<br>MAC address</div></div>
+    <div class="sc"><div class="sv pu">OUI</div><div class="sl">first 24 bits<br>= manufacturer</div></div>
+    <div class="sc"><div class="sv gn">~281T</div><div class="sl">unique MAC<br>combinations</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 2: MAC ADDRESS ANATOMY ════════════ -->
+<div class="scene" id="s2" style="background:#0a0a14">
+  <div class="hdr" style="background:#0a0a14">
+    <div class="hdr-title" style="color:#a060c0">MAC ADDRESS ANATOMY</div>
+    <div class="hdr-sub">OUI · DEVICE ID · MANUFACTURER LOOKUP</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a060c0">FORMAT</span>
+    <span class="sbadge" style="color:#a060c0;border-color:#a060c0">48-BIT</span>
+  </div>
+
+  <div class="anim" style="background:#0a0a14">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Big MAC display -->
+      <div id="s2-hero" style="border:2px solid #a060c0;border-radius:3px;padding:12px;background:#0d0818;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#a060c0;letter-spacing:2px;margin-bottom:10px;text-align:center">DISSECTING: AA:BB:CC:11:22:33</div>
+
+        <!-- byte row -->
+        <div style="display:flex;justify-content:center;gap:2px;margin-bottom:6px" id="s2-bytes">
+          <div id="s2-b1" style="text-align:center;opacity:0;transition:opacity .3s">
+            <div style="background:#200d35;border:2px solid #a060c0;border-radius:3px;padding:7px 4px;font-size:9px;color:#d090f0;width:40px">AA</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">byte 1</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center;padding-bottom:14px">:</div>
+          <div id="s2-b2" style="text-align:center;opacity:0;transition:opacity .3s .1s">
+            <div style="background:#200d35;border:2px solid #a060c0;border-radius:3px;padding:7px 4px;font-size:9px;color:#d090f0;width:40px">BB</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">byte 2</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center;padding-bottom:14px">:</div>
+          <div id="s2-b3" style="text-align:center;opacity:0;transition:opacity .3s .2s">
+            <div style="background:#200d35;border:2px solid #a060c0;border-radius:3px;padding:7px 4px;font-size:9px;color:#d090f0;width:40px">CC</div>
+            <div style="font-size:5px;color:#a060c0;margin-top:3px">byte 3</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center;padding-bottom:14px">:</div>
+          <div id="s2-b4" style="text-align:center;opacity:0;transition:opacity .3s .3s">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:7px 4px;font-size:9px;color:#4eff9a;width:40px">11</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">byte 4</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center;padding-bottom:14px">:</div>
+          <div id="s2-b5" style="text-align:center;opacity:0;transition:opacity .3s .4s">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:7px 4px;font-size:9px;color:#4eff9a;width:40px">22</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">byte 5</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center;padding-bottom:14px">:</div>
+          <div id="s2-b6" style="text-align:center;opacity:0;transition:opacity .3s .5s">
+            <div style="background:#0a1a0d;border:2px solid #4eff9a;border-radius:3px;padding:7px 4px;font-size:9px;color:#4eff9a;width:40px">33</div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:3px">byte 6</div>
+          </div>
+        </div>
+
+        <!-- bracket labels -->
+        <div id="s2-brackets" style="display:flex;gap:2px;opacity:0;transition:opacity .4s;margin-bottom:8px">
+          <div style="flex:0 0 130px;border:1px solid #a060c0;border-top:none;border-radius:0 0 4px 4px;padding:5px 4px;text-align:center">
+            <div style="font-size:6px;color:#a060c0">OUI — 24 bits</div>
+            <div style="font-size:6px;color:#888;margin-top:2px;line-height:1.5">Organizationally<br>Unique Identifier</div>
+          </div>
+          <div style="flex:1;border:1px solid #333;padding:2px"></div>
+          <div style="flex:0 0 130px;border:1px solid #4eff9a;border-top:none;border-radius:0 0 4px 4px;padding:5px 4px;text-align:center">
+            <div style="font-size:6px;color:#4eff9a">Device ID — 24 bits</div>
+            <div style="font-size:6px;color:#888;margin-top:2px;line-height:1.5">Assigned by<br>manufacturer</div>
+          </div>
+        </div>
+
+        <!-- OUI lookup -->
+        <div id="s2-lookup" style="background:#0a0010;border:1px solid #2a1a4a;border-radius:2px;padding:8px;opacity:0;transition:opacity .5s">
+          <div style="font-size:6px;color:#555;margin-bottom:5px">IEEE OUI REGISTRY LOOKUP</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:7px;color:#4ec9e1">AA:BB:CC</span>
+            <span style="font-size:7px;color:#333">→</span>
+            <span style="font-size:7px;color:#4eff9a" id="s2-lookup-result" style="overflow:hidden;white-space:nowrap;width:0">INTEL CORPORATION</span>
+          </div>
+          <div style="font-size:6px;color:#444;margin-top:4px;line-height:1.7">Every manufacturer registers their OUI with IEEE. Public database — anyone can look up who made a device from its MAC.</div>
+        </div>
+      </div>
+
+      <div class="step-block pu" id="s2-s1">
+        <div class="step-num pu">01</div>
+        <div class="step-text"><span class="pu">OUI (bytes 1–3)</span> is assigned by IEEE to the manufacturer. Apple, Intel, Cisco each have their own. Over 47,000 OUIs registered globally. Never changes.</div>
+      </div>
+      <div class="step-block pu" id="s2-s2">
+        <div class="step-num pu">02</div>
+        <div class="step-text"><span class="gn">Device ID (bytes 4–6)</span> is assigned by the manufacturer to each NIC. Must be unique within that manufacturer's OUI space. Usually sequential from the factory.</div>
+      </div>
+      <div class="step-block pu" id="s2-s3">
+        <div class="step-num pu">03</div>
+        <div class="step-text">Byte 1, bit 0 = <span class="pu">multicast flag</span>. Byte 1, bit 1 = <span class="am">locally administered flag</span>. If set, the MAC was software-assigned (MAC spoofing sets this bit).</div>
+      </div>
+      <div class="step-block pu" id="s2-s4">
+        <div class="step-num pu">04</div>
+        <div class="step-text"><span class="am">MAC spoofing</span>: OS can override the burned-in MAC. Attackers do this to bypass MAC filters or impersonate devices. The hardware MAC is called the BIA (Burned-In Address).</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">OUI LOOKUP</div>
+    <div class="ih pu">First 3 bytes = manufacturer identity</div>
+    <div class="il" style="font-size:7px">Tools like Wireshark auto-resolve OUIs in packet captures. Seeing "Apple_xx:xx:xx" vs "Cisco_xx:xx:xx" instantly tells you the device type.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">47K+</div><div class="sl">registered<br>OUI blocks</div></div>
+    <div class="sc"><div class="sv">24</div><div class="sl">bits each:<br>OUI + device</div></div>
+    <div class="sc"><div class="sv gn">BIA</div><div class="sl">burned-in<br>address</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 3: NODE-TO-NODE + BROADCAST ════════════ -->
+<div class="scene" id="s3" style="background:#0a100a">
+  <div class="hdr" style="background:#0a100a">
+    <div class="hdr-title" style="color:#4eff9a">NODE-TO-NODE DELIVERY</div>
+    <div class="hdr-sub">LOCAL SEGMENT · BROADCAST MAC · ARP</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DELIVERY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LOCAL</span>
+  </div>
+
+  <div class="anim" style="background:#0a100a">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Unicast delivery diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4eff9a;background:#060f06">
+        <div style="font-size:8px;color:#4eff9a;letter-spacing:2px;margin-bottom:8px;text-align:center">UNICAST: ONE MAC → ONE MAC</div>
+        <svg width="330" height="90" viewBox="0 0 330 90" id="s3-svg">
+          <!-- Device A -->
+          <rect x="8" y="20" width="70" height="50" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="43" y="38" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6">DEVICE A</text>
+          <text x="43" y="52" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">AA:BB:CC</text>
+          <text x="43" y="62" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">:11:22:33</text>
+
+          <!-- Switch in middle -->
+          <rect x="130" y="30" width="70" height="30" rx="3" fill="#0a0f0a" stroke="#1a3a1a" stroke-width="1.5"/>
+          <text x="165" y="43" text-anchor="middle" fill="#2a5a2a" font-family="'Press Start 2P'" font-size="6">SWITCH</text>
+          <text x="165" y="54" text-anchor="middle" fill="#1a3a1a" font-family="'Press Start 2P'" font-size="4">L2 FORWARD</text>
+
+          <!-- Device B -->
+          <rect x="252" y="20" width="70" height="50" rx="4" fill="#060f06" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="287" y="38" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6">DEVICE B</text>
+          <text x="287" y="52" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">DD:EE:FF</text>
+          <text x="287" y="62" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">:44:55:66</text>
+
+          <!-- wire lines -->
+          <line x1="78" y1="45" x2="130" y2="45" stroke="#1a3a1a" stroke-width="2"/>
+          <line x1="200" y1="45" x2="252" y2="45" stroke="#1a3a1a" stroke-width="2"/>
+
+          <!-- traveling frame -->
+          <rect id="s3-frame" x="82" y="38" width="44" height="14" rx="2" fill="#0a2a0a" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-frame-lbl" x="104" y="48" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">FRAME</text>
+
+          <!-- Device C (ignored) -->
+          <rect x="8" y="74" width="70" height="14" rx="2" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="1"/>
+          <text x="43" y="83" text-anchor="middle" fill="#2a2a2a" font-family="'Press Start 2P'" font-size="4">DEVICE C — ignored</text>
+        </svg>
+      </div>
+
+      <!-- Broadcast diagram -->
+      <div id="s3-bcast" style="border:2px solid #e8a020;border-radius:3px;padding:12px;background:#0f0a00;opacity:0;transition:opacity .5s">
+        <div style="font-size:8px;color:#e8a020;letter-spacing:2px;margin-bottom:8px;text-align:center">BROADCAST: FF:FF:FF:FF:FF:FF</div>
+        <svg width="306" height="100" viewBox="0 0 306 100">
+          <!-- center broadcast source -->
+          <rect x="118" y="36" width="70" height="28" rx="4" fill="#150a00" stroke="#e8a020" stroke-width="2"/>
+          <text x="153" y="48" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">SENDER</text>
+          <text x="153" y="59" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">ARP REQUEST</text>
+          <!-- ripple circles -->
+          <circle class="ripple1" cx="153" cy="50" r="8" fill="none" stroke="#e8a020"/>
+          <circle class="ripple2" cx="153" cy="50" r="8" fill="none" stroke="#e8a020"/>
+          <circle class="ripple3" cx="153" cy="50" r="8" fill="none" stroke="#e8a020"/>
+          <!-- receivers -->
+          <rect x="8" y="10" width="55" height="26" rx="3" fill="#0a0a0a" stroke="#2a2a2a" stroke-width="1"/>
+          <text x="35" y="22" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ALL</text>
+          <text x="35" y="31" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">receive</text>
+
+          <rect x="8" y="65" width="55" height="26" rx="3" fill="#0a0a0a" stroke="#2a2a2a" stroke-width="1"/>
+          <text x="35" y="77" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ALL</text>
+          <text x="35" y="86" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">receive</text>
+
+          <rect x="243" y="10" width="55" height="26" rx="3" fill="#0a0a0a" stroke="#2a2a2a" stroke-width="1"/>
+          <text x="270" y="22" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ALL</text>
+          <text x="270" y="31" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">receive</text>
+
+          <rect x="243" y="65" width="55" height="26" rx="3" fill="#0a0a0a" stroke="#2a2a2a" stroke-width="1"/>
+          <text x="270" y="77" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ALL</text>
+          <text x="270" y="86" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">receive</text>
+
+          <!-- FF:FF label -->
+          <text x="153" y="10" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">DST: FF:FF:FF:FF:FF:FF</text>
+        </svg>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text"><span class="gn">Unicast</span>: frame has a specific destination MAC. The switch checks its CAM table, finds the port for that MAC, forwards only there. All other devices never see it.</div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text"><span class="am">Broadcast MAC FF:FF:FF:FF:FF:FF</span> means "send to everyone on this segment." Used by ARP ("who has IP 192.168.1.5?") to discover MACs before first contact.</div>
+      </div>
+      <div class="step-block gn" id="s3-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text"><span class="gn">Multicast</span> (01:00:5E:xx:xx:xx) targets a group — used by routing protocols (OSPF, IGMP) without flooding the entire segment like broadcast does.</div>
+      </div>
+      <div class="step-block gn" id="s3-s4">
+        <div class="step-num gn">04</div>
+        <div class="step-text">Layer 2 only moves frames <span class="gn">within the same broadcast domain</span>. Hit a router → Layer 3 takes over. The switch strips the L2 header and wraps a new one per hop.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">BROADCAST DOMAIN</div>
+    <div class="ih gn">FF:FF:FF:FF:FF:FF reaches every device on the LAN</div>
+    <div class="il" style="font-size:7px">Routers terminate broadcast domains. That's why a VLAN is a broadcast domain — traffic stays inside unless a router (or L3 switch) intervenes.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3</div><div class="sl">delivery types:<br>uni/multi/broadcast</div></div>
+    <div class="sc"><div class="sv am">FF×6</div><div class="sl">broadcast<br>MAC</div></div>
+    <div class="sc"><div class="sv cy">CAM</div><div class="sl">table maps<br>MAC→port</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 4: LLC + MAC SUBLAYERS ════════════ -->
+<div class="scene" id="s4" style="background:#0a0a14">
+  <div class="hdr" style="background:#0a0a14">
+    <div class="hdr-title" style="color:#4ec9e1">LLC + MAC SUBLAYERS</div>
+    <div class="hdr-sub">HOW LAYER 2 IS DIVIDED INTERNALLY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SUBLAYERS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LLC · MAC</span>
+  </div>
+
+  <div class="anim" style="background:#0a0a14">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- sublayer stack diagram -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#4ec9e1;background:#080810">
+        <div style="font-size:8px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px;text-align:center">LAYER 2 INTERNAL STRUCTURE</div>
+
+        <!-- Layer 3 above -->
+        <div id="s4-l3" class="sublayer" style="background:#0d0820;border:1px solid #a060c0;border-radius:3px;padding:8px 10px;margin-bottom:6px;text-align:center">
+          <div style="font-size:7px;color:#a060c0">LAYER 3 — NETWORK</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">IP packets handed down ↓</div>
+        </div>
+
+        <!-- dashed boundary -->
+        <div id="s4-boundary" class="sublayer" style="border:2px dashed #4ec9e1;border-radius:4px;padding:8px;margin-bottom:6px">
+          <div style="font-size:6px;color:#4ec9e1;text-align:center;margin-bottom:8px;letter-spacing:1px">LAYER 2 BOUNDARY</div>
+
+          <!-- LLC sublayer -->
+          <div id="s4-llc" class="sublayer" style="background:#0a1428;border:2px solid #4ec9e1;border-radius:3px;padding:9px 10px;margin-bottom:5px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:8px;color:#4ec9e1;margin-bottom:4px">LLC SUBLAYER</div>
+                <div style="font-size:6px;color:#888;line-height:1.7">Logical Link Control<br>802.2 standard</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">HANDLES</div>
+                <div style="font-size:6px;color:#aaa;line-height:1.7">Protocol muxing<br>Flow control<br>Error notification</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- MAC sublayer -->
+          <div id="s4-mac" class="sublayer" style="background:#0a1a08;border:2px solid #4eff9a;border-radius:3px;padding:9px 10px">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">MAC SUBLAYER</div>
+                <div style="font-size:6px;color:#888;line-height:1.7">Media Access Control<br>802.3 / 802.11</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">HANDLES</div>
+                <div style="font-size:6px;color:#aaa;line-height:1.7">MAC addressing<br>Frame delimiting<br>Channel access</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 1 below -->
+        <div id="s4-l1" class="sublayer" style="background:#0f0606;border:1px solid #e85050;border-radius:3px;padding:8px 10px;text-align:center">
+          <div style="font-size:7px;color:#e85050">LAYER 1 — PHYSICAL</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">Bits sent as signals ↓</div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s4-s1">
+        <div class="step-num">01</div>
+        <div class="step-text"><span class="hi">LLC (Logical Link Control)</span> is the upper sublayer. It talks to Layer 3 and tells it: "here's data from Ethernet" or "here's data from Wi-Fi" — hides the physical medium.</div>
+      </div>
+      <div class="step-block" id="s4-s2">
+        <div class="step-num">02</div>
+        <div class="step-text"><span class="gn">MAC (Media Access Control)</span> is the lower sublayer. It controls who gets to transmit on the shared medium. CSMA/CD for Ethernet. CSMA/CA for Wi-Fi.</div>
+      </div>
+      <div class="step-block" id="s4-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">LLC uses <span class="hi">SAP (Service Access Point)</span> codes to tell the receiver which Layer 3 protocol is inside: 0x06 = IP, 0xE0 = IPX. Like a type field telling you what's inside the box.</div>
+      </div>
+      <div class="step-block" id="s4-s4">
+        <div class="step-num">04</div>
+        <div class="step-text">The split is why <span class="gn">Ethernet and Wi-Fi can coexist</span> — they share the same LLC sublayer but have completely different MAC sublayers. LLC is the common language up top.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">TWO SUBLAYERS</div>
+    <div class="ih">LLC talks up. MAC talks down.</div>
+    <div class="il" style="font-size:7px">LLC abstracts the medium so Layer 3 doesn't care if it's Ethernet or Wi-Fi. MAC handles the physical medium access — the "who talks when" problem.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">LLC</div><div class="sl">upper sublayer<br>802.2</div></div>
+    <div class="sc"><div class="sv gn">MAC</div><div class="sl">lower sublayer<br>802.3/802.11</div></div>
+    <div class="sc"><div class="sv cy">SAP</div><div class="sl">service access<br>point code</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 5: FRAME ANATOMY ════════════ -->
+<div class="scene" id="s5" style="background:#0a0a14">
+  <div class="hdr" style="background:#0a0a14">
+    <div class="hdr-title" style="color:#4eff9a">THE ETHERNET FRAME</div>
+    <div class="hdr-sub">L2 HEADER · PAYLOAD · TRAILER · FCS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FRAME</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ANATOMY</span>
+  </div>
+
+  <div class="anim" style="background:#0a0a14">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Frame anatomy -->
+      <div class="detail-hero" id="s5-hero" style="border-color:#4eff9a;background:#080810">
+        <div style="font-size:8px;color:#4eff9a;letter-spacing:2px;margin-bottom:10px;text-align:center">ETHERNET II FRAME STRUCTURE</div>
+
+        <!-- preamble -->
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="s5-f0" class="frame-field" style="border-color:#333">
+            <div class="frame-label">PREAMBLE + SFD</div>
+            <div class="frame-value" style="color:#555">55 55 55 55 55 55 55 D5 <span style="font-size:5px">(8 bytes · sync signal)</span></div>
+          </div>
+
+          <!-- DST MAC -->
+          <div id="s5-f1" class="frame-field" style="border-color:#4ec9e1;background:#080c14">
+            <div class="frame-label" style="color:#4ec9e1">DESTINATION MAC <span style="color:#555">(6 bytes)</span></div>
+            <div class="frame-value" style="color:#4ec9e1">DD:EE:FF:44:55:66</div>
+          </div>
+
+          <!-- SRC MAC -->
+          <div id="s5-f2" class="frame-field" style="border-color:#a060c0;background:#0d0818">
+            <div class="frame-label" style="color:#a060c0">SOURCE MAC <span style="color:#555">(6 bytes)</span></div>
+            <div class="frame-value" style="color:#a060c0">AA:BB:CC:11:22:33</div>
+          </div>
+
+          <!-- EtherType -->
+          <div id="s5-f3" class="frame-field" style="border-color:#e8a020;background:#0f0a00">
+            <div class="frame-label" style="color:#e8a020">ETHERTYPE <span style="color:#555">(2 bytes)</span></div>
+            <div class="frame-value" style="color:#e8a020">0x0800 = IPv4 &nbsp;|&nbsp; 0x86DD = IPv6 &nbsp;|&nbsp; 0x0806 = ARP</div>
+          </div>
+
+          <!-- Payload -->
+          <div id="s5-f4" class="frame-field" style="border-color:#4eff9a;background:#060f06">
+            <div class="frame-label" style="color:#4eff9a">PAYLOAD — IP PACKET (46–1500 bytes)</div>
+            <div class="frame-value" style="color:#4eff9a;font-size:7px">[ IP HEADER ][ TCP HEADER ][ HTTP DATA ][ ··· ]</div>
+            <div style="font-size:6px;color:#555;text-align:center;padding-bottom:4px">← This is the L3 packet, wrapped inside the L2 frame</div>
+          </div>
+
+          <!-- FCS -->
+          <div id="s5-f5" class="frame-field" style="border-color:#e85050;background:#0f0606">
+            <div class="frame-label" style="color:#e85050">FCS — FRAME CHECK SEQUENCE (4 bytes)</div>
+            <div class="frame-value" style="color:#e85050;font-size:7px">CRC-32 checksum · computed over entire frame · <span style="color:#4eff9a">mismatch = drop</span></div>
+          </div>
+        </div>
+
+        <!-- total size indicator -->
+        <div id="s5-size" style="margin-top:8px;border:1px solid #1a1a3a;border-radius:2px;padding:6px;text-align:center;opacity:0;transition:opacity .4s">
+          <div style="font-size:6px;color:#555;margin-bottom:3px">MINIMUM FRAME SIZE</div>
+          <div style="display:flex;justify-content:center;align-items:center;gap:6px">
+            <span style="font-size:8px;color:#4eff9a">64 bytes</span>
+            <span style="font-size:6px;color:#555">min</span>
+            <span style="font-size:8px;color:#4eff9a">1518 bytes</span>
+            <span style="font-size:6px;color:#555">max (standard)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s5-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text">A <span class="gn">frame</span> = an IP packet wrapped with an L2 header (DST+SRC MAC + EtherType) and trailer (FCS). Layer 2 adds the envelope around Layer 3's letter.</div>
+      </div>
+      <div class="step-block gn" id="s5-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text"><span class="am">EtherType (0x0800)</span> tells the receiving NIC which protocol is inside the payload — so it knows whether to hand it up to the IPv4 or IPv6 stack.</div>
+      </div>
+      <div class="step-block gn" id="s5-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text"><span class="rd">FCS (CRC-32)</span> is computed over the entire frame. Recipient recalculates it. If it doesn't match, the frame is silently <span class="rd">dropped</span> — no retry at Layer 2 (TCP handles that).</div>
+      </div>
+      <div class="step-block gn" id="s5-s4">
+        <div class="step-num gn">04</div>
+        <div class="step-text">At each router hop, the <span class="gn">L2 frame is stripped</span> and a new one is built with new src/dst MACs for the next segment. The IP packet inside stays untouched end-to-end.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">ENCAPSULATION</div>
+    <div class="ih gn">Frame wraps packet. Packet wraps segment.</div>
+    <div class="il" style="font-size:7px">Every layer wraps the one above. L2 adds MACs and FCS. L1 turns it into bits. On receive, each layer unwraps and passes up. This is encapsulation.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">26</div><div class="sl">bytes of L2<br>overhead min</div></div>
+    <div class="sc"><div class="sv rd">CRC-32</div><div class="sl">FCS error<br>detection</div></div>
+    <div class="sc"><div class="sv am">1518</div><div class="sl">max frame<br>bytes (std)</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-mac','s1-facts','s1-cta'].forEach(id=>{
+      document.getElementById(id).style.opacity='0';
+    });
+  }
+  if(n===2){
+    document.getElementById('s2-hero').style.opacity='0';
+    ['s2-b1','s2-b2','s2-b3','s2-b4','s2-b5','s2-b6'].forEach(id=>{
+      document.getElementById(id).style.opacity='0';
+    });
+    document.getElementById('s2-brackets').style.opacity='0';
+    document.getElementById('s2-lookup').style.opacity='0';
+    const r=document.getElementById('s2-lookup-result');
+    if(r){r.style.width='0';}
+    ['s2-s1','s2-s2','s2-s3','s2-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    document.getElementById('s3-bcast').style.opacity='0';
+    ['s3-s1','s3-s2','s3-s3','s3-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    const fr=document.getElementById('s3-frame');
+    const fl=document.getElementById('s3-frame-lbl');
+    if(fr){fr.setAttribute('opacity','0');fr.setAttribute('x','82');fr.style.transition='none';}
+    if(fl){fl.setAttribute('opacity','0');}
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    ['s4-l3','s4-boundary','s4-llc','s4-mac','s4-l1'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['s4-s1','s4-s2','s4-s3','s4-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+  }
+  if(n===5){
+    document.getElementById('s5-hero').classList.remove('visible');
+    ['s5-f0','s5-f1','s5-f2','s5-f3','s5-f4','s5-f5'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    document.getElementById('s5-size').style.opacity='0';
+    ['s5-s1','s5-s2','s5-s3','s5-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+  }
+}
+
+function animateFrameTravel(){
+  const fr=document.getElementById('s3-frame');
+  const fl=document.getElementById('s3-frame-lbl');
+  if(!fr||!fl) return;
+  fr.setAttribute('opacity','1');
+  fl.setAttribute('opacity','1');
+  fr.style.transition='transform 1.2s ease-in-out';
+  fl.style.transition='transform 1.2s ease-in-out,opacity .3s 1s';
+  fr.style.transform='translateX(168px)';
+  fl.style.transform='translateX(168px)';
+  delay(()=>{
+    fr.setAttribute('opacity','0');
+    fl.setAttribute('opacity','0');
+    fr.style.transition='none';fl.style.transition='none';
+    fr.style.transform='translateX(0)';fl.style.transform='translateX(0)';
+    delay(()=>{ animateFrameTravel(); },600);
+  },1600);
+}
+
+function playScene(n){
+  clearTimers();
+  resetScene(n);
+
+  if(n===1){
+    delay(()=>{ document.getElementById('s1-hero').style.opacity='1'; },200);
+    delay(()=>{ document.getElementById('s1-mac').style.opacity='1'; },900);
+    delay(()=>{ document.getElementById('s1-facts').style.opacity='1'; },1700);
+    delay(()=>{ document.getElementById('s1-cta').style.opacity='1'; },2300);
+  }
+
+  if(n===2){
+    delay(()=>{ document.getElementById('s2-hero').style.opacity='1'; },200);
+    ['s2-b1','s2-b2','s2-b3','s2-b4','s2-b5','s2-b6'].forEach((id,i)=>{
+      delay(()=>{ document.getElementById(id).style.opacity='1'; },400+i*120);
+    });
+    delay(()=>{ document.getElementById('s2-brackets').style.opacity='1'; },1200);
+    delay(()=>{
+      document.getElementById('s2-lookup').style.opacity='1';
+      delay(()=>{
+        const r=document.getElementById('s2-lookup-result');
+        if(r){r.style.transition='width .8s steps(20)';r.style.width='200px';}
+      },300);
+    },1700);
+    delay(()=>{ document.getElementById('s2-s1').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('s2-s2').classList.add('visible'); },1200);
+    delay(()=>{ document.getElementById('s2-s3').classList.add('visible'); },2200);
+    delay(()=>{ document.getElementById('s2-s4').classList.add('visible'); },2700);
+  }
+
+  if(n===3){
+    delay(()=>{ document.getElementById('s3-hero').classList.add('visible'); },200);
+    delay(()=>{ animateFrameTravel(); },700);
+    delay(()=>{ document.getElementById('s3-s1').classList.add('visible'); },600);
+    delay(()=>{
+      document.getElementById('s3-bcast').style.opacity='1';
+      document.getElementById('s3-s2').classList.add('visible');
+    },1400);
+    delay(()=>{ document.getElementById('s3-s3').classList.add('visible'); },2000);
+    delay(()=>{ document.getElementById('s3-s4').classList.add('visible'); },2600);
+  }
+
+  if(n===4){
+    delay(()=>{ document.getElementById('s4-hero').classList.add('visible'); },200);
+    delay(()=>{ document.getElementById('s4-l3').classList.add('visible'); },400);
+    delay(()=>{ document.getElementById('s4-boundary').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('s4-llc').classList.add('visible'); },1000);
+    delay(()=>{ document.getElementById('s4-mac').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('s4-l1').classList.add('visible'); },1600);
+    delay(()=>{ document.getElementById('s4-s1').classList.add('visible'); },900);
+    delay(()=>{ document.getElementById('s4-s2').classList.add('visible'); },1500);
+    delay(()=>{ document.getElementById('s4-s3').classList.add('visible'); },2100);
+    delay(()=>{ document.getElementById('s4-s4').classList.add('visible'); },2700);
+  }
+
+  if(n===5){
+    delay(()=>{ document.getElementById('s5-hero').classList.add('visible'); },200);
+    ['s5-f0','s5-f1','s5-f2','s5-f3','s5-f4','s5-f5'].forEach((id,i)=>{
+      delay(()=>{ document.getElementById(id).classList.add('visible'); },400+i*300);
+    });
+    delay(()=>{ document.getElementById('s5-size').style.opacity='1'; },400+6*300);
+    delay(()=>{ document.getElementById('s5-s1').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('s5-s2').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('s5-s3').classList.add('visible'); },1900);
+    delay(()=>{ document.getElementById('s5-s4').classList.add('visible'); },2500);
+  }
+}
+
+window.addEventListener('load',()=>{ playScene(1); });
+</script>
+</body>
+</html>
