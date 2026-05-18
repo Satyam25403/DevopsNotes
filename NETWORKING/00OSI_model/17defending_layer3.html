@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>Defending Layer 3 — ACLs, IPsec & RPKI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Network map nodes */
+.map-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;transform:translate(-50%,-50%);transition:filter .25s,transform .25s}
+.map-node .nicon{font-size:18px;line-height:1;filter:grayscale(1) brightness(.4);transition:filter .3s}
+.map-node.active .nicon,.map-node.pulse .nicon,.map-node.src .nicon,.map-node.dst .nicon,.map-node.blk .nicon{filter:none}
+.map-node .nlabel{font-size:5.5px;color:#2a4030;line-height:1.3;text-align:center;transition:color .3s;white-space:nowrap;font-family:'Press Start 2P',monospace}
+.map-node.active .nlabel{color:#4eff9a}
+.map-node.src .nlabel{color:#e8a020}
+.map-node.dst .nlabel{color:#4ec9e1}
+.map-node.blk .nlabel{color:#e85050}
+.pkt-dot{position:absolute;width:9px;height:9px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;transition:opacity .2s}
+@keyframes nodePulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.35)}}
+.map-node.pulse{animation:nodePulse .5s ease 2}
+
+/* Generic fade panel */
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Shield ring diagram ── */
+.shield-wrap{
+  position:relative;width:320px;height:320px;
+  align-self:center;flex-shrink:0;
+}
+.shield-ring{
+  position:absolute;border-radius:50%;border:2px solid;
+  opacity:0;transform:scale(.7);
+  transition:opacity .5s ease, transform .5s ease;
+  display:flex;align-items:center;justify-content:center;
+}
+.shield-ring.vis{opacity:1;transform:scale(1)}
+.ring-label{
+  position:absolute;font-size:5.5px;font-family:'Press Start 2P',monospace;
+  line-height:1.4;text-align:center;white-space:nowrap;
+  opacity:0;transition:opacity .4s .3s;
+}
+.shield-ring.vis .ring-label{opacity:1}
+
+/* attack arrow */
+.atk-arrow{
+  position:absolute;font-size:6px;font-family:'Press Start 2P',monospace;
+  color:#e85050;opacity:0;transition:opacity .3s;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  pointer-events:none;
+}
+.atk-arrow.vis{opacity:1}
+
+/* defense step card */
+.def-card{
+  border-radius:2px;padding:9px 10px;
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .38s, transform .38s;
+}
+.def-card.vis{opacity:1;transform:translateX(0)}
+.def-title{font-size:8px;line-height:1.4;margin-bottom:5px}
+.def-desc{font-size:6.5px;color:#aaa;line-height:1.8}
+.def-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.def-tag{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid currentColor;font-family:'Press Start 2P',monospace}
+
+/* ACL rule rows */
+.acl-row{
+  display:flex;align-items:center;gap:5px;padding:5px 8px;
+  border-radius:2px;margin-bottom:3px;
+  opacity:0;transform:translateX(-6px);
+  transition:opacity .33s, transform .33s;
+  font-family:'Press Start 2P',monospace;
+}
+.acl-row.vis{opacity:1;transform:translateX(0)}
+.acl-num{font-size:6px;color:#555;width:18px;text-align:right;flex-shrink:0}
+.acl-action{font-size:7px;width:36px;text-align:center;flex-shrink:0}
+.acl-src{font-size:6.5px;flex:1;font-family:monospace}
+.acl-why{font-size:6px;color:#555;flex-shrink:0}
+
+/* IPsec tunnel animation */
+.tunnel-wrap{
+  background:#050d0a;border:2px solid #0d2018;border-radius:3px;
+  position:relative;overflow:hidden;height:130px;
+}
+.tun-label{font-size:6px;font-family:'Press Start 2P',monospace;color:#1a6040;letter-spacing:.5px}
+
+/* traceroute-style hop */
+.hop-row{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:2px;margin-bottom:3px;
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .35s,transform .35s;
+}
+.hop-row.vis{opacity:1;transform:translateX(0)}
+.hop-num{font-size:7px;color:#555;width:16px;text-align:right;flex-shrink:0}
+.hop-ip{font-size:7px;flex:1;font-family:monospace;color:#4ec9e1}
+.hop-status{font-size:6px;flex-shrink:0;padding:2px 5px;border-radius:2px;border:1px solid currentColor}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK — THE THREAT LANDSCAPE ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">ACLs · IPsec · RPKI · BCP38</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THREAT MAP</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">L3 ATTACKS</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Hook -->
+      <div style="border:2px solid #e85050;border-radius:2px;background:#1e0808;text-align:center;padding:14px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:9px">THE PROBLEM</div>
+        <div style="font-size:22px;margin-bottom:9px">🎯</div>
+        <div style="font-size:10px;color:#e85050;line-height:1.9;margin-bottom:8px">LAYER 3 IS THE<br>ATTACK SURFACE<br>FOR THE INTERNET</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">IP spoofing, BGP hijacking, DDoS floods,<br>route leaks — all happen at L3.<br>Four controls stop them cold.</div>
+      </div>
+
+      <!-- Animated threat map -->
+      <div style="background:#050d0a;border:2px solid #2a0808;border-radius:3px;position:relative;height:188px" id="s1map">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 188" id="s1svg">
+          <!-- attacker lines -->
+          <line x1="30" y1="30" x2="183" y2="94" stroke="#2a0808" stroke-width="1.5" id="atk1"/>
+          <line x1="336" y1="30" x2="183" y2="94" stroke="#2a0808" stroke-width="1.5" id="atk2"/>
+          <line x1="30" y1="158" x2="183" y2="94" stroke="#2a0808" stroke-width="1.5" id="atk3"/>
+          <line x1="336" y1="158" x2="183" y2="94" stroke="#2a0808" stroke-width="1.5" id="atk4"/>
+        </svg>
+
+        <!-- packet dots (attackers) -->
+        <div id="p1" class="pkt-dot" style="background:#e85050;box-shadow:0 0 6px #e85050;left:30px;top:30px"></div>
+        <div id="p2" class="pkt-dot" style="background:#e85050;box-shadow:0 0 6px #e85050;left:336px;top:30px"></div>
+        <div id="p3" class="pkt-dot" style="background:#e85050;box-shadow:0 0 6px #e85050;left:30px;top:158px"></div>
+        <div id="p4" class="pkt-dot" style="background:#e85050;box-shadow:0 0 6px #e85050;left:336px;top:158px"></div>
+
+        <!-- attackers -->
+        <div class="map-node blk" id="atk_a" style="left:30px;top:30px">
+          <div class="nicon" style="font-size:16px">💀</div>
+          <div class="nlabel" style="color:#e85050">IP SPOOF</div>
+        </div>
+        <div class="map-node blk" id="atk_b" style="left:336px;top:30px">
+          <div class="nicon" style="font-size:16px">💀</div>
+          <div class="nlabel" style="color:#e85050">BGP HIJACK</div>
+        </div>
+        <div class="map-node blk" id="atk_c" style="left:30px;top:158px">
+          <div class="nicon" style="font-size:16px">💀</div>
+          <div class="nlabel" style="color:#e85050">DDoS FLOOD</div>
+        </div>
+        <div class="map-node blk" id="atk_d" style="left:336px;top:158px">
+          <div class="nicon" style="font-size:16px">💀</div>
+          <div class="nlabel" style="color:#e85050">ROUTE LEAK</div>
+        </div>
+        <!-- target network -->
+        <div class="map-node" id="target" style="left:183px;top:94px">
+          <div class="nicon" style="font-size:28px">🌐</div>
+          <div class="nlabel" style="color:#aaa">YOUR NETWORK</div>
+        </div>
+      </div>
+
+      <!-- 4 controls preview -->
+      <div style="display:flex;flex-direction:column;gap:4px;opacity:0;transition:opacity .5s" id="s1controls">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;text-align:center;padding:2px 0">4 CONTROLS THAT STOP THEM</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div style="background:#0a1a10;border:1px solid #4eff9a;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">🛡 BCP38</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.6">Drop spoofed IPs at ISP edge</div>
+          </div>
+          <div style="background:#100820;border:1px solid #a080c0;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#a080c0;margin-bottom:3px">🔏 RPKI</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.6">Crypto-sign BGP routes</div>
+          </div>
+          <div style="background:#1a1408;border:1px solid #e8a020;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:3px">📋 ACLs</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.6">Deny RFC1918 on public interfaces</div>
+          </div>
+          <div style="background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">🔐 IPsec</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.6">Encrypt + auth at L3</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">LAYER 3 IS THE BATTLEFIELD:</div>
+    <div class="ih rd">IP spoofing, BGP hijacks, DDoS, leaks.</div>
+    <div class="il">Four controls. Each blocks one class of attack.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4</div><div class="sl">L3<br>ATTACK TYPES</div></div>
+    <div class="sc"><div class="sv gn">4</div><div class="sl">CONTROLS<br>TO DEPLOY</div></div>
+    <div class="sc"><div class="sv am">L3</div><div class="sl">THE<br>BATTLEFIELD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: BCP38 INGRESS FILTERING ══════════════ -->
+<div class="scene" id="s2" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">BCP38 — STOP SPOOFED SOURCE IPs</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">BCP38</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">INGRESS FILTER</span>
+  </div>
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s2intro">ISP DROPS PACKETS WITH IMPOSSIBLE SOURCE IPs</div>
+
+      <!-- BCP38 map animation -->
+      <div style="background:#050d0a;border:2px solid #0d2018;border-radius:3px;position:relative;height:196px" id="s2map">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 196" id="s2svg">
+          <line x1="50" y1="98" x2="145" y2="98" stroke="#0d2018" stroke-width="2" id="e_spoof_in"/>
+          <line x1="145" y1="98" x2="260" y2="98" stroke="#0d2018" stroke-width="2" id="e_isp_net"/>
+          <line x1="260" y1="98" x2="316" y2="98" stroke="#0d2018" stroke-width="2" id="e_net_out"/>
+          <!-- drop line -->
+          <line x1="145" y1="98" x2="145" y2="168" stroke="#0d2018" stroke-width="2" stroke-dasharray="4,3" id="e_drop"/>
+        </svg>
+
+        <!-- packets -->
+        <div id="bp1" class="pkt-dot" style="background:#e85050;box-shadow:0 0 8px #e85050;width:10px;height:10px;left:50px;top:98px"></div>
+        <div id="bp2" class="pkt-dot" style="background:#4eff9a;box-shadow:0 0 8px #4eff9a;width:10px;height:10px;left:50px;top:98px"></div>
+
+        <!-- nodes -->
+        <div class="map-node" id="b_atk" style="left:50px;top:62px">
+          <div class="nicon" style="font-size:20px">💀</div>
+          <div class="nlabel">ATTACKER<br>SRC:8.8.8.8</div>
+        </div>
+        <div class="map-node" id="b_isp" style="left:145px;top:98px">
+          <div class="nicon" style="font-size:20px">📡</div>
+          <div class="nlabel">ISP EDGE<br>BCP38 FILTER</div>
+        </div>
+        <div class="map-node" id="b_drop" style="left:145px;top:168px">
+          <div class="nicon" style="font-size:18px">🗑️</div>
+          <div class="nlabel" style="color:#e85050">DROPPED</div>
+        </div>
+        <div class="map-node" id="b_net" style="left:260px;top:98px">
+          <div class="nicon" style="font-size:20px">🌐</div>
+          <div class="nlabel">INTERNET<br>CORE</div>
+        </div>
+        <div class="map-node" id="b_dst" style="left:316px;top:98px">
+          <div class="nicon" style="font-size:20px">🏢</div>
+          <div class="nlabel">TARGET<br>NETWORK</div>
+        </div>
+      </div>
+
+      <!-- How it works -->
+      <div class="def-card" id="s2how" style="border:2px solid #4eff9a;background:#071510">
+        <div class="def-title" style="color:#4eff9a">HOW BCP38 WORKS</div>
+        <div class="def-desc">ISP checks: does the <span style="color:#4eff9a">source IP</span> make sense coming from this customer port?<br><br>Customer assigned 203.0.113.0/24. Packet arrives with src=8.8.8.8 (Google). <span style="color:#e85050">IMPOSSIBLE → DROP.</span><br><br>This kills amplification DDoS attacks at the source — the attacker can't spoof victim IPs to trigger reflection.</div>
+        <div class="def-tags">
+          <span class="def-tag" style="color:#4eff9a;border-color:#4eff9a">KILLS AMPLIFICATION</span>
+          <span class="def-tag" style="color:#e85050;border-color:#e85050">DROPS SPOOFED PKT</span>
+        </div>
+      </div>
+
+      <!-- RFC1918 note -->
+      <div class="def-card" id="s2rfc" style="border:1px solid #e8a020;background:#1a1408">
+        <div class="def-title" style="color:#e8a020">ALSO: RFC1918 BLOCKING</div>
+        <div class="def-desc">Public-facing interfaces should never see packets with private source IPs (10.x, 172.16.x, 192.168.x). Drop them at ingress — they're either spoofed or misconfigured.</div>
+        <div class="def-tags">
+          <span class="def-tag" style="color:#e8a020;border-color:#e8a020">10.0.0.0/8</span>
+          <span class="def-tag" style="color:#e8a020;border-color:#e8a020">172.16.0.0/12</span>
+          <span class="def-tag" style="color:#e8a020;border-color:#e8a020">192.168.0.0/16</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">BCP38:</div>
+    <div class="ih">Drop packets where src IP ≠ expected range.</div>
+    <div class="il">Deployed at ISP edge. Kills DDoS amplification.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">SPOOF</div><div class="sl">ATTACK<br>BLOCKED</div></div>
+    <div class="sc"><div class="sv gn">ISP</div><div class="sl">WHERE IT<br>RUNS</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">INGRESS</div><div class="sl">FILTER<br>TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: RPKI / ROA ══════════════ -->
+<div class="scene" id="s3" style="background:#100820">
+  <div class="hdr" style="background:#100820">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">RPKI — CRYPTOGRAPHIC BGP ROUTE VALIDATION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a080c0">RPKI / ROA</span>
+    <span class="sbadge" style="color:#a080c0;border-color:#a080c0">BGP DEFENSE</span>
+  </div>
+  <div class="anim" style="background:#100820">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s3intro">RPKI PROVES WHICH AS OWNS WHICH PREFIX</div>
+
+      <!-- RPKI animation map -->
+      <div style="background:#050d0a;border:2px solid #1a0d30;border-radius:3px;position:relative;height:196px" id="s3map">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 196" id="s3svg">
+          <!-- valid path -->
+          <line x1="50" y1="80" x2="183" y2="98" stroke="#1a0d30" stroke-width="2" id="r_valid_in"/>
+          <line x1="183" y1="98" x2="316" y2="80" stroke="#1a0d30" stroke-width="2" id="r_valid_out"/>
+          <!-- invalid path -->
+          <line x1="50" y1="140" x2="183" y2="98" stroke="#1a0d30" stroke-width="2" id="r_inv_in"/>
+          <!-- drop -->
+          <line x1="183" y1="98" x2="183" y2="172" stroke="#1a0d30" stroke-width="2" stroke-dasharray="4,3" id="r_drop"/>
+          <!-- RPKI validator link -->
+          <line x1="183" y1="98" x2="183" y2="30" stroke="#1a0d30" stroke-width="1.5" stroke-dasharray="3,3" id="r_rpki_link"/>
+        </svg>
+
+        <div id="rp1" class="pkt-dot" style="background:#4eff9a;box-shadow:0 0 8px #4eff9a;left:50px;top:80px"></div>
+        <div id="rp2" class="pkt-dot" style="background:#e85050;box-shadow:0 0 8px #e85050;left:50px;top:140px"></div>
+
+        <div class="map-node" id="r_legit" style="left:50px;top:56px">
+          <div class="nicon" style="font-size:18px">🏢</div>
+          <div class="nlabel">LEGIT AS<br>ROA ✓</div>
+        </div>
+        <div class="map-node" id="r_hijack" style="left:50px;top:140px">
+          <div class="nicon" style="font-size:18px">💀</div>
+          <div class="nlabel">HIJACKER<br>NO ROA</div>
+        </div>
+        <div class="map-node" id="r_router" style="left:183px;top:98px">
+          <div class="nicon" style="font-size:20px">📦</div>
+          <div class="nlabel">BGP ROUTER<br>RPKI CHECK</div>
+        </div>
+        <div class="map-node" id="r_rpki" style="left:183px;top:28px">
+          <div class="nicon" style="font-size:18px">🔏</div>
+          <div class="nlabel" style="color:#a080c0">RPKI<br>VALIDATOR</div>
+        </div>
+        <div class="map-node" id="r_accept" style="left:316px;top:56px">
+          <div class="nicon" style="font-size:18px">✅</div>
+          <div class="nlabel" style="color:#4eff9a">ACCEPTED<br>ROUTE</div>
+        </div>
+        <div class="map-node" id="r_reject" style="left:183px;top:172px">
+          <div class="nicon" style="font-size:18px">🗑️</div>
+          <div class="nlabel" style="color:#e85050">REJECTED<br>ROUTE</div>
+        </div>
+      </div>
+
+      <!-- ROA explainer -->
+      <div class="def-card" id="s3roa" style="border:2px solid #a080c0;background:#130820">
+        <div class="def-title" style="color:#a080c0">ROA — ROUTE ORIGIN AUTHORISATION</div>
+        <div class="def-desc">A signed certificate that says: <span style="color:#a080c0">"AS64496 is authorised to announce 203.0.113.0/24."</span><br><br>Stored in the global RPKI repository. Routers query it via an RPKI validator before accepting BGP routes.</div>
+        <div style="background:#0d0820;border:1px solid #a080c030;border-radius:2px;padding:6px 8px;margin-top:6px;font-size:6.5px;color:#ccc;font-family:monospace;line-height:1.8">
+          ROA: prefix=203.0.113.0/24<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;maxLength=24<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;origin=AS64496<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;signature=<span style="color:#a080c0">✓ VALID</span>
+        </div>
+      </div>
+
+      <!-- States -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .4s" id="s3states">
+        <div style="flex:1;background:#071510;border:1px solid #4eff9a;border-radius:2px;padding:8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">VALID</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.7">ROA exists, AS and prefix match. Accept route.</div>
+        </div>
+        <div style="flex:1;background:#1a0808;border:1px solid #e85050;border-radius:2px;padding:8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">INVALID</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.7">ROA exists but AS doesn't match. DROP — hijack attempt.</div>
+        </div>
+        <div style="flex:1;background:#130d1e;border:1px solid #555;border-radius:2px;padding:8px">
+          <div style="font-size:7px;color:#777;margin-bottom:4px">NOT FOUND</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.7">No ROA. Accept (for now) — adoption not 100%.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#a080c0">
+    <div class="il">RPKI:</div>
+    <div class="ih" style="color:#a080c0">ROA = signed proof you own the prefix.</div>
+    <div class="il">INVALID routes dropped. Kills BGP hijacking.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080c0">ROA</div><div class="sl">SIGNED<br>CERTIFICATE</div></div>
+    <div class="sc"><div class="sv rd">INVALID</div><div class="sl">→ ROUTE<br>DROPPED</div></div>
+    <div class="sc"><div class="sv am">~50%</div><div class="sl">INTERNET<br>COVERAGE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: ACLs ══════════════ -->
+<div class="scene" id="s4" style="background:#1a1408">
+  <div class="hdr" style="background:#1a1408">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">ACLs — DENY RULES AT THE INTERFACE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ACLs</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ACCESS CONTROL</span>
+  </div>
+  <div class="anim" style="background:#1a1408">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s4intro">ACL RULES EVALUATED TOP TO BOTTOM — FIRST MATCH WINS</div>
+
+      <!-- ACL demo map -->
+      <div style="background:#050d0a;border:2px solid #0d2018;border-radius:3px;position:relative;height:140px">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 140" id="s4svg">
+          <line x1="50" y1="70" x2="150" y2="70" stroke="#0d2018" stroke-width="2" id="a_in"/>
+          <line x1="220" y1="70" x2="316" y2="70" stroke="#0d2018" stroke-width="2" id="a_out"/>
+          <line x1="185" y1="70" x2="185" y2="128" stroke="#0d2018" stroke-width="2" stroke-dasharray="4,3" id="a_drop"/>
+        </svg>
+        <div id="ap1" class="pkt-dot" style="background:#e85050;box-shadow:0 0 8px #e85050;left:50px;top:70px"></div>
+        <div id="ap2" class="pkt-dot" style="background:#4eff9a;box-shadow:0 0 8px #4eff9a;left:50px;top:70px"></div>
+        <div class="map-node blk" id="a_src" style="left:50px;top:45px">
+          <div class="nicon" style="font-size:18px">💀</div><div class="nlabel">10.0.0.1<br>RFC1918</div>
+        </div>
+        <div class="map-node" id="a_iface" style="left:185px;top:60px">
+          <div class="nicon" style="font-size:20px">📡</div><div class="nlabel">PUBLIC<br>INTERFACE</div>
+        </div>
+        <div class="map-node" id="a_allow" style="left:316px;top:45px">
+          <div class="nicon" style="font-size:18px">✅</div><div class="nlabel" style="color:#4eff9a">LEGIT<br>TRAFFIC</div>
+        </div>
+        <div class="map-node" id="a_dropnode" style="left:185px;top:128px">
+          <div class="nicon" style="font-size:16px">🗑️</div><div class="nlabel" style="color:#e85050">DENIED</div>
+        </div>
+      </div>
+
+      <!-- ACL rule list -->
+      <div style="background:#0d0d08;border:1px solid #2a2010;border-radius:2px;padding:7px 9px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px;letter-spacing:.5px">ACL — PUBLIC INTERFACE INBOUND</div>
+        <div class="acl-row" id="acl1">
+          <div class="acl-num">10</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">10.0.0.0/8</div>
+          <div class="acl-why">RFC1918</div>
+        </div>
+        <div class="acl-row" id="acl2">
+          <div class="acl-num">20</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">172.16.0.0/12</div>
+          <div class="acl-why">RFC1918</div>
+        </div>
+        <div class="acl-row" id="acl3">
+          <div class="acl-num">30</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">192.168.0.0/16</div>
+          <div class="acl-why">RFC1918</div>
+        </div>
+        <div class="acl-row" id="acl4">
+          <div class="acl-num">40</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">127.0.0.0/8</div>
+          <div class="acl-why">LOOPBACK</div>
+        </div>
+        <div class="acl-row" id="acl5">
+          <div class="acl-num">50</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">0.0.0.0/8</div>
+          <div class="acl-why">UNSPECIFIED</div>
+        </div>
+        <div class="acl-row" id="acl6">
+          <div class="acl-num">60</div>
+          <div class="acl-action" style="color:#e85050">DENY</div>
+          <div class="acl-src" style="color:#e85050">224.0.0.0/3</div>
+          <div class="acl-why">MULTICAST</div>
+        </div>
+        <div class="acl-row" id="acl7">
+          <div class="acl-num">70</div>
+          <div class="acl-action" style="color:#4eff9a">PERMIT</div>
+          <div class="acl-src" style="color:#4eff9a">any</div>
+          <div class="acl-why">LEGIT TRAFFIC</div>
+        </div>
+      </div>
+
+      <div class="def-card" id="s4note" style="border:1px solid #4ec9e1;background:#0d1a2e">
+        <div class="def-title" style="color:#4ec9e1">ICMP RATE LIMITING</div>
+        <div class="def-desc">Add: <span style="color:#4ec9e1">PERMIT ICMP any any echo-reply</span> but rate-limit ICMP echo requests to prevent ping floods and network reconnaissance. Most enterprise ACLs block unreachable ICMP from untrusted sources entirely.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">ACL RULE:</div>
+    <div class="ih am">First match wins. DENY RFC1918 at top.</div>
+    <div class="il">Applied inbound on public-facing interfaces.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">DENY</div><div class="sl">RFC1918<br>+ BOGONS</div></div>
+    <div class="sc"><div class="sv gn">TOP↓</div><div class="sl">FIRST MATCH<br>WINS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">ICMP</div><div class="sl">RATE<br>LIMITED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: IPsec ══════════════ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">IPsec — ENCRYPT & AUTHENTICATE AT L3</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">IPsec</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">VPN TUNNEL</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s5intro">IPsec WRAPS EVERY PACKET IN CRYPTO AT LAYER 3</div>
+
+      <!-- IPsec tunnel animation -->
+      <div class="tunnel-wrap" id="s5tunnel">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 130" id="s5svg">
+          <!-- plain traffic line (before tunnel) -->
+          <line x1="30" y1="40" x2="180" y2="40" stroke="#0d2018" stroke-width="2" id="t_plain"/>
+          <!-- tunnel (encrypted) -->
+          <line x1="30" y1="90" x2="180" y2="90" stroke="#0d2018" stroke-width="2" id="t_enc_a"/>
+          <line x1="180" y1="90" x2="336" y2="90" stroke="#0d2018" stroke-width="2" id="t_enc_b"/>
+          <!-- internet cloud in middle -->
+          <ellipse cx="183" cy="65" rx="38" ry="22" fill="none" stroke="#0d2018" stroke-width="1.5" stroke-dasharray="4,3" id="t_cloud"/>
+        </svg>
+
+        <!-- plain packet -->
+        <div id="tp1" class="pkt-dot" style="background:#e85050;box-shadow:0 0 6px #e85050;left:30px;top:40px"></div>
+        <!-- encrypted packet -->
+        <div id="tp2" class="pkt-dot" style="background:#4ec9e1;box-shadow:0 0 8px #4ec9e1;width:11px;height:11px;left:30px;top:90px"></div>
+
+        <div class="map-node" id="t_siteA" style="left:30px;top:65px">
+          <div class="nicon" style="font-size:20px">🏢</div>
+          <div class="nlabel">SITE A</div>
+        </div>
+        <div class="map-node" id="t_gwA" style="left:110px;top:40px">
+          <div class="nicon" style="font-size:18px">🔐</div>
+          <div class="nlabel">GW / VPN<br>ENCRYPT</div>
+        </div>
+        <div class="map-node" id="t_inet" style="left:183px;top:65px">
+          <div class="nicon" style="font-size:20px">🌐</div>
+          <div class="nlabel" style="color:#555">UNTRUSTED<br>INTERNET</div>
+        </div>
+        <div class="map-node" id="t_gwB" style="left:260px;top:90px">
+          <div class="nicon" style="font-size:18px">🔐</div>
+          <div class="nlabel">GW / VPN<br>DECRYPT</div>
+        </div>
+        <div class="map-node" id="t_siteB" style="left:336px;top:90px">
+          <div class="nicon" style="font-size:20px">🏢</div>
+          <div class="nlabel">SITE B</div>
+        </div>
+      </div>
+
+      <!-- AH vs ESP -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .4s" id="s5modes">
+        <div style="flex:1;background:#0d1a2e;border:2px solid #4ec9e1;border-radius:2px;padding:9px">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:5px">ESP</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8"><span style="color:#4eff9a">Encapsulating Security Payload.</span> Encrypts AND authenticates payload. Most common. Hides contents from sniffers. Used in VPNs.</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
+            <span style="font-size:6px;padding:2px 5px;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px">ENCRYPT</span>
+            <span style="font-size:6px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">AUTH</span>
+            <span style="font-size:6px;padding:2px 5px;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px">PROTOCOL 50</span>
+          </div>
+        </div>
+        <div style="flex:1;background:#0d1a2e;border:1px solid #555;border-radius:2px;padding:9px">
+          <div style="font-size:8px;color:#777;margin-bottom:5px">AH</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#777">Authentication Header.</span> Authenticates only — no encryption. Rarely used today (NAT breaks it).</div>
+          <div style="display:flex;gap:4px;margin-top:5px;flex-wrap:wrap">
+            <span style="font-size:6px;padding:2px 5px;border:1px solid #555;color:#777;border-radius:2px">AUTH ONLY</span>
+            <span style="font-size:6px;padding:2px 5px;border:1px solid #555;color:#777;border-radius:2px">PROTOCOL 51</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- IKE handshake steps -->
+      <div class="def-card" id="s5ike" style="border:1px solid #4eff9a;background:#071510">
+        <div class="def-title" style="color:#4eff9a">IKE HANDSHAKE — HOW TUNNELS FORM</div>
+        <div class="def-desc">
+          <span style="color:#4eff9a">IKEv2</span> (UDP 500 / 4500) negotiates the SA:<br><br>
+          <span style="color:#4ec9e1">Phase 1:</span> Authenticate peers (PSK or PKI cert) + derive master key via DH.<br>
+          <span style="color:#4ec9e1">Phase 2:</span> Negotiate encryption alg (AES-256), auth (SHA-256), lifetime.<br>
+          <span style="color:#4ec9e1">Done:</span> Bidirectional ESP tunnel active. All L3 traffic encrypted.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">IPsec:</div>
+    <div class="ih">Encrypt + auth every IP packet in transit.</div>
+    <div class="il">ESP = VPNs. IKEv2 = tunnel negotiation.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">ESP</div><div class="sl">ENCRYPT<br>+ AUTH</div></div>
+    <div class="sc"><div class="sv gn">IKEv2</div><div class="sl">TUNNEL<br>SETUP</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">AES</div><div class="sl">256-BIT<br>CIPHER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 6: SHIELD DIAGRAM — ALL 4 DEFENSES ══════════════ -->
+<div class="scene" id="s6" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">DEFENDING LAYER 3</div>
+    <div class="hdr-sub">ALL 4 DEFENSES — LAYERED SHIELD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DEFENSE IN DEPTH</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s6intro">EACH RING BLOCKS ONE CLASS OF L3 ATTACK</div>
+
+      <!-- Shield ring diagram -->
+      <div class="shield-wrap" id="s6shield">
+
+        <!-- Ring 4 — outermost: BCP38 -->
+        <div class="shield-ring" id="ring4" style="border-color:#4eff9a44;left:0;top:0;width:320px;height:320px">
+          <div class="ring-label" style="color:#4eff9a55;top:6px;left:50%;transform:translateX(-50%)">BCP38 — BLOCKS IP SPOOFING</div>
+        </div>
+
+        <!-- Ring 3: RPKI -->
+        <div class="shield-ring" id="ring3" style="border-color:#a080c044;left:30px;top:30px;width:260px;height:260px">
+          <div class="ring-label" style="color:#a080c055;top:6px;left:50%;transform:translateX(-50%)">RPKI — BLOCKS BGP HIJACK</div>
+        </div>
+
+        <!-- Ring 2: ACLs -->
+        <div class="shield-ring" id="ring2" style="border-color:#e8a02044;left:62px;top:62px;width:196px;height:196px">
+          <div class="ring-label" style="color:#e8a02055;top:5px;left:50%;transform:translateX(-50%)">ACL — BLOCKS BOGONS</div>
+        </div>
+
+        <!-- Ring 1 — innermost: IPsec -->
+        <div class="shield-ring" id="ring1" style="border-color:#4ec9e155;left:96px;top:96px;width:128px;height:128px">
+          <div class="ring-label" style="color:#4ec9e166;top:4px;left:50%;transform:translateX(-50%)">IPsec — ENCRYPTS TRAFFIC</div>
+        </div>
+
+        <!-- Core network -->
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:5">
+          <div style="font-size:28px;line-height:1;margin-bottom:4px">🌐</div>
+          <div style="font-size:6px;color:#4eff9a;font-family:'Press Start 2P',monospace;line-height:1.4">YOUR<br>NETWORK</div>
+        </div>
+
+        <!-- Attack arrows (inbound from outside rings) -->
+        <div class="atk-arrow" id="atk_arr1" style="left:4px;top:130px">
+          <div style="font-size:10px">→</div>
+          <div style="font-size:5px">SPOOF</div>
+        </div>
+        <div class="atk-arrow" id="atk_arr2" style="right:4px;top:60px">
+          <div style="font-size:10px">←</div>
+          <div style="font-size:5px">HIJACK</div>
+        </div>
+        <div class="atk-arrow" id="atk_arr3" style="left:4px;top:190px">
+          <div style="font-size:10px">→</div>
+          <div style="font-size:5px">BOGON</div>
+        </div>
+        <div class="atk-arrow" id="atk_arr4" style="right:4px;top:200px">
+          <div style="font-size:10px">←</div>
+          <div style="font-size:5px">SNIFF</div>
+        </div>
+
+        <!-- Block badges on rings -->
+        <div style="position:absolute;left:14px;top:148px;font-size:8px;opacity:0;transition:opacity .4s" id="blk1">🛑</div>
+        <div style="position:absolute;right:14px;top:78px;font-size:8px;opacity:0;transition:opacity .4s" id="blk2">🛑</div>
+        <div style="position:absolute;left:14px;top:208px;font-size:8px;opacity:0;transition:opacity .4s" id="blk3">🛑</div>
+        <div style="position:absolute;right:14px;top:218px;font-size:8px;opacity:0;transition:opacity .4s" id="blk4">🛑</div>
+      </div>
+
+      <!-- Summary table -->
+      <div style="opacity:0;transition:opacity .5s" id="s6table">
+        <div style="display:grid;grid-template-columns:54px 1fr 1fr;gap:2px">
+          <div style="font-size:6px;padding:4px;background:#0d2018;border:1px solid #1a3028;color:#4eff9a;border-radius:2px;text-align:center">CONTROL</div>
+          <div style="font-size:6px;padding:4px;background:#0d2018;border:1px solid #1a3028;color:#4eff9a;border-radius:2px;text-align:center">BLOCKS</div>
+          <div style="font-size:6px;padding:4px;background:#0d2018;border:1px solid #1a3028;color:#4eff9a;border-radius:2px;text-align:center">WHERE</div>
+          <!-- rows -->
+          <div style="font-size:6px;padding:5px;background:#071510;border:1px solid #4eff9a30;color:#4eff9a;border-radius:2px">BCP38</div>
+          <div style="font-size:6px;padding:5px;background:#071510;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.5">IP spoofing DDoS</div>
+          <div style="font-size:6px;padding:5px;background:#071510;border:1px solid #1a3028;color:#aaa;border-radius:2px;line-height:1.5">ISP edge</div>
+
+          <div style="font-size:6px;padding:5px;background:#100820;border:1px solid #a080c030;color:#a080c0;border-radius:2px">RPKI</div>
+          <div style="font-size:6px;padding:5px;background:#100820;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.5">BGP hijacks</div>
+          <div style="font-size:6px;padding:5px;background:#100820;border:1px solid #1a3028;color:#aaa;border-radius:2px;line-height:1.5">BGP routers</div>
+
+          <div style="font-size:6px;padding:5px;background:#1a1408;border:1px solid #e8a02030;color:#e8a020;border-radius:2px">ACLs</div>
+          <div style="font-size:6px;padding:5px;background:#1a1408;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.5">Bogons, RFC1918</div>
+          <div style="font-size:6px;padding:5px;background:#1a1408;border:1px solid #1a3028;color:#aaa;border-radius:2px;line-height:1.5">Your router</div>
+
+          <div style="font-size:6px;padding:5px;background:#0d1a2e;border:1px solid #4ec9e130;color:#4ec9e1;border-radius:2px">IPsec</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a2e;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.5">Eavesdrop, MiTM</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a2e;border:1px solid #1a3028;color:#aaa;border-radius:2px;line-height:1.5">Between sites</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">DEFENSE IN DEPTH:</div>
+    <div class="ih">Each layer stops what the last one missed.</div>
+    <div class="il">No single control is enough. Stack all four.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">CONTROLS<br>STACKED</div></div>
+    <div class="sc"><div class="sv gn">L3</div><div class="sl">ALL AT<br>LAYER 3</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">🛡</div><div class="sl">DEFENSE<br>IN DEPTH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function showSlide(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}});}
+
+function litEdge(id,color,ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(!e)return;
+    e.setAttribute('stroke',color||'#0d2018');
+    e.setAttribute('stroke-width',color&&color!=='#0d2018'?'3':'2');
+  });
+}
+function litNode(id,cls,ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(!e)return;
+    e.classList.remove('active','pulse','src','dst','blk','peer');
+    if(cls)e.classList.add(cls);
+  });
+}
+function moveDot(dotId,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const dot=document.getElementById(dotId);
+    if(!dot)return;
+    dot.style.transition='none';
+    dot.style.left=x1+'px';dot.style.top=y1+'px';dot.style.opacity='1';
+    af(30,()=>{
+      dot.style.transition=`left ${durMs}ms linear, top ${durMs}ms linear`;
+      dot.style.left=x2+'px';dot.style.top=y2+'px';
+    });
+  });
+}
+function hideDot(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1controls'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['atk1','atk2','atk3','atk4'].forEach(id=>litEdge(id,'#2a0808',0));
+    ['atk_a','atk_b','atk_c','atk_d','target'].forEach(id=>litNode(id,null,0));
+    ['p1','p2','p3','p4'].forEach(id=>hideDot(id,0));
+  }
+  if(n===2){
+    const ei=document.getElementById('s2intro');if(ei)ei.style.opacity='0';
+    ['e_spoof_in','e_isp_net','e_net_out','e_drop'].forEach(id=>litEdge(id,null,0));
+    ['b_atk','b_isp','b_drop','b_net','b_dst'].forEach(id=>litNode(id,null,0));
+    ['bp1','bp2'].forEach(id=>hideDot(id,0));
+    ['s2how','s2rfc'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-8px)';}});
+  }
+  if(n===3){
+    const ei=document.getElementById('s3intro');if(ei)ei.style.opacity='0';
+    ['r_valid_in','r_valid_out','r_inv_in','r_drop','r_rpki_link'].forEach(id=>litEdge(id,'#1a0d30',0));
+    ['r_legit','r_hijack','r_router','r_rpki','r_accept','r_reject'].forEach(id=>litNode(id,null,0));
+    ['rp1','rp2'].forEach(id=>hideDot(id,0));
+    ['s3roa','s3states'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-8px)';}});
+    const ss=document.getElementById('s3states');if(ss)ss.style.opacity='0';
+  }
+  if(n===4){
+    const ei=document.getElementById('s4intro');if(ei)ei.style.opacity='0';
+    ['a_in','a_out','a_drop'].forEach(id=>litEdge(id,null,0));
+    ['a_src','a_iface','a_allow','a_dropnode'].forEach(id=>litNode(id,null,0));
+    ['ap1','ap2'].forEach(id=>hideDot(id,0));
+    for(let i=1;i<=7;i++){const e=document.getElementById('acl'+i);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-6px)';}}
+    const sn=document.getElementById('s4note');if(sn){sn.style.opacity='0';sn.classList.remove('vis');sn.style.transform='translateX(-8px)';}
+  }
+  if(n===5){
+    const ei=document.getElementById('s5intro');if(ei)ei.style.opacity='0';
+    ['t_plain','t_enc_a','t_enc_b','t_cloud'].forEach(id=>litEdge(id,null,0));
+    ['t_siteA','t_gwA','t_inet','t_gwB','t_siteB'].forEach(id=>litNode(id,null,0));
+    ['tp1','tp2'].forEach(id=>hideDot(id,0));
+    const sm=document.getElementById('s5modes');if(sm)sm.style.opacity='0';
+    const si=document.getElementById('s5ike');if(si){si.style.opacity='0';si.classList.remove('vis');si.style.transform='translateX(-8px)';}
+  }
+  if(n===6){
+    const ei=document.getElementById('s6intro');if(ei)ei.style.opacity='0';
+    ['ring1','ring2','ring3','ring4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='scale(.7)';}});
+    ['atk_arr1','atk_arr2','atk_arr3','atk_arr4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+    ['blk1','blk2','blk3','blk4'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    const st=document.getElementById('s6table');if(st)st.style.opacity='0';
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    af(150,()=>{const e=document.getElementById('s1hero');if(e)e.style.opacity='1';});
+    // light up attacker nodes
+    litNode('atk_a','blk',700); litNode('atk_b','blk',900);
+    litNode('atk_c','blk',1100); litNode('atk_d','blk',1300);
+    litNode('target','active',1500);
+    // light edges
+    ['atk1','atk2','atk3','atk4'].forEach((id,i)=>litEdge(id,'#3a0808',800+i*200));
+    // animate attack packets converging
+    moveDot('p1',30,30,183,94,900,600);
+    moveDot('p2',336,30,183,94,1100,600);
+    moveDot('p3',30,158,183,94,1300,600);
+    moveDot('p4',336,158,183,94,1500,600);
+    hideDot('p1',1550); hideDot('p2',1750);
+    hideDot('p3',1950); hideDot('p4',2100);
+    af(2000,()=>{const e=document.getElementById('s1controls');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(100,()=>{const e=document.getElementById('s2intro');if(e)e.style.opacity='1';});
+    litNode('b_atk','blk',300);
+    litEdge('e_spoof_in','#e85050',600);
+    // spoofed packet travelling
+    moveDot('bp1',50,98,145,98,600,400);
+    af(1100,()=>litNode('b_isp','active',0));
+    // query up to drop - edge lights and packet falls
+    litEdge('e_drop','#e85050',1200);
+    moveDot('bp1',145,98,145,168,1200,350);
+    af(1600,()=>litNode('b_drop','blk',0));
+    hideDot('bp1',1600);
+    // legit packet gets through
+    af(1800,()=>litNode('b_net','active',0));
+    litEdge('e_isp_net','#4eff9a',1800);
+    litEdge('e_net_out','#4eff9a',2000);
+    moveDot('bp2',50,98,316,98,1800,700);
+    af(2500,()=>litNode('b_dst','dst',0));
+    hideDot('bp2',2600);
+    showSlide('s2how',2700);
+    showSlide('s2rfc',3300);
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    litNode('r_legit','active',300);
+    litNode('r_hijack','blk',500);
+    litEdge('r_rpki_link','#a080c0',700);
+    af(800,()=>litNode('r_rpki','peer',0));
+    litEdge('r_valid_in','#4eff9a',900);
+    litEdge('r_inv_in','#e85050',1100);
+    af(1000,()=>litNode('r_router','active',0));
+    // valid packet accepted
+    moveDot('rp1',50,80,183,98,900,400);
+    litEdge('r_valid_out','#4eff9a',1400);
+    moveDot('rp1',183,98,316,80,1400,400);
+    af(1850,()=>litNode('r_accept','dst',0));
+    hideDot('rp1',1900);
+    // hijacker rejected
+    moveDot('rp2',50,140,183,98,1200,400);
+    litEdge('r_drop','#e85050',1700);
+    moveDot('rp2',183,98,183,172,1700,380);
+    af(2100,()=>litNode('r_reject','blk',0));
+    hideDot('rp2',2150);
+    showSlide('s3roa',2400);
+    af(3100,()=>{const e=document.getElementById('s3states');if(e)e.style.opacity='1';});
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    litNode('a_src','blk',300);
+    litEdge('a_in','#e85050',500);
+    moveDot('ap1',50,70,185,70,500,380);
+    af(950,()=>litNode('a_iface','active',0));
+    litEdge('a_drop','#e85050',1050);
+    moveDot('ap1',185,70,185,128,1050,320);
+    af(1400,()=>litNode('a_dropnode','blk',0));
+    hideDot('ap1',1420);
+    // legit packet passes
+    litEdge('a_out','#4eff9a',1500);
+    moveDot('ap2',50,70,316,70,1500,500);
+    af(2050,()=>litNode('a_allow','dst',0));
+    hideDot('ap2',2100);
+    // ACL rows appear
+    for(let i=1;i<=7;i++) af(2200+i*220,()=>{const e=document.getElementById('acl'+i);if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}});
+    showSlide('s4note',4000);
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+    litNode('t_siteA','active',300);
+    litNode('t_gwA','active',600);
+    litEdge('t_plain','#e85050',700);
+    // unencrypted packet reaches internet (risky)
+    moveDot('tp1',30,40,183,40,700,500);
+    af(1200,()=>litNode('t_inet','active',0));
+    hideDot('tp1',1250);
+    // now show encrypted tunnel
+    litEdge('t_cloud','#4ec9e1',1400);
+    litEdge('t_enc_a','#4ec9e1',1500);
+    litEdge('t_enc_b','#4ec9e1',1700);
+    af(1400,()=>litNode('t_gwA','dst',0));
+    moveDot('tp2',30,90,183,90,1500,500);
+    af(2050,()=>litNode('t_inet','active',0));
+    moveDot('tp2',183,90,260,90,2050,400);
+    af(2500,()=>litNode('t_gwB','active',0));
+    moveDot('tp2',260,90,336,90,2500,350);
+    af(2900,()=>litNode('t_siteB','dst',0));
+    hideDot('tp2',2950);
+    af(3100,()=>{const e=document.getElementById('s5modes');if(e)e.style.opacity='1';});
+    showSlide('s5ike',3800);
+  }
+
+  if(n===6){
+    af(100,()=>{const e=document.getElementById('s6intro');if(e)e.style.opacity='1';});
+    // rings expand outward one by one
+    [['ring1',300],['ring2',700],['ring3',1100],['ring4',1500]].forEach(([id,ms])=>{
+      af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+    });
+    // attack arrows appear
+    [['atk_arr1',600],['atk_arr2',1000],['atk_arr3',1400],['atk_arr4',1800]].forEach(([id,ms])=>{
+      af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+    });
+    // block badges
+    [['blk1',700],['blk2',1100],['blk3',1500],['blk4',1900]].forEach(([id,ms])=>{
+      af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});
+    });
+    af(2200,()=>{const e=document.getElementById('s6table');if(e)e.style.opacity='1';});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

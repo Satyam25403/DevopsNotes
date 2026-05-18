@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>IPv6 Security</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden;}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+.fade{opacity:0;transition:opacity .4s ease}
+.fade.in{opacity:1}
+.fill{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:none}
+.fill.rtl{right:0;left:auto}
+.track{position:relative;height:8px;background:#1a1a2e;border-radius:2px;overflow:hidden}
+
+.node{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:2px solid #333;background:#130d1e;flex-shrink:0}
+.node .ico{font-size:16px;line-height:1}
+.node .lbl{font-size:5px;text-align:center;line-height:1.5}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulse{animation:pulse 1s ease-in-out infinite}
+@keyframes blink{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 0 4px #e85050}}
+.blink{animation:blink 1s ease infinite}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SCENE 1 — Dual-Stack Blind Spot
+══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">DUAL-STACK BLIND SPOTS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE INVISIBLE PATH</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s1_hook" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Your IPv4 firewall is <span style="color:#4eff9a">perfectly hardened</span>.<br>
+        But your hosts speak <span style="color:#e85050">IPv6 too</span> — and that<br>
+        traffic goes around it completely.
+      </div>
+
+      <!-- network diagram -->
+      <div class="fade" id="s1_diagram" style="position:relative;border:1px solid #3a1010;background:#0f0808;padding:10px 8px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px;text-align:center">DUAL-STACK NETWORK</div>
+
+        <!-- internet side -->
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+          <!-- attacker -->
+          <div class="node" style="width:58px;height:58px;border-color:#e85050">
+            <div class="ico">😈</div>
+            <div class="lbl" style="color:#e85050">ATTACKER<br>v4+v6</div>
+          </div>
+
+          <!-- middle: two paths -->
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+            <!-- IPv4 path BLOCKED -->
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:5px;color:#4eff9a;text-align:center">IPv4 PATH</div>
+              <div style="position:relative;height:8px;background:#1a2e1a;border-radius:2px;overflow:hidden">
+                <div class="fill" id="s1_v4beam" style="background:#4eff9a"></div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;gap:4px">
+                <div style="font-size:14px" id="s1_fw">🔥</div>
+                <div style="font-size:5px;color:#4eff9a">FIREWALL<br>BLOCKS IT</div>
+              </div>
+            </div>
+            <!-- IPv6 path FREE -->
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:5px;color:#e85050;text-align:center">IPv6 PATH — UNFILTERED</div>
+              <div style="position:relative;height:8px;background:#2e1a1a;border-radius:2px;overflow:hidden">
+                <div class="fill" id="s1_v6beam" style="background:#e85050"></div>
+              </div>
+              <div style="font-size:5px;color:#e85050;text-align:center" id="s1_fwlbl">no firewall rules ⚠</div>
+            </div>
+          </div>
+
+          <!-- victim -->
+          <div class="node" style="width:58px;height:58px;border-color:#4ec9e1" id="s1_victim">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4ec9e1">VICTIM<br>v4+v6</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- no NAT explanation -->
+      <div class="fade" id="s1_nonat" style="border:2px solid #e8505040;padding:9px 10px;background:#0f0808">
+        <div style="font-size:8px;color:#e85050;margin-bottom:7px">NO NAT IN IPv6 — EVERY DEVICE IS PUBLIC</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #4eff9a30;padding:6px 8px;background:#060d06">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:4px">IPv4 + NAT</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">10.0.0.x hidden<br>behind 1 public IP.<br>NAT acts as implicit<br>firewall.</div>
+          </div>
+          <div style="flex:1;border:1px solid #e8505030;padding:6px 8px;background:#0f0808">
+            <div style="font-size:6px;color:#e85050;margin-bottom:4px">IPv6 — no NAT</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">Each device has<br>a public GUA.<br>Directly reachable<br>from internet!</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- real incident pattern -->
+      <div class="fade" id="s1_incident" style="border-left:3px solid #e8a020;padding:8px 10px;font-size:7px;color:#aaa;line-height:2;background:#100d03">
+        <span style="color:#e8a020">REAL INCIDENT PATTERN:</span><br>
+        Sec team audits IPv4 rules → all clean.<br>
+        Pen tester pivots via IPv6 link-local.<br>
+        No IPv6 logging → attack invisible in SIEM.<br>
+        <span style="color:#e85050">Full LAN compromise, zero alerts.</span>
+      </div>
+
+      <!-- checklist -->
+      <div class="fade" id="s1_check" style="border:1px solid #2a1010;padding:8px 10px;background:#0f0808;font-size:7px;line-height:2.2">
+        <div style="color:#e8a020;margin-bottom:4px">DUAL-STACK AUDIT CHECKLIST:</div>
+        <div id="ck1" style="color:#888">☐ ip6tables rules match ip4tables</div>
+        <div id="ck2" style="color:#888">☐ IPv6 traffic in SIEM / IDS</div>
+        <div id="ck3" style="color:#888">☐ RA Guard on all access switches</div>
+        <div id="ck4" style="color:#888">☐ Teredo/6to4 tunnels blocked</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">IPv6 has no NAT — every host is internet-exposed</div>
+    <div class="ih" id="s1_status">► Watch attacker route around IPv4 firewall</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 2 — ICMPv6 Cannot Be Blocked
+══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1020">
+  <div class="hdr" style="background:#0d1020">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">ICMPv6 — THE FIREWALL DILEMMA</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ICMPv6 RULES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">REQUIRED</span>
+  </div>
+  <div class="anim" style="background:#0d1020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="fade" id="s2_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        "Block all ICMPv6" is <span style="color:#e85050">catastrophically wrong</span>.<br>
+        IPv6 literally cannot function without<br>certain ICMPv6 types.
+      </div>
+
+      <!-- must allow vs can block -->
+      <div class="fade" id="s2_must">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">✗ IF YOU BLOCK THESE — IPv6 BREAKS:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="mr1" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#0f0810;border:1px solid #4ec9e130">
+            <div style="font-size:9px">🔵</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#4ec9e1">Types 133–136 (NDP)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">RS/RA/NS/NA — address config + neighbor resolution</div>
+            </div>
+            <div style="font-size:7px;color:#e85050">MUST ALLOW</div>
+          </div>
+          <div id="mr2" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#0f0810;border:1px solid #4eff9a30">
+            <div style="font-size:9px">🟢</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#4eff9a">Type 2 (Packet Too Big)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">PMTUD — blocks silently break TCP (same as ICMP T3C4)</div>
+            </div>
+            <div style="font-size:7px;color:#e85050">MUST ALLOW</div>
+          </div>
+          <div id="mr3" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#0f0810;border:1px solid #e8a02030">
+            <div style="font-size:9px">🟡</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e8a020">Type 3 (Time Exceeded)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">traceroute6 — useful for diagnostics</div>
+            </div>
+            <div style="font-size:7px;color:#e8a020">ALLOW</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- can restrict -->
+      <div class="fade" id="s2_canblock">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">✓ SAFER TO RESTRICT:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="cr1" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#060d06;border:1px solid #4eff9a20">
+            <div style="font-size:9px">🔴</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e85050">Type 137 (Redirect)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">Attack vector for route hijacking — block on edge</div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a">BLOCK</div>
+          </div>
+          <div id="cr2" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#060d06;border:1px solid #4eff9a20">
+            <div style="font-size:9px">🔴</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e85050">Type 143 (MLD Reports)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">Multicast listener — allow on LAN, block on edge</div>
+            </div>
+            <div style="font-size:7px;color:#e8a020">LIMIT</div>
+          </div>
+          <div id="cr3" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:6px;padding:5px 8px;background:#060d06;border:1px solid #4eff9a20">
+            <div style="font-size:9px">🔴</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e85050">Echo Req (inbound)</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">Type 128 ping — block inbound from internet</div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a">BLOCK</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ip6tables snippet -->
+      <div class="fade" id="s2_rules" style="background:#0a0f1a;border:1px solid #1a3a5a;padding:8px 10px;font-size:6px;color:#4ec9e1;line-height:2.1">
+        <div style="color:#4eff9a;margin-bottom:4px"># Minimal safe ip6tables (input chain)</div>
+        <div style="color:#888"># Allow NDP (NS/NA/RS/RA)</div>
+        ip6tables -A INPUT -p icmpv6 \<br>
+        &nbsp;&nbsp;--icmpv6-type 133:136 -j ACCEPT<br>
+        <div style="color:#888"># Allow Packet Too Big</div>
+        ip6tables -A INPUT -p icmpv6 \<br>
+        &nbsp;&nbsp;--icmpv6-type 2 -j ACCEPT<br>
+        <div style="color:#e85050"># DROP all other ICMPv6 from internet</div>
+        ip6tables -A INPUT -p icmpv6 -j DROP
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Block ICMPv6 entirely = IPv6 stops working</div>
+    <div class="ih am" id="s2_status">► See which types are mandatory vs blockable</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 3 — RA Spoofing Attack
+══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">RA SPOOFING — ROGUE ROUTER AD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">RA SPOOFING</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">MitM ATTACK</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s3_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Any host can send a Router Advertisement.<br>
+        No authentication by default.<br>
+        <span style="color:#e85050">Attacker on LAN → instant gateway hijack.</span>
+      </div>
+
+      <!-- before: normal RA -->
+      <div class="fade" id="s3_normal">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">✓ NORMAL — LEGITIMATE RA</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="node" style="width:52px;height:52px;border-color:#4ec9e1">
+            <div class="ico">📡</div>
+            <div class="lbl" style="color:#4ec9e1">REAL<br>ROUTER</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div style="position:relative;height:8px;background:#1a2e1a;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s3_ra1" style="background:#4eff9a"></div>
+            </div>
+            <div style="font-size:5px;color:#4eff9a;text-align:center">RA: prefix=2001:db8::/64, gw=fe80::1</div>
+          </div>
+          <div class="node" style="width:52px;height:52px;border-color:#4eff9a" id="s3_h1">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4eff9a">HOST<br>gw=fe80::1</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- attacker sends fake RA -->
+      <div class="fade" id="s3_attack">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">✗ ATTACKER SENDS ROGUE RA</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="node" style="width:52px;height:52px;border-color:#e85050">
+            <div class="ico">😈</div>
+            <div class="lbl" style="color:#e85050">ATTACKER<br>on LAN</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div style="position:relative;height:8px;background:#2e1a1a;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s3_ra2" style="background:#e85050"></div>
+            </div>
+            <div style="font-size:5px;color:#e85050;text-align:center">FAKE RA: higher pref, gw=fe80::evil</div>
+          </div>
+          <div class="node" style="width:52px;height:52px;border-color:#e85050" id="s3_h2">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#e85050">HOST<br>gw=fe80::evil!</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- traffic now flows through attacker -->
+      <div class="fade" id="s3_mitm">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">ALL HOST TRAFFIC → ATTACKER</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="node" style="width:52px;height:52px;border-color:#e85050">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#ccc;font-size:4px">HOST</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div style="position:relative;height:8px;background:#2e1a1a;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s3_mitm1" style="background:#e85050"></div>
+            </div>
+          </div>
+          <div class="node" style="width:52px;height:52px;border-color:#e85050">
+            <div class="ico">😈</div>
+            <div class="lbl" style="color:#e85050;font-size:4px">ATTACKER<br>👁 reads all</div>
+          </div>
+          <div style="font-size:10px;color:#e85050">→</div>
+          <div class="node" style="width:48px;height:52px;border-color:#555">
+            <div class="ico" style="font-size:12px">🌐</div>
+            <div class="lbl" style="color:#555;font-size:4px">INTERNET</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#e85050;text-align:center;margin-top:4px">Attacker forwards traffic — victim never notices 👁</div>
+      </div>
+
+      <!-- why so easy -->
+      <div class="fade" id="s3_why" style="border:1px solid #3a1010;padding:8px 10px;background:#0f0808">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">WHY IT'S TRIVIAL TO EXECUTE:</div>
+        <div style="font-size:7px;color:#aaa;line-height:2">
+          • <span style="color:#4ec9e1">radvd</span> or <span style="color:#4ec9e1">scapy</span> — craft RA in &lt;10 lines<br>
+          • <span style="color:#4ec9e1">THC-IPv6</span> toolkit: fake_router26 command<br>
+          • Higher preference wins — no auth check<br>
+          • Works on any dual-stack LAN segment<br>
+          • <span style="color:#e85050">Equivalent to rogue DHCP server in IPv4</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Rogue RA = hijack every host's default gateway</div>
+    <div class="ih" id="s3_status">► Watch fake RA redirect all LAN traffic</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 4 — NDP Spoofing + Tunnel Bypass
+══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#100818">
+  <div class="hdr" style="background:#100818">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">NDP POISON + TUNNEL BYPASS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">TWO MORE VECTORS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+  <div class="anim" style="background:#100818">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- NDP Spoofing -->
+      <div class="fade" id="s4_ndp_title" style="font-size:8px;color:#e85050">① NDP SPOOFING (IPv6 ARP POISON)</div>
+
+      <div class="fade" id="s4_ndp" style="border:1px solid #3a1020;padding:8px 10px;background:#0f0814">
+        <div style="font-size:7px;color:#888;line-height:1.8;margin-bottom:6px">
+          Like ARP poisoning but for IPv6.<br>
+          Attacker sends unsolicited <span style="color:#e85050">Neighbor Advertisement</span><br>
+          claiming their MAC maps to victim's IPv6.
+        </div>
+        <!-- the exchange -->
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:4px">
+            <div class="node" style="width:52px;height:44px;border-color:#e85050">
+              <div class="ico" style="font-size:12px">😈</div>
+              <div class="lbl" style="color:#e85050;font-size:4px">ATTACKER</div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+              <div style="position:relative;height:7px;background:#2e1a1a;border-radius:2px;overflow:hidden">
+                <div class="fill" id="s4_na" style="background:#e85050"></div>
+              </div>
+              <div style="font-size:5px;color:#e85050;text-align:center">Unsolicited NA: "2001:db8::2 is at MY MAC"</div>
+            </div>
+            <div class="node" style="width:52px;height:44px;border-color:#4ec9e1" id="s4_router">
+              <div class="ico" style="font-size:12px">📡</div>
+              <div class="lbl" style="color:#e85050;font-size:4px">ROUTER<br>poisoned!</div>
+            </div>
+          </div>
+          <div style="font-size:6px;color:#e85050;text-align:center">Router now sends victim's traffic → attacker MAC</div>
+        </div>
+      </div>
+
+      <!-- Teredo/6to4 tunnel bypass -->
+      <div class="fade" id="s4_tun_title" style="font-size:8px;color:#e8a020">② 6to4 / TEREDO TUNNEL BYPASS</div>
+
+      <div class="fade" id="s4_tunnel" style="border:1px solid #3a2010;padding:8px 10px;background:#100d06">
+        <div style="font-size:7px;color:#888;line-height:1.8;margin-bottom:7px">
+          Hosts auto-configure <span style="color:#e8a020">Teredo</span> tunnels to reach<br>
+          IPv6 internet <span style="color:#e85050">over IPv4 UDP port 3544</span>.<br>
+          IPv4 firewall sees only UDP — not IPv6 inside.
+        </div>
+
+        <!-- tunnel diagram -->
+        <div style="display:flex;align-items:center;gap:3px;margin-bottom:5px">
+          <div class="node" style="width:50px;height:44px;border-color:#e8a020">
+            <div class="ico" style="font-size:11px">💻</div>
+            <div class="lbl" style="color:#e8a020;font-size:4px">DUAL<br>STACK</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <div style="position:relative;height:7px;background:#2e1a00;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s4_tb1" style="background:#e8a020"></div>
+            </div>
+            <div style="font-size:5px;color:#e8a020;text-align:center">IPv6 wrapped in IPv4 UDP:3544</div>
+          </div>
+          <div class="node" style="width:50px;height:44px;border-color:#4eff9a">
+            <div class="ico" style="font-size:11px">🔥</div>
+            <div class="lbl" style="color:#e85050;font-size:4px">FW: sees<br>UDP only</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <div style="position:relative;height:7px;background:#2e1a00;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s4_tb2" style="background:#e8a020"></div>
+            </div>
+            <div style="font-size:5px;color:#e8a020;text-align:center">→ passes ✓ (undetected)</div>
+          </div>
+          <div class="node" style="width:50px;height:44px;border-color:#e85050">
+            <div class="ico" style="font-size:11px">🌐</div>
+            <div class="lbl" style="color:#e85050;font-size:4px">IPv6<br>INTERNET</div>
+          </div>
+        </div>
+
+        <div style="font-size:7px;color:#aaa;line-height:1.8">
+          <span style="color:#e8a020">Windows enables Teredo by default.</span><br>
+          Linux: ISATAP, 6in4 same problem.<br>
+          <span style="color:#e85050">IPv4 DPI doesn't inspect IPv6 payload.</span>
+        </div>
+      </div>
+
+      <div class="fade" id="s4_both" style="border-left:3px solid #e85050;padding:8px 10px;font-size:7px;color:#aaa;line-height:2;background:#0f0808">
+        <span style="color:#e85050">COMBINED THREAT:</span><br>
+        NDP poison grabs LAN traffic.<br>
+        Teredo exfils data out over IPv4 UDP.<br>
+        Both techniques invisible to IPv4-only tools.
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">NDP poison = IPv6 ARP. Teredo bypasses firewall.</div>
+    <div class="ih" id="s4_status">► Two attack vectors your tools probably miss</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 5 — Detection: NDPmon
+══════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#081408">
+  <div class="hdr" style="background:#081408">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">DETECTION — NDPmon & MONITORING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DETECTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">TOOLS</span>
+  </div>
+  <div class="anim" style="background:#081408">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="fade" id="s5_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Detecting IPv6 attacks requires<br>
+        <span style="color:#4ec9e1">IPv6-aware tooling</span>.<br>
+        Most SIEMs log zero IPv6 out of the box.
+      </div>
+
+      <!-- NDPmon -->
+      <div class="fade" id="s5_ndpmon" style="border:1px solid #0d3a1a;padding:9px 10px;background:#060d06">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:7px">NDPmon — PASSIVE MONITOR</div>
+        <div style="font-size:7px;color:#aaa;line-height:2;margin-bottom:6px">
+          Listens for all NDP traffic. Builds<br>
+          legitimate address tables. Alerts on:<br>
+          • New Router Advertisement sources<br>
+          • MAC-to-IPv6 mapping changes (poison)<br>
+          • Prefix changes mid-session
+        </div>
+        <!-- simulated alert -->
+        <div id="s5_alert" style="opacity:0;transition:opacity .4s;background:#1a0808;border:1px solid #e85050;padding:6px 8px;font-size:6px;color:#e85050;line-height:1.9">
+          [NDPmon ALERT 14:32:01]<br>
+          <span style="color:#e8a020">ROGUE RA DETECTED</span><br>
+          src: fe80::dead:beef (new router!)<br>
+          prefix: 2001:db8::/64 pref=HIGH<br>
+          <span style="color:#e85050">→ RA Guard should block this</span>
+        </div>
+      </div>
+
+      <!-- packet capture -->
+      <div class="fade" id="s5_pcap" style="border:1px solid #0d3a1a;padding:8px 10px;background:#060d06">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:6px">CAPTURE IPv6 TRAFFIC:</div>
+        <div style="background:#0a0f1a;border:1px solid #1a3a5a;padding:7px 9px;font-size:6px;color:#4ec9e1;line-height:2.2">
+          # Capture all ICMPv6 on segment<br>
+          tcpdump -i eth0 icmp6<br><br>
+          # Filter RA packets only<br>
+          tcpdump -i eth0 'icmp6[0]==134'<br><br>
+          # Detect rogue RAs (scapy)<br>
+          <span style="color:#4eff9a">ip6tables -A INPUT -p icmpv6 \<br>
+          &nbsp;--icmpv6-type 134 -j LOG \<br>
+          &nbsp;--log-prefix "RA-ALERT: "</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">NDPmon watches NDP state — alerts on anomalies</div>
+    <div class="ih cy" id="s5_status">► See detection tools catch rogue RA in action</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 6 — Defense: RA Guard + Hardening
+══════════════════════════════════════════ -->
+<div class="scene" id="s6" style="background:#041a04">
+  <div class="hdr" style="background:#041a04">
+    <div class="hdr-title">IPv6 SECURITY</div>
+    <div class="hdr-sub">DEFENSE — RA GUARD & HARDENING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN</span>
+  </div>
+  <div class="anim" style="background:#041a04">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="fade" id="s6_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Each attack has a precise countermeasure.<br>
+        <span style="color:#4eff9a">Layer them — no single control is enough.</span>
+      </div>
+
+      <!-- RA Guard -->
+      <div class="fade" id="s6_rag" style="border:2px solid #4eff9a40;padding:9px 10px;background:#030f03">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">RA GUARD (switch-level)</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9;margin-bottom:5px">
+          Managed switch drops RA packets from<br>
+          ports not designated as router ports.<br>
+          <span style="color:#4eff9a">= Rogue DHCP snooping, but for IPv6.</span>
+        </div>
+        <!-- diagram: switch blocks rogue -->
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="node" style="width:50px;height:44px;border-color:#e85050">
+            <div class="ico" style="font-size:11px">😈</div>
+            <div class="lbl" style="color:#e85050;font-size:4px">ROGUE<br>RA SRC</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <div style="position:relative;height:7px;background:#2e1a1a;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s6_raguard" style="background:#e85050"></div>
+            </div>
+            <div style="font-size:5px;color:#e85050;text-align:center">fake RA →</div>
+          </div>
+          <div class="node" style="width:54px;height:44px;border-color:#4eff9a">
+            <div class="ico" style="font-size:11px">🔌</div>
+            <div class="lbl" style="color:#4eff9a;font-size:4px">SWITCH<br>RA GUARD</div>
+          </div>
+          <div style="font-size:10px;color:#e85050" id="s6_drop">🚫</div>
+          <div style="font-size:6px;color:#e85050" id="s6_droplbl">DROPPED</div>
+        </div>
+        <div style="font-size:6px;color:#4ec9e1;margin-top:5px">Cisco: ipv6 nd raguard policy &lt;name&gt;<br>Juniper: protocols router-advertisement guard</div>
+      </div>
+
+      <!-- control checklist -->
+      <div class="fade" id="s6_checklist" style="border:1px solid #0d3a1a;padding:9px 10px;background:#030f03">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:7px">COMPLETE HARDENING CHECKLIST:</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div id="hc1" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div><span style="color:#4eff9a">RA Guard</span> on all access-layer switches</div>
+          </div>
+          <div id="hc2" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div><span style="color:#4eff9a">ip6tables</span> mirrors ip4tables rules exactly</div>
+          </div>
+          <div id="hc3" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div>Block <span style="color:#e8a020">UDP 3544</span> (Teredo) at perimeter</div>
+          </div>
+          <div id="hc4" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div>Disable <span style="color:#e8a020">Teredo on Windows</span>: netsh interface teredo set state disabled</div>
+          </div>
+          <div id="hc5" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div>Log <span style="color:#4ec9e1">ICMPv6 type 134</span> (RA) to SIEM</div>
+          </div>
+          <div id="hc6" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div>Deploy <span style="color:#4ec9e1">NDPmon</span> or equivalent on each segment</div>
+          </div>
+          <div id="hc7" style="opacity:0;transition:opacity .3s;display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <div>Enable <span style="color:#4ec9e1">privacy extensions</span> (RFC 4941) on hosts</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s6_close" style="border-left:3px solid #4ec9e1;padding:8px 10px;font-size:7px;color:#aaa;line-height:2;background:#03090f">
+        <span style="color:#4ec9e1">CORE PRINCIPLE:</span><br>
+        Treat IPv6 as a first-class citizen<br>in every security control you have.<br>
+        <span style="color:#4eff9a">If IPv4 has a rule → IPv6 needs the same.</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">RA Guard at switch = rogue gateway impossible</div>
+    <div class="ih gn" id="s6_status">► Build the complete IPv6 defence stack</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(5)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(6)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur = 1;
+const total = 6;
+
+function goScene(n) {
+  document.getElementById('s'+cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s'+cur).classList.add('active');
+  resetScene(cur);
+}
+
+function resetScene(n) {
+  document.querySelectorAll('#s'+n+' .fade').forEach(f => f.classList.remove('in'));
+  document.querySelectorAll('#s'+n+' .fill').forEach(b => {
+    b.style.transition='none'; b.style.width='0';
+  });
+  // reset opacity-animated elements
+  ['mr1','mr2','mr3','cr1','cr2','cr3',
+   'hc1','hc2','hc3','hc4','hc5','hc6','hc7',
+   's5_alert','s6_drop','s6_droplbl'].forEach(id => {
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='0';
+  });
+  ['ck1','ck2','ck3','ck4'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.color='#888';
+  });
+  // reset box shadows
+  document.querySelectorAll('#s'+n+' .node').forEach(n=>n.style.boxShadow='none');
+}
+
+function fi(id,ms){setTimeout(()=>{const e=document.getElementById(id);if(e)e.classList.add('in');},ms);}
+function fo(id,ms){setTimeout(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},ms);}
+function beam(id,ms,dur){setTimeout(()=>{const b=document.getElementById(id);if(!b)return;b.style.transition=`width ${dur||.55}s ease-out`;b.style.width='100%';},ms);}
+function st(s,t,ms){setTimeout(()=>{const e=document.getElementById('s'+s+'_status');if(e)e.textContent=t;},ms);}
+function glow(id,color,ms){setTimeout(()=>{const e=document.getElementById(id);if(e)e.style.boxShadow=`0 0 0 3px ${color}`;},ms);}
+
+function playScene(n){resetScene(n);setTimeout(()=>runScene(n),70);}
+
+function runScene(n){
+  if(n===1)runS1();
+  if(n===2)runS2();
+  if(n===3)runS3();
+  if(n===4)runS4();
+  if(n===5)runS5();
+  if(n===6)runS6();
+}
+
+function runS1(){
+  st(1,'IPv4 firewall blocks attacker on v4 path…',0);
+  fi('s1_hook',100);
+  fi('s1_diagram',500);
+  beam('s1_v4beam',800,.5);
+  setTimeout(()=>{
+    const fw=document.getElementById('s1_fw');
+    if(fw)fw.style.filter='drop-shadow(0 0 6px #4eff9a)';
+    st(1,'IPv4 path blocked ✓ — firewall works',1100);
+  },1100);
+  beam('s1_v6beam',1600,.6);
+  glow('s1_victim','#e85050',2300);
+  st(1,'IPv6 path: no rules — attacker reaches victim!',2400);
+  fi('s1_nonat',3000);
+  fi('s1_incident',4000);
+  fi('s1_check',5000);
+  const checks=[['ck1',5400],['ck2',5800],['ck3',6200],['ck4',6600]];
+  checks.forEach(([id,ms])=>setTimeout(()=>{const e=document.getElementById(id);if(e)e.style.color='#e8a020';},ms));
+  st(1,'Zero IPv6 rules = attacker has free LAN access',5200);
+}
+
+function runS2(){
+  st(2,'Reviewing ICMPv6 — what can we block?',0);
+  fi('s2_intro',100);
+  fi('s2_must',600);
+  fo('mr1',900);
+  fo('mr2',1500);
+  fo('mr3',2100);
+  st(2,'NDP types 133–136: MUST allow or v6 dies',1000);
+  fi('s2_canblock',2800);
+  fo('cr1',3100);
+  fo('cr2',3700);
+  fo('cr3',4300);
+  st(2,'Block redirects and inbound echo — safe to drop',3200);
+  fi('s2_rules',5000);
+  st(2,'ip6tables: allow NDP + PTB, drop the rest',5200);
+}
+
+function runS3(){
+  st(3,'Normal LAN: real router sends RA to hosts…',0);
+  fi('s3_intro',100);
+  fi('s3_normal',500);
+  beam('s3_ra1',800,.5);
+  glow('s3_h1','#4eff9a',1400);
+  st(3,'Hosts trust first RA they receive — no auth!',1600);
+  fi('s3_attack',2000);
+  beam('s3_ra2',2300,.5);
+  glow('s3_h2','#e85050',2900);
+  st(3,'Rogue RA wins — higher preference overrides!',3000);
+  fi('s3_mitm',3600);
+  beam('s3_mitm1',3900,.6);
+  st(3,'All host traffic flows through attacker 👁',4600);
+  fi('s3_why',5200);
+}
+
+function runS4(){
+  st(4,'Attack 1: NDP Spoofing — IPv6 ARP poison',0);
+  fi('s4_ndp_title',100);
+  fi('s4_ndp',500);
+  beam('s4_na',800,.5);
+  glow('s4_router','#e85050',1400);
+  st(4,'Router neighbor cache poisoned with attacker MAC',1500);
+  fi('s4_tun_title',2200);
+  fi('s4_tunnel',2600);
+  beam('s4_tb1',2900,.5);
+  st(4,'Teredo: IPv6 inside IPv4 UDP — firewall blind',3500);
+  beam('s4_tb2',3600,.5);
+  st(4,'IPv4 FW passes UDP:3544 — IPv6 payload unseen!',4200);
+  fi('s4_both',5000);
+  st(4,'Both attacks invisible to IPv4-only monitoring',5200);
+}
+
+function runS5(){
+  st(5,'NDPmon listening on segment for NDP anomalies…',0);
+  fi('s5_intro',100);
+  fi('s5_ndpmon',500);
+  st(5,'New router source detected — checking against baseline',1400);
+  fo('s5_alert',1800);
+  st(5,'ALERT: rogue RA from fe80::dead:beef! 🚨',2200);
+  fi('s5_pcap',3000);
+  st(5,'tcpdump icmp6 type 134 — capture all RAs',3800);
+}
+
+function runS6(){
+  st(6,'Deploying RA Guard on access switch…',0);
+  fi('s6_intro',100);
+  fi('s6_rag',500);
+  beam('s6_raguard',800,.5);
+  setTimeout(()=>{
+    fo('s6_drop',1400);
+    fo('s6_droplbl',1400);
+    st(6,'Switch drops RA from non-router port ✓',1500);
+  },0);
+  fi('s6_checklist',2200);
+  const items=[['hc1',2500],['hc2',3000],['hc3',3500],['hc4',4000],['hc5',4500],['hc6',5000],['hc7',5500]];
+  items.forEach(([id,ms])=>fo(id,ms));
+  st(6,'7 controls layered = IPv6 attack surface closed',5000);
+  fi('s6_close',6200);
+  st(6,'Treat IPv6 like IPv4 — every rule, every control ✓',6400);
+}
+
+window.addEventListener('load',()=>setTimeout(()=>playScene(1),400));
+</script>
+</body>
+</html>

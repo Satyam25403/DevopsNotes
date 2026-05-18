@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Subnetting & CIDR — Explained in 60 Seconds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2e}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#06080f;border:1px solid #0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.pu{color:#a060c0}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.pu{color:#a060c0}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* bit cell */
+.bit-cell{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:20px;height:22px;font-size:8px;border-radius:2px;
+  border:1px solid;
+  opacity:0;transform:scale(.6);
+  transition:opacity .2s ease,transform .2s ease;
+}
+.bit-cell.visible{opacity:1;transform:scale(1)}
+.bit-net{background:#0d1a2e;border-color:#4ec9e1;color:#4ec9e1}
+.bit-host{background:#0a1a0d;border-color:#4eff9a;color:#4eff9a}
+
+/* octet label slide */
+.oct-reveal{
+  opacity:0;transform:translateY(6px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.oct-reveal.visible{opacity:1;transform:translateY(0)}
+
+/* mask fill bar */
+.mask-bar{
+  height:14px;border-radius:2px;
+  width:0%;transition:width 1s ease-out;
+}
+
+/* subnet row */
+.sn-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.sn-row.visible{opacity:1;transform:translateX(0)}
+
+/* calc reveal */
+.calc-line{
+  opacity:0;
+  transition:opacity .35s ease;
+}
+.calc-line.visible{opacity:1}
+
+/* highlight flash */
+@keyframes hlFlash{
+  0%,100%{background:transparent}
+  50%{background:rgba(78,201,225,.15)}
+}
+.hl-flash{animation:hlFlash .6s ease 1}
+
+/* CIDR prefix bounce */
+@keyframes prefixBounce{
+  0%,100%{transform:scale(1)}
+  40%{transform:scale(1.15)}
+  70%{transform:scale(.96)}
+}
+.prefix-bounce{animation:prefixBounce .5s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SCENE 1: HOOK ═══════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">SUBNETTING & CIDR</div>
+    <div class="hdr-sub">IP ADDRESSING · NETWORK PREFIXES · MASKS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">THE /24</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- big hero IP display -->
+      <div id="s1-hero" style="border:2px solid #4ec9e1;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px">THE QUESTION EVERYONE GETS WRONG</div>
+        <div style="font-size:13px;color:#fff;margin-bottom:6px;letter-spacing:1px">192.168.1.0<span style="color:#4eff9a">/24</span></div>
+        <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="font-size:8px;color:#555">what does</div>
+          <div style="font-size:12px;color:#4eff9a;border:2px solid #4eff9a;border-radius:3px;padding:4px 10px">/24</div>
+          <div style="font-size:8px;color:#555">mean?</div>
+        </div>
+        <div style="font-size:7px;color:#888;line-height:1.9">It means "the first 24 bits are the network<br>the remaining 8 bits are for hosts"<br>Simple as that.</div>
+      </div>
+
+      <!-- quick split preview -->
+      <div id="s1-split" style="opacity:0;transition:opacity .5s;border:1px solid #0d1a2e;border-radius:3px;padding:12px;background:#04060c">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:10px;text-align:center">32 BITS SPLIT INTO TWO PARTS</div>
+        <div style="display:flex;height:28px;border-radius:3px;overflow:hidden;margin-bottom:8px">
+          <div style="flex:3;background:#0d1a2e;border:1px solid #4ec9e1;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:7px;color:#4ec9e1">NETWORK (24 bits)</span>
+          </div>
+          <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:7px;color:#4eff9a">HOST (8)</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:3;text-align:center">
+            <div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">192.168.1</div>
+            <div style="font-size:6px;color:#555;line-height:1.6">fixed — identifies<br>the network</div>
+          </div>
+          <div style="flex:1;text-align:center">
+            <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">.0–.255</div>
+            <div style="font-size:6px;color:#555;line-height:1.6">variable —<br>the devices</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- why it matters stats -->
+      <div id="s1-facts" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #0d1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#4ec9e1;margin-bottom:3px">254</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">usable hosts<br>in a /24</div>
+        </div>
+        <div style="border:1px solid #0d1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">/0–/32</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">valid CIDR<br>prefix range</div>
+        </div>
+        <div style="border:1px solid #0d1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">256</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">total IPs per<br>/24 block</div>
+        </div>
+        <div style="border:1px solid #0d1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#a060c0;margin-bottom:3px">AWS/GCP</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">VPCs use CIDR<br>notation always</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE THE BINARY SPLIT
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">CIDR — CLASSLESS INTER-DOMAIN ROUTING</div>
+    <div class="ih">The slash tells you how much is network</div>
+    <div class="il" style="font-size:7px">Every IP is 32 bits. CIDR notation splits them: /24 means 24 network bits, 8 host bits. More bits for network = smaller subnet with fewer hosts.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">32</div><div class="sl">bits in<br>every IPv4</div></div>
+    <div class="sc"><div class="sv gn">254</div><div class="sl">hosts in<br>a /24</div></div>
+    <div class="sc"><div class="sv pu">1993</div><div class="sl">CIDR replaced<br>classful routing</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 2: BINARY BIT BREAKDOWN ═══════════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">THE BINARY SPLIT</div>
+    <div class="hdr-sub">32 BITS · NETWORK vs HOST · /24 VISUALIZED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">BITS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">BINARY</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- IP address being decoded -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#4ec9e1;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px;text-align:center">192.168.1.0 /24 — BINARY VIEW</div>
+
+        <!-- Octet 1: 192 -->
+        <div class="oct-reveal" id="s2-o1" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <div style="font-size:7px;color:#4ec9e1;width:30px;flex-shrink:0">192</div>
+            <div style="display:flex;gap:2px" id="s2-oct1">
+              <!-- bits filled by JS -->
+            </div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1;text-align:right">NETWORK</div>
+          </div>
+        </div>
+
+        <!-- Octet 2: 168 -->
+        <div class="oct-reveal" id="s2-o2" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <div style="font-size:7px;color:#4ec9e1;width:30px;flex-shrink:0">168</div>
+            <div style="display:flex;gap:2px" id="s2-oct2"></div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1;text-align:right">NETWORK</div>
+          </div>
+        </div>
+
+        <!-- Octet 3: 1 -->
+        <div class="oct-reveal" id="s2-o3" style="margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <div style="font-size:7px;color:#4ec9e1;width:30px;flex-shrink:0">1</div>
+            <div style="display:flex;gap:2px" id="s2-oct3"></div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1;text-align:right">NETWORK</div>
+          </div>
+        </div>
+
+        <!-- Octet 4: 0 -->
+        <div class="oct-reveal" id="s2-o4" style="margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+            <div style="font-size:7px;color:#4eff9a;width:30px;flex-shrink:0">0</div>
+            <div style="display:flex;gap:2px" id="s2-oct4"></div>
+            <div style="font-size:6px;color:#4eff9a;flex:1;text-align:right">HOST</div>
+          </div>
+        </div>
+
+        <!-- legend -->
+        <div id="s2-legend" style="display:flex;gap:10px;justify-content:center;opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:14px;height:14px;background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px"></div>
+            <div style="font-size:6px;color:#4ec9e1">Network bits (24)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px">
+            <div style="width:14px;height:14px;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px"></div>
+            <div style="font-size:6px;color:#4eff9a">Host bits (8)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- subnet mask connection -->
+      <div id="s2-mask" style="border:1px solid #0d1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">/24 ↔ SUBNET MASK</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <div style="font-size:8px;color:#a060c0;flex-shrink:0;width:20px">/24</div>
+          <div style="font-size:7px;color:#555">→</div>
+          <div style="font-size:8px;color:#4ec9e1">255.255.255.0</div>
+        </div>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <div style="flex:1;text-align:center">
+            <div style="background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px;padding:4px;font-size:8px;color:#4ec9e1">255</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">11111111</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center">.</div>
+          <div style="flex:1;text-align:center">
+            <div style="background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px;padding:4px;font-size:8px;color:#4ec9e1">255</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">11111111</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center">.</div>
+          <div style="flex:1;text-align:center">
+            <div style="background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px;padding:4px;font-size:8px;color:#4ec9e1">255</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">11111111</div>
+          </div>
+          <div style="font-size:8px;color:#333;align-self:center">.</div>
+          <div style="flex:1;text-align:center">
+            <div style="background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:4px;font-size:8px;color:#4eff9a">0</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">00000000</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#555;text-align:center;line-height:1.7;margin-top:4px">255 = 8 ones = "this octet is all network" · 0 = 8 zeros = "this octet is all host"</div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Every IP is exactly <span class="cy">32 bits</span>. The /24 prefix means the first 24 bits (3 octets) identify the network. The last 8 bits (1 octet) identify individual devices.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">The subnet mask <span class="cy">255.255.255.0</span> is the same information differently expressed. Bits set to 1 = network part. Bits set to 0 = host part. Always contiguous 1s then 0s.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">A /25 would split the 4th octet: first 4 bits network, last 4 bits host. <span class="gn">More prefix = smaller network = fewer hosts</span>. /32 = single host. /0 = entire internet.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">THE BINARY TRUTH</div>
+    <div class="ih">Subnet mask in binary: 24 ones then 8 zeros</div>
+    <div class="il" style="font-size:7px">255 in binary is 11111111. Three of those = /24. The mask ANDed with any IP gives you the network address. That's literally all subnetting is.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">24</div><div class="sl">network<br>bits</div></div>
+    <div class="sc"><div class="sv gn">8</div><div class="sl">host<br>bits</div></div>
+    <div class="sc"><div class="sv am">2⁸=256</div><div class="sl">total IPs<br>in block</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 3: CALCULATE NETWORK RANGES ═══════════════ -->
+<div class="scene" id="s3" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4eff9a">CALCULATE THE RANGE</div>
+    <div class="hdr-sub">NETWORK ID · FIRST IP · LAST IP · BROADCAST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">CALCULATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">RANGE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- formula -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4eff9a;background:#040c04">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:2px;margin-bottom:10px;text-align:center">GIVEN: 192.168.1.0/24</div>
+
+        <!-- step by step calc lines -->
+        <div style="display:flex;flex-direction:column;gap:5px">
+
+          <div class="calc-line" id="s3-c1" style="display:flex;align-items:center;border:1px solid #0d2a10;border-radius:2px;padding:8px;gap:8px">
+            <div style="font-size:9px;color:#4eff9a;width:14px;flex-shrink:0">①</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#aaa;margin-bottom:3px">NETWORK ADDRESS (all host bits = 0)</div>
+              <div style="font-size:9px;color:#4eff9a">192.168.1.<span style="color:#e85050">0</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:right;line-height:1.6">host bits<br>zeroed out</div>
+          </div>
+
+          <div class="calc-line" id="s3-c2" style="display:flex;align-items:center;border:1px solid #0d2a10;border-radius:2px;padding:8px;gap:8px">
+            <div style="font-size:9px;color:#4eff9a;width:14px;flex-shrink:0">②</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#aaa;margin-bottom:3px">FIRST USABLE HOST (+1 from network)</div>
+              <div style="font-size:9px;color:#4eff9a">192.168.1.<span style="color:#4ec9e1">1</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:right;line-height:1.6">network<br>+1</div>
+          </div>
+
+          <div class="calc-line" id="s3-c3" style="display:flex;align-items:center;border:1px solid #0d2a10;border-radius:2px;padding:8px;gap:8px">
+            <div style="font-size:9px;color:#4eff9a;width:14px;flex-shrink:0">③</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#aaa;margin-bottom:3px">LAST USABLE HOST (broadcast -1)</div>
+              <div style="font-size:9px;color:#4eff9a">192.168.1.<span style="color:#4ec9e1">254</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:right;line-height:1.6">broadcast<br>-1</div>
+          </div>
+
+          <div class="calc-line" id="s3-c4" style="display:flex;align-items:center;border:1px solid #0d2a10;border-radius:2px;padding:8px;gap:8px">
+            <div style="font-size:9px;color:#4eff9a;width:14px;flex-shrink:0">④</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#aaa;margin-bottom:3px">BROADCAST (all host bits = 1)</div>
+              <div style="font-size:9px;color:#4eff9a">192.168.1.<span style="color:#e8a020">255</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:right;line-height:1.6">host bits<br>all ones</div>
+          </div>
+
+        </div>
+
+        <!-- visual range bar -->
+        <div id="s3-bar" style="margin-top:10px;opacity:0;transition:opacity .4s">
+          <div style="font-size:6px;color:#555;margin-bottom:5px;letter-spacing:1px">RANGE VISUALIZATION</div>
+          <div style="height:20px;background:#04060c;border:1px solid #0d2a10;border-radius:2px;overflow:hidden;position:relative">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:1px;background:#e85050"></div>
+            <div id="s3-fill" style="height:100%;width:0%;background:linear-gradient(90deg,#0d2a10,#4eff9a20);transition:width 1s ease-out;border-right:1px solid #4eff9a"></div>
+            <div style="position:absolute;right:0;top:0;bottom:0;width:1px;background:#e8a020"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:3px">
+            <div style="font-size:5px;color:#e85050">.0 (net)</div>
+            <div style="font-size:5px;color:#4ec9e1">.1–.254 usable (254 hosts)</div>
+            <div style="font-size:5px;color:#e8a020">.255 (bcast)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- formula summary -->
+      <div id="s3-formula" style="border:1px solid #0d1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">FORMULA — WORKS FOR ANY /N</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:6px;color:#555;width:80px;flex-shrink:0">Block size</div>
+            <div style="font-size:7px;color:#4ec9e1;flex:1">= 256 − mask_octet</div>
+            <div style="font-size:6px;color:#555">(256 − 0 = 256)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:6px;color:#555;width:80px;flex-shrink:0">Usable hosts</div>
+            <div style="font-size:7px;color:#4eff9a;flex:1">= 2^(host bits) − 2</div>
+            <div style="font-size:6px;color:#555">(2⁸ − 2 = 254)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:6px;color:#555;width:80px;flex-shrink:0">Network ID</div>
+            <div style="font-size:7px;color:#e8a020;flex:1">= IP AND mask</div>
+            <div style="font-size:6px;color:#555">(host bits = 0)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <div style="font-size:6px;color:#555;width:80px;flex-shrink:0">Broadcast</div>
+            <div style="font-size:7px;color:#e85050;flex:1">= network + block − 1</div>
+            <div style="font-size:6px;color:#555">(host bits = 1)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text"><span class="gn">Why minus 2?</span> The network address (.0) and broadcast address (.255) are reserved — can't assign to hosts. Every subnet loses 2 IPs to these. Always.</div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text">The <span class="am">block size formula</span>: 256 − subnet mask octet. For /24 (mask=0): 256−0=256 total. For /25 (mask=128): 256−128=128 total. Half the size per extra bit.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">KEY FORMULA</div>
+    <div class="ih gn">Usable hosts = 2^(host bits) − 2</div>
+    <div class="il" style="font-size:7px">/24 = 2⁸ − 2 = 254. /25 = 2⁷ − 2 = 126. /26 = 2⁶ − 2 = 62. Each extra prefix bit halves the hosts. Memorise these for interviews.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">254</div><div class="sl">usable hosts<br>/24</div></div>
+    <div class="sc"><div class="sv rd">2</div><div class="sl">IPs always<br>reserved</div></div>
+    <div class="sc"><div class="sv am">256</div><div class="sl">block size<br>for /24</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 4: BLOCK SIZE STEPS ═══════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e8a020">BLOCK SIZE STEPS</div>
+    <div class="hdr-sub">SUBNETS INCREMENT BY BLOCK SIZE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">BLOCKS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">STEPPING</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- block diagram -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#e8a020;background:#0c0800">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:2px;margin-bottom:8px;text-align:center">10.0.0.0/8 SPLIT INTO /24 SUBNETS</div>
+        <svg width="330" height="100" viewBox="0 0 330 100">
+          <!-- address space bar -->
+          <rect x="10" y="8" width="310" height="28" rx="3" fill="#080600" stroke="#2a1a00" stroke-width="1"/>
+          <text x="165" y="26" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">10.0.0.0/8  —  16 million addresses</text>
+
+          <!-- /24 subnet blocks -->
+          <rect id="s4-b1" x="10" y="46" width="72" height="30" rx="3" fill="#0a1408" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s4-b1t" x="46" y="58" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">10.0.0.0</text>
+          <text id="s4-b1s" x="46" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">/24 · 254h</text>
+
+          <rect id="s4-b2" x="88" y="46" width="72" height="30" rx="3" fill="#0a1408" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s4-b2t" x="124" y="58" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">10.0.1.0</text>
+          <text id="s4-b2s" x="124" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">/24 · 254h</text>
+
+          <rect id="s4-b3" x="166" y="46" width="72" height="30" rx="3" fill="#0a1408" stroke="#a060c0" stroke-width="1.5" opacity="0"/>
+          <text id="s4-b3t" x="202" y="58" text-anchor="middle" fill="#a060c0" font-family="'Press Start 2P'" font-size="4" opacity="0">10.0.2.0</text>
+          <text id="s4-b3s" x="202" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">/24 · 254h</text>
+
+          <rect id="s4-bdot" x="244" y="46" width="76" height="30" rx="3" fill="#080600" stroke="#2a1a00" stroke-width="1" opacity="0"/>
+          <text id="s4-bdott" x="282" y="64" text-anchor="middle" fill="#444" font-family="'Press Start 2P'" font-size="7" opacity="0">···</text>
+
+          <!-- arrows between blocks -->
+          <text id="s4-arr1" x="83" y="64" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="7" opacity="0">+256</text>
+          <text id="s4-arr2" x="161" y="64" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="7" opacity="0">+256</text>
+
+          <!-- block size label -->
+          <rect id="s4-bslbl" x="10" y="82" width="150" height="12" rx="2" fill="#0c0800" stroke="none" opacity="0"/>
+          <text id="s4-bslblt" x="85" y="91" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5" opacity="0">Block size = 256 steps</text>
+        </svg>
+      </div>
+
+      <!-- common prefix table -->
+      <div id="s4-table" style="border:1px solid #1a1000;border-radius:3px;padding:10px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">COMMON SUBNET SIZES — MEMORISE THESE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a1000;padding-bottom:4px;margin-bottom:5px">
+          <div style="font-size:6px;color:#e8a020;width:38px">CIDR</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">MASK</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">BLOCK</div>
+          <div style="font-size:6px;color:#e8a020;flex:1">HOSTS</div>
+          <div style="font-size:6px;color:#e8a020;width:50px">USE CASE</div>
+        </div>
+
+        <div class="sn-row" id="sn1" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/16</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.0.0</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">65536</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">65534</div>
+          <div style="font-size:6px;color:#555;width:50px">large VPC</div>
+        </div>
+        <div class="sn-row" id="sn2" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/24</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.0</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">256</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">254</div>
+          <div style="font-size:6px;color:#555;width:50px">office LAN</div>
+        </div>
+        <div class="sn-row" id="sn3" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/25</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.128</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">128</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">126</div>
+          <div style="font-size:6px;color:#555;width:50px">dept</div>
+        </div>
+        <div class="sn-row" id="sn4" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/26</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.192</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">64</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">62</div>
+          <div style="font-size:6px;color:#555;width:50px">small grp</div>
+        </div>
+        <div class="sn-row" id="sn5" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/28</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.240</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">16</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">14</div>
+          <div style="font-size:6px;color:#555;width:50px">AWS subnet</div>
+        </div>
+        <div class="sn-row" id="sn6" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/30</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.252</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">4</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">2</div>
+          <div style="font-size:6px;color:#555;width:50px">P2P link</div>
+        </div>
+        <div class="sn-row" id="sn7" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#4eff9a;width:38px">/32</div>
+          <div style="font-size:6px;color:#888;width:56px">255.255.255.255</div>
+          <div style="font-size:6px;color:#e8a020;width:56px">1</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">0</div>
+          <div style="font-size:6px;color:#555;width:50px">host route</div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text"><span class="am">Block size = 256 − mask octet</span>. For /25 (mask 128): 256−128=128. Next subnet starts at .128. Then .0 again in the next /24. Subnets always align to multiples of block size.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">Each additional prefix bit <span class="am">halves the subnet size</span> but doubles the number of subnets. /24 → two /25s. Each /25 → two /26s. This is how you split a network for VLANs.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">BLOCK SIZE TRICK</div>
+    <div class="ih am">256 − mask = block. Subnets step in block increments.</div>
+    <div class="il" style="font-size:7px">For /25: 256−128=128. Subnets are .0/.128. For /26: 256−192=64. Subnets are .0/.64/.128/.192. No calculator needed — it's just powers of 2.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">256-n</div><div class="sl">block size<br>formula</div></div>
+    <div class="sc"><div class="sv gn">÷2</div><div class="sl">hosts per +1<br>prefix bit</div></div>
+    <div class="sc"><div class="sv cy">×2</div><div class="sl">subnets per<br>+1 prefix bit</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 5: QUICK REFERENCE + CLOUD ═══════════════ -->
+<div class="scene" id="s5" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#a060c0">CIDR IN THE REAL WORLD</div>
+    <div class="hdr-sub">CLOUD VPCs · PRIVATE RANGES · CHEAT SHEET</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a060c0">REAL WORLD</span>
+    <span class="sbadge" style="color:#a060c0;border-color:#a060c0">CLOUD + LAN</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">RFC 1918 PRIVATE ADDRESS RANGES</div>
+
+      <!-- private ranges -->
+      <div id="s5-r1" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <div style="font-size:9px;color:#4eff9a;flex:1">10.0.0.0/8</div>
+          <div style="font-size:7px;color:#555">16.7M addresses</div>
+        </div>
+        <div style="display:flex;gap:4px;flex-wrap:wrap">
+          <div style="font-size:6px;color:#888;line-height:1.7">Class A private · Enterprise LANs · AWS default VPC range</div>
+        </div>
+        <div style="margin-top:5px;height:8px;background:#04060c;border:1px solid #0d2010;border-radius:2px;overflow:hidden">
+          <div id="s5-bar1" style="height:100%;width:0%;background:#4eff9a;transition:width 1.2s ease-out;opacity:.5"></div>
+        </div>
+      </div>
+
+      <div id="s5-r2" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <div style="font-size:9px;color:#4ec9e1;flex:1">172.16.0.0/12</div>
+          <div style="font-size:7px;color:#555">1M addresses</div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.7">Class B private · 172.16.x.x–172.31.x.x · Docker default bridge</div>
+        <div style="margin-top:5px;height:8px;background:#04060c;border:1px solid #0d1a2e;border-radius:2px;overflow:hidden">
+          <div id="s5-bar2" style="height:100%;width:0%;background:#4ec9e1;transition:width 1.2s .15s ease-out;opacity:.5"></div>
+        </div>
+      </div>
+
+      <div id="s5-r3" style="border:2px solid #e8a020;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <div style="font-size:9px;color:#e8a020;flex:1">192.168.0.0/16</div>
+          <div style="font-size:7px;color:#555">65K addresses</div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.7">Class C private · Home routers · 192.168.1.0/24 most common</div>
+        <div style="margin-top:5px;height:8px;background:#04060c;border:1px solid #1a1000;border-radius:2px;overflow:hidden">
+          <div id="s5-bar3" style="height:100%;width:0%;background:#e8a020;transition:width 1.2s .3s ease-out;opacity:.5"></div>
+        </div>
+      </div>
+
+      <!-- cloud cheat sheet -->
+      <div id="s5-cloud" style="border:1px solid #1a0d2e;border-radius:3px;padding:10px;background:#0a0612;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#a060c0;letter-spacing:1px;margin-bottom:8px">☁ CLOUD CIDR CHEAT SHEET</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="sn-row" id="cl1" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid #1a0d2e;border-radius:2px">
+            <span style="font-size:8px;flex-shrink:0">🟠</span>
+            <div style="font-size:6px;color:#e8a020;flex:1">AWS VPC</div>
+            <div style="font-size:6px;color:#aaa">/16 to /28 supported</div>
+          </div>
+          <div class="sn-row" id="cl2" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid #1a0d2e;border-radius:2px">
+            <span style="font-size:8px;flex-shrink:0">🔵</span>
+            <div style="font-size:6px;color:#4ec9e1;flex:1">Azure VNet</div>
+            <div style="font-size:6px;color:#aaa">/8 to /29 supported</div>
+          </div>
+          <div class="sn-row" id="cl3" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid #1a0d2e;border-radius:2px">
+            <span style="font-size:8px;flex-shrink:0">🟢</span>
+            <div style="font-size:6px;color:#4eff9a;flex:1">GCP VPC</div>
+            <div style="font-size:6px;color:#aaa">/8 to /29 per subnet</div>
+          </div>
+          <div class="sn-row" id="cl4" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid #1a0d2e;border-radius:2px">
+            <span style="font-size:8px;flex-shrink:0">🐳</span>
+            <div style="font-size:6px;color:#4ec9e1;flex:1">Docker bridge</div>
+            <div style="font-size:6px;color:#aaa">172.17.0.0/16 default</div>
+          </div>
+          <div class="sn-row" id="cl5" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border:1px solid #1a0d2e;border-radius:2px">
+            <span style="font-size:8px;flex-shrink:0">☸</span>
+            <div style="font-size:6px;color:#a060c0;flex:1">Kubernetes pods</div>
+            <div style="font-size:6px;color:#aaa">10.244.0.0/16 (flannel)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- final summary card -->
+      <div id="s5-summary" style="border:2px solid #a060c0;border-radius:3px;padding:12px;opacity:0;transition:opacity .4s;text-align:center;background:#0a0612">
+        <div style="font-size:7px;color:#a060c0;letter-spacing:2px;margin-bottom:8px">THE 30-SECOND SUMMARY</div>
+        <div style="font-size:7px;color:#ccc;line-height:2;text-align:left">
+          <span style="color:#4ec9e1">/N</span> = first N bits are network<br>
+          <span style="color:#4eff9a">Hosts</span> = 2^(32−N) − 2<br>
+          <span style="color:#e8a020">Block</span> = 256 − last mask octet<br>
+          <span style="color:#e85050">Reserved</span>: .0 (net) + .255 (bcast)<br>
+          <span style="color:#a060c0">Subnets</span> step by block size
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">REMEMBER</div>
+    <div class="ih pu">Private IPs never route on the public internet</div>
+    <div class="il" style="font-size:7px">RFC 1918 ranges (10.x, 172.16–31.x, 192.168.x) are reserved for private use. Your router NATs them to a public IP. That's why every home network can use 192.168.1.x.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3</div><div class="sl">private<br>RFC1918 ranges</div></div>
+    <div class="sc"><div class="sv am">/28</div><div class="sl">smallest AWS<br>subnet (14h)</div></div>
+    <div class="sc"><div class="sv pu">NAT</div><div class="sl">maps private<br>→ public IP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+
+// Build bit cells for an octet value, net=true means network bits (blue), false = host bits (green)
+function buildOctet(containerId, value, isNet){
+  const c=document.getElementById(containerId);
+  if(!c) return;
+  c.innerHTML='';
+  const bits = value.toString(2).padStart(8,'0');
+  for(let i=0;i<8;i++){
+    const cell=document.createElement('div');
+    cell.className='bit-cell '+(isNet?'bit-net':'bit-host');
+    cell.textContent=bits[i];
+    cell.id=containerId+'_b'+i;
+    c.appendChild(cell);
+  }
+}
+
+function revealBits(containerId, startDelay, msPerBit){
+  for(let i=0;i<8;i++){
+    delay(()=>{
+      const el=document.getElementById(containerId+'_b'+i);
+      if(el) el.classList.add('visible');
+    }, startDelay + i*msPerBit);
+  }
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-split','s1-facts','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-mask','0'); setOp('s2-legend','0');
+    ['s2-o1','s2-o2','s2-o3','s2-o4'].forEach(id=>rmV(id));
+    ['s2-s1','s2-s2','s2-s3'].forEach(id=>rmV(id));
+    // rebuild & hide bits
+    buildOctet('s2-oct1',192,true);
+    buildOctet('s2-oct2',168,true);
+    buildOctet('s2-oct3',1,true);
+    buildOctet('s2-oct4',0,false);
+    // hide all bit cells
+    ['s2-oct1','s2-oct2','s2-oct3','s2-oct4'].forEach(cid=>{
+      for(let i=0;i<8;i++){
+        const el=document.getElementById(cid+'_b'+i);
+        if(el) el.classList.remove('visible');
+      }
+    });
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-formula','0');
+    ['s3-c1','s3-c2','s3-c3','s3-c4'].forEach(id=>rmV(id));
+    setOp('s3-bar','0');
+    const fill=document.getElementById('s3-fill');
+    if(fill){fill.style.transition='none';fill.style.width='0%';}
+    ['s3-s1','s3-s2'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    setOp('s4-table','0');
+    ['s4-b1','s4-b1t','s4-b1s','s4-b2','s4-b2t','s4-b2s','s4-b3','s4-b3t','s4-b3s',
+     's4-bdot','s4-bdott','s4-arr1','s4-arr2','s4-bslbl','s4-bslblt'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.setAttribute('opacity','0');
+    });
+    ['sn1','sn2','sn3','sn4','sn5','sn6','sn7'].forEach(id=>rmV(id));
+    ['s4-s1','s4-s2'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-title','0');
+    ['s5-r1','s5-r2','s5-r3','s5-cloud','s5-summary'].forEach(id=>setOp(id,'0'));
+    ['s5-bar1','s5-bar2','s5-bar3'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.transition='none';el.style.width='0%';}
+    });
+    ['cl1','cl2','cl3','cl4','cl5'].forEach(id=>rmV(id));
+  }
+}
+
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-split','1'),900);
+    delay(()=>setOp('s1-facts','1'),1600);
+    delay(()=>setOp('s1-cta','1'),2300);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // reveal octets with bits
+    delay(()=>{ addV('s2-o1'); revealBits('s2-oct1',0,60); },500);
+    delay(()=>{ addV('s2-o2'); revealBits('s2-oct2',0,60); },1000);
+    delay(()=>{ addV('s2-o3'); revealBits('s2-oct3',0,60); },1500);
+    delay(()=>{ addV('s2-o4'); revealBits('s2-oct4',0,60); },2000);
+    delay(()=>{ setOp('s2-legend','1'); },2600);
+    delay(()=>setOp('s2-mask','1'),2100);
+    delay(()=>addV('s2-s1'),800);
+    delay(()=>addV('s2-s2'),1600);
+    delay(()=>addV('s2-s3'),2400);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    delay(()=>addV('s3-c1'),500);
+    delay(()=>addV('s3-c2'),900);
+    delay(()=>addV('s3-c3'),1300);
+    delay(()=>addV('s3-c4'),1700);
+    delay(()=>{
+      setOp('s3-bar','1');
+      delay(()=>{
+        const f=document.getElementById('s3-fill');
+        if(f){f.style.transition='width 1s ease-out';f.style.width='100%';}
+      },100);
+    },2000);
+    delay(()=>setOp('s3-formula','1'),2300);
+    delay(()=>addV('s3-s1'),700);
+    delay(()=>addV('s3-s2'),1800);
+  }
+
+  if(n===4){
+    delay(()=>document.getElementById('s4-hero').classList.add('visible'),200);
+    // svg blocks appear
+    delay(()=>{ svgOp('s4-b1','1');svgOp('s4-b1t','1');svgOp('s4-b1s','1'); },600);
+    delay(()=>{ svgOp('s4-arr1','1'); },900);
+    delay(()=>{ svgOp('s4-b2','1');svgOp('s4-b2t','1');svgOp('s4-b2s','1'); },1000);
+    delay(()=>{ svgOp('s4-arr2','1'); },1300);
+    delay(()=>{ svgOp('s4-b3','1');svgOp('s4-b3t','1');svgOp('s4-b3s','1'); },1400);
+    delay(()=>{ svgOp('s4-bdot','1');svgOp('s4-bdott','1'); },1700);
+    delay(()=>{ svgOp('s4-bslbl','1');svgOp('s4-bslblt','1'); },1900);
+    delay(()=>{
+      setOp('s4-table','1');
+      ['sn1','sn2','sn3','sn4','sn5','sn6','sn7'].forEach((id,i)=>{
+        delay(()=>addV(id),i*200);
+      });
+    },2100);
+    delay(()=>addV('s4-s1'),800);
+    delay(()=>addV('s4-s2'),2000);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-title','1'),200);
+    delay(()=>{
+      setOp('s5-r1','1');
+      delay(()=>{ const b=document.getElementById('s5-bar1');if(b){b.style.transition='width 1.2s ease-out';b.style.width='90%';} },100);
+    },400);
+    delay(()=>{
+      setOp('s5-r2','1');
+      delay(()=>{ const b=document.getElementById('s5-bar2');if(b){b.style.transition='width 1.2s ease-out';b.style.width='60%';} },100);
+    },800);
+    delay(()=>{
+      setOp('s5-r3','1');
+      delay(()=>{ const b=document.getElementById('s5-bar3');if(b){b.style.transition='width 1.2s ease-out';b.style.width='35%';} },100);
+    },1200);
+    delay(()=>{
+      setOp('s5-cloud','1');
+      ['cl1','cl2','cl3','cl4','cl5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },1700);
+    delay(()=>setOp('s5-summary','1'),2900);
+  }
+}
+
+window.addEventListener('load',()=>{ playScene(1); });
+</script>
+</body>
+</html>

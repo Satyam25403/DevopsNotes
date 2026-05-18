@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>Routing Protocols — OSPF, BGP & Path Finding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Network map shared ── */
+.map-wrap{
+  background:#050d0a;border:2px solid #0d2018;border-radius:3px;
+  position:relative;overflow:hidden;
+}
+.map-node{
+  position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;
+  transform:translate(-50%,-50%);
+  transition:filter .25s,transform .25s;
+}
+.map-node .nicon{font-size:18px;line-height:1;filter:grayscale(1) brightness(.4);transition:filter .3s}
+.map-node.active .nicon{filter:none}
+.map-node.pulse .nicon{filter:none;animation:nodePulse .5s ease 2}
+.map-node .nlabel{font-size:5.5px;color:#2a4030;line-height:1.3;text-align:center;transition:color .3s;white-space:nowrap}
+.map-node.active .nlabel{color:#4eff9a}
+.map-node.src .nlabel{color:#e8a020}
+.map-node.dst .nlabel{color:#4ec9e1}
+.map-node.peer .nlabel{color:#a080c0}
+
+@keyframes nodePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.3)}}
+
+/* packet dot */
+.pkt-dot{
+  position:absolute;width:8px;height:8px;border-radius:50%;
+  transform:translate(-50%,-50%);
+  pointer-events:none;z-index:10;
+  opacity:0;transition:opacity .2s;
+}
+.pkt-dot.vis{opacity:1}
+
+/* AS boundary */
+.as-box{
+  position:absolute;border:1px dashed;border-radius:4px;
+  opacity:0;transition:opacity .4s;
+}
+
+/* traceroute hop row */
+.tr-hop{
+  display:flex;align-items:center;gap:6px;padding:5px 8px;
+  border-radius:2px;margin-bottom:3px;
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .35s,transform .35s;
+}
+.tr-hop.vis{opacity:1;transform:translateX(0)}
+.tr-num{font-size:7px;color:#555;width:16px;flex-shrink:0;text-align:right}
+.tr-ip{font-size:7px;flex:1;font-family:monospace;color:#4ec9e1}
+.tr-ms{font-size:6.5px;color:#4eff9a;flex-shrink:0;width:46px;text-align:right}
+.tr-flag{font-size:10px;flex-shrink:0;width:18px;text-align:center}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">OSPF · BGP · HOW TRAFFIC FINDS ITS PATH</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">INTRO</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">L3</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="border:2px solid #4eff9a;border-radius:2px;background:#071510;text-align:center;padding:14px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:9px">THE BIG INSIGHT</div>
+        <div style="font-size:22px;margin-bottom:9px">🌐</div>
+        <div style="font-size:10px;color:#4eff9a;line-height:1.9;margin-bottom:8px">NO CENTRAL<br>CONTROLLER<br>EXISTS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">Every router independently decides<br>where to forward your packet.<br>Routing protocols are how they agree.</div>
+      </div>
+
+      <!-- Three protocols preview -->
+      <div style="display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .5s" id="s1protos">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 9px;background:#111808;border:1px solid #7a9e30;border-radius:2px">
+          <div style="font-size:18px">🏢</div>
+          <div>
+            <div style="font-size:8px;color:#7a9e30">OSPF — Open Shortest Path First</div>
+            <div style="font-size:6.5px;color:#aaa;margin-top:2px;line-height:1.6">Inside one organisation. Link-state. Finds the shortest path.</div>
+          </div>
+          <div style="font-size:6.5px;color:#555;flex-shrink:0">IGP</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 9px;background:#1a0d2e;border:1px solid #a080c0;border-radius:2px">
+          <div style="font-size:18px">🌍</div>
+          <div>
+            <div style="font-size:8px;color:#a080c0">BGP — Border Gateway Protocol</div>
+            <div style="font-size:6.5px;color:#aaa;margin-top:2px;line-height:1.6">Between organisations (ISPs, clouds). Policy-based. The internet's backbone.</div>
+          </div>
+          <div style="font-size:6.5px;color:#555;flex-shrink:0">EGP</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 9px;background:#1e1408;border:1px solid #e8a020;border-radius:2px">
+          <div style="font-size:18px">📟</div>
+          <div>
+            <div style="font-size:8px;color:#e8a020">RIP — Routing Information Protocol</div>
+            <div style="font-size:6.5px;color:#aaa;margin-top:2px;line-height:1.6">Legacy. Hop-count based (max 15). Slow convergence. Mostly retired.</div>
+          </div>
+          <div style="font-size:6.5px;color:#555;flex-shrink:0">OLD</div>
+        </div>
+      </div>
+
+      <div style="background:#0d1a12;border:1px solid #4eff9a;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s1key">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">IGP vs EGP</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8"><span style="color:#7a9e30">IGP</span> (Interior Gateway Protocol) = routing within one Autonomous System.<br><span style="color:#a080c0">EGP</span> (Exterior Gateway Protocol) = routing between Autonomous Systems.<br>BGP is the only EGP that matters today.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">ROUTING = DECIDING NEXT HOP</div>
+    <div class="ih">Each router only knows its neighbours.</div>
+    <div class="il">Protocols share that info so all can route.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#7a9e30">OSPF</div><div class="sl">INSIDE<br>ORG</div></div>
+    <div class="sc"><div class="sv" style="color:#a080c0">BGP</div><div class="sl">BETWEEN<br>ISPS</div></div>
+    <div class="sc"><div class="sv am">RIP</div><div class="sl">LEGACY<br>HOP CNT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: OSPF ══════════════ -->
+<div class="scene" id="s2" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">OSPF — SHORTEST PATH WITHIN YOUR NETWORK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#7a9e30">OSPF</span>
+    <span class="sbadge" style="color:#7a9e30;border-color:#7a9e30">LINK-STATE IGP</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s2intro">OSPF FINDS THE SHORTEST PATH USING COST</div>
+
+      <!-- OSPF map -->
+      <div class="map-wrap" style="height:210px" id="s2map">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 210" id="s2svg">
+          <!-- edges with cost labels -->
+          <!-- A-B cost 5 -->
+          <line x1="60" y1="55" x2="183" y2="40" stroke="#0d2018" stroke-width="2" id="e_ab"/>
+          <text x="112" y="33" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">5</text>
+          <!-- A-C cost 2 -->
+          <line x1="60" y1="55" x2="60" y2="155" stroke="#0d2018" stroke-width="2" id="e_ac"/>
+          <text x="22" y="112" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">2</text>
+          <!-- B-D cost 4 -->
+          <line x1="183" y1="40" x2="305" y2="105" stroke="#0d2018" stroke-width="2" id="e_bd"/>
+          <text x="250" y="62" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">4</text>
+          <!-- C-D cost 8 -->
+          <line x1="60" y1="155" x2="305" y2="105" stroke="#0d2018" stroke-width="2" id="e_cd"/>
+          <text x="168" y="150" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">8</text>
+          <!-- B-E cost 3 -->
+          <line x1="183" y1="40" x2="183" y2="175" stroke="#0d2018" stroke-width="2" id="e_be"/>
+          <text x="190" y="115" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">3</text>
+          <!-- D-E cost 1 -->
+          <line x1="305" y1="105" x2="183" y2="175" stroke="#0d2018" stroke-width="2" id="e_de"/>
+          <text x="254" y="155" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">1</text>
+          <!-- C-E cost 6 -->
+          <line x1="60" y1="155" x2="183" y2="175" stroke="#0d2018" stroke-width="2" id="e_ce"/>
+          <text x="95" y="178" font-size="8" fill="#1a4028" font-family="Press Start 2P, monospace">6</text>
+        </svg>
+
+        <!-- moving packet -->
+        <div id="ospf_pkt" class="pkt-dot" style="background:#4eff9a;box-shadow:0 0 6px #4eff9a;left:60px;top:55px"></div>
+
+        <!-- nodes -->
+        <div class="map-node src" id="n_a" style="left:60px;top:55px">
+          <div class="nicon">🏢</div><div class="nlabel">ROUTER A<br>SOURCE</div>
+        </div>
+        <div class="map-node" id="n_b" style="left:183px;top:40px">
+          <div class="nicon">📦</div><div class="nlabel">ROUTER B<br>cost 5</div>
+        </div>
+        <div class="map-node" id="n_c" style="left:60px;top:155px">
+          <div class="nicon">📦</div><div class="nlabel">ROUTER C<br>cost 2</div>
+        </div>
+        <div class="map-node" id="n_d" style="left:305px;top:105px">
+          <div class="nicon">📦</div><div class="nlabel">ROUTER D<br>cost 9</div>
+        </div>
+        <div class="map-node dst" id="n_e" style="left:183px;top:175px">
+          <div class="nicon">🖥️</div><div class="nlabel">ROUTER E<br>DEST</div>
+        </div>
+      </div>
+
+      <!-- path comparison -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .4s" id="s2paths">
+        <div style="flex:1;background:#1e0808;border:2px solid #e85050;border-radius:2px;padding:8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">LONG PATH</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">A→B→D→E<br>Cost: 5+4+1 = <span style="color:#e85050">10</span></div>
+        </div>
+        <div style="flex:1;background:#071510;border:2px solid #4eff9a;border-radius:2px;padding:8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">BEST PATH ✓</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">A→B→E<br>Cost: 5+3 = <span style="color:#4eff9a">8</span></div>
+        </div>
+      </div>
+
+      <div class="panel" id="s2how" style="border:1px solid #7a9e30;background:#111808">
+        <div style="font-size:7px;color:#7a9e30;margin-bottom:5px">HOW OSPF WORKS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+          <span style="color:#4eff9a">1.</span> Routers flood link-state advertisements (LSAs) to all others.<br>
+          <span style="color:#4eff9a">2.</span> Every router builds the same map of the network (LSDB).<br>
+          <span style="color:#4eff9a">3.</span> Dijkstra's algorithm finds shortest path from source to all dests.<br>
+          <span style="color:#4eff9a">4.</span> Cost = bandwidth-based (lower bandwidth = higher cost).
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#7a9e30">
+    <div class="il">OSPF KEY FACTS:</div>
+    <div class="ih" style="color:#7a9e30">Link-state. Dijkstra's shortest path.</div>
+    <div class="il">All routers share the same topology map.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#7a9e30">SPF</div><div class="sl">DIJKSTRA<br>ALGORITHM</div></div>
+    <div class="sc"><div class="sv gn">LSA</div><div class="sl">FLOOD<br>TOPOLOGY</div></div>
+    <div class="sc"><div class="sv am">BW</div><div class="sl">COST =<br>BANDWIDTH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: BGP ══════════════ -->
+<div class="scene" id="s3" style="background:#0d0818">
+  <div class="hdr" style="background:#0d0818">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">BGP — THE INTERNET'S BACKBONE PROTOCOL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a080c0">BGP</span>
+    <span class="sbadge" style="color:#a080c0;border-color:#a080c0">INTER-AS EGP</span>
+  </div>
+  <div class="anim" style="background:#0d0818">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s3intro">BGP PEERS BETWEEN AUTONOMOUS SYSTEMS</div>
+
+      <!-- BGP AS map -->
+      <div class="map-wrap" style="height:210px" id="s3map">
+        <!-- AS boundary boxes -->
+        <div class="as-box" id="as1box" style="left:6px;top:8px;width:120px;height:90px;border-color:#7a9e3060;background:#0a1a0820"></div>
+        <div class="as-box" id="as2box" style="left:132px;top:8px;width:110px;height:90px;border-color:#a080c060;background:#1a0d2820"></div>
+        <div class="as-box" id="as3box" style="left:248px;top:8px;width:112px;height:90px;border-color:#4ec9e160;background:#0d1a2820"></div>
+        <div class="as-box" id="as4box" style="left:60px;top:112px;width:245px;height:88px;border-color:#e8a02060;background:#1e140820"></div>
+
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 210" id="s3svg">
+          <!-- BGP peering links -->
+          <line x1="120" y1="52" x2="145" y2="52" stroke="#1a1025" stroke-width="2" stroke-dasharray="4,3" id="bgp_12"/>
+          <line x1="240" y1="52" x2="260" y2="52" stroke="#1a1025" stroke-width="2" stroke-dasharray="4,3" id="bgp_23"/>
+          <line x1="66" y1="96" x2="100" y2="130" stroke="#1a1025" stroke-width="2" stroke-dasharray="4,3" id="bgp_14"/>
+          <line x1="186" y1="96" x2="183" y2="128" stroke="#1a1025" stroke-width="2" stroke-dasharray="4,3" id="bgp_24"/>
+          <line x1="302" y1="96" x2="280" y2="128" stroke="#1a1025" stroke-width="2" stroke-dasharray="4,3" id="bgp_34"/>
+          <!-- internal OSPF inside each AS (faint) -->
+          <line x1="30" y1="52" x2="90" y2="52" stroke="#0d2018" stroke-width="1.5" id="ospf_as1"/>
+          <line x1="152" y1="52" x2="230" y2="52" stroke="#0d1525" stroke-width="1.5" id="ospf_as2"/>
+        </svg>
+
+        <!-- AS labels -->
+        <div style="position:absolute;left:8px;top:9px;font-size:5.5px;color:#7a9e3080;letter-spacing:.5px">AS 100</div>
+        <div style="position:absolute;left:134px;top:9px;font-size:5.5px;color:#a080c080;letter-spacing:.5px">AS 200</div>
+        <div style="position:absolute;left:250px;top:9px;font-size:5.5px;color:#4ec9e180;letter-spacing:.5px">AS 300</div>
+        <div style="position:absolute;left:62px;top:113px;font-size:5.5px;color:#e8a02080;letter-spacing:.5px">AS 400 — TIER 1 ISP</div>
+
+        <!-- moving BGP packet -->
+        <div id="bgp_pkt" class="pkt-dot" style="background:#a080c0;box-shadow:0 0 6px #a080c0;left:30px;top:52px"></div>
+
+        <!-- nodes -->
+        <div class="map-node src" id="bg_a" style="left:30px;top:52px">
+          <div class="nicon" style="font-size:16px">🏢</div>
+          <div class="nlabel" style="color:#7a9e30">ORG A</div>
+        </div>
+        <div class="map-node" id="bg_b" style="left:90px;top:52px">
+          <div class="nicon" style="font-size:16px">📡</div>
+          <div class="nlabel">BORDER</div>
+        </div>
+        <div class="map-node" id="bg_c" style="left:152px;top:52px">
+          <div class="nicon" style="font-size:16px">📡</div>
+          <div class="nlabel">BORDER</div>
+        </div>
+        <div class="map-node" id="bg_d" style="left:230px;top:52px">
+          <div class="nicon" style="font-size:16px">📡</div>
+          <div class="nlabel">BORDER</div>
+        </div>
+        <div class="map-node" id="bg_e" style="left:302px;top:52px">
+          <div class="nicon" style="font-size:16px">📡</div>
+          <div class="nlabel">BORDER</div>
+        </div>
+        <div class="map-node" id="bg_t1a" style="left:100px;top:156px">
+          <div class="nicon" style="font-size:16px">🌐</div>
+          <div class="nlabel">T1 ROUTER</div>
+        </div>
+        <div class="map-node" id="bg_t1b" style="left:183px;top:140px">
+          <div class="nicon" style="font-size:16px">🌐</div>
+          <div class="nlabel">T1 ROUTER</div>
+        </div>
+        <div class="map-node dst" id="bg_dst" style="left:280px;top:156px">
+          <div class="nicon" style="font-size:16px">🖥️</div>
+          <div class="nlabel" style="color:#4ec9e1">DEST ORG</div>
+        </div>
+      </div>
+
+      <div class="panel" id="s3how" style="border:1px solid #a080c0;background:#130820">
+        <div style="font-size:7px;color:#a080c0;margin-bottom:5px">HOW BGP WORKS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+          <span style="color:#a080c0">1.</span> Routers in different ASes form TCP sessions (port 179) — called <span style="color:#a080c0">BGP peers</span>.<br>
+          <span style="color:#a080c0">2.</span> Peers advertise their IP prefixes: "I can reach 1.2.3.0/24."<br>
+          <span style="color:#a080c0">3.</span> BGP chooses best path using policy attributes (AS-PATH, LOCAL-PREF, MED).<br>
+          <span style="color:#a080c0">4.</span> Unlike OSPF, BGP doesn't optimise for speed — it follows policy.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#a080c0">
+    <div class="il">BGP KEY FACTS:</div>
+    <div class="ih" style="color:#a080c0">Path-vector. Policy-driven. TCP port 179.</div>
+    <div class="il">Every ISP, cloud provider runs BGP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080c0">TCP</div><div class="sl">PORT 179<br>SESSION</div></div>
+    <div class="sc"><div class="sv" style="color:#a080c0">AS</div><div class="sl">AUTONOMOUS<br>SYSTEM</div></div>
+    <div class="sc"><div class="sv am">POLICY</div><div class="sl">NOT JUST<br>SHORTEST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: RIP + COMPARISON ══════════════ -->
+<div class="scene" id="s4" style="background:#1a0d08">
+  <div class="hdr" style="background:#1a0d08">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">RIP vs OSPF vs BGP — FULL COMPARISON</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">RIP + COMPARE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">LEGACY</span>
+  </div>
+  <div class="anim" style="background:#1a0d08">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s4intro">RIP — THE PROTOCOL THAT COUNTS HOPS</div>
+
+      <!-- RIP explanation -->
+      <div class="panel" id="s4rip" style="border:2px solid #e8a020;background:#1e1408">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:22px">📟</div>
+          <div style="font-size:9px;color:#e8a020">RIP — ROUTING INFORMATION PROTOCOL</div>
+        </div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9;margin-bottom:6px">RIP is distance-vector. Routers share their entire routing table with neighbours every 30 seconds. Best path = fewest hops (max 15). Slow to converge. Vulnerable to routing loops.</div>
+        <!-- hop count demo -->
+        <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;overflow:hidden">
+          <div style="text-align:center;font-size:6px">🏢<br>HOP 0</div>
+          <div style="flex:1;height:2px;background:#e8a020;border-radius:1px;min-width:14px"></div>
+          <div style="text-align:center;font-size:6px">📦<br>HOP 1</div>
+          <div style="flex:1;height:2px;background:#e8a020;border-radius:1px;min-width:14px"></div>
+          <div style="text-align:center;font-size:6px">📦<br>HOP 2</div>
+          <div style="flex:1;height:2px;background:#e8a020;border-radius:1px;min-width:14px"></div>
+          <div style="text-align:center;font-size:6px">📦<br>HOP 3</div>
+          <div style="flex:1;height:2px;background:#555;border-radius:1px;stroke-dasharray:4,4;min-width:14px"></div>
+          <div style="text-align:center;font-size:6px;color:#555">📦<br>HOP 15<br>MAX</div>
+          <div style="flex:1;height:2px;background:#e85050;border-radius:1px;min-width:10px"></div>
+          <div style="text-align:center;font-size:6px;color:#e85050">✗<br>DROP</div>
+        </div>
+      </div>
+
+      <!-- Comparison table -->
+      <div style="opacity:0;transition:opacity .4s" id="s4table">
+        <div style="font-size:7px;color:#aaa;margin-bottom:5px;letter-spacing:.5px;text-align:center">PROTOCOL COMPARISON</div>
+        <!-- header -->
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div></div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1e1408;border:1px solid #e8a020;color:#e8a020;border-radius:2px">RIP</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#111808;border:1px solid #7a9e30;color:#7a9e30;border-radius:2px">OSPF</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#130820;border:1px solid #a080c0;color:#a080c0;border-radius:2px">BGP</div>
+        </div>
+        <!-- rows -->
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="font-size:6px;padding:4px;color:#555;display:flex;align-items:center">TYPE</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1a1008;border:1px solid #2a1f10;color:#e8a020;border-radius:2px">Distance<br>Vector</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d1a08;border:1px solid #1a2810;color:#7a9e30;border-radius:2px">Link<br>State</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#100820;border:1px solid #201030;color:#a080c0;border-radius:2px">Path<br>Vector</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="font-size:6px;padding:4px;color:#555;display:flex;align-items:center">METRIC</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1a1008;border:1px solid #2a1f10;color:#ccc;border-radius:2px">Hop<br>count</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d1a08;border:1px solid #1a2810;color:#ccc;border-radius:2px">Cost<br>(BW)</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#100820;border:1px solid #201030;color:#ccc;border-radius:2px">AS<br>path</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="font-size:6px;padding:4px;color:#555;display:flex;align-items:center">SCOPE</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1a1008;border:1px solid #2a1f10;color:#ccc;border-radius:2px">Small<br>LAN</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d1a08;border:1px solid #1a2810;color:#ccc;border-radius:2px">Single<br>org</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#100820;border:1px solid #201030;color:#ccc;border-radius:2px">Global<br>internet</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px;margin-bottom:2px">
+          <div style="font-size:6px;padding:4px;color:#555;display:flex;align-items:center">SPEED</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1a1008;border:1px solid #e85050;color:#e85050;border-radius:2px">Slow<br>30s</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d1a08;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">Fast<br>hello</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#100820;border:1px solid #e8a020;color:#e8a020;border-radius:2px">Minutes<br>TCP</div>
+        </div>
+        <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr;gap:2px">
+          <div style="font-size:6px;padding:4px;color:#555;display:flex;align-items:center">STATUS</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#1a1008;border:1px solid #e85050;color:#e85050;border-radius:2px">Legacy<br>retired</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d1a08;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">Active<br>widely</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#100820;border:1px solid #4eff9a;color:#4eff9a;border-radius:2px">Active<br>critical</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">RIP WEAKNESS:</div>
+    <div class="ih am">Max 15 hops. Broadcasts every 30s.</div>
+    <div class="il">Replaced by OSPF for all serious networks.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">15</div><div class="sl">RIP MAX<br>HOPS</div></div>
+    <div class="sc"><div class="sv gn">30s</div><div class="sl">RIP UPDATE<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv rd">LOOP</div><div class="sl">RIP<br>PROBLEM</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: BGP HIJACKING ══════════════ -->
+<div class="scene" id="s5" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">BGP IS TRUSTED — AND THAT'S DANGEROUS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">BGP HIJACKING</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s5intro">BGP HAS NO BUILT-IN AUTHENTICATION</div>
+
+      <div class="panel" id="s5trust" style="border:2px solid #e85050;background:#1e0808">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">⚠ THE FUNDAMENTAL PROBLEM</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">BGP was designed in 1989 on the assumption that all ASes are <span style="color:#e85050">trusted peers</span>. A router accepting a BGP advertisement has no way to verify the sender actually owns those IP prefixes.</div>
+      </div>
+
+      <div class="panel" id="s5how" style="border:1px solid #e85050;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">HOW BGP HIJACKING WORKS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:7px;padding:5px 8px;background:#240d0d;border-radius:2px;align-items:flex-start">
+            <div style="font-size:7px;color:#e85050;flex-shrink:0;width:14px">1</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7">Attacker's router announces "I own 1.2.3.0/24" via BGP.</div>
+          </div>
+          <div style="display:flex;gap:7px;padding:5px 8px;background:#240d0d;border-radius:2px;align-items:flex-start">
+            <div style="font-size:7px;color:#e85050;flex-shrink:0;width:14px">2</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7">Other routers accept the advertisement — no verification.</div>
+          </div>
+          <div style="display:flex;gap:7px;padding:5px 8px;background:#240d0d;border-radius:2px;align-items:flex-start">
+            <div style="font-size:7px;color:#e85050;flex-shrink:0;width:14px">3</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7">Traffic meant for the real 1.2.3.0/24 is rerouted to attacker.</div>
+          </div>
+          <div style="display:flex;gap:7px;padding:5px 8px;background:#240d0d;border-radius:2px;align-items:flex-start">
+            <div style="font-size:7px;color:#e85050;flex-shrink:0;width:14px">4</div>
+            <div style="font-size:6.5px;color:#ccc;line-height:1.7">Attacker can drop, intercept, or inspect packets. MiTM or blackhole.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="s5real" style="border:1px solid #e8a020;background:#1a1008">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">REAL-WORLD INCIDENTS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+          <span style="color:#e8a020">2010:</span> China Telecom accidentally re-routed 15% of internet traffic through China for 18 minutes.<br>
+          <span style="color:#e8a020">2018:</span> Russian ISP hijacked Google/AWS prefixes for 1 hour.<br>
+          <span style="color:#e8a020">2022:</span> Multiple nation-state BGP hijacks targeting financial infrastructure.
+        </div>
+      </div>
+
+      <div class="panel" id="s5fix" style="border:1px solid #4eff9a;background:#071510">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">THE FIX — RPKI (Resource Public Key Infrastructure)</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Cryptographically signs route origin — proves an AS is authorised to announce a prefix. Adoption is growing but not universal. Only ~50% of internet routes are RPKI-protected in 2024.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">BGP HIJACKING:</div>
+    <div class="ih rd">Announce fake routes → steal traffic.</div>
+    <div class="il">RPKI adds crypto signatures to fix this.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">89</div><div class="sl">BGP YEAR<br>DESIGNED</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">BUILT-IN<br>AUTH</div></div>
+    <div class="sc"><div class="sv gn">RPKI</div><div class="sl">CRYPTO<br>FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 6: TRACEROUTE ══════════════ -->
+<div class="scene" id="s6" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">ROUTING PROTOCOLS</div>
+    <div class="hdr-sub">TRACEROUTE — SEE THE PATH LIVE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TRACEROUTE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">TOOL</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="panel" id="s6how" style="border:1px solid #4ec9e1;background:#0d1a2e">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">HOW TRACEROUTE WORKS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">Sends packets with TTL=1, then 2, then 3… Each router decrements TTL. When it hits 0, the router sends back an ICMP "Time Exceeded" — revealing its IP and location. You see every hop.</div>
+      </div>
+
+      <!-- Simulated traceroute output -->
+      <div style="background:#050d0a;border:1px solid #0d2018;border-radius:2px;padding:8px 9px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:.5px">$ traceroute google.com</div>
+
+        <div class="tr-hop" id="tr0">
+          <div class="tr-num">1</div>
+          <div class="tr-ip">192.168.1.1</div>
+          <div class="tr-ms">1.2 ms</div>
+          <div class="tr-flag">🏠</div>
+          <div style="font-size:6px;color:#555">home router</div>
+        </div>
+        <div class="tr-hop" id="tr1">
+          <div class="tr-num">2</div>
+          <div class="tr-ip">10.120.4.1</div>
+          <div class="tr-ms">8.4 ms</div>
+          <div class="tr-flag">📡</div>
+          <div style="font-size:6px;color:#555">ISP edge</div>
+        </div>
+        <div class="tr-hop" id="tr2">
+          <div class="tr-num">3</div>
+          <div class="tr-ip">72.14.204.68</div>
+          <div class="tr-ms">12.1 ms</div>
+          <div class="tr-flag">🌐</div>
+          <div style="font-size:6px;color:#a080c0">BGP peer</div>
+        </div>
+        <div class="tr-hop" id="tr3">
+          <div class="tr-num">4</div>
+          <div class="tr-ip">216.239.48.1</div>
+          <div class="tr-ms">14.7 ms</div>
+          <div class="tr-flag">🌐</div>
+          <div style="font-size:6px;color:#a080c0">Google AS</div>
+        </div>
+        <div class="tr-hop" id="tr4">
+          <div class="tr-num">5</div>
+          <div class="tr-ip">142.250.80.46</div>
+          <div class="tr-ms">15.2 ms</div>
+          <div class="tr-flag">🖥️</div>
+          <div style="font-size:6px;color:#4ec9e1">google.com ✓</div>
+        </div>
+        <div class="tr-hop" id="tr5" style="opacity:0;transition:opacity .3s">
+          <div class="tr-num" style="color:#e85050">6</div>
+          <div class="tr-ip" style="color:#e85050">* * *</div>
+          <div class="tr-ms" style="color:#e85050">timeout</div>
+          <div class="tr-flag">🔥</div>
+          <div style="font-size:6px;color:#555">blocked ICMP</div>
+        </div>
+      </div>
+
+      <!-- what each hop tells you -->
+      <div class="panel" id="s6read" style="border:1px solid #4eff9a;background:#071510">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">READING THE OUTPUT</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+          <span style="color:#4eff9a">Hop 1:</span> Your gateway — always private IP.<br>
+          <span style="color:#a080c0">Hop 3:</span> BGP peering point — ISP handoff.<br>
+          <span style="color:#4ec9e1">Hop 4+:</span> Inside destination AS (Google).<br>
+          <span style="color:#e85050">* * *:</span> Router blocking ICMP or firewall drop — not necessarily a problem.
+        </div>
+      </div>
+
+      <div class="panel" id="s6bgplink" style="border:1px solid #a080c0;background:#130820">
+        <div style="font-size:7px;color:#a080c0;margin-bottom:4px">CONNECTING IT ALL</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">The jump from hop 2 → 3 in the traceroute is a <span style="color:#a080c0">BGP peering point</span> — the boundary between your ISP's AS and another. OSPF handles hops within each AS. BGP decides the inter-AS handoff.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">TRACEROUTE:</div>
+    <div class="ih">TTL expires → router reveals itself.</div>
+    <div class="il">Shows every BGP & OSPF hop in the path.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">TTL</div><div class="sl">DECREMENTS<br>PER HOP</div></div>
+    <div class="sc"><div class="sv gn">ICMP</div><div class="sl">TIME<br>EXCEEDED</div></div>
+    <div class="sc"><div class="sv rd">* * *</div><div class="sl">BLOCKED<br>NORMAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function showSlide(id,ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}
+  });
+}
+
+function litEdge(id,color,ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(!e) return;
+    e.setAttribute('stroke',color||'#0d2018');
+    e.setAttribute('stroke-width',color&&color!=='#0d2018'?'3':'2');
+    e.removeAttribute('stroke-dasharray');
+  });
+}
+function litNode(id,cls,ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(!e) return;
+    e.classList.remove('active','pulse','src','dst','peer');
+    if(cls) e.classList.add(cls);
+  });
+}
+
+// Animate a dot along a line from (x1,y1) to (x2,y2)
+function moveDot(dotId, x1, y1, x2, y2, startMs, durMs){
+  af(startMs, ()=>{
+    const dot=document.getElementById(dotId);
+    if(!dot) return;
+    dot.style.transition='none';
+    dot.style.left=x1+'px';
+    dot.style.top=y1+'px';
+    dot.style.opacity='1';
+    af(30,()=>{
+      dot.style.transition=`left ${durMs}ms linear, top ${durMs}ms linear`;
+      dot.style.left=x2+'px';
+      dot.style.top=y2+'px';
+    });
+  });
+}
+function hideDot(dotId,ms){
+  af(ms,()=>{const e=document.getElementById(dotId);if(e)e.style.opacity='0';});
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1protos','s1key'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+  if(n===2){
+    const ei=document.getElementById('s2intro');if(ei)ei.style.opacity='0';
+    ['e_ab','e_ac','e_bd','e_cd','e_be','e_de','e_ce'].forEach(id=>litEdge(id,null,0));
+    ['n_a','n_b','n_c','n_d','n_e'].forEach(id=>litNode(id,null,0));
+    const p=document.getElementById('ospf_pkt');
+    if(p){p.style.opacity='0';p.style.left='60px';p.style.top='55px';}
+    ['s2paths','s2how'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+  if(n===3){
+    const ei=document.getElementById('s3intro');if(ei)ei.style.opacity='0';
+    ['as1box','as2box','as3box','as4box'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['bgp_12','bgp_23','bgp_14','bgp_24','bgp_34'].forEach(id=>litEdge(id,'#1a1025',0));
+    ['bg_a','bg_b','bg_c','bg_d','bg_e','bg_t1a','bg_t1b','bg_dst'].forEach(id=>litNode(id,null,0));
+    const p=document.getElementById('bgp_pkt');if(p){p.style.opacity='0';p.style.left='30px';p.style.top='52px';}
+    const h=document.getElementById('s3how');if(h){h.style.opacity='0';h.classList.remove('vis');}
+  }
+  if(n===4){
+    const ei=document.getElementById('s4intro');if(ei)ei.style.opacity='0';
+    ['s4rip','s4table'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+  if(n===5){
+    ['s5intro','s5trust','s5how','s5real','s5fix'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}
+    });
+  }
+  if(n===6){
+    ['s6how','s6read','s6bgplink'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+    for(let i=0;i<5;i++){const e=document.getElementById('tr'+i);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-8px)';}}
+    const t5=document.getElementById('tr5');if(t5)t5.style.opacity='0';
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    show('s1hero',150);
+    af(700,()=>{const e=document.getElementById('s1protos');if(e)e.style.opacity='1';});
+    af(1500,()=>{const e=document.getElementById('s1key');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(100,()=>{const e=document.getElementById('s2intro');if(e)e.style.opacity='1';});
+    // light up nodes one by one
+    litNode('n_a','src',300);
+    litNode('n_b','active',600);
+    litNode('n_c','active',900);
+    litNode('n_d','active',1200);
+    litNode('n_e','dst',1500);
+    // light all edges grey
+    ['e_ab','e_ac','e_bd','e_cd','e_be','e_de','e_ce'].forEach((id,i)=>litEdge(id,'#1a3028',200+i*150));
+    // show paths comparison
+    af(2000,()=>{const e=document.getElementById('s2paths');if(e)e.style.opacity='1';});
+    // animate best path A→B→E
+    af(2200,()=>{
+      litEdge('e_ab','#4eff9a',0);
+      litNode('n_a','src',0);
+      litNode('n_b','pulse',0);
+    });
+    // move packet A→B
+    moveDot('ospf_pkt',60,55,183,40,2200,450);
+    af(2700,()=>{
+      litEdge('e_be','#4eff9a',0);
+      litNode('n_b','active',0);
+      litNode('n_e','pulse',0);
+    });
+    // move packet B→E
+    moveDot('ospf_pkt',183,40,183,175,2700,450);
+    hideDot('ospf_pkt',3200);
+    show('s2how',3300);
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    // show AS boxes
+    ['as1box','as2box','as3box','as4box'].forEach((id,i)=>{
+      af(300+i*200,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});
+    });
+    // light nodes
+    const nodes=[['bg_a','src',700],['bg_b','active',850],['bg_c','active',1000],
+                 ['bg_d','active',1150],['bg_e','active',1300],
+                 ['bg_t1a','active',1450],['bg_t1b','active',1600],['bg_dst','dst',1750]];
+    nodes.forEach(([id,cls,ms])=>litNode(id,cls,ms));
+    // light peering links
+    [['bgp_12','#a080c0',900],['bgp_23','#a080c0',1100],['bgp_14','#e8a020',1300],
+     ['bgp_24','#e8a020',1500],['bgp_34','#e8a020',1700]].forEach(([id,col,ms])=>litEdge(id,col,ms));
+    // animate packet path: A→B→C(bgp peer)→T1b→T1a→dst
+    moveDot('bgp_pkt',30,52,90,52,2000,300);
+    af(2300,()=>litNode('bg_b','peer',0));
+    moveDot('bgp_pkt',90,52,152,52,2350,300);
+    af(2650,()=>litNode('bg_c','peer',0));
+    moveDot('bgp_pkt',152,52,183,140,2700,350);
+    af(3050,()=>litNode('bg_t1b','peer',0));
+    moveDot('bgp_pkt',183,140,280,156,3100,350);
+    hideDot('bgp_pkt',3500);
+    af(3200,()=>litNode('bg_dst','dst',0));
+    show('s3how',3600);
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    show('s4rip',300);
+    af(1100,()=>{const e=document.getElementById('s4table');if(e)e.style.opacity='1';});
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+    show('s5trust',300);
+    show('s5how',900);
+    show('s5real',1700);
+    show('s5fix',2500);
+  }
+
+  if(n===6){
+    show('s6how',200);
+    for(let i=0;i<5;i++) showSlide('tr'+i, 700+i*400);
+    af(3000,()=>{const e=document.getElementById('tr5');if(e)e.style.opacity='1';});
+    show('s6read',3600);
+    show('s6bgplink',4300);
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

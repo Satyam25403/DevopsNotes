@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What Is A Port?</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.map-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;transform:translate(-50%,-50%);transition:filter .25s,transform .25s}
+.map-node .nicon{font-size:18px;line-height:1;filter:grayscale(1) brightness(.4);transition:filter .3s}
+.map-node.active .nicon,.map-node.pulse .nicon,.map-node.src .nicon,.map-node.dst .nicon,.map-node.peer .nicon{filter:none}
+.map-node .nlabel{font-size:5.5px;color:#2a4030;line-height:1.3;text-align:center;transition:color .3s;white-space:nowrap;font-family:'Press Start 2P',monospace}
+.map-node.active .nlabel{color:#4eff9a}
+.map-node.src .nlabel{color:#e8a020}
+.map-node.dst .nlabel{color:#4ec9e1}
+.map-node.peer .nlabel{color:#a080c0}
+.pkt-dot{position:absolute;width:8px;height:8px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;transition:opacity .2s}
+@keyframes nodePulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.35)}}
+.map-node.pulse{animation:nodePulse .5s ease 2}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(100%)}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ SCENE 1: HOOK ═══════════ -->
+<div class="scene active" id="s1" style="background:#0d0010">
+  <div class="hdr" style="background:#0d0010;border-bottom:1px solid #3a1040">
+    <div class="hdr-title" style="color:#e060ff">WHAT IS A PORT?</div>
+    <div class="hdr-sub">KERNEL-LEVEL DEEP DIVE</div>
+    <div class="dots">
+      <div class="dot active" id="d1_1"></div>
+      <div class="dot" id="d1_2"></div>
+      <div class="dot" id="d1_3"></div>
+      <div class="dot" id="d1_4"></div>
+      <div class="dot" id="d1_5"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0d0010">
+    <span class="slabel" style="color:#e060ff">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">INCIDENT</span>
+  </div>
+  <div class="anim" style="background:#0d0010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- GLOBE MAP ANIMATION -->
+      <div style="height:195px;position:relative;background:#050008;border:2px solid #3a1040;border-radius:3px;overflow:hidden">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 195">
+          <!-- grid lines for globe feel -->
+          <line x1="0" y1="65" x2="366" y2="65" stroke="#1a0820" stroke-width="1"/>
+          <line x1="0" y1="130" x2="366" y2="130" stroke="#1a0820" stroke-width="1"/>
+          <line x1="91" y1="0" x2="91" y2="195" stroke="#1a0820" stroke-width="1"/>
+          <line x1="183" y1="0" x2="183" y2="195" stroke="#1a0820" stroke-width="1"/>
+          <line x1="275" y1="0" x2="275" y2="195" stroke="#1a0820" stroke-width="1"/>
+          <!-- infection spread lines -->
+          <line id="inf1" x1="183" y1="97" x2="60" y2="50" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf2" x1="183" y1="97" x2="310" y2="60" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf3" x1="183" y1="97" x2="270" y2="150" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf4" x1="183" y1="97" x2="80" y2="140" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf5" x1="60" y1="50" x2="30" y2="30" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf6" x1="60" y1="50" x2="100" y2="25" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf7" x1="310" y1="60" x2="340" y2="30" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf8" x1="310" y1="60" x2="350" y2="90" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf9" x1="270" y1="150" x2="330" y2="170" stroke="#e85050" stroke-width="0" opacity="0"/>
+          <line id="inf10" x1="80" y1="140" x2="40" y2="170" stroke="#e85050" stroke-width="0" opacity="0"/>
+        </svg>
+        <!-- Infection nodes -->
+        <div id="p0" style="position:absolute;left:183px;top:97px;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:#e85050;box-shadow:0 0 12px #e85050;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p1" style="position:absolute;left:60px;top:50px;transform:translate(-50%,-50%);width:7px;height:7px;border-radius:50%;background:#e85050;box-shadow:0 0 8px #e85050;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p2" style="position:absolute;left:310px;top:60px;transform:translate(-50%,-50%);width:7px;height:7px;border-radius:50%;background:#e85050;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p3" style="position:absolute;left:270px;top:150px;transform:translate(-50%,-50%);width:7px;height:7px;border-radius:50%;background:#e85050;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p4" style="position:absolute;left:80px;top:140px;transform:translate(-50%,-50%);width:7px;height:7px;border-radius:50%;background:#e85050;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p5" style="position:absolute;left:30px;top:30px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p6" style="position:absolute;left:100px;top:25px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p7" style="position:absolute;left:340px;top:30px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p8" style="position:absolute;left:350px;top:90px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p9" style="position:absolute;left:330px;top:170px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <div id="p10" style="position:absolute;left:40px;top:170px;transform:translate(-50%,-50%);width:5px;height:5px;border-radius:50%;background:#ff8080;opacity:0;transition:opacity .3s;z-index:5"></div>
+        <!-- Label inside map -->
+        <div id="mapLabel" style="position:absolute;bottom:8px;left:0;right:0;text-align:center;font-size:7px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .4s">SPREADING VIA PORT 445 →</div>
+      </div>
+
+      <!-- STAT CARDS -->
+      <div style="display:flex;gap:8px">
+        <div class="panel" id="stat_a" style="flex:1;background:#1a0008;border:1px solid #e85050;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 6px">
+          <div style="font-size:18px;color:#e85050" id="counterMachines">0</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.6">MACHINES<br>INFECTED</div>
+        </div>
+        <div class="panel" id="stat_b" style="flex:1;background:#1a0008;border:1px solid #e8a020;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 6px">
+          <div style="font-size:18px;color:#e8a020" id="counterCountries">0</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.6">COUNTRIES<br>HIT</div>
+        </div>
+        <div class="panel" id="stat_c" style="flex:1;background:#1a0008;border:1px solid #4ec9e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;padding:10px 6px">
+          <div style="font-size:18px;color:#4ec9e1">1</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.6">DAY TO<br>SPREAD</div>
+        </div>
+      </div>
+
+      <!-- HOW LINE -->
+      <div class="panel" id="hook_how" style="background:#110010;border:1px solid #e060ff;display:flex;align-items:center;gap:10px">
+        <div style="font-size:22px;flex-shrink:0">🔓</div>
+        <div>
+          <div style="font-size:8px;color:#e060ff;margin-bottom:4px">HOW: WANNACRY 2017</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.8">Port 445 (SMB) left open to internet. NSA exploit EternalBlue. No port filter = no defence.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd" style="margin:0 12px">
+    <div class="il">One port. Zero firewall rules.</div>
+    <div class="ih rd">= 230,000 machines. 150 countries. 1 day.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">445</div><div class="sl">PORT USED</div></div>
+    <div class="sc"><div class="sv rd">$4–8B</div><div class="sl">DAMAGE</div></div>
+    <div class="sc"><div class="sv am">SMB</div><div class="sl">PROTOCOL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 2: WHAT IS A PORT ═══════════ -->
+<div class="scene" id="s2" style="background:#0a1420">
+  <div class="hdr" style="background:#0a1420;border-bottom:1px solid #1a3050">
+    <div class="hdr-title" style="color:#4ec9e1">WHAT IS A PORT?</div>
+    <div class="hdr-sub">16-BIT KERNEL ADDRESS</div>
+    <div class="dots">
+      <div class="dot done" id="d2_1"></div>
+      <div class="dot active" id="d2_2"></div>
+      <div class="dot" id="d2_3"></div>
+      <div class="dot" id="d2_4"></div>
+      <div class="dot" id="d2_5"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a1420">
+    <span class="slabel" style="color:#4ec9e1">PORT ANATOMY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">KERNEL</span>
+  </div>
+  <div class="anim" style="background:#0a1420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- PACKET ARRIVING ANIMATION -->
+      <div style="height:160px;position:relative;background:#050d18;border:2px solid #1a3050;border-radius:3px;overflow:hidden">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 160">
+          <!-- NIC → Kernel line -->
+          <line id="nicLine" x1="50" y1="80" x2="190" y2="80" stroke="#1a3050" stroke-width="2"/>
+          <!-- Kernel → Process A line -->
+          <line id="pALine" x1="220" y1="80" x2="310" y2="40" stroke="#1a3050" stroke-width="2"/>
+          <!-- Kernel → Process B line -->
+          <line id="pBLine" x1="220" y1="80" x2="310" y2="120" stroke="#1a3050" stroke-width="2"/>
+        </svg>
+        <!-- NIC node -->
+        <div id="nicNode" class="map-node" style="left:50px;top:80px">
+          <div class="nicon">🔌</div>
+          <div class="nlabel">NIC</div>
+        </div>
+        <!-- Kernel node -->
+        <div id="kernelNode" class="map-node" style="left:205px;top:80px">
+          <div class="nicon" style="font-size:22px">⚙️</div>
+          <div class="nlabel">KERNEL<br>SOCKET TABLE</div>
+        </div>
+        <!-- Process A -->
+        <div id="procA" class="map-node" style="left:325px;top:40px">
+          <div class="nicon">🌐</div>
+          <div class="nlabel">nginx<br>:80</div>
+        </div>
+        <!-- Process B -->
+        <div id="procB" class="map-node" style="left:325px;top:120px">
+          <div class="nicon">🖥️</div>
+          <div class="nlabel">sshd<br>:22</div>
+        </div>
+        <!-- Packet dot -->
+        <div id="pkt2" class="pkt-dot" style="background:#4ec9e1;box-shadow:0 0 6px #4ec9e1;left:50px;top:80px"></div>
+        <!-- Port label on packet -->
+        <div id="portLabel2" style="position:absolute;top:55px;left:50px;font-size:6px;color:#4ec9e1;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;white-space:nowrap">dst:80</div>
+        <!-- Decision label -->
+        <div id="decisionLabel" style="position:absolute;top:8px;left:0;right:0;text-align:center;font-size:7px;color:#4eff9a;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .4s">→ ROUTED TO nginx</div>
+      </div>
+
+      <!-- PORT NUMBER EXPLAINER -->
+      <div class="panel" id="port_bits" style="background:#060e1a;border:1px solid #1a5080">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">PORT = 16-BIT INTEGER</div>
+        <div style="display:flex;gap:3px;margin-bottom:6px">
+          <div style="flex:1;background:#0a2040;border:1px solid #1a4060;padding:5px 3px;text-align:center;font-size:7px;color:#4ec9e1;line-height:1.7">0<br><span style="color:#555;font-size:6px">NULL</span></div>
+          <div style="flex:2;background:#1a0a00;border:1px solid #4a2800;padding:5px 3px;text-align:center;font-size:7px;color:#e8a020;line-height:1.7">1–1023<br><span style="font-size:6px;color:#888">WELL-KNOWN</span></div>
+          <div style="flex:2;background:#0a1a00;border:1px solid #284a00;padding:5px 3px;text-align:center;font-size:7px;color:#4eff9a;line-height:1.7">1024–49151<br><span style="font-size:6px;color:#888">REGISTERED</span></div>
+          <div style="flex:2;background:#100a1a;border:1px solid #3a2850;padding:5px 3px;text-align:center;font-size:7px;color:#a080ff;line-height:1.7">49152–65535<br><span style="font-size:6px;color:#888">EPHEMERAL</span></div>
+        </div>
+        <div style="font-size:6.5px;color:#666;line-height:1.8">2¹⁶ = 65536 possible values. OS tracks each one in the socket table.</div>
+      </div>
+
+      <!-- WELL-KNOWN PORTS -->
+      <div class="panel" id="known_ports" style="background:#060e1a;border:1px solid #e8a020">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:7px">WELL-KNOWN PORTS (need root)</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 5px;background:#0d0800;border-left:2px solid #e8a020">
+            <span style="color:#e8a020">:22</span><span style="color:#aaa">SSH — encrypted shell</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 5px;background:#0d0800;border-left:2px solid #4ec9e1">
+            <span style="color:#4ec9e1">:80</span><span style="color:#aaa">HTTP — web traffic</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 5px;background:#0d0800;border-left:2px solid #4eff9a">
+            <span style="color:#4eff9a">:443</span><span style="color:#aaa">HTTPS — TLS web</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px;padding:3px 5px;background:#0d0800;border-left:2px solid #e85050">
+            <span style="color:#e85050">:445</span><span style="color:#aaa">SMB — WannaCry vector</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="margin:0 12px;border-color:#4ec9e1">
+    <div class="il">A port is a 16-bit number (0–65535).</div>
+    <div class="ih">The kernel uses it to route packets to the right process.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">65536</div><div class="sl">TOTAL PORTS</div></div>
+    <div class="sc"><div class="sv am">1024</div><div class="sl">NEED ROOT</div></div>
+    <div class="sc"><div class="sv" style="color:#a080ff">16384</div><div class="sl">EPHEMERAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 3: 5-TUPLE ═══════════ -->
+<div class="scene" id="s3" style="background:#001a10">
+  <div class="hdr" style="background:#001a10;border-bottom:1px solid #0d3020">
+    <div class="hdr-title" style="color:#4eff9a">THE 5-TUPLE</div>
+    <div class="hdr-sub">UNIQUE CONNECTION ID</div>
+    <div class="dots">
+      <div class="dot done" id="d3_1"></div>
+      <div class="dot done" id="d3_2"></div>
+      <div class="dot active" id="d3_3"></div>
+      <div class="dot" id="d3_4"></div>
+      <div class="dot" id="d3_5"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a10">
+    <span class="slabel" style="color:#4eff9a">5-TUPLE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SOCKET ID</span>
+  </div>
+  <div class="anim" style="background:#001a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- 5-TUPLE CARDS, reveal one by one -->
+      <div style="background:#050d08;border:1px solid #0d3020;border-radius:3px;padding:10px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:10px;text-align:center">EVERY CONNECTION = 5 FIELDS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="panel" id="t1" style="background:#0a1a0a;border:1px solid #1a5020;display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;background:#1a3010;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center;font-size:9px;color:#4eff9a;flex-shrink:0">1</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#4eff9a">PROTOCOL</div>
+              <div style="font-size:6.5px;color:#888;line-height:1.7;margin-top:2px">TCP or UDP — defines how data flows</div>
+            </div>
+            <div style="font-size:10px;flex-shrink:0">📡</div>
+          </div>
+          <div class="panel" id="t2" style="background:#0a1a0a;border:1px solid #1a5020;display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;background:#1a3010;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;font-size:9px;color:#e8a020;flex-shrink:0">2</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e8a020">SRC IP</div>
+              <div style="font-size:6.5px;color:#888;line-height:1.7;margin-top:2px">Where the packet came from</div>
+            </div>
+            <div style="font-size:8px;color:#e8a020;flex-shrink:0;white-space:nowrap">1.2.3.4</div>
+          </div>
+          <div class="panel" id="t3" style="background:#0a1a0a;border:1px solid #1a5020;display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;background:#1a3010;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;font-size:9px;color:#e8a020;flex-shrink:0">3</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#e8a020">SRC PORT</div>
+              <div style="font-size:6.5px;color:#888;line-height:1.7;margin-top:2px">OS-assigned ephemeral port</div>
+            </div>
+            <div style="font-size:8px;color:#e8a020;flex-shrink:0;white-space:nowrap">:54321</div>
+          </div>
+          <div class="panel" id="t4" style="background:#0a1a0a;border:1px solid #1a5020;display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;background:#1a3010;border:1px solid #4ec9e1;display:flex;align-items:center;justify-content:center;font-size:9px;color:#4ec9e1;flex-shrink:0">4</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#4ec9e1">DST IP</div>
+              <div style="font-size:6.5px;color:#888;line-height:1.7;margin-top:2px">Server being contacted</div>
+            </div>
+            <div style="font-size:8px;color:#4ec9e1;flex-shrink:0;white-space:nowrap">5.6.7.8</div>
+          </div>
+          <div class="panel" id="t5" style="background:#0a1a0a;border:1px solid #1a5020;display:flex;align-items:center;gap:8px">
+            <div style="width:28px;height:28px;background:#1a3010;border:1px solid #4ec9e1;display:flex;align-items:center;justify-content:center;font-size:9px;color:#4ec9e1;flex-shrink:0">5</div>
+            <div style="flex:1">
+              <div style="font-size:7px;color:#4ec9e1">DST PORT</div>
+              <div style="font-size:6.5px;color:#888;line-height:1.7;margin-top:2px">The service port being targeted</div>
+            </div>
+            <div style="font-size:8px;color:#4ec9e1;flex-shrink:0;white-space:nowrap">:443</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASSEMBLED TUPLE -->
+      <div class="panel" id="tuple_assembled" style="background:#050d08;border:2px solid #4eff9a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;text-align:center">ASSEMBLED SOCKET KEY</div>
+        <div style="background:#020a04;padding:8px;font-size:7px;color:#4eff9a;line-height:2;text-align:center;border:1px solid #1a4020">
+          TCP | 1.2.3.4:<span style="color:#e8a020">54321</span><br>→ 5.6.7.8:<span style="color:#4ec9e1">443</span>
+        </div>
+        <div style="font-size:6.5px;color:#666;margin-top:6px;line-height:1.8;text-align:center">Change any one field → different connection</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn" style="margin:0 12px">
+    <div class="il">5-tuple = unique connection fingerprint.</div>
+    <div class="ih">Kernel stores this in socket table to track all sessions.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">5</div><div class="sl">FIELDS</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">UNIQUE ID</div></div>
+    <div class="sc"><div class="sv am">ANY 1</div><div class="sl">CHANGE = NEW CONN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 4: SS COMMAND ═══════════ -->
+<div class="scene" id="s4" style="background:#0a0d1a">
+  <div class="hdr" style="background:#0a0d1a;border-bottom:1px solid #1a2040">
+    <div class="hdr-title" style="color:#a080ff">SOCKET TABLE LIVE</div>
+    <div class="hdr-sub">ss -tlnp IN ACTION</div>
+    <div class="dots">
+      <div class="dot done" id="d4_1"></div>
+      <div class="dot done" id="d4_2"></div>
+      <div class="dot done" id="d4_3"></div>
+      <div class="dot active" id="d4_4"></div>
+      <div class="dot" id="d4_5"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0d1a">
+    <span class="slabel" style="color:#a080ff">ss -tlnp</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">TOOL</span>
+  </div>
+  <div class="anim" style="background:#0a0d1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- TERMINAL SIMULATION -->
+      <div style="background:#020208;border:2px solid #3a2870;border-radius:3px;overflow:hidden">
+        <div style="background:#1a1030;padding:6px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#e85050"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:7px;color:#666">terminal</div>
+        </div>
+        <div style="padding:8px 10px;font-size:7px;line-height:2">
+          <div style="color:#4eff9a">$ <span style="color:#fff">ss -tlnp</span> <span id="cursor4" style="animation:blink 1s infinite">█</span></div>
+          <!-- header row -->
+          <div id="ss_hdr" style="color:#666;opacity:0;transition:opacity .3s;margin-top:4px;font-size:6px">State    Recv-Q  Local Address:Port  Process</div>
+          <!-- rows reveal one by one -->
+          <div id="ss_r1" style="opacity:0;transition:opacity .3s;color:#4ec9e1;font-size:6.5px">LISTEN   0  0.0.0.0:<span style="color:#4eff9a">22</span>   sshd</div>
+          <div id="ss_r2" style="opacity:0;transition:opacity .3s;color:#4ec9e1;font-size:6.5px">LISTEN   0  0.0.0.0:<span style="color:#4eff9a">80</span>   nginx</div>
+          <div id="ss_r3" style="opacity:0;transition:opacity .3s;color:#4ec9e1;font-size:6.5px">LISTEN   0  0.0.0.0:<span style="color:#4eff9a">443</span>  nginx</div>
+          <div id="ss_r4" style="opacity:0;transition:opacity .3s;color:#e85050;font-size:6.5px">LISTEN   0  0.0.0.0:<span style="color:#e85050">445</span>  smbd ← ⚠️</div>
+          <div id="ss_r5" style="opacity:0;transition:opacity .3s;color:#4ec9e1;font-size:6.5px">LISTEN   0  127.0.0.1:<span style="color:#4eff9a">5432</span> postgres</div>
+          <div id="ss_r6" style="opacity:0;transition:opacity .3s;color:#a080ff;font-size:6.5px">LISTEN   0  :::3000      node</div>
+        </div>
+      </div>
+
+      <!-- FLAG EXPLANATION -->
+      <div class="panel" id="flags_exp" style="background:#060810;border:1px solid #3a2870">
+        <div style="font-size:8px;color:#a080ff;margin-bottom:8px">FLAG MEANINGS</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:6px;font-size:7px">
+            <span style="color:#a080ff;width:24px;flex-shrink:0">-t</span>
+            <span style="color:#888">TCP sockets only</span>
+          </div>
+          <div style="display:flex;gap:6px;font-size:7px">
+            <span style="color:#a080ff;width:24px;flex-shrink:0">-l</span>
+            <span style="color:#888">LISTEN state — services waiting</span>
+          </div>
+          <div style="display:flex;gap:6px;font-size:7px">
+            <span style="color:#a080ff;width:24px;flex-shrink:0">-n</span>
+            <span style="color:#888">Show port numbers not names</span>
+          </div>
+          <div style="display:flex;gap:6px;font-size:7px">
+            <span style="color:#a080ff;width:24px;flex-shrink:0">-p</span>
+            <span style="color:#888">Show owning process (needs root)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- WARNING BOX -->
+      <div class="panel" id="warn_exp" style="background:#100508;border:1px solid #e85050;display:flex;align-items:center;gap:10px">
+        <div style="font-size:24px;flex-shrink:0">⚠️</div>
+        <div>
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">PORT 445 EXPOSED</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">0.0.0.0 means listening on ALL interfaces including public internet. WannaCry scanned the internet for this exact line.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="margin:0 12px;border-color:#a080ff">
+    <div class="il">ss -tlnp shows every open port + process.</div>
+    <div class="ih" style="color:#a080ff">Run this on any Linux box to audit exposure.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">:445</div><div class="sl">DANGEROUS</div></div>
+    <div class="sc"><div class="sv gn">127.x</div><div class="sl">LOCALHOST SAFE</div></div>
+    <div class="sc"><div class="sv am">0.0.0.0</div><div class="sl">ALL IFACES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 5: KERNEL ROUTING FLOW ═══════════ -->
+<div class="scene" id="s5" style="background:#100a00">
+  <div class="hdr" style="background:#100a00;border-bottom:1px solid #302010">
+    <div class="hdr-title" style="color:#e8a020">KERNEL ROUTING</div>
+    <div class="hdr-sub">NIC → SOCKET TABLE → PROCESS</div>
+    <div class="dots">
+      <div class="dot done" id="d5_1"></div>
+      <div class="dot done" id="d5_2"></div>
+      <div class="dot done" id="d5_3"></div>
+      <div class="dot done" id="d5_4"></div>
+      <div class="dot active" id="d5_5"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#100a00">
+    <span class="slabel" style="color:#e8a020">PACKET JOURNEY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">FINAL</span>
+  </div>
+  <div class="anim" style="background:#100a00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- BIG ROUTING DIAGRAM -->
+      <div style="height:220px;position:relative;background:#060400;border:2px solid #302010;border-radius:3px;overflow:hidden">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 220">
+          <!-- NIC to kernel -->
+          <line id="r_nicKern" x1="55" y1="110" x2="165" y2="110" stroke="#2a1800" stroke-width="2"/>
+          <!-- Kernel to socket table -->
+          <line id="r_kernSock" x1="215" y1="110" x2="265" y2="110" stroke="#2a1800" stroke-width="2"/>
+          <!-- Socket to nginx -->
+          <line id="r_sockNginx" x1="310" y1="110" x2="346" y2="55" stroke="#2a1800" stroke-width="2"/>
+          <!-- Socket to sshd -->
+          <line id="r_sockSsh" x1="310" y1="110" x2="346" y2="110" stroke="#2a1800" stroke-width="2"/>
+          <!-- Socket to postgres -->
+          <line id="r_sockPg" x1="310" y1="110" x2="346" y2="165" stroke="#2a1800" stroke-width="2"/>
+        </svg>
+        <!-- Packet dot 5 -->
+        <div id="pkt5" class="pkt-dot" style="background:#4ec9e1;box-shadow:0 0 8px #4ec9e1;left:55px;top:110px;width:10px;height:10px"></div>
+        <!-- Step labels inside map -->
+        <div id="step5_1" style="position:absolute;top:8px;left:0;right:0;text-align:center;font-size:7px;color:#e8a020;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">① PACKET ARRIVES AT NIC</div>
+        <div id="step5_2" style="position:absolute;top:8px;left:0;right:0;text-align:center;font-size:7px;color:#4eff9a;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">② KERNEL READS DST PORT :80</div>
+        <div id="step5_3" style="position:absolute;top:8px;left:0;right:0;text-align:center;font-size:7px;color:#4ec9e1;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">③ SOCKET TABLE LOOKUP</div>
+        <div id="step5_4" style="position:absolute;top:8px;left:0;right:0;text-align:center;font-size:7px;color:#a080ff;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">④ DELIVERED TO nginx PID 1234</div>
+        <!-- NIC -->
+        <div id="r_nic" class="map-node" style="left:55px;top:110px">
+          <div class="nicon">🔌</div>
+          <div class="nlabel">NIC</div>
+        </div>
+        <!-- Kernel -->
+        <div id="r_kern" class="map-node" style="left:190px;top:110px">
+          <div class="nicon" style="font-size:20px">⚙️</div>
+          <div class="nlabel">KERNEL<br>TCP/IP STACK</div>
+        </div>
+        <!-- Socket table -->
+        <div id="r_sock" class="map-node" style="left:287px;top:110px">
+          <div class="nicon" style="font-size:18px">📋</div>
+          <div class="nlabel">SOCKET<br>TABLE</div>
+        </div>
+        <!-- Processes on right -->
+        <div id="r_nginx" class="map-node" style="left:352px;top:55px">
+          <div class="nicon">🌐</div>
+          <div class="nlabel">nginx<br>:80</div>
+        </div>
+        <div id="r_sshd" class="map-node" style="left:352px;top:110px">
+          <div class="nicon">💻</div>
+          <div class="nlabel">sshd<br>:22</div>
+        </div>
+        <div id="r_pg" class="map-node" style="left:352px;top:165px">
+          <div class="nicon">🗄️</div>
+          <div class="nlabel">postgres<br>:5432</div>
+        </div>
+      </div>
+
+      <!-- STEP LOG -->
+      <div style="background:#080400;border:1px solid #3a2000;border-radius:2px;padding:8px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">KERNEL LOG</div>
+        <div id="log5_1" style="font-size:6.5px;color:#555;line-height:1.8">▷ waiting for packet…</div>
+        <div id="log5_2" style="font-size:6.5px;color:#555;line-height:1.8;opacity:0;transition:opacity .3s">▷ eth0: rx frame, dst_port=80</div>
+        <div id="log5_3" style="font-size:6.5px;color:#555;line-height:1.8;opacity:0;transition:opacity .3s">▷ socket_lookup(TCP,*:80) → pid:1234</div>
+        <div id="log5_4" style="font-size:6.5px;color:#4eff9a;line-height:1.8;opacity:0;transition:opacity .3s">▷ deliver → nginx (pid 1234) ✓</div>
+      </div>
+
+      <!-- TAKEAWAY -->
+      <div class="panel" id="takeaway5" style="background:#080400;border:1px solid #e8a020;display:flex;align-items:center;gap:10px">
+        <div style="font-size:22px;flex-shrink:0">🔑</div>
+        <div>
+          <div style="font-size:7px;color:#e8a020;margin-bottom:4px">KEY INSIGHT</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">The kernel never cares about app logic — it only reads the dst port number and delivers to the matching socket fd. Ports ARE the OS multiplexing mechanism.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am" style="margin:0 12px">
+    <div class="il">Ports are the kernel's multiplexing layer.</div>
+    <div class="ih am">One IP address, dozens of services, zero confusion.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">O(1)</div><div class="sl">LOOKUP TIME</div></div>
+    <div class="sc"><div class="sv gn">HASH</div><div class="sl">TABLE</div></div>
+    <div class="sc"><div class="sv am">fd</div><div class="sl">FILE DESCRIPTOR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn rd" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function litEdge(id, color, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.setAttribute('stroke', color || '#2a1800');
+    e.setAttribute('stroke-width', color && color !== '#2a1800' && color !== '#1a3050' && color !== '#0d2018' ? '3' : '2');
+  });
+}
+function litNode(id, cls, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.classList.remove('active','pulse','src','dst','peer');
+    if (cls) e.classList.add(cls);
+  });
+}
+function moveDot(dotId, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const dot = document.getElementById(dotId);
+    if (!dot) return;
+    dot.style.transition = 'none';
+    dot.style.left = x1 + 'px';
+    dot.style.top = y1 + 'px';
+    dot.style.opacity = '1';
+    af(30, () => {
+      dot.style.transition = `left ${durMs}ms linear, top ${durMs}ms linear`;
+      dot.style.left = x2 + 'px';
+      dot.style.top = y2 + 'px';
+    });
+  });
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['p0','p1','p2','p3','p4','p5','p6','p7','p8','p9','p10'].forEach(id => hide(id));
+    ['stat_a','stat_b','stat_c','hook_how'].forEach(id => hide(id));
+    hide('mapLabel');
+    const cm = document.getElementById('counterMachines');
+    const cc = document.getElementById('counterCountries');
+    if (cm) cm.textContent = '0';
+    if (cc) cc.textContent = '0';
+    ['inf1','inf2','inf3','inf4','inf5','inf6','inf7','inf8','inf9','inf10'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.setAttribute('stroke-width','0'); e.setAttribute('opacity','0'); }
+    });
+  }
+  if (n === 2) {
+    ['nicNode','kernelNode','procA','procB'].forEach(id => litNode(id, null, 0));
+    ['nicLine','pALine','pBLine'].forEach(id => litEdge(id, '#1a3050', 0));
+    const d = document.getElementById('pkt2');
+    if (d) { d.style.opacity = '0'; d.style.left = '50px'; d.style.top = '80px'; }
+    hide('portLabel2'); hide('decisionLabel');
+    ['port_bits','known_ports'].forEach(id => hide(id));
+  }
+  if (n === 3) {
+    ['t1','t2','t3','t4','t5','tuple_assembled'].forEach(id => hide(id));
+  }
+  if (n === 4) {
+    ['ss_hdr','ss_r1','ss_r2','ss_r3','ss_r4','ss_r5','ss_r6'].forEach(id => hide(id));
+    ['flags_exp','warn_exp'].forEach(id => hide(id));
+  }
+  if (n === 5) {
+    ['r_nic','r_kern','r_sock','r_nginx','r_sshd','r_pg'].forEach(id => litNode(id, null, 0));
+    ['r_nicKern','r_kernSock','r_sockNginx','r_sockSsh','r_sockPg'].forEach(id => litEdge(id, '#2a1800', 0));
+    const d = document.getElementById('pkt5');
+    if (d) { d.style.opacity = '0'; d.style.left = '55px'; d.style.top = '110px'; }
+    ['step5_1','step5_2','step5_3','step5_4'].forEach(id => hide(id));
+    const log1 = document.getElementById('log5_1');
+    if (log1) { log1.textContent = '▷ waiting for packet…'; log1.style.color = '#555'; }
+    ['log5_2','log5_3','log5_4'].forEach(id => hide(id));
+    hide('takeaway5');
+  }
+}
+
+function animateCounter(id, target, ms, duration) {
+  af(ms, () => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    let start = 0;
+    const step = target / (duration / 50);
+    const iv = setInterval(() => {
+      start = Math.min(start + step, target);
+      el.textContent = Math.round(start).toLocaleString();
+      if (start >= target) clearInterval(iv);
+    }, 50);
+  });
+}
+
+function showLine(svgId, ms) {
+  af(ms, () => {
+    const e = document.getElementById(svgId);
+    if (!e) return;
+    e.setAttribute('stroke-width', '1.5');
+    e.setAttribute('opacity', '0.8');
+  });
+}
+
+function play(n) {
+  clr(); reset(n);
+
+  if (n === 1) {
+    // Show origin dot
+    af(300, () => { const e = document.getElementById('p0'); if(e){e.style.opacity='1';} });
+    // Spread lines + nodes
+    const spread = [
+      ['inf1','p1',600], ['inf2','p2',900], ['inf3','p3',1200], ['inf4','p4',1400],
+      ['inf5','p5',1600], ['inf6','p6',1700], ['inf7','p7',1800], ['inf8','p8',1900],
+      ['inf9','p9',2100], ['inf10','p10',2200]
+    ];
+    spread.forEach(([lineId, nodeId, delay]) => {
+      showLine(lineId, delay);
+      af(delay + 100, () => { const e = document.getElementById(nodeId); if(e) e.style.opacity='1'; });
+    });
+    show('mapLabel', 2300);
+    show('stat_a', 600); show('stat_b', 800); show('stat_c', 1000);
+    animateCounter('counterMachines', 230000, 700, 1800);
+    animateCounter('counterCountries', 150, 900, 1600);
+    show('hook_how', 2500);
+  }
+
+  if (n === 2) {
+    litNode('nicNode','src',200);
+    litEdge('nicLine','#4ec9e1',300);
+    moveDot('pkt2', 50,80, 205,80, 300, 600);
+    af(500, () => { show('portLabel2',0); });
+    litNode('kernelNode','active',950);
+    litEdge('nicLine','#1a3050',1000);
+    litEdge('pALine','#4eff9a',1050);
+    moveDot('pkt2', 205,80, 325,40, 1100, 400);
+    litNode('procA','dst',1550);
+    show('decisionLabel',1600);
+    show('port_bits',1800);
+    show('known_ports',2200);
+  }
+
+  if (n === 3) {
+    ['t1','t2','t3','t4','t5'].forEach((id,i) => show(id, 300 + i * 350));
+    show('tuple_assembled', 2100);
+  }
+
+  if (n === 4) {
+    show('ss_hdr', 400);
+    ['ss_r1','ss_r2','ss_r3','ss_r4','ss_r5','ss_r6'].forEach((id,i) => show(id, 700 + i * 350));
+    show('flags_exp', 2800);
+    show('warn_exp', 3300);
+  }
+
+  if (n === 5) {
+    litNode('r_nic','src',200);
+    show('step5_1', 200);
+    const log1 = document.getElementById('log5_1');
+    af(400, () => { if(log1){log1.textContent='▷ waiting for packet…';log1.style.color='#555';} });
+    moveDot('pkt5', 55,110, 190,110, 300, 500);
+    litEdge('r_nicKern','#4ec9e1',300);
+    af(500, () => { if(log1){log1.textContent='▷ eth0: rx frame, dst_port=80';log1.style.color='#e8a020';} });
+
+    litNode('r_kern','active',850);
+    hide('step5_1');
+    show('step5_2', 850);
+    litEdge('r_nicKern','#2a1800',900);
+    show('log5_2',900);
+
+    litEdge('r_kernSock','#4eff9a',1150);
+    moveDot('pkt5', 190,110, 287,110, 1200, 400);
+    litNode('r_sock','active',1300);
+    hide('step5_2');
+    show('step5_3',1300);
+    show('log5_3',1350);
+
+    litEdge('r_kernSock','#2a1800',1700);
+    litEdge('r_sockNginx','#a080ff',1750);
+    moveDot('pkt5', 287,110, 352,55, 1800, 400);
+    litNode('r_nginx','dst',2250);
+    hide('step5_3');
+    show('step5_4',2250);
+    show('log5_4',2300);
+
+    show('takeaway5',2700);
+  }
+}
+
+function go(n) {
+  clr();
+  document.getElementById('s' + cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s' + n).classList.add('active');
+  reset(n);
+  af(80, () => play(n));
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

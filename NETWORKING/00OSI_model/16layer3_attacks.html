@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>IP Spoofing & BGP Hijacking — Layer 3 Attacks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a0808}
+.hdr-title{font-size:9px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#200808;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#a060c0}
+.il{color:#aaa}
+.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0f0606;border:1px solid #200808;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #2a0808;border-radius:2px;border-left:3px solid #e85050;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#e85050;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.gn{color:#4eff9a}.step-num.cy{color:#4ec9e1}.step-num.pu{color:#a060c0}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.rd{color:#e85050}.am{color:#e8a020}.gn{color:#4eff9a}.cy{color:#4ec9e1}.pu{color:#a060c0}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* packet travel */
+@keyframes pktSlide{
+  0%{transform:translateX(0);opacity:1}
+  85%{opacity:1}
+  100%{transform:translateX(var(--dx));opacity:0}
+}
+.pkt-go{animation:pktSlide .9s ease-in-out forwards}
+
+/* amplification fan */
+@keyframes fanOut{
+  0%{opacity:0;transform:scale(.4) translate(var(--fx),var(--fy))}
+  30%{opacity:1}
+  100%{opacity:0;transform:scale(1) translate(var(--fx),var(--fy))}
+}
+
+/* BGP route pulse */
+@keyframes routePulse{
+  0%,100%{stroke-opacity:.3;stroke-width:1.5}
+  50%{stroke-opacity:1;stroke-width:3}
+}
+.bgp-legit{animation:routePulse 2s ease-in-out infinite}
+
+@keyframes hijackAppear{
+  0%{stroke-dashoffset:300;stroke-opacity:0}
+  100%{stroke-dashoffset:0;stroke-opacity:1}
+}
+.bgp-hijack{
+  stroke-dasharray:300;stroke-dashoffset:300;
+  animation:hijackAppear 1.2s ease-out forwards;
+}
+
+/* map node pulse */
+@keyframes nodePing{
+  0%,100%{r:5}50%{r:8}
+}
+.node-active{animation:nodePing 1s ease-in-out infinite}
+
+/* red flood arrows */
+@keyframes floodArrow{
+  0%{opacity:0;transform:scale(.5)}
+  40%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(1.2)}
+}
+.flood-arrow{animation:floodArrow 1.4s ease-in-out infinite}
+.flood-arrow:nth-child(2){animation-delay:.35s}
+.flood-arrow:nth-child(3){animation-delay:.7s}
+.flood-arrow:nth-child(4){animation-delay:1.05s}
+
+/* timeline step */
+.tl-step{
+  opacity:0;transform:translateX(-12px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.tl-step.visible{opacity:1;transform:translateX(0)}
+
+/* RPKI shield build */
+.shield-layer{
+  opacity:0;transform:scaleY(.5);transform-origin:bottom;
+  transition:opacity .4s ease,transform .4s ease;
+}
+.shield-layer.visible{opacity:1;transform:scaleY(1)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1: HOOK ══════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">IP SPOOFING & BGP HIJACKING</div>
+    <div class="hdr-sub">LAYER 3 ATTACKS · INTERNET SCALE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ REAL INCIDENT</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- headline -->
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">APRIL 8, 2010 · 18 MINUTES</div>
+        <div style="font-size:9px;color:#ffcccc;line-height:2;margin-bottom:10px">15% OF ALL INTERNET<br>TRAFFIC WAS SILENTLY<br>REROUTED THROUGH<br>CHINA TELECOM</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Traffic to the US Senate, Dept of Defense,<br>NASA, and Dell briefly flowed through<br>China Telecom's AS23724.<br>No one noticed for 18 minutes.</div>
+      </div>
+
+      <!-- impact grid -->
+      <div id="s1-grid" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">15%</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">of all internet<br>traffic affected</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">18min</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">before anyone<br>noticed</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">0</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">BGP auth<br>by default</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">75K+</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">IP prefixes<br>hijacked</div>
+        </div>
+      </div>
+
+      <!-- what's covered -->
+      <div id="s1-covers" style="opacity:0;transition:opacity .5s;border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0d0404">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px">ATTACKS COVERED</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px;color:#e85050">
+            <span>🎭</span><span>IP Spoofing — forge the source IP</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px;color:#e8a020">
+            <span>📡</span><span>Smurf Attack — amplified broadcast flood</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px;color:#e85050">
+            <span>🌐</span><span>BGP Hijacking — steal entire IP blocks</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px;color:#4eff9a">
+            <span>🛡</span><span>RPKI — the cryptographic fix</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE HOW IP SPOOFING WORKS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LAYER 3 ATTACKS</div>
+    <div class="ih">IP has no source authentication. BGP trusts everyone.</div>
+    <div class="il" style="font-size:7px">Both vulnerabilities stem from protocols designed in an era of trust. IP (1981) and BGP (1989) assumed all participants were cooperative. They weren't.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">IP</div><div class="sl">RFC 791<br>1981 · no auth</div></div>
+    <div class="sc"><div class="sv am">BGP</div><div class="sl">RFC 1163<br>1989 · no auth</div></div>
+    <div class="sc"><div class="sv rd">L3</div><div class="sl">both operate<br>at Layer 3</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2: IP SPOOFING ══════════════════ -->
+<div class="scene" id="s2" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title" style="color:#e85050">IP SPOOFING</div>
+    <div class="hdr-sub">FORGED SOURCE IP IN PACKET HEADER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK #1</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FORGE SRC IP</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- IP header diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#e85050;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">IPv4 PACKET HEADER — ATTACKER FORGES SOURCE</div>
+        <svg width="330" height="130" viewBox="0 0 330 130">
+          <!-- header box -->
+          <rect x="8" y="8" width="314" height="114" rx="4" fill="#0d0404" stroke="#2a0808" stroke-width="1.5"/>
+
+          <!-- Version/IHL row -->
+          <rect x="8" y="8" width="40" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="28" y="20" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">VER/IHL</text>
+          <rect x="48" y="8" width="40" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="68" y="20" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">DSCP/ECN</text>
+          <rect x="88" y="8" width="82" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="129" y="20" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">TOTAL LENGTH</text>
+          <rect x="170" y="8" width="152" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="246" y="20" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">IDENTIFICATION</text>
+
+          <!-- TTL/Proto/Checksum -->
+          <rect x="8" y="28" width="40" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="28" y="40" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">TTL</text>
+          <rect x="48" y="28" width="40" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="68" y="40" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">PROTO</text>
+          <rect x="88" y="28" width="234" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="205" y="40" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">HEADER CHECKSUM</text>
+
+          <!-- SOURCE IP — highlighted RED = forged -->
+          <rect x="8" y="48" width="314" height="24" rx="0" fill="#250808" stroke="#e85050" stroke-width="2"/>
+          <text x="165" y="57" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5">SOURCE IP  ←  FORGED</text>
+          <text id="s2-src-before" x="165" y="68" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">99.88.77.66  (attacker's real IP)</text>
+          <text id="s2-src-after" x="165" y="68" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">1.2.3.4  (victim's IP — FAKE!)</text>
+
+          <!-- DEST IP — normal -->
+          <rect x="8" y="72" width="314" height="20" rx="0" fill="#0a0a14" stroke="#1a1a3a" stroke-width="1"/>
+          <text x="165" y="82" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">DESTINATION IP:  203.0.113.10  (target server)</text>
+
+          <!-- data row -->
+          <rect x="8" y="92" width="314" height="30" rx="0" fill="#060606" stroke="#1a1a1a" stroke-width="1"/>
+          <text x="165" y="110" text-anchor="middle" fill="#2a2a2a" font-family="'Press Start 2P'" font-size="5">DATA PAYLOAD</text>
+
+          <!-- forge arrow -->
+          <text id="s2-forge-lbl" x="165" y="125" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">OS allows raw socket writes — no OS-level check on src IP</text>
+        </svg>
+      </div>
+
+      <!-- smurf amplification preview -->
+      <div id="s2-smurf" style="border:1px solid #3a0808;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:7px">SMURF ATTACK — SPOOFING + AMPLIFICATION</div>
+        <svg width="306" height="90" viewBox="0 0 306 90">
+          <!-- attacker -->
+          <rect x="2" y="30" width="54" height="30" rx="3" fill="#200808" stroke="#e85050" stroke-width="1.5"/>
+          <text x="29" y="43" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4">ATTACKER</text>
+          <text x="29" y="53" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">src=victim IP</text>
+
+          <!-- broadcast network -->
+          <rect x="110" y="24" width="86" height="42" rx="3" fill="#150800" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="153" y="38" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">BROADCAST</text>
+          <text x="153" y="48" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">255.255.255.255</text>
+          <text x="153" y="57" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">every host replies</text>
+
+          <!-- victim -->
+          <rect x="252" y="20" width="52" height="50" rx="3" fill="#0a0a14" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="278" y="36" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">VICTIM</text>
+          <text x="278" y="48" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">flooded</text>
+          <text x="278" y="58" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">with pings</text>
+
+          <!-- single ping arrow -->
+          <line x1="56" y1="45" x2="110" y2="45" stroke="#e85050" stroke-width="2" marker-end="url(#arr1)"/>
+          <text x="83" y="40" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3">1 ping</text>
+
+          <!-- flood arrows back to victim -->
+          <line x1="196" y1="36" x2="252" y2="36" stroke="#e8a020" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <line x1="196" y1="45" x2="252" y2="45" stroke="#e8a020" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <line x1="196" y1="54" x2="252" y2="54" stroke="#e8a020" stroke-width="1.5" marker-end="url(#arr2)"/>
+          <text x="224" y="30" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3">×1000 ICMP replies</text>
+
+          <!-- amplification label -->
+          <text x="153" y="82" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">AMPLIFICATION RATIO: up to 1:1000</text>
+
+          <defs>
+            <marker id="arr1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#e8a020" stroke-width="1.5"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">The IPv4 header has a <span class="rd">source IP field</span> with no signature or verification. Raw sockets (available to root/admin) let you write any value there. The router forwards it anyway.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text"><span class="am">Smurf attack:</span> spoof victim's IP as source, send ICMP echo to broadcast address. Every host on the network replies to the victim. 1 packet becomes 1000. DDoS amplification.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text"><span class="gn">BCP38 (ingress filtering):</span> ISPs should drop packets whose source IP doesn't belong to the customer's address space. Prevents spoofing at origin. Most ISPs now implement this — but not all.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">IP SPOOFING</div>
+    <div class="ih">Source IP field has zero authentication</div>
+    <div class="il" style="font-size:7px">IPv4 was designed when trust was assumed. A raw socket on any Linux machine can forge any source IP. BCP38 at ISP level is the only real prevention.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">raw</div><div class="sl">socket needed<br>(root)</div></div>
+    <div class="sc"><div class="sv am">1:1000</div><div class="sl">smurf<br>amplification</div></div>
+    <div class="sc"><div class="sv gn">BCP38</div><div class="sl">ingress filter<br>at ISP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3: BGP HIJACKING ══════════════════ -->
+<div class="scene" id="s3" style="background:#0a0810">
+  <div class="hdr" style="background:#0a0810">
+    <div class="hdr-title" style="color:#e85050">BGP HIJACKING</div>
+    <div class="hdr-sub">HOW ROUTES GET STOLEN AT INTERNET SCALE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK #2</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BGP POISON</span>
+  </div>
+
+  <div class="anim" style="background:#0a0810">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- BGP world map animation -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#e85050;background:#06040e">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">BGP BEFORE → DURING HIJACK</div>
+        <svg width="330" height="160" viewBox="0 0 330 160">
+          <!-- simplified world regions -->
+          <!-- US -->
+          <rect x="10" y="40" width="70" height="40" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="1.5" id="s3-us"/>
+          <text x="45" y="56" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">US</text>
+          <text x="45" y="67" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">AS15169</text>
+          <text x="45" y="76" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">Google</text>
+
+          <!-- Europe -->
+          <rect x="120" y="20" width="70" height="40" rx="4" fill="#0a0820" stroke="#4ec9e1" stroke-width="1.5" id="s3-eu"/>
+          <text x="155" y="36" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">EUROPE</text>
+          <text x="155" y="47" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">AS3356</text>
+          <text x="155" y="56" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">Level3</text>
+
+          <!-- China — attacker -->
+          <rect x="230" y="40" width="90" height="50" rx="4" fill="#200808" stroke="#e85050" stroke-width="2" id="s3-cn" class=""/>
+          <text x="275" y="58" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5">CHINA</text>
+          <text x="275" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">AS23724</text>
+          <text x="275" y="79" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3">China Telecom</text>
+          <text id="s3-hijack-lbl" x="275" y="89" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3" opacity="0">HIJACKER!</text>
+
+          <!-- normal legit routes -->
+          <path id="s3-r1" class="bgp-legit" d="M80,60 Q105,30 120,40" stroke="#4eff9a" stroke-width="1.5" fill="none"/>
+          <path id="s3-r2" class="bgp-legit" d="M190,40 Q215,30 230,55" stroke="#4ec9e1" stroke-width="1.5" fill="none"/>
+
+          <!-- hijack route: china announces US prefix -->
+          <path id="s3-hijack1" d="M230,62 Q165,5 80,60" stroke="#e85050" stroke-width="2.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-hlbl1" x="155" y="12" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">FAKE: "8.8.8.0/24 is via me!"</text>
+
+          <!-- traffic reroute arrow -->
+          <path id="s3-reroute" d="M80,80 C100,130 200,140 230,85" stroke="#e8a020" stroke-width="2" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-rlbl" x="160" y="148" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">US traffic now flows to China!</text>
+
+          <!-- US victim label change -->
+          <text id="s3-victim-lbl" x="45" y="90" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">traffic stolen</text>
+        </svg>
+      </div>
+
+      <!-- how BGP works + how hijack happens -->
+      <div id="s3-explain" style="border:1px solid #2a0820;border-radius:3px;padding:10px;background:#06040e;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:7px">HOW BGP ROUTING WORKS</div>
+        <div style="font-size:7px;color:#555;margin-bottom:6px;line-height:1.8">Routers exchange <span style="color:#4ec9e1">BGP UPDATE messages</span>: "I can reach prefix X.X.X.X/N via path [AS1, AS2, AS3]". All BGP peers accept this by default. Most specific prefix wins.</div>
+        <div style="border-top:1px solid #2a0820;padding-top:6px;margin-top:2px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">HOW HIJACK HAPPENS</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.8">Attacker announces a <span style="color:#e85050">more specific prefix</span> (e.g. /24 instead of /22) for IP space they don't own. Routers prefer more specific → traffic redirects. No password, no signature required.</div>
+        </div>
+      </div>
+
+      <div class="step-block pu" id="s3-s1">
+        <div class="step-num pu">01</div>
+        <div class="step-text"><span class="pu">BGP (Border Gateway Protocol)</span> is how internet routers share routing information between Autonomous Systems (AS). Each AS is an ISP, cloud provider, or large network. ~73,000 ASes today.</div>
+      </div>
+      <div class="step-block pu" id="s3-s2">
+        <div class="step-num pu">02</div>
+        <div class="step-text">BGP has <span class="rd">zero origin authentication</span>. Any AS can announce any prefix. Routers accept the most-specific matching prefix. Announce /24 for someone's /22 → you win their traffic.</div>
+      </div>
+      <div class="step-block pu" id="s3-s3">
+        <div class="step-num pu">03</div>
+        <div class="step-text"><span class="am">2010 China Telecom:</span> AS23724 announced 37,000+ more-specific prefixes including US government and military ranges. Traffic silently detoured through China for 18 minutes. Classified content at risk.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">BGP TRUST MODEL</div>
+    <div class="ih pu">Every AS trusts every other AS by default</div>
+    <div class="il" style="font-size:7px">BGP was designed for 1989 internet — a few hundred cooperating universities. At 73,000 ASes, one misconfigured or malicious router can redirect global traffic in seconds.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">73K</div><div class="sl">autonomous<br>systems</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">BGP origin<br>auth</div></div>
+    <div class="sc"><div class="sv am">/24 &gt; /22</div><div class="sl">more specific<br>prefix wins</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4: 2010 CHINA TELECOM TIMELINE ══════════════════ -->
+<div class="scene" id="s4" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">2010 CHINA TELECOM INCIDENT</div>
+    <div class="hdr-sub">TIMELINE · WHAT WAS AFFECTED · CONSEQUENCES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CASE STUDY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">APR 8, 2010</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- timeline -->
+      <div id="s4-tl" style="border:2px solid #e8a020;border-radius:3px;padding:12px;background:#0d0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:10px">INCIDENT TIMELINE — APRIL 8, 2010</div>
+
+        <div class="tl-step" id="s4-t1" style="display:flex;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#e8a020;width:50px;flex-shrink:0;padding-top:2px">07:43 UTC</div>
+          <div>
+            <div style="font-size:7px;color:#fff;margin-bottom:3px">BGP ANNOUNCEMENTS BEGIN</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">China Telecom AS23724 starts announcing 37,000+ IP prefixes belonging to other ASes. More-specific /24 prefixes override legitimate /22 announcements.</div>
+          </div>
+        </div>
+
+        <div class="tl-step" id="s4-t2" style="display:flex;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#e85050;width:50px;flex-shrink:0;padding-top:2px">07:44</div>
+          <div>
+            <div style="font-size:7px;color:#ffcccc;margin-bottom:3px">TRAFFIC REROUTED GLOBALLY</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">US Senate, DoD, NASA, Dell, IBM traffic briefly routes through China Telecom infrastructure. Affects ~15% of all internet routes.</div>
+          </div>
+        </div>
+
+        <div class="tl-step" id="s4-t3" style="display:flex;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#e85050;width:50px;flex-shrink:0;padding-top:2px">07:44–</div>
+          <div>
+            <div style="font-size:7px;color:#ffcccc;margin-bottom:3px">AFFECTED ORGANISATIONS</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">US military (.mil), US Senate, Dept of Defense, NASA, Dell, Apple, CNN, Microsoft. Traffic visible to China Telecom routers — plaintext content exposed.</div>
+          </div>
+        </div>
+
+        <div class="tl-step" id="s4-t4" style="display:flex;gap:10px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#4eff9a;width:50px;flex-shrink:0;padding-top:2px">08:01</div>
+          <div>
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">ROUTES WITHDRAWN (18 MIN LATER)</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">Prefixes withdrawn. Normal routing resumes. China Telecom claims "misconfiguration". US Congress holds hearings. No confirmed evidence of intentional data capture.</div>
+          </div>
+        </div>
+
+        <div class="tl-step" id="s4-t5" style="display:flex;gap:10px">
+          <div style="font-size:6px;color:#4ec9e1;width:50px;flex-shrink:0;padding-top:2px">2012+</div>
+          <div>
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">RPKI DEPLOYMENT BEGINS</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">RIPE, ARIN, APNIC begin deploying Resource Public Key Infrastructure. Cryptographic route origin validation starts becoming standard practice.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- affected orgs visual -->
+      <div id="s4-orgs" style="border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px">TRAFFIC VISIBLE TO ATTACKER</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e85050">🏛 US Senate</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e85050">⚔ US DoD</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e85050">🚀 NASA</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e8a020">🍎 Apple</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e8a020">💻 Dell</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e8a020">📡 CNN</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#e8a020">🪟 Microsoft</div>
+          <div style="border:1px solid #2a0808;border-radius:2px;padding:4px 7px;font-size:6px;color:#888">+37,000 prefixes</div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text">China Telecom claimed it was a <span class="am">router misconfiguration</span>. Whether intentional espionage or accident, the result was the same — 15% of internet traffic briefly visible to a foreign state-owned telecoms firm.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">This wasn't unique. <span class="am">Similar incidents</span>: Pakistan Telecom took down YouTube globally (2008), Rostelecom hijacked financial traffic (2020), Telianet hijacked AWS (2018). BGP hijacks are routine.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">2010 INCIDENT</div>
+    <div class="ih am">Misconfiguration or espionage? Both outcomes are equally catastrophic.</div>
+    <div class="il" style="font-size:7px">Even if unintentional, traffic passing through a foreign state's infrastructure — even briefly — exposes unencrypted content and metadata. TLS doesn't protect against this fully.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">37K</div><div class="sl">prefixes<br>hijacked</div></div>
+    <div class="sc"><div class="sv am">18min</div><div class="sl">duration<br>of attack</div></div>
+    <div class="sc"><div class="sv gn">2012</div><div class="sl">RPKI<br>rollout begins</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 5: RPKI — THE FIX ══════════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">RPKI — THE CRYPTOGRAPHIC FIX</div>
+    <div class="hdr-sub">ROUTE ORIGIN AUTHORIZATION · ROA</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">RPKI + ROA</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-intro" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s;padding:2px 0">HOW RPKI STOPS BGP HIJACKING</div>
+
+      <!-- RPKI diagram -->
+      <div id="s5-hero" style="border:2px solid #4eff9a;border-radius:3px;padding:12px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">ROA — ROUTE ORIGIN AUTHORIZATION</div>
+        <svg width="306" height="120" viewBox="0 0 306 120">
+          <!-- RIR authority (RIPE/ARIN) -->
+          <rect x="2" y="4" width="100" height="40" rx="4" fill="#040f04" stroke="#4eff9a" stroke-width="2"/>
+          <text x="52" y="18" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">ARIN / RIPE</text>
+          <text x="52" y="28" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">Regional Internet</text>
+          <text x="52" y="36" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">Registry (RIR)</text>
+
+          <!-- ROA cert -->
+          <rect x="116" y="4" width="100" height="56" rx="4" fill="#040f04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="166" y="16" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">ROA RECORD</text>
+          <text x="166" y="26" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">prefix: 8.8.8.0/24</text>
+          <text x="166" y="35" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">max-len: /24</text>
+          <text x="166" y="44" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3">origin AS: 15169</text>
+          <text x="166" y="53" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">sig: [ARIN crypto sig]</text>
+
+          <!-- Router validates -->
+          <rect x="230" y="4" width="74" height="56" rx="4" fill="#040f04" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="267" y="18" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">ROUTER</text>
+          <text x="267" y="29" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">validates</text>
+          <text x="267" y="38" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">BGP UPDATE</text>
+          <text x="267" y="47" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">against ROA</text>
+
+          <!-- arrows -->
+          <line x1="102" y1="24" x2="116" y2="24" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arrG)"/>
+          <line x1="216" y1="24" x2="230" y2="24" stroke="#4ec9e1" stroke-width="1.5" marker-end="url(#arrC)"/>
+
+          <!-- valid vs invalid -->
+          <rect x="2" y="68" width="100" height="44" rx="3" fill="#040f04" stroke="#4eff9a" stroke-width="1.5" id="s5-valid" opacity="0"/>
+          <text id="s5-v1" x="52" y="82" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">✓ VALID</text>
+          <text id="s5-v2" x="52" y="93" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">AS15169 announces</text>
+          <text id="s5-v3" x="52" y="101" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">8.8.8.0/24 → ACCEPT</text>
+          <text id="s5-v4" x="52" y="109" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3" opacity="0">matches ROA ✓</text>
+
+          <rect x="116" y="68" width="188" height="44" rx="3" fill="#200808" stroke="#e85050" stroke-width="1.5" id="s5-invalid" opacity="0"/>
+          <text id="s5-i1" x="210" y="82" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">✕ INVALID → DROP</text>
+          <text id="s5-i2" x="210" y="93" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">AS23724 announces</text>
+          <text id="s5-i3" x="210" y="101" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">8.8.8.0/24 → REJECT</text>
+          <text id="s5-i4" x="210" y="109" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3" opacity="0">AS not in ROA ✗</text>
+
+          <defs>
+            <marker id="arrG" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+            <marker id="arrC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- deployment status -->
+      <div id="s5-deploy" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#040c04;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px">RPKI ADOPTION — 2024</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:6px;color:#aaa;width:70px;flex-shrink:0">Valid ROAs</div>
+            <div style="flex:1;height:10px;background:#04060c;border:1px solid #0d2010;border-radius:2px;overflow:hidden">
+              <div id="s5-b1" style="height:100%;width:0%;background:#4eff9a;transition:width 1.2s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a;width:36px;text-align:right">~45%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:6px;color:#aaa;width:70px;flex-shrink:0">Enforcing</div>
+            <div style="flex:1;height:10px;background:#04060c;border:1px solid #0d2010;border-radius:2px;overflow:hidden">
+              <div id="s5-b2" style="height:100%;width:0%;background:#4ec9e1;transition:width 1.2s .15s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#4ec9e1;width:36px;text-align:right">~30%</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:6px;color:#aaa;width:70px;flex-shrink:0">No ROA yet</div>
+            <div style="flex:1;height:10px;background:#04060c;border:1px solid #0d2010;border-radius:2px;overflow:hidden">
+              <div id="s5-b3" style="height:100%;width:0%;background:#e85050;transition:width 1.2s .3s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#e85050;width:36px;text-align:right">~55%</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#444;margin-top:6px;line-height:1.7">Major clouds (AWS, GCP, Azure, Cloudflare) fully RPKI-signed. But ~55% of prefixes still unprotected. Full protection requires universal adoption.</div>
+      </div>
+
+      <div class="step-block gn" id="s5-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text"><span class="gn">RPKI (Resource PKI)</span> lets IP prefix owners create a <span class="gn">ROA (Route Origin Authorization)</span> — a cryptographically signed record saying "AS15169 is authorized to announce 8.8.8.0/24".</div>
+      </div>
+      <div class="step-block gn" id="s5-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text">Routers with RPKI validation <span class="gn">reject BGP updates</span> from unauthorized ASes. China Telecom's fake announcement would be dropped — it doesn't match the ROA signed by ARIN.</div>
+      </div>
+      <div class="step-block gn" id="s5-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text">Combined with <span class="am">BCP38</span> (IP spoofing fix at ISP) and <span class="gn">RPKI</span> (BGP hijacking fix), most Layer 3 attacks become impractical. But adoption is still incomplete — the internet is only as safe as its weakest AS.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">RPKI</div>
+    <div class="ih gn">Cryptographic proof that AS owns the prefix</div>
+    <div class="il" style="font-size:7px">Cloudflare, Amazon, Google all publish ROAs. If your ISP validates them, a China Telecom-style hijack of their prefixes is impossible — the route would be marked INVALID and dropped.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">ROA</div><div class="sl">route origin<br>authorization</div></div>
+    <div class="sc"><div class="sv cy">~45%</div><div class="sl">prefixes with<br>valid ROA</div></div>
+    <div class="sc"><div class="sv am">BCP38</div><div class="sl">IP spoof<br>prevention</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function svgSdo(id,v){const el=document.getElementById(id);if(el)el.style.strokeDashoffset=v;}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-grid','s1-covers','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-smurf','0');
+    ['s2-s1','s2-s2','s2-s3'].forEach(id=>rmV(id));
+    svgOp('s2-src-after','0');
+    svgOp('s2-src-before','1');
+    svgOp('s2-forge-lbl','0');
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-explain','0');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>rmV(id));
+    const h1=document.getElementById('s3-hijack1');
+    if(h1){h1.style.transition='none';h1.style.strokeDashoffset='300';}
+    const rr=document.getElementById('s3-reroute');
+    if(rr){rr.style.transition='none';rr.style.strokeDashoffset='300';}
+    ['s3-hlbl1','s3-rlbl','s3-hijack-lbl','s3-victim-lbl'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===4){
+    setOp('s4-tl','0'); setOp('s4-orgs','0');
+    ['s4-t1','s4-t2','s4-t3','s4-t4','s4-t5'].forEach(id=>rmV(id));
+    ['s4-s1','s4-s2'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-intro','0'); setOp('s5-hero','0'); setOp('s5-deploy','0');
+    ['s5-valid','s5-v1','s5-v2','s5-v3','s5-v4',
+     's5-invalid','s5-i1','s5-i2','s5-i3','s5-i4'].forEach(id=>svgOp(id,'0'));
+    ['s5-b1','s5-b2','s5-b3'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.transition='none';el.style.width='0%';}
+    });
+    ['s5-s1','s5-s2','s5-s3'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-grid','1'),900);
+    delay(()=>setOp('s1-covers','1'),1600);
+    delay(()=>setOp('s1-cta','1'),2300);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // forge animation: swap src IP
+    delay(()=>{
+      svgOp('s2-src-before','0');
+      svgOp('s2-src-after','1');
+      svgOp('s2-forge-lbl','1');
+    },800);
+    delay(()=>setOp('s2-smurf','1'),1300);
+    delay(()=>addV('s2-s1'),500);
+    delay(()=>addV('s2-s2'),1100);
+    delay(()=>addV('s2-s3'),1900);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // animate hijack route appearing
+    delay(()=>{
+      const h1=document.getElementById('s3-hijack1');
+      if(h1){h1.style.transition='stroke-dashoffset 1s ease-out';h1.style.strokeDashoffset='0';}
+      svgOp('s3-hlbl1','1');
+      svgOp('s3-hijack-lbl','1');
+    },800);
+    delay(()=>{
+      const rr=document.getElementById('s3-reroute');
+      if(rr){rr.style.transition='stroke-dashoffset .9s ease-out';rr.style.strokeDashoffset='0';}
+      svgOp('s3-rlbl','1');
+      svgOp('s3-victim-lbl','1');
+    },1600);
+    delay(()=>setOp('s3-explain','1'),2000);
+    delay(()=>addV('s3-s1'),600);
+    delay(()=>addV('s3-s2'),1200);
+    delay(()=>addV('s3-s3'),2000);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-tl','1'),200);
+    ['s4-t1','s4-t2','s4-t3','s4-t4','s4-t5'].forEach((id,i)=>{
+      delay(()=>addV(id),500+i*400);
+    });
+    delay(()=>setOp('s4-orgs','1'),2400);
+    delay(()=>addV('s4-s1'),700);
+    delay(()=>addV('s4-s2'),2600);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-intro','1'),200);
+    delay(()=>setOp('s5-hero','1'),400);
+    // show valid/invalid comparison
+    delay(()=>{
+      svgOp('s5-valid','1');
+      ['s5-v1','s5-v2','s5-v3','s5-v4'].forEach((id,i)=>delay(()=>svgOp(id,'1'),i*150));
+    },1000);
+    delay(()=>{
+      svgOp('s5-invalid','1');
+      ['s5-i1','s5-i2','s5-i3','s5-i4'].forEach((id,i)=>delay(()=>svgOp(id,'1'),i*150));
+    },1700);
+    delay(()=>{
+      setOp('s5-deploy','1');
+      delay(()=>{
+        ['s5-b1','s5-b2','s5-b3'].forEach((id,i)=>{
+          const el=document.getElementById(id);
+          if(el){
+            const widths=['45%','30%','55%'];
+            el.style.transition=`width 1.2s ${i*.15}s ease-out`;
+            el.style.width=widths[i];
+          }
+        });
+      },200);
+    },2200);
+    delay(()=>addV('s5-s1'),600);
+    delay(()=>addV('s5-s2'),1300);
+    delay(()=>addV('s5-s3'),2600);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

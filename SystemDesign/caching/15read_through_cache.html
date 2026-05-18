@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Read-Through Cache</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.rl{font-size:7px;color:#666;letter-spacing:1px;margin-bottom:4px}
+/* swimlane */
+.lane-box{border:2px solid;border-radius:2px;padding:7px 9px;text-align:center;font-size:8px}
+/* animated beam line */
+.bwrap{position:relative;height:14px;margin:1px 0}
+.bline{position:absolute;top:50%;transform:translateY(-50%);height:3px;border-radius:2px;width:0;transition:width 0s}
+</style>
+</head>
+<body>
+
+<!-- ════════════ SCENE 1 · HOOK ════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">READ-THROUGH CACHE</div>
+    <div class="hdr-sub">THE CACHE THAT FETCHES ITS OWN DATA</div>
+    <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE IDEA</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PATTERN</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="h1q" style="border:2px solid #4ec9e1;background:#040e1a;padding:12px;border-radius:2px">
+        <div style="color:#fff;font-size:9px;line-height:1.9;margin-bottom:6px">"YOU'VE HEARD OF CACHE-ASIDE.<br>BUT WHAT IF THE CACHE FETCHED<br>THE DATA ITSELF?"</div>
+        <div style="color:#888;font-size:7px;line-height:1.8">Used natively by: CDNs (Cloudflare),<br>Nginx proxy_cache, Varnish, NCache.</div>
+      </div>
+
+      <!-- Side-by-side comparison cards -->
+      <div class="fade" id="h1cmp" style="display:flex;gap:8px">
+        <div style="flex:1;background:#120a00;border:2px solid #e8a020;padding:10px;border-radius:2px">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:8px">CACHE-ASIDE</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">
+            App checks cache.<br>
+            Miss? <span style="color:#e8a020">App fetches DB.</span><br>
+            App writes to cache.<br>
+            App has DB logic.
+          </div>
+        </div>
+        <div style="flex:1;background:#040e1a;border:2px solid #4ec9e1;padding:10px;border-radius:2px">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">READ-THROUGH</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">
+            App asks cache.<br>
+            Miss? <span style="color:#4eff9a">Cache fetches DB.</span><br>
+            Cache writes itself.<br>
+            App has NO DB logic.
+          </div>
+        </div>
+      </div>
+
+      <!-- Key insight -->
+      <div class="fade" id="h1key" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">THE KEY DIFFERENCE</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          In Cache-Aside: <span style="color:#e8a020">app orchestrates everything</span>.<br>
+          In Read-Through: <span style="color:#4ec9e1">cache is the smart layer</span>.<br>
+          App always talks to cache only.<br>
+          <span style="color:#4eff9a">Simpler app code. Cache owns the logic.</span>
+        </div>
+      </div>
+
+      <!-- Where you'll see it -->
+      <div class="fade" id="h1where">
+        <div class="rl">WHERE READ-THROUGH APPEARS IN THE WILD</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:16px">🌐</div>
+            <div><div style="font-size:8px;color:#4ec9e1">CDN Edge Nodes</div><div style="font-size:7px;color:#888;margin-top:3px">Cloudflare, Fastly — cache fetches origin on miss</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:16px">🔁</div>
+            <div><div style="font-size:8px;color:#4ec9e1">Nginx proxy_cache</div><div style="font-size:7px;color:#888;margin-top:3px">Cache layer fetches upstream on miss</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#0e0a14;border:1px solid #2a1030;padding:9px 10px;border-radius:2px">
+            <div style="font-size:16px">🗄️</div>
+            <div><div style="font-size:8px;color:#4ec9e1">ORM-level caches</div><div style="font-size:7px;color:#888;margin-top:3px">Hibernate 2nd-level, Spring Cache abstractions</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info cy" style="border-color:#4ec9e1">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO START</div>
+    <div class="ih" id="s1i2" style="display:none">APP ALWAYS TALKS TO CACHE. NEVER TO DB.</div>
+    <div class="il" id="s1i3" style="display:none">CACHE OWNS THE DB FETCH LOGIC. NOT THE APP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">CACHE</div><div class="sl">DOES THE<br>DB FETCH</div></div>
+    <div class="sc"><div class="sv gn">ZERO</div><div class="sl">DB LOGIC<br>IN APP</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">CDN</div><div class="sl">NATIVE<br>PATTERN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 2 · CACHE-ASIDE vs READ-THROUGH SWIMLANES ════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">SIDE BY SIDE</div>
+    <div class="hdr-sub">WHO DOES THE WORK ON A MISS?</div>
+    <div class="dots"><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">MISS COMPARISON</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ON MISS</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- CACHE-ASIDE swimlane -->
+      <div style="background:#120a00;border:2px solid #e8a020;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:8px;text-align:center">CACHE-ASIDE (MISS PATH)</div>
+
+        <!-- Row 1: APP → CACHE (miss) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#888;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="ca1" class="bline" style="background:#e8a020;left:0"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#888;flex-shrink:0">CACHE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#e8a020;margin-bottom:6px" id="ca1lbl" style="opacity:0">→ get(key) — MISS ✗</div>
+
+        <!-- Row 2: APP → DB -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#e85050;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="ca2" class="bline" style="background:#e85050;left:0"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#e85050;flex-shrink:0">DATABASE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#e85050;margin-bottom:6px" id="ca2lbl" style="opacity:0">→ query(key) — APP fetches DB</div>
+
+        <!-- Row 3: DB → APP -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#4eff9a;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="ca3" class="bline" style="background:#4eff9a;right:0;left:auto"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#4eff9a;flex-shrink:0">DATABASE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#4eff9a;margin-bottom:6px" id="ca3lbl" style="opacity:0">← data returned to app</div>
+
+        <!-- Row 4: APP → CACHE (write) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#e8a020;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="ca4" class="bline" style="background:#e8a020;left:0"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#e8a020;flex-shrink:0">CACHE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#e8a020" id="ca4lbl" style="opacity:0">→ set(key, data) — APP writes cache</div>
+
+        <div id="ca_summary" class="fade" style="margin-top:8px;background:#1a0800;border:1px solid #3a2000;padding:7px;font-size:7px;color:#e8a020;text-align:center">
+          APP makes 3 separate calls. App has DB logic.
+        </div>
+      </div>
+
+      <!-- READ-THROUGH swimlane -->
+      <div style="background:#040e1a;border:2px solid #4ec9e1;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;text-align:center">READ-THROUGH (MISS PATH)</div>
+
+        <!-- Row 1: APP → CACHE (miss) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#888;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="rt1" class="bline" style="background:#4ec9e1;left:0"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#888;flex-shrink:0">CACHE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#4ec9e1;margin-bottom:6px" id="rt1lbl" style="opacity:0">→ get(key) — MISS ✗</div>
+
+        <!-- Row 2: CACHE → DB (cache does this!) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#4eff9a;text-align:right;flex-shrink:0">CACHE</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="rt2" class="bline" style="background:#4eff9a;left:0"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#4eff9a;flex-shrink:0">DATABASE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#4eff9a;margin-bottom:6px" id="rt2lbl" style="opacity:0">→ CACHE fetches DB automatically</div>
+
+        <!-- Row 3: DB → CACHE (populates) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#4eff9a;text-align:right;flex-shrink:0">CACHE</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="rt3" class="bline" style="background:#4eff9a;right:0;left:auto"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#4eff9a;flex-shrink:0">DATABASE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#4eff9a;margin-bottom:6px" id="rt3lbl" style="opacity:0">← data → cache populates itself</div>
+
+        <!-- Row 4: CACHE → APP (return) -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="width:50px;font-size:6px;color:#4ec9e1;text-align:right;flex-shrink:0">APP</div>
+          <div style="flex:1;position:relative;height:14px">
+            <div id="rt4" class="bline" style="background:#4ec9e1;right:0;left:auto"></div>
+          </div>
+          <div style="width:50px;font-size:6px;color:#4ec9e1;flex-shrink:0">CACHE</div>
+        </div>
+        <div style="padding-left:56px;font-size:6px;color:#4ec9e1" id="rt4lbl" style="opacity:0">← data returned to app</div>
+
+        <div id="rt_summary" class="fade" style="margin-top:8px;background:#051020;border:1px solid #1a3050;padding:7px;font-size:7px;color:#4eff9a;text-align:center">
+          APP makes 1 call only. Zero DB logic in app.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info am" style="border-color:#e8a020">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO ANIMATE BOTH FLOWS</div>
+    <div class="ih am" id="s2i2" style="display:none">CACHE-ASIDE: APP DOES 3 CALLS. DB LOGIC IN APP.</div>
+    <div class="ih" id="s2i3" style="display:none">READ-THROUGH: APP DOES 1 CALL. CACHE HANDLES REST.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">3</div><div class="sl">ASIDE<br>APP CALLS</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">READ-THRU<br>APP CALL</div></div>
+    <div class="sc"><div class="sv gn">CACHE</div><div class="sl">DOES<br>THE WORK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 3 · READ-THROUGH HIT PATH ════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE HIT PATH</div>
+    <div class="hdr-sub">SECOND REQUEST — CACHE HIT — FAST</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">READ-THROUGH HIT</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAST PATH</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Architecture diagram -->
+      <div class="fade" id="s3arch" style="background:#051020;border:2px solid #4ec9e1;padding:11px;border-radius:2px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;text-align:center">READ-THROUGH ARCHITECTURE</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <div style="flex:1;background:#0a1828;border:2px solid #4ec9e1;padding:10px 6px;text-align:center;border-radius:2px">
+            <div style="font-size:16px;margin-bottom:4px">📱</div>
+            <div style="font-size:7px;color:#4ec9e1">APP</div>
+            <div style="font-size:6px;color:#555;margin-top:3px">zero DB logic</div>
+          </div>
+          <div style="font-size:10px;color:#4ec9e1">⟷</div>
+          <div style="flex:1.4;background:#041408;border:2px solid #4eff9a;padding:10px 6px;text-align:center;border-radius:2px">
+            <div style="font-size:16px;margin-bottom:4px">🔄</div>
+            <div style="font-size:7px;color:#4eff9a">SMART CACHE</div>
+            <div style="font-size:6px;color:#555;margin-top:3px">fetch + store logic</div>
+          </div>
+          <div style="font-size:10px;color:#555">⟷</div>
+          <div style="flex:1;background:#0e0a14;border:2px solid #333;padding:10px 6px;text-align:center;border-radius:2px">
+            <div style="font-size:16px;margin-bottom:4px">🗄️</div>
+            <div style="font-size:7px;color:#555">DATABASE</div>
+            <div style="font-size:6px;color:#444;margin-top:3px">source of truth</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#888;margin-top:8px;text-align:center">App never speaks directly to DB.</div>
+      </div>
+
+      <!-- Hit path flow -->
+      <div class="fade" id="s3hit">
+        <div class="rl">HIT PATH — KEY ALREADY CACHED</div>
+        <div style="background:#040e1a;border:1px solid #1a3050;padding:10px;border-radius:2px">
+
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <div style="width:55px;font-size:6px;color:#888;text-align:right;flex-shrink:0">APP</div>
+            <div style="flex:1;position:relative;height:14px">
+              <div id="rh1" class="bline" style="background:#4ec9e1;left:0"></div>
+            </div>
+            <div style="width:55px;font-size:6px;color:#4eff9a;flex-shrink:0">CACHE</div>
+          </div>
+          <div style="padding-left:61px;font-size:6px;color:#4ec9e1;margin-bottom:8px" id="rh1lbl" style="opacity:0">→ get("user:42")</div>
+
+          <div id="rh_hitbox" class="fade" style="background:#041408;border:2px solid #4eff9a;padding:9px;margin-bottom:8px;text-align:center">
+            <div style="font-size:9px;color:#4eff9a">✓ CACHE HIT!</div>
+            <div style="font-size:7px;color:#888;margin-top:4px">Key found. DB never contacted.</div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <div style="width:55px;font-size:6px;color:#4eff9a;text-align:right;flex-shrink:0">APP</div>
+            <div style="flex:1;position:relative;height:14px">
+              <div id="rh2" class="bline" style="background:#4eff9a;right:0;left:auto"></div>
+            </div>
+            <div style="width:55px;font-size:6px;color:#4eff9a;flex-shrink:0">CACHE</div>
+          </div>
+          <div style="padding-left:61px;font-size:6px;color:#4eff9a" id="rh2lbl" style="opacity:0">← {name:"Alice"} returned instantly</div>
+        </div>
+      </div>
+
+      <!-- Latency badge -->
+      <div class="fade" id="s3lat" style="background:#041408;border:2px solid #4eff9a;padding:11px;text-align:center;border-radius:2px">
+        <div style="font-size:18px;color:#4eff9a">⚡ ~1ms</div>
+        <div style="font-size:8px;color:#888;margin-top:6px">DB NEVER QUERIED ON HIT</div>
+      </div>
+
+      <!-- Code comparison -->
+      <div class="fade" id="s3code">
+        <div class="rl">APP CODE COMPARISON</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#120a00;border:1px solid #3a2000;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:6px">CACHE-ASIDE</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">
+              data = cache.get(k)<br>
+              <span style="color:#e85050">if !data:</span><br>
+              &nbsp;&nbsp;<span style="color:#e85050">data=db.query(k)</span><br>
+              &nbsp;&nbsp;<span style="color:#e85050">cache.set(k,data)</span><br>
+              return data
+            </div>
+          </div>
+          <div style="flex:1;background:#041408;border:1px solid #0a3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">READ-THROUGH</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">
+              <span style="color:#555">// cache handles miss</span><br>
+              data = cache.get(k)<br>
+              return data<br>
+              <span style="color:#555">// that's it. done.</span><br>
+              &nbsp;
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE HIT PATH</div>
+    <div class="ih" id="s3i2" style="display:none">APP CALLS CACHE. HIT → RETURNED INSTANTLY.</div>
+    <div class="il" id="s3i3" style="display:none">DB NEVER TOUCHED. APP CODE IS 3 LINES.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~1ms</div><div class="sl">HIT<br>LATENCY</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">DB CALLS<br>ON HIT</div></div>
+    <div class="sc"><div class="sv gn">3 LINES</div><div class="sl">APP<br>CODE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 4 · TRADEOFFS + WHEN TO USE ════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title">TRADEOFFS &<br>WHEN TO USE</div>
+    <div class="hdr-sub">READ-THROUGH vs CACHE-ASIDE</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DECISION GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">USE THIS</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Full comparison table -->
+      <div class="fade" id="s4tbl">
+        <div class="rl">FEATURE COMPARISON</div>
+        <div style="border:1px solid #1a2a1a;border-radius:2px;overflow:hidden">
+          <div style="display:flex;background:#0a1a0a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#555;border-right:1px solid #1a2a1a">FEATURE</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center;border-right:1px solid #1a2a1a">ASIDE</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4ec9e1;text-align:center">READ-THRU</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">App calls DB?</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e85050;text-align:center;border-right:1px solid #1a2a1a">YES</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center">NO</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">Cache control</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center;border-right:1px solid #1a2a1a">Full</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center">Delegated</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">App complexity</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center;border-right:1px solid #1a2a1a">Higher</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center">Lower</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">Cache flexibility</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center;border-right:1px solid #1a2a1a">High</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e8a020;text-align:center">Low</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">First miss latency</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#888;text-align:center;border-right:1px solid #1a2a1a">Same</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#888;text-align:center">Same</div>
+          </div>
+          <div style="display:flex;border-top:1px solid #1a2a1a">
+            <div style="flex:1.4;padding:7px 8px;font-size:7px;color:#888;border-right:1px solid #1a2a1a">Native in Redis?</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#4eff9a;text-align:center;border-right:1px solid #1a2a1a">YES</div>
+            <div style="flex:1;padding:7px 8px;font-size:7px;color:#e85050;text-align:center">NO</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- When to use each -->
+      <div class="fade" id="s4use">
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#120a00;border:2px solid #e8a020;padding:10px;border-radius:2px">
+            <div style="font-size:8px;color:#e8a020;margin-bottom:7px">USE CACHE-ASIDE</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">
+              ✓ Redis / Memcached<br>
+              ✓ Need fine control<br>
+              ✓ Complex cache logic<br>
+              ✓ Mixed read/write<br>
+              ✓ Most apps use this
+            </div>
+          </div>
+          <div style="flex:1;background:#041408;border:2px solid #4ec9e1;padding:10px;border-radius:2px">
+            <div style="font-size:8px;color:#4ec9e1;margin-bottom:7px">USE READ-THROUGH</div>
+            <div style="font-size:7px;color:#aaa;line-height:2">
+              ✓ CDN / proxy layer<br>
+              ✓ ORM 2nd-level cache<br>
+              ✓ Simplify app code<br>
+              ✓ Read-heavy workload<br>
+              ✓ NCache / Varnish
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- The warm-up problem -->
+      <div class="fade" id="s4warm" style="border:2px solid #e8a020;background:#120a00;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:7px">⚠ THE WARM-UP PROBLEM</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Both patterns share the same cold-start issue:<br>
+          <span style="color:#e85050">First request always goes to DB</span>.<br>
+          Fix: <span style="color:#4eff9a">pre-warm the cache on deploy</span><br>
+          by loading hot keys before traffic hits.
+        </div>
+      </div>
+
+      <!-- Interview one-liner -->
+      <div class="fade" id="s4ans" style="background:#041408;border:2px solid #4eff9a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">INTERVIEW ONE-LINER</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          "Read-Through moves the cache-miss logic<br>
+          from the app into the caching layer itself.<br>
+          App always calls cache. Cache calls DB.<br>
+          <span style="color:#4ec9e1">It's how CDNs and caching proxies work.</span>"
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE TRADEOFFS</div>
+    <div class="ih" id="s4i2" style="display:none">ASIDE: MORE CONTROL. READ-THRU: SIMPLER APP.</div>
+    <div class="il" id="s4i3" style="display:none">CDN = READ-THROUGH. REDIS = CACHE-ASIDE.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">CDN</div><div class="sl">READ-THRU<br>NATIVE</div></div>
+    <div class="sc"><div class="sv gn">REDIS</div><div class="sl">ASIDE<br>NATIVE</div></div>
+    <div class="sc"><div class="sv gn">BOTH</div><div class="sl">SAME<br>MISS HIT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function rst(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+function lbl(id){let e=document.getElementById(id);if(e)e.style.opacity='1';}
+function beam(id,dir,dur,delay){
+  af(delay,()=>{
+    let e=document.getElementById(id);
+    if(!e)return;
+    e.style.transition='none';
+    if(dir==='r'){e.style.left='0';e.style.right='auto';e.style.width='0';}
+    else{e.style.right='0';e.style.left='auto';e.style.width='0';}
+    af(30,()=>{e.style.transition='width '+(dur/1000)+'s ease-out';e.style.width='100%';});
+  });
+}
+function resetBeam(id){
+  let e=document.getElementById(id);
+  if(e){e.style.transition='none';e.style.width='0';}
+}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  fullReset();
+}
+function fullReset(){
+  rst(['h1q','h1cmp','h1key','h1where']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+
+  ['ca1','ca2','ca3','ca4'].forEach(resetBeam);
+  ['ca1lbl','ca2lbl','ca3lbl','ca4lbl'].forEach(id=>{let e=document.getElementById(id);if(e)e.style.opacity='0';});
+  rst(['ca_summary']);
+  ['rt1','rt2','rt3','rt4'].forEach(resetBeam);
+  ['rt1lbl','rt2lbl','rt3lbl','rt4lbl'].forEach(id=>{let e=document.getElementById(id);if(e)e.style.opacity='0';});
+  rst(['rt_summary']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+
+  rst(['s3arch','s3hit','s3lat','s3code','rh_hitbox']);
+  ['rh1','rh2'].forEach(resetBeam);
+  ['rh1lbl','rh2lbl'].forEach(id=>{let e=document.getElementById(id);if(e)e.style.opacity='0';});
+  hide('s3i2');hide('s3i3');show('s3i1');
+
+  rst(['s4tbl','s4use','s4warm','s4ans']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+}
+
+function play1(){
+  clr();fullReset();
+  af(300,()=>fin('h1q'));
+  af(900,()=>{fin('h1cmp');hide('s1i1');show('s1i2');});
+  af(1600,()=>fin('h1key'));
+  af(2400,()=>{fin('h1where');show('s1i3');});
+}
+
+function play2(){
+  clr();fullReset();
+  hide('s2i1');show('s2i2');
+  // Cache-Aside flow
+  beam('ca1','r',500,200); af(800,()=>lbl('ca1lbl'));
+  beam('ca2','r',500,1100); af(1700,()=>lbl('ca2lbl'));
+  beam('ca3','l',500,2000); af(2600,()=>lbl('ca3lbl'));
+  beam('ca4','r',500,2900); af(3400,()=>{lbl('ca4lbl');fin('ca_summary');});
+  // Read-Through flow (staggered after)
+  beam('rt1','r',500,1000); af(1550,()=>lbl('rt1lbl'));
+  beam('rt2','r',500,1900); af(2450,()=>lbl('rt2lbl'));
+  beam('rt3','l',500,2700); af(3250,()=>lbl('rt3lbl'));
+  beam('rt4','l',500,3600); af(4100,()=>{lbl('rt4lbl');fin('rt_summary');show('s2i3');});
+}
+
+function play3(){
+  clr();fullReset();
+  hide('s3i1');show('s3i2');
+  af(300,()=>fin('s3arch'));
+  af(1000,()=>{fin('s3hit');beam('rh1','r',500,100);af(700,()=>lbl('rh1lbl'));});
+  af(1900,()=>fin('rh_hitbox'));
+  af(2500,()=>{beam('rh2','l',500,100);af(700,()=>{lbl('rh2lbl');show('s3i3');});});
+  af(3300,()=>fin('s3lat'));
+  af(4000,()=>fin('s3code'));
+}
+
+function play4(){
+  clr();fullReset();
+  hide('s4i1');show('s4i2');
+  af(200,()=>fin('s4tbl'));
+  af(1100,()=>fin('s4use'));
+  af(2000,()=>fin('s4warm'));
+  af(2900,()=>{fin('s4ans');show('s4i3');});
+}
+
+fullReset();
+</script>
+</body>
+</html>
