@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Layer 2 Defenses</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a2a1a}
+.hdr-title{font-size:11px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a0d;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#aaa}
+.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060f06;border:1px solid #0d2010;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4eff9a;text-align:center}
+.sv.am{color:#e8a020}.sv.rd{color:#e85050}.sv.cy{color:#4ec9e1}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4ec9e1;color:#4ec9e1}.btn.play:hover{background:#4ec9e120}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* toggle row */
+.toggle-row{
+  display:flex;align-items:center;gap:0;
+  border:1px solid #1a2a1a;border-radius:3px;
+  background:#060f06;overflow:hidden;
+  opacity:0;transform:translateY(6px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.toggle-row.visible{opacity:1;transform:translateY(0)}
+.toggle-row.active-row{border-color:#4eff9a;background:#07150a}
+.toggle-row.blocked{border-color:#e85050;background:#150606}
+
+.tr-icon{width:46px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;padding:10px 0}
+.tr-body{flex:1;padding:9px 10px 9px 4px}
+.tr-title{font-size:8px;color:#ccc;margin-bottom:4px;line-height:1.5}
+.tr-title.on{color:#4eff9a}
+.tr-title.off{color:#e85050}
+.tr-desc{font-size:6px;color:#555;line-height:1.8}
+.tr-desc.on{color:#444}
+.tr-right{width:56px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 6px}
+
+/* toggle switch */
+.tgl{width:38px;height:18px;border-radius:9px;background:#1a0a0a;border:1px solid #3a1010;position:relative;transition:all .4s}
+.tgl.on{background:#0a2010;border-color:#2a6030}
+.tgl-knob{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#e85050;transition:all .4s}
+.tgl.on .tgl-knob{left:22px;background:#4eff9a}
+.tgl-lbl{font-size:6px;color:#e85050}
+.tgl-lbl.on{color:#4eff9a}
+
+/* attack badge */
+.atk-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:6px;padding:3px 6px;border-radius:2px;
+  border:1px solid #e85050;color:#e85050;background:#150606;
+  opacity:0;transition:opacity .3s;
+}
+.atk-badge.blocked{
+  border-color:#4eff9a;color:#4eff9a;background:#071507;
+  text-decoration:line-through;
+}
+.atk-badge.visible{opacity:1}
+
+/* attack stream */
+.atk-stream{
+  display:flex;flex-wrap:wrap;gap:4px;padding:6px 10px;
+  border:1px solid #1a0808;border-radius:2px;background:#0d0404;
+  opacity:0;transition:opacity .4s;
+}
+.atk-stream.visible{opacity:1}
+.atk-pkt{
+  font-size:6px;padding:2px 5px;border:1px solid #3a1010;
+  border-radius:2px;color:#e85050;background:#150606;
+  opacity:0;animation:none;
+}
+.atk-pkt.blocked{border-color:#1a3a1a;color:#4eff9a;background:#071507;text-decoration:line-through}
+@keyframes pktAppear{0%{opacity:0;transform:translateX(-6px)}100%{opacity:1;transform:translateX(0)}}
+
+/* stat bar */
+.stat-bar-wrap{background:#0d0404;border-radius:2px;height:10px;width:100%;overflow:hidden;margin-top:3px}
+.stat-bar{height:100%;width:0%;border-radius:2px;transition:width 1.2s ease-out}
+
+/* step block */
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d2010;border-radius:2px;border-left:3px solid #4eff9a;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-num{font-size:9px;color:#4eff9a;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}.step-num.cy{color:#4ec9e1}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}.cy{color:#4ec9e1}.pu{color:#a060c0}
+
+/* switch diagram */
+.sw-box{
+  border:2px solid #2a4a2a;border-radius:4px;background:#060f06;
+  padding:8px;display:flex;flex-direction:column;gap:4px;
+  opacity:0;transition:opacity .5s;
+}
+.sw-box.visible{opacity:1}
+.sw-port{
+  display:flex;align-items:center;gap:6px;padding:5px 7px;
+  border:1px solid #0d2010;border-radius:2px;background:#050d05;
+}
+.sw-port.auth{border-color:#4eff9a;background:#071507}
+.sw-port.deny{border-color:#e85050;background:#150606}
+.port-led{width:8px;height:8px;border-radius:50%;background:#2a1010;flex-shrink:0}
+.port-led.on{background:#4eff9a}
+.port-led.deny{background:#e85050}
+.port-label{font-size:6px;color:#555;flex:1}
+.port-label.on{color:#4eff9a}
+.port-label.deny{color:#e85050}
+.port-status{font-size:6px;color:#333}
+.port-status.on{color:#4eff9a}
+.port-status.deny{color:#e85050}
+
+/* vlan diagram */
+.vlan-box{
+  border:2px solid;border-radius:3px;padding:8px 10px;
+  opacity:0;transform:translateY(6px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.vlan-box.visible{opacity:1;transform:translateY(0)}
+.vlan-title{font-size:7px;margin-bottom:5px;letter-spacing:.5px}
+.vlan-device{
+  display:flex;align-items:center;gap:6px;padding:3px 5px;
+  border:1px solid currentColor;border-radius:2px;margin-bottom:3px;
+  font-size:6px;opacity:.7;
+}
+.blocked-arrow{
+  text-align:center;font-size:8px;color:#e85050;
+  opacity:0;transition:opacity .4s;
+  padding:2px 0;
+}
+.blocked-arrow.visible{opacity:1}
+
+/* blinking */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* terminal */
+.term-line{opacity:0;transition:opacity .25s}
+.term-line.visible{opacity:1}
+
+/* hero box */
+.hero-box{
+  border:2px solid #4eff9a;border-radius:3px;
+  padding:14px;text-align:center;
+  opacity:0;transition:opacity .5s;
+}
+.hero-box.visible{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ══════════ SCENE 1: HOOK ══════════ -->
+<div class="scene active" id="s1" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title">LAYER 2 DEFENSES</div>
+    <div class="hdr-sub">SWITCH CONFIGS MOST ENGINEERS SKIP</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">HIGH IMPACT</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="hero-box" id="s1-hero" style="border-color:#e8a020;background:#0d0900">
+        <div style="font-size:9px;color:#e8a020;letter-spacing:1px;margin-bottom:12px">YOUR SWITCH RIGHT NOW</div>
+        <div style="display:flex;flex-direction:column;gap:5px;text-align:left">
+          <div id="s1-l1" class="term-line" style="font-size:7px;color:#333;padding:4px 8px;border:1px solid #1a1a0a;border-radius:2px">
+            DAI .............. <span style="color:#e85050">DISABLED</span>
+          </div>
+          <div id="s1-l2" class="term-line" style="font-size:7px;color:#333;padding:4px 8px;border:1px solid #1a1a0a;border-radius:2px">
+            802.1X ........... <span style="color:#e85050">DISABLED</span>
+          </div>
+          <div id="s1-l3" class="term-line" style="font-size:7px;color:#333;padding:4px 8px;border:1px solid #1a1a0a;border-radius:2px">
+            DHCP SNOOPING .... <span style="color:#e85050">DISABLED</span>
+          </div>
+          <div id="s1-l4" class="term-line" style="font-size:7px;color:#333;padding:4px 8px;border:1px solid #1a1a0a;border-radius:2px">
+            VLAN SEGMENT ..... <span style="color:#e85050">DISABLED</span>
+          </div>
+          <div id="s1-l5" class="term-line" style="font-size:7px;color:#333;padding:4px 8px;border:1px solid #1a1a0a;border-radius:2px">
+            DTP .............. <span style="color:#e85050">ENABLED</span> ⚠
+          </div>
+        </div>
+        <div id="s1-warn" class="term-line" style="margin-top:10px;font-size:8px;color:#e85050">▶ OPEN TO L2 ATTACKS <span class="blink">█</span></div>
+      </div>
+
+      <!-- attack stream -->
+      <div class="atk-stream visible" id="s1-stream">
+        <div class="atk-pkt" id="s1-p1">ARP SPOOF</div>
+        <div class="atk-pkt" id="s1-p2">ROGUE DHCP</div>
+        <div class="atk-pkt" id="s1-p3">VLAN HOP</div>
+        <div class="atk-pkt" id="s1-p4">MAC FLOOD</div>
+        <div class="atk-pkt" id="s1-p5">MITM</div>
+        <div class="atk-pkt" id="s1-p6">STP ATTACK</div>
+        <div class="atk-pkt" id="s1-p7">CAM OVERFLOW</div>
+      </div>
+
+      <div class="step-block rd" id="s1-s1">
+        <div class="step-num rd">!</div>
+        <div class="step-text">Layer 2 (the switch layer) has <span class="rd">zero security enabled by default</span>. Any device that can plug into your switch can poison ARP tables, impersonate DHCP, or hop VLANs.</div>
+      </div>
+      <div class="step-block am" id="s1-s2">
+        <div class="step-num am">!</div>
+        <div class="step-text">Firewalls, IDS, and TLS all operate at <span class="am">Layer 3+</span>. They never see L2 attacks. The only fix is switch configuration — and most switches ship with everything disabled.</div>
+      </div>
+      <div class="step-block" id="s1-s3">
+        <div class="step-num" style="color:#4eff9a">▶</div>
+        <div class="step-text"><span class="gn">5 settings. One afternoon.</span> DAI + 802.1X + DHCP Snooping + VLANs + DTP off blocks the vast majority of LAN-based attacks. Let's enable them one by one.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">THE PROBLEM</div>
+    <div class="ih rd">L2 is unprotected by default — everywhere</div>
+    <div class="il" style="font-size:7px">RFC 826 (ARP) and 802.3 (Ethernet) were designed with zero authentication. Your switch trusts every frame from every port. Every. Single. One.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0</div><div class="sl">L2 defenses<br>default-on</div></div>
+    <div class="sc"><div class="sv am">5</div><div class="sl">settings to<br>enable today</div></div>
+    <div class="sc"><div class="sv gn">90%</div><div class="sl">attacks<br>blocked</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 2: DAI + DHCP SNOOPING ══════════ -->
+<div class="scene" id="s2" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">DAI + DHCP SNOOPING</div>
+    <div class="hdr-sub">VALIDATE ARP AGAINST GROUND TRUTH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSE 1+2</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LAYER 2</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- DHCP Snooping toggle -->
+      <div class="toggle-row" id="s2-t1">
+        <div class="tr-icon">🛡</div>
+        <div class="tr-body">
+          <div class="tr-title" id="s2-t1-lbl">DHCP SNOOPING</div>
+          <div class="tr-desc" id="s2-t1-desc">Watches DHCP traffic. Only "trusted" uplink ports can send OFFER/ACK. Any rogue DHCP reply from an access port is silently dropped.</div>
+          <div style="margin-top:6px;font-size:6px;color:#333" id="s2-t1-cfg">ip dhcp snooping vlan 10</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl" id="s2-tgl1"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl" id="s2-tlbl1">OFF</div>
+        </div>
+      </div>
+
+      <!-- DAI toggle -->
+      <div class="toggle-row" id="s2-t2">
+        <div class="tr-icon">🔍</div>
+        <div class="tr-body">
+          <div class="tr-title" id="s2-t2-lbl">DYNAMIC ARP INSPECTION</div>
+          <div class="tr-desc" id="s2-t2-desc">Uses the DHCP snooping binding table as ground truth. Any ARP reply with an IP→MAC mismatch is dropped at the port before reaching any host.</div>
+          <div style="margin-top:6px;font-size:6px;color:#333" id="s2-t2-cfg">ip arp inspection vlan 10</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl" id="s2-tgl2"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl" id="s2-tlbl2">OFF</div>
+        </div>
+      </div>
+
+      <!-- how they work together -->
+      <div id="s2-flow" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#050d05;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">HOW THEY WORK TOGETHER</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#4ec9e1;width:24px;flex-shrink:0">①</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">DHCP snooping logs every <span class="gn">IP→MAC→port</span> lease in a binding table</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#4ec9e1;width:24px;flex-shrink:0">②</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">DAI checks every ARP reply against that table</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#e85050;width:24px;flex-shrink:0">③</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">ARP spoof attempt: attacker's fake <span class="rd">192.168.1.1→EVIL:MAC</span> doesn't match table → <span class="rd">DROPPED</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#4eff9a;width:24px;flex-shrink:0">✓</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Rogue DHCP server reply comes from access port → <span class="rd">DROPPED</span> before any client sees it</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- attacks blocked -->
+      <div style="opacity:0;transition:opacity .4s" id="s2-blocked">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:1px">ATTACKS BLOCKED ▼</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="atk-badge blocked visible">✕ ARP SPOOFING / POISONING</div>
+          <div class="atk-badge blocked visible">✕ ROGUE DHCP SERVER</div>
+          <div class="atk-badge blocked visible">✕ MAN-IN-THE-MIDDLE (L2)</div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num" style="color:#4eff9a">!</div>
+        <div class="step-text"><span class="am">DHCP snooping must be enabled first</span> — DAI depends on its binding table. If you enable DAI on a VLAN without snooping, all ARP traffic is dropped (hosts go offline).</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">WHY IT WORKS</div>
+    <div class="ih">ARP has no auth — the switch now provides it</div>
+    <div class="il" style="font-size:7px">The DHCP binding table is ground truth: lease issued by the real server = the only valid IP→MAC mapping. Attacker can't fake a binding entry they never received.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DAI</div><div class="sl">blocks ARP<br>poisoning</div></div>
+    <div class="sc"><div class="sv cy">SNOOP</div><div class="sl">blocks rogue<br>DHCP</div></div>
+    <div class="sc"><div class="sv am">ORDER</div><div class="sl">snooping<br>first!</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 3: 802.1X ══════════ -->
+<div class="scene" id="s3" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">802.1X PORT AUTH</div>
+    <div class="hdr-sub">NO CREDENTIALS = NO NETWORK ACCESS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DEFENSE 3</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PORT AUTH</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- switch port diagram -->
+      <div class="sw-box" id="s3-sw">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:4px;text-align:center">SWITCH PORT STATUS — 802.1X ENABLED</div>
+        <div class="sw-port auth" id="s3-p1">
+          <div class="port-led on" id="s3-led1"></div>
+          <div class="port-label on" id="s3-lbl1">GI0/1 — Corp Laptop</div>
+          <div class="port-status on" id="s3-st1">AUTH ✓</div>
+        </div>
+        <div class="sw-port auth" id="s3-p2">
+          <div class="port-led on" id="s3-led2"></div>
+          <div class="port-label on" id="s3-lbl2">GI0/2 — Badge Reader</div>
+          <div class="port-status on" id="s3-st2">AUTH ✓</div>
+        </div>
+        <div class="sw-port deny" id="s3-p3">
+          <div class="port-led deny" id="s3-led3"></div>
+          <div class="port-label deny" id="s3-lbl3">GI0/3 — Unknown Device</div>
+          <div class="port-status deny" id="s3-st3">BLOCKED ✕</div>
+        </div>
+        <div class="sw-port deny" id="s3-p4">
+          <div class="port-led deny" id="s3-led4"></div>
+          <div class="port-label deny" id="s3-lbl4">GI0/4 — Attacker Laptop</div>
+          <div class="port-status deny" id="s3-st4">BLOCKED ✕</div>
+        </div>
+        <div class="sw-port" id="s3-p5" style="border-color:#0d2a3a;background:#050d15">
+          <div class="port-led" style="background:#1a3a5a"></div>
+          <div class="port-label" style="color:#2a4a6a">GI0/5 — (empty)</div>
+          <div class="port-status" style="color:#1a3a4a">UNAUTH</div>
+        </div>
+      </div>
+
+      <!-- flow -->
+      <div style="border:1px solid #0a1a2a;border-radius:3px;padding:10px;background:#050810;opacity:0;transition:opacity .5s" id="s3-flow">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px;letter-spacing:1px">HOW 802.1X WORKS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="font-size:7px;color:#4ec9e1;width:22px;flex-shrink:0">①</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Device plugs in → port is in <span class="cy">UNAUTH state</span> — only EAP frames pass</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="font-size:7px;color:#4ec9e1;width:22px;flex-shrink:0">②</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Device sends credentials to <span class="cy">RADIUS server</span> (cert, username/pw, or MAB)</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="font-size:7px;color:#4eff9a;width:22px;flex-shrink:0">③</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">RADIUS says <span class="gn">ACCEPT</span> → switch opens port, assigns VLAN</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="font-size:7px;color:#e85050;width:22px;flex-shrink:0">✕</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">No credentials → port stays blocked. <span class="rd">Attacker gets NOTHING</span> — not even a DHCP address</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- attacks blocked -->
+      <div style="opacity:0;transition:opacity .4s" id="s3-blocked">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:1px">ATTACKS BLOCKED ▼</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="atk-badge blocked visible">✕ ROGUE DEVICE ON LAN</div>
+          <div class="atk-badge blocked visible">✕ MAC FLOODING</div>
+          <div class="atk-badge blocked visible">✕ PHYSICAL DROP ATTACK</div>
+        </div>
+      </div>
+
+      <div class="step-block cy" id="s3-s1">
+        <div class="step-num cy">!</div>
+        <div class="step-text">No 802.1X? Anyone who can plug an Ethernet cable in — contractor, visitor, attacker who broke into the building — gets full LAN access instantly.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">ZERO-TRUST AT L2</div>
+    <div class="ih cy">Every port unauthenticated until proven otherwise</div>
+    <div class="il" style="font-size:7px">The port itself is the enforcement point. Before 802.1X, attackers just plug in and start. After: they're stuck sending EAP frames into a wall.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">EAP</div><div class="sl">auth protocol<br>on port</div></div>
+    <div class="sc"><div class="sv gn">RADIUS</div><div class="sl">identity<br>server</div></div>
+    <div class="sc"><div class="sv rd">BLOCKED</div><div class="sl">no creds<br>= no port</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 4: VLANs + DTP ══════════ -->
+<div class="scene" id="s4" style="background:#0d060f">
+  <div class="hdr" style="background:#0d060f">
+    <div class="hdr-title" style="color:#a060c0">VLANs + DISABLE DTP</div>
+    <div class="hdr-sub">SEGMENT TRAFFIC · KILL VLAN HOPPING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a060c0">DEFENSE 4+5</span>
+    <span class="sbadge" style="color:#a060c0;border-color:#a060c0">SEGMENTATION</span>
+  </div>
+
+  <div class="anim" style="background:#0d060f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- VLAN diagram -->
+      <div style="font-size:7px;color:#a060c0;letter-spacing:1px;text-align:center;opacity:0;transition:opacity .4s" id="s4-lbl">VLAN SEGMENTATION — ISOLATED BY DESIGN</div>
+
+      <div class="vlan-box" id="s4-v1" style="border-color:#e85050;color:#e85050">
+        <div class="vlan-title">VLAN 10 — SERVERS (SENSITIVE)</div>
+        <div class="vlan-device">🖥 DB-01 · 192.168.10.5</div>
+        <div class="vlan-device">🖥 AUTH-01 · 192.168.10.6</div>
+      </div>
+
+      <div class="blocked-arrow" id="s4-arrow">⛔ CROSS-VLAN BLOCKED AT SWITCH</div>
+
+      <div class="vlan-box" id="s4-v2" style="border-color:#4ec9e1;color:#4ec9e1">
+        <div class="vlan-title">VLAN 20 — WORKSTATIONS</div>
+        <div class="vlan-device">💻 ENG-01 · 192.168.20.10</div>
+        <div class="vlan-device">💻 ATTACKER · 192.168.20.99</div>
+      </div>
+
+      <div class="blocked-arrow" id="s4-arrow2">⛔ CROSS-VLAN BLOCKED AT SWITCH</div>
+
+      <div class="vlan-box" id="s4-v3" style="border-color:#4eff9a;color:#4eff9a">
+        <div class="vlan-title">VLAN 30 — GUEST Wi-Fi</div>
+        <div class="vlan-device">📱 Guest Device · 10.0.30.x</div>
+      </div>
+
+      <!-- DTP disable -->
+      <div class="toggle-row" id="s4-dtp">
+        <div class="tr-icon">🔒</div>
+        <div class="tr-body">
+          <div class="tr-title" id="s4-dtp-lbl">DTP DISABLED</div>
+          <div class="tr-desc">Dynamic Trunking Protocol auto-negotiates trunk links. Attackers send fake DTP frames to make the switch open a trunk — giving access to ALL VLANs. Disable it.</div>
+          <div style="margin-top:5px;font-size:6px;color:#555">switchport nonegotiate</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on" id="s4-tgl"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on" id="s4-tlbl">ON</div>
+        </div>
+      </div>
+
+      <!-- attacks blocked -->
+      <div style="opacity:0;transition:opacity .4s" id="s4-blocked">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:1px">ATTACKS BLOCKED ▼</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="atk-badge blocked visible">✕ VLAN HOPPING (DTP)</div>
+          <div class="atk-badge blocked visible">✕ LATERAL MOVEMENT</div>
+          <div class="atk-badge blocked visible">✕ GUEST → SERVER ACCESS</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#a060c0">
+    <div class="il">BLAST RADIUS CONTROL</div>
+    <div class="ih" style="color:#a060c0">Compromise one VLAN — can't touch the others</div>
+    <div class="il" style="font-size:7px">VLANs don't stop attacks — they contain them. Attacker on VLAN 20 sees no traffic from VLAN 10. DTP off removes the switch's ability to betray its own segmentation.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">VLAN</div><div class="sl">L2 broadcast<br>domain split</div></div>
+    <div class="sc"><div class="sv rd">DTP OFF</div><div class="sl">no trunk<br>negotiation</div></div>
+    <div class="sc"><div class="sv gn">CONTAIN</div><div class="sl">blast<br>radius ↓</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 5: FULL DASHBOARD ══════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">SWITCH SECURED ✓</div>
+    <div class="hdr-sub">ALL 5 DEFENSES ACTIVE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SECURED</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ALL ENABLED</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="text-align:center;font-size:7px;color:#333;letter-spacing:2px;opacity:0;transition:opacity .4s" id="s5-intro">SWITCH SECURITY DASHBOARD</div>
+
+      <!-- all 5 toggles ON -->
+      <div class="toggle-row active-row" id="s5-t1">
+        <div class="tr-icon">🛡</div>
+        <div class="tr-body">
+          <div class="tr-title on">DHCP SNOOPING</div>
+          <div class="tr-desc on">Rogue DHCP servers eliminated at port level</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on">ON</div>
+        </div>
+      </div>
+
+      <div class="toggle-row active-row" id="s5-t2">
+        <div class="tr-icon">🔍</div>
+        <div class="tr-body">
+          <div class="tr-title on">DYNAMIC ARP INSPECTION</div>
+          <div class="tr-desc on">ARP spoof attempts dropped before delivery</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on">ON</div>
+        </div>
+      </div>
+
+      <div class="toggle-row active-row" id="s5-t3">
+        <div class="tr-icon">🔑</div>
+        <div class="tr-body">
+          <div class="tr-title on">802.1X PORT AUTH</div>
+          <div class="tr-desc on">Every port unauthenticated until RADIUS confirms</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on">ON</div>
+        </div>
+      </div>
+
+      <div class="toggle-row active-row" id="s5-t4">
+        <div class="tr-icon">🧱</div>
+        <div class="tr-body">
+          <div class="tr-title on">VLAN SEGMENTATION</div>
+          <div class="tr-desc on">Servers, workstations, guests fully isolated</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on">ON</div>
+        </div>
+      </div>
+
+      <div class="toggle-row active-row" id="s5-t5">
+        <div class="tr-icon">🚫</div>
+        <div class="tr-body">
+          <div class="tr-title on">DTP DISABLED</div>
+          <div class="tr-desc on">VLAN hopping via trunk negotiation impossible</div>
+        </div>
+        <div class="tr-right">
+          <div class="tgl on"><div class="tgl-knob"></div></div>
+          <div class="tgl-lbl on">ON</div>
+        </div>
+      </div>
+
+      <!-- coverage bar -->
+      <div id="s5-bar-wrap" style="opacity:0;transition:opacity .4s">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <div style="font-size:7px;color:#4eff9a">L2 ATTACK COVERAGE</div>
+          <div style="font-size:7px;color:#4eff9a" id="s5-pct">0%</div>
+        </div>
+        <div class="stat-bar-wrap">
+          <div class="stat-bar" id="s5-bar" style="background:#4eff9a"></div>
+        </div>
+      </div>
+
+      <!-- all blocked -->
+      <div id="s5-all-blocked" style="opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:1px">ALL L2 ATTACKS BLOCKED ▼</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px">
+          <div class="atk-badge blocked visible">✕ ARP SPOOFING</div>
+          <div class="atk-badge blocked visible">✕ ROGUE DHCP</div>
+          <div class="atk-badge blocked visible">✕ VLAN HOPPING</div>
+          <div class="atk-badge blocked visible">✕ ROGUE DEVICE</div>
+          <div class="atk-badge blocked visible">✕ MAC FLOODING</div>
+          <div class="atk-badge blocked visible">✕ MITM (L2)</div>
+          <div class="atk-badge blocked visible">✕ LATERAL MOVE</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">KEY TAKEAWAY</div>
+    <div class="ih">L2 security is a one-time config — not ongoing work</div>
+    <div class="il" style="font-size:7px">These five settings take an afternoon. They stay on. They require no maintenance. Most networks skip them entirely — which is why L2 attacks are still effective in 2026.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">5</div><div class="sl">switch<br>settings</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">afternoon<br>to deploy</div></div>
+    <div class="sc"><div class="sv gn">~90%</div><div class="sl">L2 attacks<br>blocked</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addVisible(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmVisible(ids){ids.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('visible');});}
+function addCls(id,c){const el=document.getElementById(id);if(el)el.classList.add(c);}
+function rmCls(id,c){const el=document.getElementById(id);if(el)el.classList.remove(c);}
+
+function toggleOn(tglId,lblId){
+  const t=document.getElementById(tglId);
+  const l=document.getElementById(lblId);
+  if(t)t.classList.add('on');
+  if(l){l.classList.add('on');l.textContent='ON';}
+}
+function toggleOff(tglId,lblId){
+  const t=document.getElementById(tglId);
+  const l=document.getElementById(lblId);
+  if(t)t.classList.remove('on');
+  if(l){l.classList.remove('on');l.textContent='OFF';}
+}
+
+function resetScene(n){
+  if(n===1){
+    setOp('s1-hero','0');
+    ['s1-l1','s1-l2','s1-l3','s1-l4','s1-l5','s1-warn'].forEach(id=>rmVisible([id]));
+    ['s1-p1','s1-p2','s1-p3','s1-p4','s1-p5','s1-p6','s1-p7'].forEach(id=>{
+      const el=document.getElementById(id);if(el)el.style.opacity='0';
+    });
+    rmVisible(['s1-s1','s1-s2','s1-s3']);
+  }
+  if(n===2){
+    ['s2-t1','s2-t2'].forEach(id=>rmVisible([id]));
+    toggleOff('s2-tgl1','s2-tlbl1');toggleOff('s2-tgl2','s2-tlbl2');
+    ['s2-t1','s2-t2'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('active-row');});
+    const t1lbl=document.getElementById('s2-t1-lbl');if(t1lbl)t1lbl.className='tr-title';
+    const t2lbl=document.getElementById('s2-t2-lbl');if(t2lbl)t2lbl.className='tr-title';
+    const c1=document.getElementById('s2-t1-cfg');if(c1)c1.style.color='#333';
+    const c2=document.getElementById('s2-t2-cfg');if(c2)c2.style.color='#333';
+    setOp('s2-flow','0');setOp('s2-blocked','0');
+    rmVisible(['s2-s1']);
+  }
+  if(n===3){
+    const sw=document.getElementById('s3-sw');if(sw)sw.classList.remove('visible');
+    setOp('s3-flow','0');setOp('s3-blocked','0');
+    rmVisible(['s3-s1']);
+  }
+  if(n===4){
+    setOp('s4-lbl','0');
+    ['s4-v1','s4-v2','s4-v3'].forEach(id=>rmVisible([id]));
+    ['s4-arrow','s4-arrow2'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('visible');});
+    rmVisible(['s4-dtp']);
+    setOp('s4-blocked','0');
+  }
+  if(n===5){
+    setOp('s5-intro','0');
+    ['s5-t1','s5-t2','s5-t3','s5-t4','s5-t5'].forEach(id=>rmVisible([id]));
+    setOp('s5-bar-wrap','0');setOp('s5-all-blocked','0');
+    const bar=document.getElementById('s5-bar');if(bar)bar.style.width='0%';
+    const pct=document.getElementById('s5-pct');if(pct)pct.textContent='0%';
+  }
+}
+
+function animatePct(targetPct, duration){
+  let start=null;
+  const bar=document.getElementById('s5-bar');
+  const pct=document.getElementById('s5-pct');
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/duration,1);
+    const cur=Math.round(p*targetPct);
+    if(bar)bar.style.width=cur+'%';
+    if(pct)pct.textContent=cur+'%';
+    if(p<1)requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    ['s1-l1','s1-l2','s1-l3','s1-l4','s1-l5'].forEach((id,i)=>
+      delay(()=>addVisible(id),600+i*250));
+    delay(()=>addVisible('s1-warn'),600+5*250);
+    // animate attack packets
+    ['s1-p1','s1-p2','s1-p3','s1-p4','s1-p5','s1-p6','s1-p7'].forEach((id,i)=>{
+      delay(()=>{
+        const el=document.getElementById(id);
+        if(el){el.style.animation=`pktAppear .3s ease forwards`;el.style.animationDelay='0s';el.style.opacity='1';}
+      },500+i*180);
+    });
+    delay(()=>addVisible('s1-s1'),1800);
+    delay(()=>addVisible('s1-s2'),2400);
+    delay(()=>addVisible('s1-s3'),3000);
+  }
+
+  if(n===2){
+    // show first toggle
+    delay(()=>addVisible('s2-t1'),300);
+    // enable DHCP snooping
+    delay(()=>{
+      toggleOn('s2-tgl1','s2-tlbl1');
+      addCls('s2-t1','active-row');
+      const lbl=document.getElementById('s2-t1-lbl');if(lbl)lbl.className='tr-title on';
+      const cfg=document.getElementById('s2-t1-cfg');if(cfg)cfg.style.color='#4eff9a';
+    },900);
+    // show second toggle
+    delay(()=>addVisible('s2-t2'),1400);
+    // enable DAI
+    delay(()=>{
+      toggleOn('s2-tgl2','s2-tlbl2');
+      addCls('s2-t2','active-row');
+      const lbl=document.getElementById('s2-t2-lbl');if(lbl)lbl.className='tr-title on';
+      const cfg=document.getElementById('s2-t2-cfg');if(cfg)cfg.style.color='#4eff9a';
+    },2000);
+    delay(()=>setOp('s2-flow','1'),2400);
+    delay(()=>setOp('s2-blocked','1'),2900);
+    delay(()=>addVisible('s2-s1'),3200);
+  }
+
+  if(n===3){
+    delay(()=>addCls('s3-sw','visible'),300);
+    delay(()=>setOp('s3-flow','1'),1200);
+    delay(()=>setOp('s3-blocked','1'),1800);
+    delay(()=>addVisible('s3-s1'),2200);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-lbl','1'),200);
+    delay(()=>addVisible('s4-v1'),500);
+    delay(()=>{const el=document.getElementById('s4-arrow');if(el)el.classList.add('visible');},900);
+    delay(()=>addVisible('s4-v2'),1200);
+    delay(()=>{const el=document.getElementById('s4-arrow2');if(el)el.classList.add('visible');},1600);
+    delay(()=>addVisible('s4-v3'),1900);
+    delay(()=>addVisible('s4-dtp'),2400);
+    delay(()=>setOp('s4-blocked','1'),2900);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-intro','1'),200);
+    ['s5-t1','s5-t2','s5-t3','s5-t4','s5-t5'].forEach((id,i)=>
+      delay(()=>addVisible(id),500+i*300));
+    delay(()=>{
+      setOp('s5-bar-wrap','1');
+      animatePct(90,1400);
+    },500+5*300+200);
+    delay(()=>setOp('s5-all-blocked','1'),500+5*300+1800);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

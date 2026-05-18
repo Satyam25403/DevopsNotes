@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Layer 3 — Network Layer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2a}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2a;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}
+.il{color:#aaa}
+.ih{color:#4ec9e1}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#06080f;border:1px solid #0d1a2a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}.cy{color:#4ec9e1}.pu{color:#a060c0}
+
+/* fade reveal */
+.rev{opacity:0;transform:translateY(7px);transition:opacity .35s ease,transform .35s ease}
+.rev.visible{opacity:1;transform:translateY(0)}
+
+/* step block */
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d1a2a;border-radius:2px;border-left:3px solid #4ec9e1;
+}
+.step-block.am{border-left-color:#e8a020}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.gn{color:#4eff9a}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+
+/* blink */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink .8s step-end infinite}
+
+/* TTL counter flash */
+@keyframes ttlFlash{0%{background:#3a0808;color:#e85050}50%{background:#200000}100%{background:transparent;color:#e85050}}
+
+/* packet travel on SVG — use CSS property-based transitions so cx/cy animate properly */
+circle.pkt-animated {
+  transition: cx .5s ease, cy .5s ease;
+}
+
+/* TTL bar transition via CSS so setAttribute width animates in supporting browsers */
+/* (We use Web Animations API as the reliable fallback — see JS) */
+
+/* header field highlight */
+@keyframes fieldPop{0%{background:#0a1a0a}50%{background:#1a3a1a}100%{background:#0a1a2a}}
+</style>
+</head>
+<body>
+
+<!-- ══════════ SCENE 1: HOOK — THE JOURNEY ══════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">LAYER 3 — NETWORK</div>
+    <div class="hdr-sub">IP ADDRESSING & PACKET ROUTING</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">100ms</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- globe SVG animation -->
+      <div id="s1-globe" class="rev" style="border:2px solid #0d2a3a;border-radius:4px;background:#040810;padding:8px">
+        <div style="font-size:7px;color:#4ec9e1;text-align:center;letter-spacing:1px;margin-bottom:6px">INDIA → US · ~14,000 KM · ~100ms</div>
+        <svg width="334" height="170" viewBox="0 0 334 170" id="s1-svg">
+          <!-- ocean background -->
+          <rect x="0" y="0" width="334" height="170" fill="#040810" rx="3"/>
+          <!-- subtle grid lines -->
+          <line x1="0" y1="56" x2="334" y2="56" stroke="#0a1a2a" stroke-width="1"/>
+          <line x1="0" y1="112" x2="334" y2="112" stroke="#0a1a2a" stroke-width="1"/>
+          <line x1="83" y1="0" x2="83" y2="170" stroke="#0a1a2a" stroke-width="1"/>
+          <line x1="167" y1="0" x2="167" y2="170" stroke="#0a1a2a" stroke-width="1"/>
+          <line x1="250" y1="0" x2="250" y2="170" stroke="#0a1a2a" stroke-width="1"/>
+
+          <!-- continents (simplified blobs) -->
+          <!-- India region -->
+          <ellipse cx="248" cy="105" rx="22" ry="28" fill="#0d2010" stroke="#1a3a1a" stroke-width="1"/>
+          <text x="248" y="108" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">IN</text>
+
+          <!-- US region -->
+          <ellipse cx="72" cy="72" rx="38" ry="22" fill="#0a1a2a" stroke="#1a2a3a" stroke-width="1"/>
+          <text x="72" y="75" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">US</text>
+
+          <!-- Europe blob -->
+          <ellipse cx="167" cy="68" rx="18" ry="14" fill="#0d0d1a" stroke="#1a1a2a" stroke-width="1"/>
+
+          <!-- Middle East -->
+          <ellipse cx="205" cy="90" rx="12" ry="10" fill="#0d0d0a" stroke="#1a1a0a" stroke-width="1"/>
+
+          <!-- route path (curved arc) -->
+          <path id="s1-route" d="M248,88 C240,40 160,20 72,60"
+            stroke="#0d2a3a" stroke-width="1.5" fill="none" stroke-dasharray="4,4"/>
+
+          <!-- routers along path -->
+          <!-- R1: Mumbai -->
+          <rect id="s1-r1" x="236" y="76" width="24" height="16" rx="2" fill="#040810" stroke="#1a3a2a" stroke-width="1.5"/>
+          <text x="248" y="87" text-anchor="middle" fill="#2a5a3a" font-family="'Press Start 2P'" font-size="4">R1</text>
+
+          <!-- R2: Middle East -->
+          <rect id="s1-r2" x="193" y="58" width="24" height="16" rx="2" fill="#040810" stroke="#1a3a2a" stroke-width="1.5"/>
+          <text x="205" y="69" text-anchor="middle" fill="#2a5a3a" font-family="'Press Start 2P'" font-size="4">R2</text>
+
+          <!-- R3: Europe -->
+          <rect id="s1-r3" x="155" y="44" width="24" height="16" rx="2" fill="#040810" stroke="#1a3a2a" stroke-width="1.5"/>
+          <text x="167" y="55" text-anchor="middle" fill="#2a5a3a" font-family="'Press Start 2P'" font-size="4">R3</text>
+
+          <!-- R4: Atlantic -->
+          <rect id="s1-r4" x="115" y="38" width="24" height="16" rx="2" fill="#040810" stroke="#1a3a2a" stroke-width="1.5"/>
+          <text x="127" y="49" text-anchor="middle" fill="#2a5a3a" font-family="'Press Start 2P'" font-size="4">R4</text>
+
+          <!-- R5: US East -->
+          <rect id="s1-r5" x="84" y="44" width="24" height="16" rx="2" fill="#040810" stroke="#1a3a2a" stroke-width="1.5"/>
+          <text x="96" y="55" text-anchor="middle" fill="#2a5a3a" font-family="'Press Start 2P'" font-size="4">R5</text>
+
+          <!-- source: India host -->
+          <!-- FIX BUG 1: Use style.cx/style.cy so CSS transitions work on SVG circle -->
+          <circle id="s1-pkt" cx="248" cy="88" r="5" fill="#4eff9a" opacity="0"/>
+          <!-- FIX BUG 6: Added missing s1-pkt-t text element that the JS references -->
+          <text id="s1-pkt-t" x="248" y="91" text-anchor="middle" fill="#040810" font-family="'Press Start 2P'" font-size="4" opacity="0">PKT</text>
+          <!-- destination star -->
+          <circle cx="72" cy="60" r="5" fill="#4ec9e1" opacity=".4" id="s1-dst"/>
+
+          <!-- hop labels (appear one by one) -->
+          <text id="s1-h1" x="248" y="73" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">HOP 1</text>
+          <text id="s1-h2" x="205" y="55" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">HOP 2</text>
+          <text id="s1-h3" x="167" y="41" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">HOP 3</text>
+          <text id="s1-h4" x="127" y="35" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">HOP 4</text>
+          <text id="s1-h5" x="96" y="40" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">HOP 5</text>
+          <text id="s1-done" x="72" y="54" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">✓</text>
+
+          <!-- TTL display -->
+          <rect x="0" y="148" width="334" height="22" fill="#040810"/>
+          <text x="10" y="162" fill="#555" font-family="'Press Start 2P'" font-size="5">TTL:</text>
+          <text id="s1-ttl" x="40" y="162" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">64</text>
+          <text x="65" y="162" fill="#333" font-family="'Press Start 2P'" font-size="5">→ 63 → 62 → 61 → 60 → 59</text>
+          <text x="248" y="162" fill="#555" font-family="'Press Start 2P'" font-size="5">DST: 23.45.67.89</text>
+        </svg>
+      </div>
+
+      <!-- what happened -->
+      <div class="step-block rev" id="s1-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Your packet left India with a destination IP address: <span class="cy">23.45.67.89</span>. No router knew the full path — each one only knew the <span class="cy">next hop</span>.</div>
+      </div>
+      <div class="step-block rev am" id="s1-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">At every router the <span class="am">TTL field decremented by 1</span>. If it hit zero the packet would be discarded — a built-in loop prevention mechanism from 1981.</div>
+      </div>
+      <div class="step-block rev gn" id="s1-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text">This is <span class="gn">Layer 3</span>: logical IP addressing + hop-by-hop routing. The internet is just millions of routers each making one local forwarding decision.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LAYER 3 — NETWORK</div>
+    <div class="ih">IP addressing + routing = the internet</div>
+    <div class="il" style="font-size:7px">No single router knows the full path. Each knows only: "for this destination, send to THIS next-hop." That chain of local decisions moves packets globally.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">~100ms</div><div class="sl">India<br>to US</div></div>
+    <div class="sc"><div class="sv am">10–20</div><div class="sl">hops<br>typical</div></div>
+    <div class="sc"><div class="sv gn">64</div><div class="sl">default<br>TTL start</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 2: IP vs MAC ══════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4eff9a">IP vs MAC ADDRESS</div>
+    <div class="hdr-sub">LOGICAL vs PHYSICAL · TWO LAYERS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ADDRESSES</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">L2 vs L3</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- IP address card -->
+      <div class="rev" id="s2-ip" style="border:2px solid #4ec9e1;border-radius:3px;background:#040810;padding:12px">
+        <div style="font-size:8px;color:#4ec9e1;letter-spacing:1px;margin-bottom:10px">LAYER 3 — IP ADDRESS (LOGICAL)</div>
+        <div style="font-size:22px;color:#4ec9e1;text-align:center;letter-spacing:2px;margin-bottom:8px" id="s2-ipval">192.168.1.50</div>
+        <div style="display:flex;gap:0;margin-bottom:6px">
+          <div style="flex:1;background:#0a1a2a;border:1px solid #0d2a3a;padding:6px 8px;border-radius:2px 0 0 2px">
+            <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">NETWORK PART</div>
+            <div style="font-size:8px;color:#4eff9a">192.168.1</div>
+            <div style="font-size:5px;color:#444;margin-top:2px">identifies network</div>
+          </div>
+          <div style="flex:1;background:#0a1a2a;border:1px solid #0d2a3a;border-left:none;padding:6px 8px;border-radius:0 2px 2px 0">
+            <div style="font-size:6px;color:#e8a020;margin-bottom:3px">HOST PART</div>
+            <div style="font-size:8px;color:#e8a020">.50</div>
+            <div style="font-size:5px;color:#444;margin-top:2px">identifies device</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#555;line-height:1.8">✓ Assigned by DHCP or admin &nbsp;·&nbsp; Can change &nbsp;·&nbsp; Routable globally</div>
+      </div>
+
+      <!-- MAC address card -->
+      <div class="rev" id="s2-mac" style="border:2px solid #a060c0;border-radius:3px;background:#0d060f;padding:12px">
+        <div style="font-size:8px;color:#a060c0;letter-spacing:1px;margin-bottom:10px">LAYER 2 — MAC ADDRESS (PHYSICAL)</div>
+        <div style="font-size:14px;color:#a060c0;text-align:center;letter-spacing:2px;margin-bottom:8px">AA:BB:CC:11:22:33</div>
+        <div style="display:flex;gap:0;margin-bottom:6px">
+          <div style="flex:1;background:#0d080f;border:1px solid #1a0a1a;padding:6px 8px;border-radius:2px 0 0 2px">
+            <div style="font-size:6px;color:#a060c0;margin-bottom:3px">OUI (VENDOR)</div>
+            <div style="font-size:8px;color:#c080e0">AA:BB:CC</div>
+            <div style="font-size:5px;color:#444;margin-top:2px">manufacturer ID</div>
+          </div>
+          <div style="flex:1;background:#0d080f;border:1px solid #1a0a1a;border-left:none;padding:6px 8px;border-radius:0 2px 2px 0">
+            <div style="font-size:6px;color:#a060c0;margin-bottom:3px">DEVICE ID</div>
+            <div style="font-size:8px;color:#c080e0">11:22:33</div>
+            <div style="font-size:5px;color:#444;margin-top:2px">unique per NIC</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#555;line-height:1.8">✓ Burned into hardware &nbsp;·&nbsp; Local network only &nbsp;·&nbsp; NOT routable</div>
+      </div>
+
+      <!-- comparison table -->
+      <div class="rev" id="s2-tbl" style="border:1px solid #0d1a2a;border-radius:3px;background:#040810;padding:10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">KEY DIFFERENCE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #0d1a2a;padding-bottom:4px;margin-bottom:6px">
+          <div style="width:90px;font-size:6px;color:#555"></div>
+          <div style="flex:1;font-size:6px;color:#4ec9e1;text-align:center">IP</div>
+          <div style="flex:1;font-size:6px;color:#a060c0;text-align:center">MAC</div>
+        </div>
+        <div style="display:flex;gap:0;margin-bottom:5px">
+          <div style="width:90px;font-size:6px;color:#555">Scope</div>
+          <div style="flex:1;font-size:6px;color:#ccc;text-align:center">GLOBAL</div>
+          <div style="flex:1;font-size:6px;color:#ccc;text-align:center">LOCAL</div>
+        </div>
+        <div style="display:flex;gap:0;margin-bottom:5px">
+          <div style="width:90px;font-size:6px;color:#555">Changes?</div>
+          <div style="flex:1;font-size:6px;color:#4eff9a;text-align:center">YES</div>
+          <div style="flex:1;font-size:6px;color:#e85050;text-align:center">NO</div>
+        </div>
+        <div style="display:flex;gap:0;margin-bottom:5px">
+          <div style="width:90px;font-size:6px;color:#555">Used by</div>
+          <div style="flex:1;font-size:6px;color:#ccc;text-align:center">ROUTERS</div>
+          <div style="flex:1;font-size:6px;color:#ccc;text-align:center">SWITCHES</div>
+        </div>
+        <div style="display:flex;gap:0">
+          <div style="width:90px;font-size:6px;color:#555">Layer</div>
+          <div style="flex:1;font-size:6px;color:#4ec9e1;text-align:center">L3</div>
+          <div style="flex:1;font-size:6px;color:#a060c0;text-align:center">L2</div>
+        </div>
+      </div>
+
+      <div class="step-block rev am" id="s2-s1">
+        <div class="step-num am">!</div>
+        <div class="step-text"><span class="am">ARP bridges the gap:</span> before a device can send a frame, it needs the MAC for the next-hop IP. ARP asks "who has 192.168.1.1?" and the router replies with its MAC.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">THE ANALOGY</div>
+    <div class="ih gn">IP = postal address · MAC = your actual face</div>
+    <div class="il" style="font-size:7px">IP tells packets where to GO. MAC tells the switch which physical port to use right NOW. A router strips the old MAC header and writes a new one at each hop.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">IP</div><div class="sl">logical<br>global</div></div>
+    <div class="sc"><div class="sv pu">MAC</div><div class="sl">physical<br>local only</div></div>
+    <div class="sc"><div class="sv am">ARP</div><div class="sl">maps IP<br>→ MAC</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 3: HOP-BY-HOP ROUTING + TTL ══════════ -->
+<div class="scene" id="s3" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e8a020">HOP-BY-HOP ROUTING</div>
+    <div class="hdr-sub">TTL COUNTDOWN · LOOP PREVENTION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ROUTING + TTL</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOP-BY-HOP</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- hop animation panel -->
+      <div class="rev" id="s3-anim" style="border:2px solid #1a2a0a;border-radius:4px;background:#040810;padding:10px">
+        <div style="font-size:7px;color:#e8a020;text-align:center;letter-spacing:1px;margin-bottom:8px">PACKET JOURNEY — WATCH THE TTL</div>
+        <svg width="314" height="130" viewBox="0 0 314 130" id="s3-svg">
+          <!-- route line -->
+          <line x1="18" y1="52" x2="296" y2="52" stroke="#0d1a0a" stroke-width="2"/>
+
+          <!-- Source -->
+          <rect x="0" y="36" width="36" height="32" rx="3" fill="#07150a" stroke="#1a4a1a" stroke-width="1.5"/>
+          <text x="18" y="50" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">SRC</text>
+          <text x="18" y="61" text-anchor="middle" fill="#2a5a2a" font-family="'Press Start 2P'" font-size="4">IN</text>
+
+          <!-- R1 -->
+          <rect x="54" y="36" width="40" height="32" rx="3" fill="#040810" stroke="#1a2a3a" stroke-width="1.5" id="s3-r1box"/>
+          <text x="74" y="49" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">RTR 1</text>
+          <text id="s3-ttl1" x="74" y="61" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">--</text>
+
+          <!-- R2 -->
+          <rect x="114" y="36" width="40" height="32" rx="3" fill="#040810" stroke="#1a2a3a" stroke-width="1.5" id="s3-r2box"/>
+          <text x="134" y="49" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">RTR 2</text>
+          <text id="s3-ttl2" x="134" y="61" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">--</text>
+
+          <!-- R3 -->
+          <rect x="174" y="36" width="40" height="32" rx="3" fill="#040810" stroke="#1a2a3a" stroke-width="1.5" id="s3-r3box"/>
+          <text x="194" y="49" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">RTR 3</text>
+          <text id="s3-ttl3" x="194" y="61" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">--</text>
+
+          <!-- Destination -->
+          <rect x="278" y="36" width="36" height="32" rx="3" fill="#040c14" stroke="#1a3a4a" stroke-width="1.5"/>
+          <text x="296" y="50" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">DST</text>
+          <text x="296" y="61" text-anchor="middle" fill="#1a4a5a" font-family="'Press Start 2P'" font-size="4">US</text>
+
+          <!-- Packet dot -->
+          <!-- FIX BUG 2: remove inline style transition on element; animate via Web Animations API in JS -->
+          <circle id="s3-pkt" cx="18" cy="52" r="7" fill="#e8a020" opacity="0"/>
+          <text id="s3-pkt-t" x="18" y="55" text-anchor="middle" fill="#040810" font-family="'Press Start 2P'" font-size="4" opacity="0">PKT</text>
+
+          <!-- TTL display bar -->
+          <rect x="0" y="90" width="314" height="40" fill="#040810"/>
+          <text x="0" y="103" fill="#555" font-family="'Press Start 2P'" font-size="5">PACKET TTL:</text>
+          <rect x="0" y="108" width="314" height="14" rx="2" fill="#0a0a0a" stroke="#0d1a0a" stroke-width="1"/>
+          <!-- FIX BUG 3 & 7: width is set via setAttribute in JS; transition handled by Web Animations API -->
+          <rect id="s3-ttlbar" x="1" y="109" width="312" height="12" rx="1" fill="#1a4a0a"/>
+          <text id="s3-ttlnum" x="157" y="119" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">64</text>
+        </svg>
+      </div>
+
+      <!-- TTL zero scenario -->
+      <div class="rev" id="s3-drop" style="border:2px solid #e85050;border-radius:3px;background:#0d0404;padding:10px">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:7px">TTL = 0 → PACKET DROPPED</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">If TTL reaches 0 before delivery, the router <span class="rd">discards the packet</span> and sends an <span class="am">ICMP "Time Exceeded"</span> message back to the source. This is how traceroute works — it sends packets with TTL=1, 2, 3… and reads the "Time Exceeded" replies to map each hop.</div>
+        <div style="margin-top:6px;font-size:6px;color:#4eff9a;background:#071507;border:1px solid #1a3a1a;padding:5px;border-radius:2px">
+          traceroute: TTL=1 → maps hop 1 · TTL=2 → hop 2 · …
+        </div>
+      </div>
+
+      <div class="step-block rev" id="s3-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Each router decrements TTL and checks if DST IP is in its <span class="cy">routing table</span>. It never reads the payload — just the IP header. Forwards to best next-hop and moves on.</div>
+      </div>
+      <div class="step-block rev am" id="s3-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">Default TTL: <span class="am">Linux=64, Windows=128, Cisco=255</span>. You can fingerprint an OS by the TTL value seen at the destination — a 57 arriving TTL from 7 hops away implies Linux origin.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">TTL DESIGN</div>
+    <div class="ih am">Prevents infinite loops in misconfigured networks</div>
+    <div class="il" style="font-size:7px">Before TTL, a routing loop would circulate a packet forever, consuming bandwidth. TTL gives every packet a maximum lifespan — at most 255 router hops.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">−1</div><div class="sl">TTL per<br>hop</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">= packet<br>dropped</div></div>
+    <div class="sc"><div class="sv gn">ICMP</div><div class="sl">time<br>exceeded</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 4: IPv4 HEADER ══════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">IPv4 HEADER</div>
+    <div class="hdr-sub">KEY FIELDS EVERY ENGINEER MUST KNOW</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">IP HEADER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">20 BYTES</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- header fields diagram -->
+      <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;text-align:center;opacity:0;transition:opacity .4s" id="s4-title">IPv4 HEADER — FIELD BY FIELD</div>
+
+      <!-- field rows, appearing one by one -->
+      <div class="rev" id="s4-f1" style="border:1px solid #0d2a3a;border-radius:2px;background:#040810;overflow:hidden">
+        <div style="display:flex;align-items:stretch">
+          <div style="width:8px;background:#4ec9e1;flex-shrink:0"></div>
+          <div style="padding:8px 10px;flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:7px;color:#4ec9e1">VERSION &amp; IHL</div>
+              <div style="font-size:6px;color:#555;background:#0a1a2a;padding:2px 6px;border-radius:2px">bits 0–7</div>
+            </div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Version=4 (IPv4). IHL=header length in 32-bit words. Minimum 5 = 20 bytes. Options can extend it.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rev" id="s4-f2" style="border:1px solid #0d2a0a;border-radius:2px;background:#040810;overflow:hidden">
+        <div style="display:flex;align-items:stretch">
+          <div style="width:8px;background:#e8a020;flex-shrink:0"></div>
+          <div style="padding:8px 10px;flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:7px;color:#e8a020">TOTAL LENGTH</div>
+              <div style="font-size:6px;color:#555;background:#0a1a0a;padding:2px 6px;border-radius:2px">16 bits</div>
+            </div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Total size of IP packet (header + data) in bytes. Max 65,535. MTU usually limits to 1500 bytes on Ethernet.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rev" id="s4-f3" style="border:1px solid #1a0a0a;border-radius:2px;background:#040810;overflow:hidden">
+        <div style="display:flex;align-items:stretch">
+          <div style="width:8px;background:#e85050;flex-shrink:0"></div>
+          <div style="padding:8px 10px;flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:7px;color:#e85050">TTL</div>
+              <div style="font-size:6px;color:#555;background:#140808;padding:2px 6px;border-radius:2px">8 bits</div>
+            </div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Decremented by 1 at each router. Packet dropped at 0. Linux default=64, Windows=128, network gear=255.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rev" id="s4-f4" style="border:1px solid #1a0a1a;border-radius:2px;background:#040810;overflow:hidden">
+        <div style="display:flex;align-items:stretch">
+          <div style="width:8px;background:#a060c0;flex-shrink:0"></div>
+          <div style="padding:8px 10px;flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:7px;color:#a060c0">PROTOCOL</div>
+              <div style="font-size:6px;color:#555;background:#0d080f;padding:2px 6px;border-radius:2px">8 bits</div>
+            </div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Identifies what's in the payload so the OS knows which socket to hand it to. Critical for L4 demultiplexing.</div>
+            <div style="display:flex;gap:5px;margin-top:6px">
+              <div style="font-size:6px;padding:3px 7px;border:1px solid #1a3a2a;border-radius:2px;color:#4eff9a;background:#071507">6=TCP</div>
+              <div style="font-size:6px;padding:3px 7px;border:1px solid #1a2a3a;border-radius:2px;color:#4ec9e1;background:#040810">17=UDP</div>
+              <div style="font-size:6px;padding:3px 7px;border:1px solid #2a1a0a;border-radius:2px;color:#e8a020;background:#0d0700">1=ICMP</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rev" id="s4-f5" style="border:1px solid #0d2a3a;border-radius:2px;background:#040810;overflow:hidden">
+        <div style="display:flex;align-items:stretch">
+          <div style="width:8px;background:#4eff9a;flex-shrink:0"></div>
+          <div style="padding:8px 10px;flex:1">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-size:7px;color:#4eff9a">SRC / DST IP</div>
+              <div style="font-size:6px;color:#555;background:#071507;padding:2px 6px;border-radius:2px">32 bits each</div>
+            </div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">The actual addresses routers use to make forwarding decisions. <span class="gn">Never change</span> end-to-end (unlike MAC which changes every hop).</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- sample header hex view -->
+      <div class="rev" id="s4-hex" style="border:1px solid #0d1a2a;border-radius:2px;background:#040810;padding:9px">
+        <div style="font-size:6px;color:#555;margin-bottom:5px;letter-spacing:1px">REAL IPv4 HEADER (HEX DUMP)</div>
+        <div style="font-size:7px;color:#4ec9e1;font-family:monospace,monospace;line-height:2;letter-spacing:1px">
+          <span style="color:#4ec9e1">45</span> <span style="color:#333">00</span> <span style="color:#e8a020">05 dc</span> <span style="color:#333">1a 2b 40 00</span> <span style="color:#e85050">40</span> <span style="color:#a060c0">06</span> <span style="color:#333">b2 c3</span><br>
+          <span style="color:#4eff9a">c0 a8 01 32</span> <span style="color:#4eff9a">17 2d 43 59</span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+          <div style="font-size:5px;color:#4ec9e1">45=v4,IHL=5</div>
+          <div style="font-size:5px;color:#e8a020">05dc=1500B</div>
+          <div style="font-size:5px;color:#e85050">40=TTL 64</div>
+          <div style="font-size:5px;color:#a060c0">06=TCP</div>
+          <div style="font-size:5px;color:#4eff9a">c0a80132=192.168.1.50</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">HEADER SIZE</div>
+    <div class="ih">20 bytes minimum — every packet, everywhere</div>
+    <div class="il" style="font-size:7px">The IPv4 header has been unchanged since RFC 791 in 1981. Every HTTP request, video stream, and SSH session carries these same 20+ bytes at the front.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">20B</div><div class="sl">min header<br>overhead</div></div>
+    <div class="sc"><div class="sv am">1981</div><div class="sl">RFC 791<br>unchanged</div></div>
+    <div class="sc"><div class="sv gn">5</div><div class="sl">key fields<br>to know</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 5: PROTOCOL NUMBERS ══════════ -->
+<div class="scene" id="s5" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4eff9a">PROTOCOL NUMBERS</div>
+    <div class="hdr-sub">HOW IP KNOWS WHAT'S INSIDE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEMUX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PROTOCOL FIELD</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- incoming packet split -->
+      <div class="rev" id="s5-split" style="border:2px solid #0d2a0d;border-radius:3px;background:#040810;padding:10px">
+        <div style="font-size:7px;color:#4eff9a;text-align:center;letter-spacing:1px;margin-bottom:10px">PROTOCOL FIELD ROUTES TO RIGHT HANDLER</div>
+        <svg width="294" height="120" viewBox="0 0 294 120" id="s5-svg">
+          <!-- incoming packet -->
+          <rect x="97" y="0" width="100" height="28" rx="3" fill="#071507" stroke="#1a3a1a" stroke-width="1.5"/>
+          <text x="147" y="11" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">IP PACKET</text>
+          <text x="147" y="22" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">PROTO = ?</text>
+
+          <!-- vertical line down -->
+          <line id="s5-line0" x1="147" y1="28" x2="147" y2="50" stroke="#1a3a1a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+
+          <!-- split lines -->
+          <line id="s5-line1" x1="37" y1="50" x2="257" y2="50" stroke="#1a3a1a" stroke-width="1.5" opacity="0"/>
+          <line id="s5-line2" x1="37" y1="50" x2="37" y2="68" stroke="#1a3a1a" stroke-width="1.5" opacity="0"/>
+          <line id="s5-line3" x1="147" y1="50" x2="147" y2="68" stroke="#1a3a1a" stroke-width="1.5" opacity="0"/>
+          <line id="s5-line4" x1="257" y1="50" x2="257" y2="68" stroke="#1a3a1a" stroke-width="1.5" opacity="0"/>
+
+          <!-- TCP box -->
+          <rect id="s5-tcp" x="0" y="68" width="74" height="52" rx="3" fill="#071507" stroke="#1a4a1a" stroke-width="1.5" opacity="0"/>
+          <text id="s5-tcpt1" x="37" y="84" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6" opacity="0">TCP</text>
+          <text id="s5-tcpt2" x="37" y="96" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="7" opacity="0">06</text>
+          <text id="s5-tcpt3" x="37" y="113" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">HTTP·SSH·TLS</text>
+
+          <!-- UDP box -->
+          <rect id="s5-udp" x="110" y="68" width="74" height="52" rx="3" fill="#040c14" stroke="#0d2a3a" stroke-width="1.5" opacity="0"/>
+          <text id="s5-udpt1" x="147" y="84" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6" opacity="0">UDP</text>
+          <text id="s5-udpt2" x="147" y="96" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="7" opacity="0">17</text>
+          <text id="s5-udpt3" x="147" y="113" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">DNS·QUIC·VoIP</text>
+
+          <!-- ICMP box -->
+          <rect id="s5-icmp" x="220" y="68" width="74" height="52" rx="3" fill="#0d0900" stroke="#2a1a0a" stroke-width="1.5" opacity="0"/>
+          <text id="s5-icmpt1" x="257" y="84" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5" opacity="0">ICMP</text>
+          <text id="s5-icmpt2" x="257" y="96" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="7" opacity="0">01</text>
+          <text id="s5-icmpt3" x="257" y="113" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">PING·TRACERT</text>
+        </svg>
+      </div>
+
+      <!-- detail cards -->
+      <div class="rev" id="s5-c1" style="border:2px solid #1a4a1a;border-radius:3px;padding:11px;background:#071507">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:20px;color:#4eff9a;width:28px;text-align:center;font-family:monospace">6</div>
+          <div style="font-size:8px;color:#4eff9a">TCP — Transmission Control Protocol</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Connection-oriented. Guarantees delivery, order, and error-checking. <span class="gn">3-way handshake</span> before data flows. HTTP, HTTPS, SSH, SMTP all use TCP. Slower but reliable.</div>
+      </div>
+
+      <div class="rev" id="s5-c2" style="border:2px solid #0d2a3a;border-radius:3px;padding:11px;background:#040c14">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:20px;color:#4ec9e1;width:28px;text-align:center;font-family:monospace">17</div>
+          <div style="font-size:8px;color:#4ec9e1">UDP — User Datagram Protocol</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Connectionless. Fire-and-forget. No handshake, no guarantee. <span class="cy">DNS, QUIC, VoIP, gaming, streaming</span> use UDP. Fast — but you handle retries yourself.</div>
+      </div>
+
+      <div class="rev" id="s5-c3" style="border:2px solid #2a1a0a;border-radius:3px;padding:11px;background:#0d0900">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:20px;color:#e8a020;width:28px;text-align:center;font-family:monospace">1</div>
+          <div style="font-size:8px;color:#e8a020">ICMP — Internet Control Message Protocol</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Not for data — for <span class="am">network diagnostics</span>. Ping uses ICMP Echo. Traceroute reads ICMP Time Exceeded. TTL=0 sends ICMP back to sender automatically.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">KEY TAKEAWAY</div>
+    <div class="ih gn">IP routes it. Protocol field says what to do with it.</div>
+    <div class="il" style="font-size:7px">The OS reads the Protocol field and hands the payload to the right L4 handler. No protocol field = no way to demultiplex. It's how one IP can run HTTP, SSH, and DNS simultaneously.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">6</div><div class="sl">TCP<br>reliable</div></div>
+    <div class="sc"><div class="sv cy">17</div><div class="sl">UDP<br>fast</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">ICMP<br>control</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene = 1;
+let timers = [];
+function clearTimers() { timers.forEach(t => clearTimeout(t)); timers = []; }
+function delay(fn, ms) { timers.push(setTimeout(fn, ms)); }
+
+// FIX BUG 8: removed redundant resetScene() call from goScene — playScene already calls it
+function goScene(n) {
+  clearTimers();
+  document.getElementById('s' + currentScene).classList.remove('active');
+  currentScene = n;
+  document.getElementById('s' + n).classList.add('active');
+  playScene(n);
+}
+
+function setOp(id, v) { const el = document.getElementById(id); if (el) el.setAttribute('opacity', v); }
+function addV(id) { const el = document.getElementById(id); if (el) el.classList.add('visible'); }
+function rmV(id) { const el = document.getElementById(id); if (el) el.classList.remove('visible'); }
+
+/* ─── SVG position helper (rAF interpolation) ───
+   FIX BUG 1 & 2: CSS transitions on cx/cy setAttribute are unreliable cross-browser.
+   requestAnimationFrame lerp is guaranteed to work everywhere for SVG attributes.
+*/
+function moveSvgCircle(el, toCx, toCy, durationMs, onDone) {
+  if (!el) return;
+  if (durationMs === 0) {
+    el.setAttribute('cx', toCx);
+    el.setAttribute('cy', toCy);
+    if (onDone) onDone();
+    return;
+  }
+  const fromCx = parseFloat(el.getAttribute('cx')) || 0;
+  const fromCy = parseFloat(el.getAttribute('cy')) || 0;
+  const start = performance.now();
+  function ease(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+  function step(now) {
+    const t = Math.min((now - start) / durationMs, 1);
+    const e = ease(t);
+    el.setAttribute('cx', fromCx + (toCx - fromCx) * e);
+    el.setAttribute('cy', fromCy + (toCy - fromCy) * e);
+    if (t < 1) { requestAnimationFrame(step); }
+    else { el.setAttribute('cx', toCx); el.setAttribute('cy', toCy); if (onDone) onDone(); }
+  }
+  requestAnimationFrame(step);
+}
+
+/* ─── SVG rect width animation (rAF interpolation) ───
+   FIX BUG 3 & 7: style.width ignored on SVG rects in Firefox/Safari.
+   rAF setAttribute interpolation is the only fully reliable approach.
+   FIX BUG 4: fill set once via setAttribute only — no style.fill conflict.
+*/
+function animateSvgWidth(el, fromW, toW, durationMs, fillColor) {
+  if (!el) return;
+  if (fillColor) el.setAttribute('fill', fillColor);
+  const start = performance.now();
+  function ease(t) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
+  function step(now) {
+    const t = Math.min((now - start) / durationMs, 1);
+    const e = ease(t);
+    el.setAttribute('width', Math.round(fromW + (toW - fromW) * e));
+    if (t < 1) requestAnimationFrame(step);
+    else el.setAttribute('width', toW);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ─── packet animation on scene 1 globe ─── */
+function animGlobe() {
+  const pkt = document.getElementById('s1-pkt');
+  const pktT = document.getElementById('s1-pkt-t'); // FIX BUG 6: element now exists in HTML
+  if (!pkt) return;
+
+  const hops = [
+    { cx: 248, cy: 84, ttl: 63, hop: 's1-h1', router: 's1-r1' },
+    { cx: 205, cy: 66, ttl: 62, hop: 's1-h2', router: 's1-r2' },
+    { cx: 167, cy: 52, ttl: 61, hop: 's1-h3', router: 's1-r3' },
+    { cx: 127, cy: 46, ttl: 60, hop: 's1-h4', router: 's1-r4' },
+    { cx: 96,  cy: 52, ttl: 59, hop: 's1-h5', router: 's1-r5' },
+    { cx: 72,  cy: 60, ttl: 58, hop: null, router: null, done: true },
+  ];
+
+  pkt.setAttribute('opacity', '1');
+  if (pktT) pktT.setAttribute('opacity', '1');
+  pkt.setAttribute('cx', '248');
+  pkt.setAttribute('cy', '88');
+
+  const ttlEl = document.getElementById('s1-ttl');
+
+  hops.forEach((h, i) => {
+    delay(() => {
+      // FIX BUG 1: use style.cx/style.cy transition instead of setAttribute
+      moveSvgCircle(pkt, h.cx, h.cy, 500);
+      if (pktT) {
+        pktT.setAttribute('x', h.cx);
+        pktT.setAttribute('y', h.cy + 3);
+      }
+      if (ttlEl) ttlEl.textContent = h.ttl;
+      if (h.hop) setOp(h.hop, '1');
+      if (h.done) {
+        setOp('s1-done', '1');
+        pkt.setAttribute('fill', '#4eff9a');
+      }
+    }, 600 + i * 700);
+  });
+}
+
+/* ─── hop animation on scene 3 ─── */
+function animHops() {
+  const pkt = document.getElementById('s3-pkt');
+  const pktT = document.getElementById('s3-pkt-t');
+  if (!pkt) return;
+
+  // FIX BUG 5: corrected TTL values — 3 router hops from 64 → 63 → 62 → 61, DST receives 60
+  const positions = [
+    { x: 18,  ttl: '64', barW: 312, col: '#4eff9a', tId: null },
+    { x: 74,  ttl: '63', barW: 270, col: '#4eff9a', tId: 's3-ttl1' },
+    { x: 134, ttl: '62', barW: 228, col: '#e8a020', tId: 's3-ttl2' },
+    { x: 194, ttl: '61', barW: 186, col: '#e8a020', tId: 's3-ttl3' },
+    { x: 296, ttl: '60', barW: 100, col: '#4ec9e1', tId: null, done: true }, // FIX BUG 5: was '59', corrected to '60'
+  ];
+
+  pkt.setAttribute('opacity', '1');
+  if (pktT) pktT.setAttribute('opacity', '1');
+
+  let prevX = 18;
+  positions.forEach((p, i) => {
+    delay(() => {
+      // FIX BUG 2: use rAF interpolation for smooth packet movement
+      moveSvgCircle(pkt, p.x, 52, i === 0 ? 0 : 500);
+      // Sync the PKT text label — snap it to match; rAF on text x isn't needed visually
+      if (pktT) {
+        pktT.setAttribute('x', p.x);
+        pktT.setAttribute('y', '55');
+      }
+
+      const bar = document.getElementById('s3-ttlbar');
+      const num = document.getElementById('s3-ttlnum');
+      const prevW = i === 0 ? 312 : positions[i - 1].barW;
+
+      // FIX BUG 3 & 4: use animateSvgWidth which calls setAttribute (no style.width, no dual fill assignment)
+      if (bar) animateSvgWidth(bar, prevW, p.barW, 500, p.col);
+      if (num) { num.textContent = p.ttl; num.setAttribute('fill', p.col); }
+      if (p.tId) {
+        const el = document.getElementById(p.tId);
+        if (el) { el.textContent = p.ttl; el.setAttribute('fill', p.col); }
+      }
+      if (p.done) { pkt.setAttribute('fill', '#4eff9a'); }
+      prevX = p.x;
+    }, i === 0 ? 0 : 300 + i * 700);
+  });
+}
+
+/* ─── protocol split lines scene 5 ─── */
+function animSplit() {
+  const ids = ['s5-line0', 's5-line1', 's5-line2', 's5-line3', 's5-line4'];
+  ids.forEach((id, i) => delay(() => setOp(id, '1'), 300 + i * 150));
+  const boxes = ['s5-tcp','s5-tcpt1','s5-tcpt2','s5-tcpt3','s5-udp','s5-udpt1','s5-udpt2','s5-udpt3','s5-icmp','s5-icmpt1','s5-icmpt2','s5-icmpt3'];
+  boxes.forEach((id, i) => delay(() => setOp(id, '1'), 900 + i * 80));
+}
+
+function resetScene(n) {
+  if (n === 1) {
+    ['s1-globe', 's1-s1', 's1-s2', 's1-s3'].forEach(id => rmV(id));
+    const pkt = document.getElementById('s1-pkt');
+    if (pkt) { pkt.setAttribute('opacity', '0'); pkt.setAttribute('fill', '#4eff9a'); }
+    const pktT = document.getElementById('s1-pkt-t');
+    if (pktT) pktT.setAttribute('opacity', '0');
+    ['s1-h1','s1-h2','s1-h3','s1-h4','s1-h5','s1-done'].forEach(id => setOp(id, '0'));
+    const ttl = document.getElementById('s1-ttl');
+    if (ttl) ttl.textContent = '64';
+  }
+  if (n === 2) {
+    ['s2-ip', 's2-mac', 's2-tbl', 's2-s1'].forEach(id => rmV(id));
+  }
+  if (n === 3) {
+    ['s3-anim', 's3-drop', 's3-s1', 's3-s2'].forEach(id => rmV(id));
+    const pkt = document.getElementById('s3-pkt');
+    if (pkt) { pkt.setAttribute('opacity', '0'); pkt.setAttribute('cx', '18'); pkt.setAttribute('fill', '#e8a020'); }
+    const pktT = document.getElementById('s3-pkt-t');
+    if (pktT) { pktT.setAttribute('opacity', '0'); pktT.setAttribute('x', '18'); }
+    ['s3-ttl1','s3-ttl2','s3-ttl3'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '--'; el.setAttribute('fill', '#333'); }
+    });
+    // FIX BUG 7: reset bar width via setAttribute, not style.width
+    const bar = document.getElementById('s3-ttlbar');
+    if (bar) { bar.setAttribute('width', '312'); bar.setAttribute('fill', '#1a4a0a'); }
+    const num = document.getElementById('s3-ttlnum');
+    if (num) { num.textContent = '64'; num.setAttribute('fill', '#4eff9a'); }
+  }
+  if (n === 4) {
+    setOp('s4-title', '0');
+    ['s4-f1','s4-f2','s4-f3','s4-f4','s4-f5','s4-hex'].forEach(id => rmV(id));
+  }
+  if (n === 5) {
+    ['s5-split','s5-c1','s5-c2','s5-c3'].forEach(id => rmV(id));
+    const ids = ['s5-line0','s5-line1','s5-line2','s5-line3','s5-line4','s5-tcp','s5-tcpt1','s5-tcpt2','s5-tcpt3','s5-udp','s5-udpt1','s5-udpt2','s5-udpt3','s5-icmp','s5-icmpt1','s5-icmpt2','s5-icmpt3'];
+    ids.forEach(id => setOp(id, '0'));
+  }
+}
+
+function playScene(n) {
+  clearTimers();
+  resetScene(n); // single reset call here (goScene no longer calls it separately — FIX BUG 8)
+
+  if (n === 1) {
+    delay(() => addV('s1-globe'), 200);
+    delay(() => animGlobe(), 600);
+    delay(() => addV('s1-s1'), 1800);
+    delay(() => addV('s1-s2'), 2500);
+    delay(() => addV('s1-s3'), 3200);
+  }
+
+  if (n === 2) {
+    delay(() => addV('s2-ip'), 300);
+    delay(() => addV('s2-mac'), 900);
+    delay(() => addV('s2-tbl'), 1500);
+    delay(() => addV('s2-s1'), 2200);
+  }
+
+  if (n === 3) {
+    delay(() => addV('s3-anim'), 200);
+    delay(() => animHops(), 600);
+    delay(() => addV('s3-drop'), 3200);
+    delay(() => addV('s3-s1'), 3700);
+    delay(() => addV('s3-s2'), 4300);
+  }
+
+  if (n === 4) {
+    delay(() => setOp('s4-title', '1'), 200);
+    ['s4-f1','s4-f2','s4-f3','s4-f4','s4-f5','s4-hex'].forEach((id, i) =>
+      delay(() => addV(id), 500 + i * 380));
+  }
+
+  if (n === 5) {
+    delay(() => addV('s5-split'), 200);
+    delay(() => animSplit(), 500);
+    delay(() => addV('s5-c1'), 1800);
+    delay(() => addV('s5-c2'), 2300);
+    delay(() => addV('s5-c3'), 2800);
+  }
+}
+
+window.addEventListener('load', () => playScene(1));
+</script>
+</body>
+</html>

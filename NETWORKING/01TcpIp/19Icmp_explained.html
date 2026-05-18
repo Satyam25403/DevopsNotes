@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ICMP — More Than Just Ping</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden;}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── shared animation helpers ── */
+.fade{opacity:0;transition:opacity .4s ease}
+.fade.in{opacity:1}
+.beam-wrap{position:relative;height:10px;background:#1a1a2e;border-radius:2px;overflow:hidden}
+.beam{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:width .6s ease-out}
+.beam.c{background:#4ec9e1}
+.beam.a{background:#e8a020}
+.beam.g{background:#4eff9a}
+.beam.r{background:#e85050}
+
+/* ── SCENE 1 — Ping (Echo Req/Reply) ── */
+.ping-host{width:76px;height:68px;border:2px solid #4ec9e1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:8px;color:#4ec9e1;background:#0d1a2e;position:relative}
+.ping-host .icon{font-size:18px}
+.road{flex:1;height:10px;background:#1a1a2e;position:relative;border-radius:2px;overflow:hidden}
+.road-label{font-size:7px;color:#555;text-align:center;margin-top:2px}
+
+/* ── SCENE 2 — Traceroute ── */
+.hop-row{display:flex;align-items:center;gap:0;height:48px;opacity:0;transition:opacity .35s}
+.hop-box{width:58px;height:44px;border:2px solid #333;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:7px;flex-shrink:0;background:#130d1e}
+.hop-box.dead{border-color:#e85050;background:#1a0d0d}
+.hop-box.alive{border-color:#4ec9e1;background:#0d1a2e}
+.hop-box.src{border-color:#4eff9a;background:#0d1a0d}
+.hop-line{flex:1;height:3px;background:#222;position:relative;overflow:visible}
+.hop-pkt{position:absolute;top:-5px;left:0;width:12px;height:12px;border-radius:2px;font-size:6px;display:flex;align-items:center;justify-content:center;transition:left .5s linear}
+.icmp-back{position:absolute;top:2px;right:0;font-size:7px;opacity:0;transition:opacity .3s}
+
+/* ── SCENE 3 — PMTUD ── */
+.mtu-host{width:72px;height:60px;border:2px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:7px}
+.pkt-big{height:22px;background:#e8a020;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#000;font-weight:bold;transition:width .4s}
+.pkt-small{height:16px;background:#4eff9a;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#000}
+.router-box{width:64px;height:52px;border:2px solid #888;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:7px;color:#aaa;background:#111}
+.mtu-label{font-size:7px;color:#e8a020;margin-top:2px;text-align:center}
+
+/* ── SCENE 4 — ICMP Redirect ── */
+.atk-row{display:flex;align-items:center;justify-content:space-between;padding:0 6px}
+.net-box{width:70px;height:54px;border:2px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:7px;text-align:center}
+.evil-badge{font-size:6px;padding:2px 6px;background:#e8505040;border:1px solid #e85050;color:#e85050;border-radius:2px}
+
+/* ── SCENE 5 — "Don't Block ICMP" ── */
+.rule-row{display:flex;align-items:center;gap:8px;padding:6px 10px;border:1px solid #333;border-radius:2px;opacity:0;transition:opacity .4s}
+.rule-icon{font-size:16px;flex-shrink:0}
+.rule-text{font-size:8px;line-height:1.7;color:#ccc}
+.rule-label{font-size:7px;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — Type 8/0: Echo Request / Reply (Ping)
+════════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ICMP — MORE THAN PING</div>
+    <div class="hdr-sub">THE NETWORK'S ERROR NERVOUS SYSTEM</div>
+    <div class="dots">
+      <div class="dot active" id="d1_1"></div>
+      <div class="dot" id="d1_2"></div>
+      <div class="dot" id="d1_3"></div>
+      <div class="dot" id="d1_4"></div>
+      <div class="dot" id="d1_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TYPE 8 / TYPE 0</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PING</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- subtitle -->
+      <div class="fade" id="s1_title" style="text-align:center;font-size:9px;color:#888;line-height:1.8">Echo Request → Echo Reply<br><span style="color:#4ec9e1">the classic ICMP pair</span></div>
+
+      <!-- hosts row -->
+      <div class="fade" id="s1_hosts" style="display:flex;align-items:center;gap:0;margin-top:4px">
+        <div class="ping-host" style="border-color:#4eff9a">
+          <div class="icon">💻</div>
+          <div style="font-size:7px;color:#4eff9a">YOUR PC</div>
+        </div>
+        <!-- road between -->
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;padding:0 6px">
+          <!-- request beam -->
+          <div style="font-size:6px;color:#e8a020;margin-bottom:1px">▶ TYPE 8: ECHO REQ</div>
+          <div class="beam-wrap">
+            <div class="beam a" id="s1_req"></div>
+          </div>
+          <!-- reply beam -->
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;text-align:right">TYPE 0: ECHO REPLY ◀</div>
+          <div class="beam-wrap">
+            <div class="beam g" id="s1_rep" style="left:auto;right:0;width:0;transition:width .6s ease-out"></div>
+          </div>
+        </div>
+        <div class="ping-host" style="border-color:#e8a020">
+          <div class="icon">🌐</div>
+          <div style="font-size:7px;color:#e8a020">SERVER</div>
+        </div>
+      </div>
+
+      <!-- packet anatomy -->
+      <div class="fade" id="s1_anatomy" style="border:1px solid #2a1f3d;padding:10px 10px 8px;background:#120d1f">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">ICMP PACKET ANATOMY</div>
+        <div style="display:flex;gap:0;height:30px;width:100%;border:1px solid #333;border-radius:2px;overflow:hidden">
+          <div style="width:18%;background:#4ec9e1;display:flex;align-items:center;justify-content:center;font-size:6px;color:#000">TYPE</div>
+          <div style="width:18%;background:#e8a020;display:flex;align-items:center;justify-content:center;font-size:6px;color:#000">CODE</div>
+          <div style="width:28%;background:#3a2060;display:flex;align-items:center;justify-content:center;font-size:6px;color:#ccc">CHECKSUM</div>
+          <div style="flex:1;background:#1e1535;display:flex;align-items:center;justify-content:center;font-size:6px;color:#888">DATA / PAYLOAD</div>
+        </div>
+        <div style="display:flex;gap:0;margin-top:3px">
+          <div style="width:18%;font-size:6px;color:#4ec9e1;text-align:center">8=req<br>0=rep</div>
+          <div style="width:18%;font-size:6px;color:#e8a020;text-align:center">sub-<br>type</div>
+          <div style="width:28%;font-size:6px;color:#666;text-align:center">error<br>detect</div>
+          <div style="flex:1;font-size:6px;color:#555;text-align:center">echo carries<br>timestamp</div>
+        </div>
+      </div>
+
+      <!-- RTT display -->
+      <div class="fade" id="s1_rtt" style="display:flex;gap:8px">
+        <div class="sc" style="background:#0d1a0d;border-color:#4eff9a;flex:1;height:52px">
+          <div class="sv gn" id="s1_rtt_val">—</div>
+          <div class="sl">ROUND TRIP TIME</div>
+        </div>
+        <div class="sc" style="flex:1;height:52px">
+          <div class="sv" id="s1_ttl_val">64</div>
+          <div class="sl">TTL IN REPLY</div>
+        </div>
+        <div class="sc" style="flex:1;height:52px;border-color:#e8a020">
+          <div class="sv am">8→0</div>
+          <div class="sl">TYPE FLOW</div>
+        </div>
+      </div>
+
+      <!-- use cases -->
+      <div class="fade" id="s1_uses" style="border-left:3px solid #4ec9e1;padding:8px 10px;background:#0d1a2e20;font-size:8px;line-height:2;color:#aaa">
+        <span style="color:#4ec9e1">USED FOR:</span><br>
+        • Host reachability (ping)<br>
+        • RTT measurement<br>
+        • Packet loss detection
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">TYPE 8 = Echo Request &nbsp;|&nbsp; TYPE 0 = Echo Reply</div>
+    <div class="ih am" id="s1_status">► Press PLAY to watch the ping travel</div>
+  </div>
+  <div class="srow" style="display:none"></div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — Type 11: Time Exceeded → Traceroute
+════════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">ICMP — MORE THAN PING</div>
+    <div class="hdr-sub">HOW TRACEROUTE ACTUALLY WORKS</div>
+    <div class="dots">
+      <div class="dot done" id="d2_1"></div>
+      <div class="dot active" id="d2_2"></div>
+      <div class="dot" id="d2_3"></div>
+      <div class="dot" id="d2_4"></div>
+      <div class="dot" id="d2_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">TYPE 11: TIME EXCEEDED</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">TTL EXPIRY</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;text-align:center;line-height:1.8">Each probe sent with TTL=1, 2, 3…<br><span style="color:#e8a020">each router decrements TTL → dies → reports back</span></div>
+
+      <!-- TTL=1 probe -->
+      <div class="hop-row" id="tr_row1">
+        <div class="hop-box src">
+          <div style="font-size:10px">💻</div>
+          <div>SRC</div>
+        </div>
+        <div class="hop-line" id="tr_l1a">
+          <div class="hop-pkt" id="tr_p1" style="background:#e8a020;color:#000">T1</div>
+          <div class="icmp-back" id="tr_b1" style="color:#e85050">💥T11</div>
+        </div>
+        <div class="hop-box dead" id="tr_hop1">
+          <div style="font-size:10px">📡</div>
+          <div>HOP 1</div>
+          <div style="font-size:6px;color:#e85050">TTL=0!</div>
+        </div>
+        <div class="hop-line" id="tr_l1b" style="background:#111"></div>
+        <div class="hop-box" style="border-color:#333;background:#111">
+          <div style="font-size:10px;opacity:.3">📡</div>
+          <div style="color:#333">HOP 2</div>
+        </div>
+        <div class="hop-line" style="background:#111"></div>
+        <div class="hop-box" style="border-color:#333;background:#111;width:48px">
+          <div style="font-size:8px;opacity:.3">🌐</div>
+          <div style="color:#333;font-size:6px">DEST</div>
+        </div>
+      </div>
+      <div class="fade" id="tr_lbl1" style="font-size:7px;color:#e85050;text-align:center">TTL=1 → dies at HOP 1 → ICMP Type 11 sent back → we learn HOP 1's IP</div>
+
+      <!-- TTL=2 probe -->
+      <div class="hop-row" id="tr_row2">
+        <div class="hop-box src">
+          <div style="font-size:10px">💻</div>
+          <div>SRC</div>
+        </div>
+        <div class="hop-line" id="tr_l2a">
+          <div class="hop-pkt" id="tr_p2" style="background:#4ec9e1;color:#000">T2</div>
+          <div class="icmp-back" id="tr_b2" style="color:#e85050;right:auto;left:0">💥T11</div>
+        </div>
+        <div class="hop-box alive" id="tr_hop2a">
+          <div style="font-size:10px">📡</div>
+          <div>HOP 1</div>
+          <div style="font-size:6px;color:#4ec9e1">TTL-1</div>
+        </div>
+        <div class="hop-line" id="tr_l2b">
+          <div class="hop-pkt" id="tr_p2b" style="background:#4ec9e1;color:#000;left:0">T2</div>
+          <div class="icmp-back" id="tr_b2b" style="color:#e85050">💥T11</div>
+        </div>
+        <div class="hop-box dead" id="tr_hop2b">
+          <div style="font-size:10px">📡</div>
+          <div>HOP 2</div>
+          <div style="font-size:6px;color:#e85050">TTL=0!</div>
+        </div>
+        <div class="hop-line" style="background:#111"></div>
+        <div class="hop-box" style="border-color:#333;background:#111;width:48px">
+          <div style="font-size:8px;opacity:.3">🌐</div>
+          <div style="color:#333;font-size:6px">DEST</div>
+        </div>
+      </div>
+      <div class="fade" id="tr_lbl2" style="font-size:7px;color:#4ec9e1;text-align:center">TTL=2 → survives HOP 1 → dies at HOP 2 → learn HOP 2's IP</div>
+
+      <!-- TTL=3 reaches dest -->
+      <div class="hop-row" id="tr_row3">
+        <div class="hop-box src">
+          <div style="font-size:10px">💻</div>
+          <div>SRC</div>
+        </div>
+        <div class="hop-line">
+          <div class="hop-pkt" id="tr_p3" style="background:#4eff9a;color:#000">T3</div>
+        </div>
+        <div class="hop-box alive">
+          <div style="font-size:10px">📡</div>
+          <div>HOP 1</div>
+        </div>
+        <div class="hop-line">
+          <div class="hop-pkt" id="tr_p3b" style="background:#4eff9a;color:#000;left:0">T3</div>
+        </div>
+        <div class="hop-box alive">
+          <div style="font-size:10px">📡</div>
+          <div>HOP 2</div>
+        </div>
+        <div class="hop-line">
+          <div class="hop-pkt" id="tr_p3c" style="background:#4eff9a;color:#000;left:0">T3</div>
+        </div>
+        <div class="hop-box" style="border-color:#4eff9a;background:#0d1a0d;width:48px">
+          <div style="font-size:8px">🌐</div>
+          <div style="font-size:6px;color:#4eff9a">DEST</div>
+          <div style="font-size:6px;color:#4eff9a">T0!</div>
+        </div>
+      </div>
+      <div class="fade" id="tr_lbl3" style="font-size:7px;color:#4eff9a;text-align:center">TTL=3 → survives all hops → ICMP Type 0 echo reply from destination!</div>
+
+      <!-- result map -->
+      <div class="fade" id="tr_map" style="border:1px solid #2a3a4d;padding:8px 10px;background:#0a1520;font-size:7px;line-height:2.2;color:#888">
+        <span style="color:#4ec9e1">TRACEROUTE MAP BUILT:</span><br>
+        <span style="color:#e8a020">1.</span> 192.168.1.1 &nbsp; 2ms<br>
+        <span style="color:#4ec9e1">2.</span> 10.0.0.254 &nbsp;&nbsp;14ms<br>
+        <span style="color:#4eff9a">3.</span> 93.184.216.34 &nbsp;52ms ✓
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">ICMP Type 11 = Time Exceeded (TTL reached zero)</div>
+    <div class="ih am" id="s2_status">► Watch TTL probes map each hop</div>
+  </div>
+  <div class="srow" style="display:none"></div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — Type 3 Code 4: PMTUD
+════════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">ICMP — MORE THAN PING</div>
+    <div class="hdr-sub">PATH MTU DISCOVERY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">TYPE 3 CODE 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FRAG NEEDED</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;text-align:center;line-height:1.8">Sender assumes large MTU. Router can't<br>fragment (DF bit set). <span style="color:#e85050">Sends ICMP back.</span></div>
+
+      <!-- attempt 1: big packet rejected -->
+      <div class="fade" id="pm_a1" style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:8px;color:#e8a020">ATTEMPT 1 — 1500 byte packet (DF=1)</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="mtu-host" style="border-color:#4eff9a;color:#4eff9a">
+            <div style="font-size:12px">💻</div>
+            <div style="font-size:7px">HOST</div>
+            <div style="font-size:6px;color:#888">MTU?</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div class="beam-wrap" id="pm_b1w">
+              <div class="beam r" id="pm_b1" style="height:22px;margin-top:-6px"></div>
+            </div>
+            <div style="font-size:6px;color:#e85050;text-align:center" id="pm_rej">✗ TOO BIG — DROPPED</div>
+            <div class="beam-wrap" id="pm_b1rw">
+              <div class="beam r" id="pm_b1r" style="right:0;left:auto"></div>
+            </div>
+            <div style="font-size:6px;color:#e85050;text-align:right" id="pm_t3">ICMP T3C4: MTU=576 ▶</div>
+          </div>
+          <div class="router-box" id="pm_r1">
+            <div style="font-size:12px">📡</div>
+            <div>ROUTER</div>
+            <div style="font-size:6px;color:#e85050" id="pm_r1lbl">MTU=576</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- attempt 2: small packet succeeds -->
+      <div class="fade" id="pm_a2" style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:8px;color:#4eff9a">ATTEMPT 2 — 576 byte packet (adjusted)</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="mtu-host" style="border-color:#4ec9e1;color:#4ec9e1">
+            <div style="font-size:12px">💻</div>
+            <div style="font-size:7px">HOST</div>
+            <div style="font-size:6px;color:#4eff9a">MTU=576</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div class="beam-wrap">
+              <div class="beam g" id="pm_b2"></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center" id="pm_ok">✓ FITS — FORWARDED</div>
+          </div>
+          <div class="router-box" style="border-color:#4ec9e1">
+            <div style="font-size:12px">📡</div>
+            <div style="color:#4ec9e1">ROUTER</div>
+            <div style="font-size:6px;color:#4eff9a">OK!</div>
+          </div>
+          <div style="width:4px"></div>
+          <div class="mtu-host" style="border-color:#4eff9a;color:#4eff9a;width:52px">
+            <div style="font-size:12px">🌐</div>
+            <div style="font-size:6px">DEST</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what breaks when blocked -->
+      <div class="fade" id="pm_block" style="background:#1a0d0d;border:2px solid #e85050;padding:10px 10px;margin-top:4px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:8px">⚠ IF ICMP T3C4 IS BLOCKED:</div>
+        <div style="font-size:7px;color:#ccc;line-height:2.1">
+          • Host keeps sending 1500-byte packets<br>
+          • Router keeps silently dropping them<br>
+          • TCP connection hangs forever<br>
+          • <span style="color:#e85050">PMTUD black hole — mysterious failure!</span>
+        </div>
+      </div>
+
+      <!-- MTU comparison -->
+      <div class="fade" id="pm_table" style="font-size:7px;border:1px solid #2a1f3d;padding:8px 10px;background:#120d1f;line-height:2.2">
+        <span style="color:#4ec9e1">COMMON MTU VALUES:</span><br>
+        <span style="color:#4eff9a">Ethernet: 1500 bytes</span><br>
+        <span style="color:#e8a020">PPPoE DSL: 1492 bytes</span><br>
+        <span style="color:#888">Old links: 576 bytes</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Type 3 Code 4 = "Fragmentation Needed, DF set"</div>
+    <div class="ih rd" id="s3_status">► Blocking this = mysterious TCP black holes</div>
+  </div>
+  <div class="srow" style="display:none"></div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play am" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 4 — Type 5: ICMP Redirect Attack
+════════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#1a0d0d">
+  <div class="hdr" style="background:#1a0d0d">
+    <div class="hdr-title">ICMP — MORE THAN PING</div>
+    <div class="hdr-sub">TYPE 5: REDIRECT — ATTACK VECTOR</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">TYPE 5: REDIRECT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a0d0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;text-align:center;line-height:1.8">ICMP Redirect tells a host to<br><span style="color:#e85050">use a different gateway</span> — easily spoofed!</div>
+
+      <!-- normal flow -->
+      <div class="fade" id="rd_norm">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">✓ NORMAL TRAFFIC FLOW</div>
+        <div class="atk-row">
+          <div class="net-box" style="border-color:#4eff9a;color:#4eff9a">
+            <div style="font-size:14px">💻</div>
+            <div>HOST</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:2px">
+            <div class="beam-wrap" style="width:100%">
+              <div class="beam g" id="rd_b1"></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a">──────────────▶</div>
+          </div>
+          <div class="net-box" style="border-color:#4ec9e1;color:#4ec9e1">
+            <div style="font-size:14px">📡</div>
+            <div style="font-size:6px">REAL GW</div>
+          </div>
+          <div style="font-size:10px">→</div>
+          <div class="net-box" style="border-color:#888;color:#888;width:60px">
+            <div style="font-size:12px">🌐</div>
+            <div style="font-size:6px">INET</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- attacker injects redirect -->
+      <div class="fade" id="rd_atk">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">✗ ATTACKER SENDS FAKE TYPE 5</div>
+        <div style="display:flex;align-items:flex-start;gap:8px;padding:0 6px">
+          <div class="net-box" style="border-color:#e85050;color:#e85050;width:70px">
+            <div style="font-size:14px">😈</div>
+            <div style="font-size:6px">ATTACKER</div>
+            <div class="evil-badge">on LAN</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px;padding-top:10px">
+            <div class="beam-wrap">
+              <div class="beam r" id="rd_b2"></div>
+            </div>
+            <div style="font-size:6px;color:#e85050;text-align:center">ICMP TYPE 5: "use ME instead!"</div>
+          </div>
+          <div class="net-box" style="border-color:#4eff9a;color:#4eff9a">
+            <div style="font-size:14px">💻</div>
+            <div>HOST</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- result: traffic rerouted -->
+      <div class="fade" id="rd_result">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">TRAFFIC NOW ROUTES THROUGH ATTACKER</div>
+        <div class="atk-row">
+          <div class="net-box" style="border-color:#e85050;color:#ccc">
+            <div style="font-size:14px">💻</div>
+            <div style="font-size:6px;color:#e85050">HOST</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;flex:1;gap:2px">
+            <div class="beam-wrap">
+              <div class="beam r" id="rd_b3"></div>
+            </div>
+          </div>
+          <div class="net-box" style="border-color:#e85050;color:#e85050">
+            <div style="font-size:14px">😈</div>
+            <div style="font-size:6px">MitM</div>
+          </div>
+          <div style="font-size:10px;color:#e85050">→</div>
+          <div class="net-box" style="border-color:#888;color:#888;width:60px">
+            <div style="font-size:12px">🌐</div>
+            <div style="font-size:6px">INET</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#e85050;text-align:center;margin-top:4px">All your packets pass through attacker 👁</div>
+      </div>
+
+      <!-- mitigation -->
+      <div class="fade" id="rd_fix" style="border-left:3px solid #4eff9a;padding:8px 10px;background:#0d1a0d20;font-size:7px;line-height:2;color:#aaa">
+        <span style="color:#4eff9a">MITIGATIONS:</span><br>
+        • Disable ICMP redirects on hosts<br>
+        • <code style="color:#4ec9e1">sysctl net.ipv4.conf.all.accept_redirects=0</code>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Type 5 = "Use this gateway instead" — trivially spoofed</div>
+    <div class="ih rd" id="s4_status">► Watch attacker hijack the route</div>
+  </div>
+  <div class="srow" style="display:none"></div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" style="border-color:#e85050;color:#e85050" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 5 — Don't Block ICMP (summary)
+════════════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">ICMP — MORE THAN PING</div>
+    <div class="hdr-sub">WHAT YOU CAN AND CAN'T BLOCK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FIREWALL RULES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;text-align:center;line-height:1.8">"Block all ICMP" is a <span style="color:#e85050">dangerous myth.</span><br>These types MUST be allowed:</div>
+
+      <!-- MUST ALLOW -->
+      <div class="rule-row fade" id="r5_1" style="border-color:#4eff9a20;background:#0d1a0d20">
+        <div class="rule-icon">✅</div>
+        <div>
+          <div class="rule-text"><span style="color:#4eff9a">TYPE 3 CODE 4</span> — Frag Needed</div>
+          <div class="rule-label" style="color:#888">Required for PMTUD — blocks silently break TCP</div>
+        </div>
+      </div>
+
+      <div class="rule-row fade" id="r5_2" style="border-color:#4eff9a20;background:#0d1a0d20">
+        <div class="rule-icon">✅</div>
+        <div>
+          <div class="rule-text"><span style="color:#4eff9a">TYPE 11</span> — Time Exceeded</div>
+          <div class="rule-label" style="color:#888">Required for traceroute / path diagnostics</div>
+        </div>
+      </div>
+
+      <div class="rule-row fade" id="r5_3" style="border-color:#4ec9e120;background:#0d1a2e30">
+        <div class="rule-icon">✅</div>
+        <div>
+          <div class="rule-text"><span style="color:#4ec9e1">TYPE 8/0</span> — Echo Req/Reply</div>
+          <div class="rule-label" style="color:#888">Allow outbound; inbound optional</div>
+        </div>
+      </div>
+
+      <!-- CAN RESTRICT -->
+      <div class="rule-row fade" id="r5_4" style="border-color:#e8a02030;background:#1a1005">
+        <div class="rule-icon">⚠️</div>
+        <div>
+          <div class="rule-text"><span style="color:#e8a020">TYPE 5</span> — Redirect</div>
+          <div class="rule-label" style="color:#888">Block or disable on hosts — attack vector</div>
+        </div>
+      </div>
+
+      <div class="rule-row fade" id="r5_5" style="border-color:#e8500030;background:#1a0d0d20">
+        <div class="rule-icon">🚫</div>
+        <div>
+          <div class="rule-text"><span style="color:#e85050">TYPE 17/18</span> — Address Mask</div>
+          <div class="rule-label" style="color:#888">Obsolete — block safely</div>
+        </div>
+      </div>
+
+      <!-- NDP note -->
+      <div class="fade" id="r5_ndp" style="border:2px solid #4ec9e1;padding:10px 10px;background:#0a1520;margin-top:2px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:6px">IPv6 MAKES IT WORSE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          ICMPv6 Types 133–137 are <span style="color:#4eff9a">NDP</span><br>
+          (Neighbor Discovery Protocol)<br>
+          Blocking ICMPv6 = <span style="color:#e85050">IPv6 totally breaks</span><br>
+          No ARP, no router discovery, nothing.
+        </div>
+      </div>
+
+      <!-- key takeaway -->
+      <div class="fade" id="r5_take" style="background:#4ec9e115;border-left:3px solid #4ec9e1;padding:8px 10px;font-size:8px;color:#4ec9e1;line-height:1.9">
+        ICMP = network's error layer.<br>Filter <em>selectively</em>, never blindly block.
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">The security rule: filter ICMP, never nuke it</div>
+    <div class="ih" id="s5_status">► See what to allow vs block</div>
+  </div>
+  <div class="srow" style="display:none"></div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur = 1;
+const total = 5;
+
+function goScene(n) {
+  document.getElementById('s'+cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s'+cur).classList.add('active');
+  resetScene(cur);
+}
+
+function resetScene(n) {
+  const fades = document.querySelectorAll('#s'+n+' .fade');
+  fades.forEach(f => f.classList.remove('in'));
+  const beams = document.querySelectorAll('#s'+n+' .beam');
+  beams.forEach(b => { b.style.width='0'; b.style.transition='none'; });
+  const hoprows = document.querySelectorAll('#s'+n+' .hop-row');
+  hoprows.forEach(r => r.style.opacity='0');
+  const pkts = document.querySelectorAll('#s'+n+' .hop-pkt');
+  pkts.forEach(p => { p.style.left='0'; p.style.transition='none'; });
+  const ibacks = document.querySelectorAll('#s'+n+' .icmp-back');
+  ibacks.forEach(i => i.style.opacity='0');
+}
+
+function animBeam(id, delay, dur) {
+  const b = document.getElementById(id);
+  if(!b) return;
+  setTimeout(()=>{
+    b.style.transition = `width ${dur||0.6}s ease-out`;
+    b.style.width='100%';
+  }, delay);
+}
+
+function fadeIn(id, delay) {
+  setTimeout(()=>{
+    const el = document.getElementById(id);
+    if(el) el.classList.add('in');
+  }, delay);
+}
+
+function playScene(n) {
+  resetScene(n);
+  // small delay to let CSS reset apply
+  setTimeout(()=>{ runScene(n); }, 60);
+}
+
+function runScene(n) {
+  if(n===1) runS1();
+  if(n===2) runS2();
+  if(n===3) runS3();
+  if(n===4) runS4();
+  if(n===5) runS5();
+}
+
+/* ─── SCENE 1: Ping ─── */
+function runS1() {
+  fadeIn('s1_title', 100);
+  fadeIn('s1_hosts', 300);
+  // request beam
+  setTimeout(()=>{
+    const b = document.getElementById('s1_req');
+    b.style.transition='width .6s ease-out';
+    b.style.width='100%';
+  }, 600);
+  // reply beam (RTL: we animate right-to-left via width from right side)
+  setTimeout(()=>{
+    const b = document.getElementById('s1_rep');
+    b.style.transition='width .6s ease-out';
+    b.style.width='100%';
+  }, 1400);
+  // rtt counter
+  setTimeout(()=>{ document.getElementById('s1_rtt_val').textContent='12ms'; }, 1800);
+  document.getElementById('s1_status').textContent='📡 Request sent…';
+  setTimeout(()=>{ document.getElementById('s1_status').textContent='↩ Echo Reply received — 12ms RTT'; }, 1800);
+  fadeIn('s1_anatomy', 900);
+  fadeIn('s1_rtt', 1800);
+  fadeIn('s1_uses', 2400);
+}
+
+/* ─── SCENE 2: Traceroute ─── */
+function runS2() {
+  document.getElementById('s2_status').textContent='TTL=1: probe departing…';
+
+  // Row 1: TTL=1
+  setTimeout(()=>{
+    document.getElementById('tr_row1').style.opacity='1';
+    document.getElementById('tr_row1').style.transition='opacity .4s';
+    // packet moves right to hop1
+    const p = document.getElementById('tr_p1');
+    const line = document.getElementById('tr_l1a');
+    const lw = line.offsetWidth - 16;
+    p.style.transition='left .5s linear';
+    p.style.left = lw+'px';
+  }, 300);
+  setTimeout(()=>{
+    // hop1 flashes red
+    document.getElementById('tr_hop1').style.boxShadow='0 0 0 3px #e85050';
+    // icmp back appears
+    const b = document.getElementById('tr_b1');
+    b.style.opacity='1';
+    document.getElementById('s2_status').textContent='HOP 1 → ICMP T11 back to src!';
+  }, 900);
+  fadeIn('tr_lbl1', 1100);
+
+  // Row 2: TTL=2
+  setTimeout(()=>{
+    document.getElementById('tr_row2').style.opacity='1';
+    document.getElementById('tr_row2').style.transition='opacity .4s';
+    const p2 = document.getElementById('tr_p2');
+    const l2a = document.getElementById('tr_l2a');
+    p2.style.transition='left .5s linear';
+    p2.style.left=(l2a.offsetWidth-16)+'px';
+    document.getElementById('s2_status').textContent='TTL=2: probe to hop 2…';
+  }, 1600);
+  setTimeout(()=>{
+    // passes hop1, now seg2
+    const p2b = document.getElementById('tr_p2b');
+    const l2b = document.getElementById('tr_l2b');
+    p2b.style.transition='left .5s linear';
+    p2b.style.left=(l2b.offsetWidth-16)+'px';
+  }, 2200);
+  setTimeout(()=>{
+    document.getElementById('tr_b2b').style.opacity='1';
+    document.getElementById('s2_status').textContent='HOP 2 → ICMP T11 back!';
+  }, 2800);
+  fadeIn('tr_lbl2', 3000);
+
+  // Row 3: TTL=3 reaches dest
+  setTimeout(()=>{
+    document.getElementById('tr_row3').style.opacity='1';
+    document.getElementById('tr_row3').style.transition='opacity .4s';
+    const p3 = document.getElementById('tr_p3');
+    p3.style.transition='left .45s linear';
+    p3.style.left='40px';
+    document.getElementById('s2_status').textContent='TTL=3: crossing all hops…';
+  }, 3400);
+  setTimeout(()=>{
+    const p3b = document.getElementById('tr_p3b');
+    p3b.style.transition='left .45s linear';
+    p3b.style.left='40px';
+  }, 3900);
+  setTimeout(()=>{
+    const p3c = document.getElementById('tr_p3c');
+    p3c.style.transition='left .45s linear';
+    p3c.style.left='36px';
+    document.getElementById('s2_status').textContent='✓ Destination reached — full path mapped!';
+  }, 4400);
+  fadeIn('tr_lbl3', 4800);
+  fadeIn('tr_map', 5200);
+}
+
+/* ─── SCENE 3: PMTUD ─── */
+function runS3() {
+  fadeIn('pm_a1', 200);
+  document.getElementById('s3_status').textContent='Sending 1500-byte packet…';
+  setTimeout(()=>{
+    const b = document.getElementById('pm_b1');
+    b.style.transition='width .55s ease-out';
+    b.style.width='100%';
+  }, 500);
+  setTimeout(()=>{
+    document.getElementById('pm_r1').style.boxShadow='0 0 0 3px #e85050';
+    document.getElementById('s3_status').textContent='Router drops it — too big for link!';
+  }, 1150);
+  // ICMP back
+  setTimeout(()=>{
+    const br = document.getElementById('pm_b1r');
+    br.style.transition='width .55s ease-out';
+    br.style.width='100%';
+    document.getElementById('s3_status').textContent='ICMP T3C4: "MTU=576" returned to host';
+  }, 1400);
+  // attempt 2
+  fadeIn('pm_a2', 2200);
+  setTimeout(()=>{
+    const b2 = document.getElementById('pm_b2');
+    b2.style.transition='width .6s ease-out';
+    b2.style.width='100%';
+    document.getElementById('s3_status').textContent='576-byte packet fits — success!';
+  }, 2600);
+  fadeIn('pm_block', 3400);
+  fadeIn('pm_table', 4200);
+}
+
+/* ─── SCENE 4: Redirect attack ─── */
+function runS4() {
+  fadeIn('rd_norm', 200);
+  document.getElementById('s4_status').textContent='Normal: host routes via real GW';
+  setTimeout(()=>{
+    const b = document.getElementById('rd_b1');
+    b.style.transition='width .6s ease-out';
+    b.style.width='100%';
+  }, 500);
+  fadeIn('rd_atk', 1400);
+  setTimeout(()=>{
+    const b2 = document.getElementById('rd_b2');
+    b2.style.transition='width .6s ease-out';
+    b2.style.width='100%';
+    document.getElementById('s4_status').textContent='Attacker injects ICMP Type 5!';
+  }, 1800);
+  fadeIn('rd_result', 2800);
+  setTimeout(()=>{
+    const b3 = document.getElementById('rd_b3');
+    b3.style.transition='width .6s ease-out';
+    b3.style.width='100%';
+    document.getElementById('s4_status').textContent='⚠ Traffic now flows through attacker!';
+  }, 3200);
+  fadeIn('rd_fix', 4200);
+}
+
+/* ─── SCENE 5: Summary ─── */
+function runS5() {
+  const items = ['r5_1','r5_2','r5_3','r5_4','r5_5','r5_ndp','r5_take'];
+  items.forEach((id,i)=>{ fadeIn(id, 300 + i*400); });
+  document.getElementById('s5_status').textContent='Reviewing ICMP firewall rules…';
+  setTimeout(()=>{ document.getElementById('s5_status').textContent='Filter selectively — never block blindly.'; }, 3000);
+}
+
+// Auto-play scene 1 on load
+window.addEventListener('load', ()=>{
+  setTimeout(()=>{ playScene(1); }, 400);
+});
+</script>
+</body>
+</html>

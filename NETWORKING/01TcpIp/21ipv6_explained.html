@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>IPv6 Architecture</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden;}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#b06aff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#b06aff}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+.fade{opacity:0;transition:opacity .4s ease}
+.fade.in{opacity:1}
+
+.fill{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:none}
+.fill.rtl{right:0;left:auto}
+.track{position:relative;height:8px;background:#1a1a2e;border-radius:2px;overflow:hidden}
+
+.node{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:2px solid #333;background:#130d1e;flex-shrink:0}
+.node .ico{font-size:16px;line-height:1}
+.node .lbl{font-size:6px;text-align:center;line-height:1.4}
+
+/* address bit display */
+.addr-row{display:flex;gap:2px;border-radius:2px;overflow:hidden;height:26px}
+.addr-seg{display:flex;align-items:center;justify-content:center;font-size:5px;line-height:1.3;text-align:center;font-family:'Press Start 2P',monospace;transition:opacity .3s}
+
+/* type cards */
+.tcard{border:2px solid #333;background:#100d1e;padding:8px 10px;border-radius:2px;opacity:0;transition:opacity .4s}
+.tcard .tc-prefix{font-size:9px;font-family:'Press Start 2P',monospace;margin-bottom:5px}
+.tcard .tc-name{font-size:7px;color:#888;margin-bottom:4px}
+.tcard .tc-desc{font-size:6px;color:#aaa;line-height:1.8}
+
+/* abbreviation step */
+.ab-step{padding:7px 10px;background:#0a0f1a;border:1px solid #1a2a3a;border-radius:2px;opacity:0;transition:opacity .4s}
+.ab-addr{font-size:8px;font-family:'Press Start 2P',monospace;line-height:1.8;word-break:break-all}
+.ab-rule{font-size:6px;color:#888;margin-top:3px}
+
+.code{background:#0a0f1a;border:1px solid #1a3a5a;border-radius:2px;padding:8px 10px;font-size:7px;color:#4ec9e1;line-height:2;letter-spacing:.3px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SCENE 1 — 128-bit address + abbreviation
+══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0d0820">
+  <div class="hdr" style="background:#0d0820">
+    <div class="hdr-title">IPv6 ARCHITECTURE</div>
+    <div class="hdr-sub">ADDRESSES, TYPES & NDP</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b06aff">128-BIT ADDRESSES</span>
+    <span class="sbadge" style="color:#b06aff;border-color:#b06aff">ANATOMY</span>
+  </div>
+  <div class="anim" style="background:#0d0820">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s1_hook" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        IPv4: <span style="color:#e8a020">32 bits → 4.3 billion addrs</span><br>
+        IPv6: <span style="color:#4eff9a">128 bits → 3.4 × 10³⁸ addrs</span><br>
+        <span style="color:#b06aff">Every atom on Earth × 100</span>
+      </div>
+
+      <!-- full 128-bit exploded view -->
+      <div class="fade" id="s1_bits">
+        <div style="font-size:7px;color:#b06aff;margin-bottom:5px">128 BITS = 8 GROUPS OF 16 BITS (HEX)</div>
+        <div style="display:flex;gap:1px;flex-wrap:nowrap;overflow:hidden;border-radius:2px;height:28px">
+          <div class="addr-seg" id="b1" style="flex:1;background:#4ec9e1;color:#000">2001</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b2" style="flex:1;background:#3aafca;color:#000">0db8</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b3" style="flex:1;background:#2070a0;color:#fff">0000</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b4" style="flex:1;background:#1a5080;color:#fff">0000</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b5" style="flex:1;background:#4eff9a;color:#000">0000</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b6" style="flex:1;background:#2acc78;color:#000">0000</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b7" style="flex:1;background:#e8a020;color:#000">0000</div>
+          <div style="width:3px;background:#0d0820;flex-shrink:0"></div>
+          <div class="addr-seg" id="b8" style="flex:1;background:#e86820;color:#fff">0001</div>
+        </div>
+        <div style="display:flex;gap:1px;margin-top:3px;font-size:5px">
+          <div style="flex:1;text-align:center;color:#4ec9e1">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#3aafca">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#4eff9a">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#4eff9a">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#4eff9a">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#4eff9a">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#e8a020">16b</div>
+          <div style="width:3px;flex-shrink:0"></div>
+          <div style="flex:1;text-align:center;color:#e86820">16b</div>
+        </div>
+        <!-- network vs interface -->
+        <div style="display:flex;margin-top:5px;font-size:6px">
+          <div style="flex:4;text-align:center;color:#4ec9e1;border-top:2px solid #4ec9e1;padding-top:3px">← NETWORK PREFIX (64 bits)</div>
+          <div style="width:6px"></div>
+          <div style="flex:4;text-align:center;color:#e8a020;border-top:2px solid #e8a020;padding-top:3px">INTERFACE ID (64 bits) →</div>
+        </div>
+      </div>
+
+      <!-- abbreviation rules -->
+      <div class="fade" id="s1_abrules">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">ABBREVIATION RULES — STEP BY STEP:</div>
+
+        <div class="ab-step" id="ab1">
+          <div style="font-size:6px;color:#888;margin-bottom:4px">FULL ADDRESS:</div>
+          <div class="ab-addr" style="color:#aaa">2001:0db8:0000:0000:<br>0000:0000:0000:0001</div>
+        </div>
+
+        <div class="ab-step" id="ab2" style="margin-top:5px">
+          <div style="font-size:6px;color:#e8a020;margin-bottom:4px">RULE 1 — drop leading zeros in each group:</div>
+          <div class="ab-addr"><span style="color:#e8a020">2001:db8</span><span style="color:#aaa">:0:0:0:0:0:1</span></div>
+          <div class="ab-rule">0db8 → db8 &nbsp;|&nbsp; 0000 → 0</div>
+        </div>
+
+        <div class="ab-step" id="ab3" style="margin-top:5px">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:4px">RULE 2 — replace longest run of :0: with ::&nbsp;(once only):</div>
+          <div class="ab-addr"><span style="color:#aaa">2001:db8</span><span style="color:#4ec9e1">::</span><span style="color:#aaa">1</span></div>
+          <div class="ab-rule">:0:0:0:0:0:0: → :: &nbsp;(6 groups collapsed)</div>
+        </div>
+
+        <div class="ab-step" id="ab4" style="margin-top:5px;border-color:#4eff9a">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:4px">✓ FINAL COMPRESSED FORM:</div>
+          <div class="ab-addr" style="color:#4eff9a;font-size:11px">2001:db8::1</div>
+          <div class="ab-rule" style="color:#4eff9a">39 chars → 11 chars. Same address.</div>
+        </div>
+      </div>
+
+      <div class="fade" id="s1_note" style="border-left:3px solid #b06aff;padding:7px 10px;font-size:7px;color:#aaa;line-height:2;background:#0d0820">
+        <span style="color:#b06aff">::</span> can appear ONCE per address.<br>
+        Expand by filling zeros until 8 groups.<br>
+        <span style="color:#4ec9e1">:: = one or more groups of 0000</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">128 bits = 8 hex groups, colon-separated</div>
+    <div class="ih pu" id="s1_status">► Watch an address shrink from 39 to 11 chars</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 2 — Address Types
+══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1a0d">
+  <div class="hdr" style="background:#0d1a0d">
+    <div class="hdr-title">IPv6 ARCHITECTURE</div>
+    <div class="hdr-sub">ADDRESS TYPES & SCOPES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FOUR ADDRESS TYPES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SCOPE</span>
+  </div>
+  <div class="anim" style="background:#0d1a0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="fade" id="s2_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.8">
+        Every IPv6 address has a <span style="color:#4eff9a">scope</span>.<br>The prefix tells you exactly what it is.
+      </div>
+
+      <!-- scope diagram -->
+      <div class="fade" id="s2_scope" style="position:relative;height:110px">
+        <!-- concentric rings as divs -->
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+          <div style="width:330px;height:100px;border:2px solid #4eff9a22;border-radius:50px;display:flex;align-items:center;justify-content:center;position:relative">
+            <div style="font-size:5px;color:#4eff9a;position:absolute;top:4px;left:12px">GLOBAL (internet)</div>
+            <div style="width:250px;height:74px;border:2px solid #4ec9e122;border-radius:36px;display:flex;align-items:center;justify-content:center;position:relative">
+              <div style="font-size:5px;color:#4ec9e1;position:absolute;top:3px;left:10px">SITE / UNIQUE LOCAL</div>
+              <div style="width:150px;height:48px;border:2px solid #e8a02040;border-radius:22px;display:flex;align-items:center;justify-content:center">
+                <div style="font-size:5px;color:#e8a020;text-align:center">LINK-LOCAL<br>(same subnet)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- type cards -->
+      <div class="tcard" id="tc1" style="border-color:#4eff9a20">
+        <div class="tc-prefix" style="color:#4eff9a">2000::/3</div>
+        <div class="tc-name">Global Unicast Address (GUA)</div>
+        <div class="tc-desc">Routable on the internet. Like IPv4 public IP.<br>Assigned by ISP. Starts with 2 or 3.<br><span style="color:#4eff9a">Example: 2001:db8::1</span></div>
+      </div>
+
+      <div class="tcard" id="tc2" style="border-color:#e8a02040">
+        <div class="tc-prefix" style="color:#e8a020">fe80::/10</div>
+        <div class="tc-name">Link-Local Address (LLA)</div>
+        <div class="tc-desc">Auto-configured on every interface. Never routed.<br>Used for NDP, router discovery on the segment.<br><span style="color:#e8a020">Example: fe80::1%eth0</span></div>
+      </div>
+
+      <div class="tcard" id="tc3" style="border-color:#4ec9e140">
+        <div class="tc-prefix" style="color:#4ec9e1">fc00::/7</div>
+        <div class="tc-name">Unique Local Address (ULA)</div>
+        <div class="tc-desc">Private IPv6 — like RFC1918 (10.x, 192.168.x).<br>Routable within org, not on internet.<br><span style="color:#4ec9e1">Example: fd12:3456:789a::1</span></div>
+      </div>
+
+      <div class="tcard" id="tc4" style="border-color:#b06aff40">
+        <div class="tc-prefix" style="color:#b06aff">ff00::/8</div>
+        <div class="tc-name">Multicast (replaces broadcast!)</div>
+        <div class="tc-desc">Sent to a group, not a single host.<br>ff02::1 = all nodes &nbsp;|&nbsp; ff02::2 = all routers<br><span style="color:#b06aff">No broadcast in IPv6 — ever.</span></div>
+      </div>
+
+      <!-- quick lookup bar -->
+      <div class="fade" id="s2_lookup" style="border:1px solid #1a2a1a;padding:8px 10px;background:#060d06;font-size:7px">
+        <div style="color:#4eff9a;margin-bottom:5px">QUICK PREFIX LOOKUP:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;line-height:2">
+          <span style="color:#4eff9a">2xxx / 3xxx</span><span style="color:#888">→ Global</span>
+          <span style="color:#e8a020">fe80::</span><span style="color:#888">→ Link-local</span>
+          <span style="color:#4ec9e1">fc:: / fd::</span><span style="color:#888">→ Private</span>
+          <span style="color:#b06aff">ff::</span><span style="color:#888">→ Multicast</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Prefix = scope. fe80 = link only. ff = group.</div>
+    <div class="ih" id="s2_status">► See each address type appear in scope</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 3 — No Broadcast → Multicast
+══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a0d1a">
+  <div class="hdr" style="background:#1a0d1a">
+    <div class="hdr-title">IPv6 ARCHITECTURE</div>
+    <div class="hdr-sub">NO BROADCAST — MULTICAST EVERYWHERE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b06aff">MULTICAST vs BROADCAST</span>
+    <span class="sbadge" style="color:#b06aff;border-color:#b06aff">NO BCAST</span>
+  </div>
+  <div class="anim" style="background:#1a0d1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s3_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        IPv4 broadcast = <span style="color:#e85050">flood all hosts</span><br>
+        IPv6 multicast = <span style="color:#4eff9a">only subscribed hosts</span>
+      </div>
+
+      <!-- IPv4 broadcast -->
+      <div class="fade" id="s3_bcast">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">IPv4 BROADCAST (255.255.255.255)</div>
+        <div style="display:flex;align-items:center;justify-content:space-around;padding:0 4px">
+          <div class="node" style="width:52px;height:48px;border-color:#e8a020">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#e8a020;font-size:5px">SENDER</div>
+          </div>
+          <div style="font-size:12px;color:#e85050" id="s3_arrows_bcast">→</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div class="node" style="width:46px;height:36px;border-color:#e85050">
+              <div style="font-size:10px">💻</div>
+              <div class="lbl" style="font-size:5px;color:#e85050">HOST A</div>
+            </div>
+            <div class="node" style="width:46px;height:36px;border-color:#e85050">
+              <div style="font-size:10px">🖨</div>
+              <div class="lbl" style="font-size:5px;color:#e85050">PRINTER</div>
+            </div>
+            <div class="node" style="width:46px;height:36px;border-color:#e85050">
+              <div style="font-size:10px">📷</div>
+              <div class="lbl" style="font-size:5px;color:#e85050">CAMERA</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#e85050;text-align:center;margin-top:4px">Every host woken up, even if irrelevant! 🔊</div>
+      </div>
+
+      <!-- IPv6 multicast -->
+      <div class="fade" id="s3_mcast">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">IPv6 MULTICAST (ff02::1)</div>
+        <div style="display:flex;align-items:center;justify-content:space-around;padding:0 4px">
+          <div class="node" style="width:52px;height:48px;border-color:#4eff9a">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4eff9a;font-size:5px">SENDER</div>
+          </div>
+          <div style="font-size:12px;color:#4eff9a">→</div>
+          <div style="display:flex;flex-direction:column;gap:5px">
+            <div class="node" style="width:46px;height:36px;border-color:#4eff9a" id="s3_ha">
+              <div style="font-size:10px">💻</div>
+              <div class="lbl" style="font-size:5px;color:#4eff9a">HOST A<br>✓ sub</div>
+            </div>
+            <div class="node" style="width:46px;height:36px;border-color:#333" id="s3_pr">
+              <div style="font-size:10px;opacity:.4">🖨</div>
+              <div class="lbl" style="font-size:5px;color:#444">PRINTER<br>no sub</div>
+            </div>
+            <div class="node" style="width:46px;height:36px;border-color:#333" id="s3_ca">
+              <div style="font-size:10px;opacity:.4">📷</div>
+              <div class="lbl" style="font-size:5px;color:#444">CAMERA<br>no sub</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#4eff9a;text-align:center;margin-top:4px">Only subscribed hosts process it ✓</div>
+      </div>
+
+      <!-- key multicast groups -->
+      <div class="fade" id="s3_groups" style="border:1px solid #2a1a2a;padding:9px 10px;background:#0d060d">
+        <div style="font-size:8px;color:#b06aff;margin-bottom:7px">KEY MULTICAST GROUPS:</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#b06aff;font-family:'Press Start 2P',monospace">ff02::1</span>
+            <span style="color:#888">All nodes on link</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#b06aff;font-family:'Press Start 2P',monospace">ff02::2</span>
+            <span style="color:#888">All routers on link</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#b06aff;font-family:'Press Start 2P',monospace">ff02::1:ffxx:xxxx</span>
+            <span style="color:#888">Solicited-node (NDP)</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#b06aff;font-family:'Press Start 2P',monospace">ff02::fb</span>
+            <span style="color:#888">mDNS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s3_note" style="border-left:3px solid #4eff9a;padding:7px 10px;font-size:7px;color:#aaa;line-height:2;background:#060d06">
+        <span style="color:#4eff9a">SECURITY WIN:</span> No broadcast storms.<br>
+        <span style="color:#e85050">SECURITY RISK:</span> ff02::1 still reachable<br>by any attacker on the same segment.
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">IPv6 has zero broadcast — multicast only</div>
+    <div class="ih pu" id="s3_status">► Watch broadcast flood vs targeted multicast</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" style="border-color:#b06aff;color:#b06aff" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 4 — NDP replaces ARP
+══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">IPv6 ARCHITECTURE</div>
+    <div class="hdr-sub">NDP REPLACES ARP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">NEIGHBOR DISCOVERY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ICMPv6</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s4_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        IPv4 ARP = layer-2 broadcast storm.<br>
+        <span style="color:#4ec9e1">NDP = ICMPv6 multicast, targeted & efficient.</span>
+      </div>
+
+      <!-- ARP vs NDP comparison -->
+      <div class="fade" id="s4_cmp" style="display:flex;gap:6px">
+        <div style="flex:1;border:1px solid #e8505040;padding:7px 8px;background:#0f0808">
+          <div style="font-size:7px;color:#e85050;margin-bottom:6px">ARP (IPv4)</div>
+          <div style="font-size:6px;color:#aaa;line-height:2">
+            • Layer 2 broadcast<br>
+            • "Who has 10.0.0.1?"<br>
+            • ALL hosts wake up<br>
+            • No auth → spoofable<br>
+            • O(n) on large LANs
+          </div>
+        </div>
+        <div style="flex:1;border:1px solid #4ec9e140;padding:7px 8px;background:#080f18">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">NDP (IPv6)</div>
+          <div style="font-size:6px;color:#aaa;line-height:2">
+            • ICMPv6 multicast<br>
+            • "NS to ff02::1:ff…"<br>
+            • Only target wakes<br>
+            • SEcure NDP (SEND)<br>
+            • Scales to huge nets
+          </div>
+        </div>
+      </div>
+
+      <!-- NS/NA flow -->
+      <div class="fade" id="s4_flow">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:6px">NS / NA EXCHANGE:</div>
+        <div style="border:1px solid #1a2a3a;padding:8px 10px;background:#080f18;display:flex;flex-direction:column;gap:6px">
+
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="node" style="width:56px;height:48px;border-color:#4ec9e1">
+              <div class="ico">💻</div>
+              <div class="lbl" style="color:#4ec9e1;font-size:5px">HOST A<br>fe80::1</div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <div class="track"><div class="fill" id="s4_ns" style="background:#e8a020"></div></div>
+              <div style="font-size:5px;color:#e8a020;text-align:center">NS: "who is fe80::2?" → ff02::1:ff…:0002</div>
+            </div>
+            <div class="node" style="width:56px;height:48px;border-color:#e8a020" id="s4_b">
+              <div class="ico">💻</div>
+              <div class="lbl" style="color:#e8a020;font-size:5px">HOST B<br>fe80::2</div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="node" style="width:56px;height:48px;border-color:#4eff9a" id="s4_a2">
+              <div class="ico">💻</div>
+              <div class="lbl" style="color:#4eff9a;font-size:5px">HOST A<br>← MAC!</div>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+              <div class="track"><div class="fill rtl" id="s4_na" style="background:#4eff9a"></div></div>
+              <div style="font-size:5px;color:#4eff9a;text-align:center">NA: "I am fe80::2, MAC=aa:bb:cc…" ←</div>
+            </div>
+            <div class="node" style="width:56px;height:48px;border-color:#4ec9e1">
+              <div class="ico">💻</div>
+              <div class="lbl" style="color:#4ec9e1;font-size:5px">HOST B</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NDP message types -->
+      <div class="fade" id="s4_types" style="border:1px solid #1a2a3a;padding:8px 10px;background:#080f18">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:7px">NDP ICMPv6 TYPES:</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:6px;line-height:1.8">
+          <div><span style="color:#4ec9e1">Type 133</span> <span style="color:#888">Router Solicitation &nbsp;(RS) — "any routers?"</span></div>
+          <div><span style="color:#4ec9e1">Type 134</span> <span style="color:#888">Router Advertisement (RA) — "here's prefix"</span></div>
+          <div><span style="color:#4ec9e1">Type 135</span> <span style="color:#888">Neighbor Solicitation &nbsp;(NS) — like ARP req</span></div>
+          <div><span style="color:#4ec9e1">Type 136</span> <span style="color:#888">Neighbor Advertisement (NA) — like ARP rep</span></div>
+          <div><span style="color:#4ec9e1">Type 137</span> <span style="color:#888">Redirect &nbsp;— better route exists</span></div>
+        </div>
+      </div>
+
+      <div class="fade" id="s4_sec" style="border-left:3px solid #e85050;padding:7px 10px;font-size:7px;color:#aaa;line-height:2;background:#0f0808">
+        <span style="color:#e85050">SECURITY NOTE:</span> NDP is spoofable too.<br>
+        <span style="color:#e8a020">RA Guard</span> on switches blocks rogue RAs.<br>
+        <span style="color:#4ec9e1">SEND</span> (RFC 3971) uses crypto — rarely deployed.
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">NDP = ICMPv6 types 133–137. ARP is gone.</div>
+    <div class="ih" id="s4_status">► Watch Neighbor Solicitation / Advertisement</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 5 — SLAAC: auto-configure without DHCP
+══════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0d200d">
+  <div class="hdr" style="background:#0d200d">
+    <div class="hdr-title">IPv6 ARCHITECTURE</div>
+    <div class="hdr-sub">SLAAC — SELF-CONFIGURE WITHOUT DHCP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SLAAC</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">STATELESS</span>
+  </div>
+  <div class="anim" style="background:#0d200d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="fade" id="s5_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        SLAAC = <span style="color:#4eff9a">Stateless Address Auto-Configuration</span><br>
+        No DHCP server needed. Router provides prefix.<br>Host generates its own Interface ID.
+      </div>
+
+      <!-- 4-step SLAAC flow -->
+      <div class="fade" id="s5_step1" style="border:1px solid #0d3a1a;padding:7px 10px;background:#060d06">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:18px">①</div>
+          <div style="flex:1">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">LINK-LOCAL FIRST</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Host auto-builds <span style="color:#e8a020">fe80::</span> + EUI-64 from MAC.<br>Checks uniqueness via DAD (Duplicate Address Detection).</div>
+          </div>
+          <div class="node" style="width:48px;height:44px;border-color:#e8a020">
+            <div class="ico" style="font-size:12px">💻</div>
+            <div class="lbl" style="color:#e8a020;font-size:5px">fe80::1</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s5_step2" style="border:1px solid #0d3a1a;padding:7px 10px;background:#060d06">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:18px">②</div>
+          <div style="flex:1">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">ROUTER SOLICITATION</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Host sends RS to <span style="color:#b06aff">ff02::2</span> (all routers):<br>"Any routers here? Send me your prefix."</div>
+          </div>
+          <div style="font-size:10px">→ 📡</div>
+        </div>
+        <div class="track" style="margin-top:5px"><div class="fill" id="s5_b1" style="background:#4ec9e1"></div></div>
+      </div>
+
+      <div class="fade" id="s5_step3" style="border:1px solid #0d3a1a;padding:7px 10px;background:#060d06">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:18px">③</div>
+          <div style="flex:1">
+            <div style="font-size:7px;color:#b06aff;margin-bottom:3px">ROUTER ADVERTISEMENT</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Router replies from <span style="color:#4ec9e1">fe80::1</span> to <span style="color:#b06aff">ff02::1</span>:<br>Prefix=<span style="color:#4eff9a">2001:db8:cafe:1::/64</span>, lifetime, flags.</div>
+          </div>
+          <div style="font-size:10px">📡 →</div>
+        </div>
+        <div class="track" style="margin-top:5px"><div class="fill rtl" id="s5_b2" style="background:#b06aff"></div></div>
+      </div>
+
+      <div class="fade" id="s5_step4" style="border:2px solid #4eff9a40;padding:7px 10px;background:#030f03">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:18px">④</div>
+          <div style="flex:1">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">ADDRESS BUILT!</div>
+            <div style="font-size:6px;color:#aaa;line-height:1.8">Host combines prefix + Interface ID:<br><span style="color:#4eff9a">2001:db8:cafe:1::</span> + <span style="color:#e8a020">EUI-64-from-MAC</span></div>
+          </div>
+          <div class="node" style="width:58px;height:44px;border-color:#4eff9a">
+            <div class="ico" style="font-size:12px">💻</div>
+            <div class="lbl" style="color:#4eff9a;font-size:4px">GUA ready!</div>
+          </div>
+        </div>
+        <!-- assembled address -->
+        <div style="margin-top:6px;display:flex;gap:1px;height:22px;border-radius:2px;overflow:hidden">
+          <div style="flex:4;background:#4eff9a30;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center;font-size:5px;color:#4eff9a">2001:db8:cafe:1:: (router prefix)</div>
+          <div style="width:3px;background:#0d200d"></div>
+          <div style="flex:4;background:#e8a02030;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;font-size:5px;color:#e8a020">aa:bb:ff:fe:cc:dd (EUI-64 from MAC)</div>
+        </div>
+      </div>
+
+      <!-- privacy extension note -->
+      <div class="fade" id="s5_priv" style="border-left:3px solid #e8a020;padding:7px 10px;font-size:7px;color:#aaa;line-height:2;background:#0f0d03">
+        <span style="color:#e8a020">PRIVACY EXTENSION (RFC 4941):</span><br>
+        EUI-64 leaks your MAC address globally.<br>
+        Modern OSes use random Interface IDs<br>that rotate to prevent tracking.
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">SLAAC = prefix from router + MAC → full GUA</div>
+    <div class="ih" id="s5_status">► Watch a host self-configure its IPv6 address</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur = 1;
+
+function goScene(n) {
+  document.getElementById('s'+cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s'+cur).classList.add('active');
+  resetScene(cur);
+}
+
+function resetScene(n) {
+  document.querySelectorAll('#s'+n+' .fade').forEach(f => f.classList.remove('in'));
+  document.querySelectorAll('#s'+n+' .fill').forEach(b => {
+    b.style.transition = 'none';
+    b.style.width = '0';
+  });
+  document.querySelectorAll('#s'+n+' .tcard').forEach(c => c.style.opacity = '0');
+  document.querySelectorAll('#s'+n+' .ab-step').forEach(c => c.style.opacity = '0');
+}
+
+function fi(id, ms) {
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if(el) el.classList.add('in');
+  }, ms);
+}
+
+function beam(id, ms, dur, rev) {
+  setTimeout(() => {
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.style.transition = `width ${dur||0.55}s ease-out`;
+    b.style.width = '100%';
+  }, ms);
+}
+
+function card(id, ms) {
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if(el) el.style.opacity = '1';
+  }, ms);
+}
+
+function abStep(id, ms) {
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if(el) el.style.opacity = '1';
+  }, ms);
+}
+
+function st(scene, txt, ms) {
+  setTimeout(() => {
+    const el = document.getElementById('s'+scene+'_status');
+    if(el) el.textContent = txt;
+  }, ms);
+}
+
+function playScene(n) {
+  resetScene(n);
+  setTimeout(() => runScene(n), 70);
+}
+
+function runScene(n) {
+  if(n===1) runS1();
+  if(n===2) runS2();
+  if(n===3) runS3();
+  if(n===4) runS4();
+  if(n===5) runS5();
+}
+
+function runS1() {
+  st(1, 'Reading the 128-bit address…', 0);
+  fi('s1_hook', 100);
+  fi('s1_bits', 600);
+  st(1, 'Network prefix (64b) + Interface ID (64b)', 900);
+  fi('s1_abrules', 1400);
+  abStep('ab1', 1700);
+  st(1, 'Rule 1: drop leading zeros per group', 2200);
+  abStep('ab2', 2400);
+  st(1, 'Rule 2: collapse longest :0: run to ::', 3300);
+  abStep('ab3', 3500);
+  st(1, '✓ 2001:db8::1 — same address, 11 chars', 4400);
+  abStep('ab4', 4600);
+  fi('s1_note', 5400);
+}
+
+function runS2() {
+  st(2, 'Every prefix reveals address scope…', 0);
+  fi('s2_intro', 100);
+  fi('s2_scope', 500);
+  st(2, 'GUA — internet-routable, assigned by ISP', 1200);
+  card('tc1', 1400);
+  st(2, 'Link-Local — auto-built, never leaves segment', 2400);
+  card('tc2', 2600);
+  st(2, 'Unique Local — private IPv6 (like RFC1918)', 3400);
+  card('tc3', 3600);
+  st(2, 'Multicast — groups only, no broadcast ever!', 4400);
+  card('tc4', 4600);
+  fi('s2_lookup', 5400);
+  st(2, 'Prefix alone tells you exactly what it is ✓', 5600);
+}
+
+function runS3() {
+  st(3, 'IPv4 broadcast wakes everyone on segment…', 0);
+  fi('s3_intro', 100);
+  fi('s3_bcast', 500);
+  // flash all hosts red
+  setTimeout(() => {
+    document.querySelectorAll('#s3_bcast .node').forEach(n => n.style.boxShadow='0 0 0 3px #e85050');
+  }, 900);
+  st(3, 'Every host interrupted — even the printer!', 1000);
+  fi('s3_mcast', 1800);
+  setTimeout(() => {
+    const ha = document.getElementById('s3_ha');
+    if(ha) ha.style.boxShadow = '0 0 0 3px #4eff9a';
+    st(3, 'ff02::1 — only subscribed host responds ✓', 2400);
+  }, 2200);
+  fi('s3_groups', 3200);
+  fi('s3_note', 4200);
+  st(3, 'No broadcast storms. But ff02::1 still open.', 4400);
+}
+
+function runS4() {
+  st(4, 'Host A needs MAC of fe80::2…', 0);
+  fi('s4_intro', 100);
+  fi('s4_cmp', 500);
+  st(4, 'NS to solicited-node multicast, not broadcast', 1400);
+  fi('s4_flow', 1700);
+  beam('s4_ns', 2000, 0.5);
+  setTimeout(() => {
+    const b = document.getElementById('s4_b');
+    if(b) b.style.boxShadow = '0 0 0 3px #e8a020';
+    st(4, 'Only Host B receives the NS — wakes up', 2600);
+  }, 2600);
+  beam('s4_na', 3100, 0.5);
+  setTimeout(() => {
+    const a = document.getElementById('s4_a2');
+    if(a) a.style.boxShadow = '0 0 0 3px #4eff9a';
+    st(4, 'NA returned with MAC — neighbor table updated', 3700);
+  }, 3700);
+  fi('s4_types', 4400);
+  fi('s4_sec', 5300);
+  st(4, 'NDP still spoofable without SEND / RA Guard', 5500);
+}
+
+function runS5() {
+  st(5, 'Step 1: host builds link-local from MAC…', 0);
+  fi('s5_intro', 100);
+  fi('s5_step1', 600);
+  st(5, 'Step 2: Router Solicitation → ff02::2', 1600);
+  fi('s5_step2', 1800);
+  beam('s5_b1', 2100, 0.55);
+  st(5, 'Step 3: Router Advertisement with prefix', 2900);
+  fi('s5_step3', 3100);
+  beam('s5_b2', 3400, 0.55);
+  st(5, 'Step 4: host assembles full global address!', 4300);
+  fi('s5_step4', 4500);
+  st(5, 'No DHCP server needed — fully stateless ✓', 5300);
+  fi('s5_priv', 5700);
+}
+
+window.addEventListener('load', () => {
+  setTimeout(() => playScene(1), 400);
+});
+</script>
+</body>
+</html>

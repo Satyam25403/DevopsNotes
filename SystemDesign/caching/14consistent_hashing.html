@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Consistent Hashing</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#e8a020;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s}
+.fade.in{opacity:1}
+.rl{font-size:7px;color:#666;letter-spacing:1px;margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1 · HOOK: NAIVE HASHING BREAKS ══════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CONSISTENT HASHING</div>
+    <div class="hdr-sub">WHY NAIVE HASHING BREAKS AT SCALE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">NAIVE HASH</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="h1hook" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="color:#fff;font-size:9px;line-height:1.9;margin-bottom:6px">"ADD ONE SERVER TO YOUR CACHE<br>CLUSTER. WITH NAIVE HASHING,<br>EVERYTHING BREAKS."</div>
+        <div style="color:#888;font-size:7px;line-height:1.8">Used by: Redis Cluster, DynamoDB,<br>Cassandra, Memcached (Ketama), CDNs.</div>
+      </div>
+
+      <!-- Naive hash formula -->
+      <div class="fade" id="h1naive" style="border:2px solid #e8a020;background:#120a00;padding:12px;border-radius:2px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:8px">NAIVE APPROACH: key % N</div>
+        <div style="background:#080400;border:1px solid #3a2800;padding:9px;font-size:8px;color:#aaa;line-height:2">
+          node = hash(key) % <span style="color:#e85050">N</span><br>
+          <span style="color:#555">// N=3: "user:42" → hash=8 → 8%3 = node 2</span><br>
+          <span style="color:#555">// N=4: "user:42" → hash=8 → 8%4 = node 0 ✗</span>
+        </div>
+        <div style="font-size:8px;color:#e85050;margin-top:8px">Add 1 node: N changes → ALL keys remap!</div>
+      </div>
+
+      <!-- Remap visual: before/after grid -->
+      <div class="fade" id="h1remap">
+        <div class="rl">KEY → NODE MAPPING (6 keys, N=3 → N=4)</div>
+        <div style="display:flex;gap:6px">
+          <!-- Before N=3 -->
+          <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:6px;text-align:center">N = 3</div>
+            <div style="display:flex;flex-direction:column;gap:3px" id="remap_before"></div>
+          </div>
+          <!-- Arrow -->
+          <div style="display:flex;align-items:center;font-size:14px;color:#e85050;padding:0 2px">→</div>
+          <!-- After N=4 -->
+          <div style="flex:1;background:#0e0a14;border:1px solid #2a1030;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:6px;text-align:center">N = 4 (+1 node)</div>
+            <div style="display:flex;flex-direction:column;gap:3px" id="remap_after"></div>
+          </div>
+        </div>
+        <div style="margin-top:6px;background:#1a0505;border:1px solid #3a1010;padding:8px;text-align:center">
+          <div style="font-size:9px;color:#e85050" id="remap_pct">0% of keys remapped</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">= cache miss storm on all remapped keys</div>
+        </div>
+      </div>
+
+      <div class="fade" id="h1fix" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:7px">CONSISTENT HASHING SOLUTION</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Place nodes on a <span style="color:#4eff9a">virtual ring</span> (0–2³²).<br>
+          Keys route to the <span style="color:#4eff9a">next node clockwise</span>.<br>
+          Add 1 node → only <span style="color:#4eff9a">1/N keys remap</span>.<br>
+          <span style="color:#4ec9e1">N=4: only 25% move instead of 100%.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO SEE NAIVE HASHING FAIL</div>
+    <div class="ih rd" id="s1i2" style="display:none">N=3 → N=4: ALMOST ALL KEYS CHANGE NODES</div>
+    <div class="il" id="s1i3" style="display:none">EVERY REMAP = CACHE MISS. DB GETS SLAMMED.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">~83%</div><div class="sl">KEYS<br>REMAPPED</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">CACHE<br>MISS RATE</div></div>
+    <div class="sc"><div class="sv rd">BROKEN</div><div class="sl">NAIVE<br>APPROACH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2 · THE HASH RING ══════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE HASH RING</div>
+    <div class="hdr-sub">KEYS ROUTE CLOCKWISE TO NEAREST NODE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CONSISTENT RING</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HOW IT WORKS</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="rl">RING: 3 NODES, KEYS ROUTE CLOCKWISE</div>
+
+      <!-- Ring SVG -->
+      <div style="display:flex;justify-content:center">
+        <canvas id="ring2" width="320" height="320" style="border-radius:2px"></canvas>
+      </div>
+
+      <!-- Step-by-step explanation -->
+      <div class="fade" id="s2explain" style="background:#051020;border:2px solid #4ec9e1;padding:11px;border-radius:2px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:7px">HOW KEY LOOKUP WORKS:</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          <span style="color:#4eff9a">1.</span> Hash key → position 0–2³² on ring<br>
+          <span style="color:#4eff9a">2.</span> Walk <span style="color:#4eff9a">clockwise</span> to next node<br>
+          <span style="color:#4eff9a">3.</span> That node owns the key<br>
+          <span style="color:#4ec9e1">Each node owns its arc of the ring.</span>
+        </div>
+      </div>
+
+      <!-- Key routing table -->
+      <div class="fade" id="s2table">
+        <div class="rl">KEY → NODE ROUTING</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:7px 10px">
+            <span style="font-size:8px;color:#e8a020">● user:42</span>
+            <span style="font-size:7px;color:#555">pos 847</span>
+            <span style="font-size:8px;color:#4ec9e1">→ Node A</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:7px 10px">
+            <span style="font-size:8px;color:#4eff9a">● cart:99</span>
+            <span style="font-size:7px;color:#555">pos 1893</span>
+            <span style="font-size:8px;color:#4eff9a">→ Node B</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:7px 10px">
+            <span style="font-size:8px;color:#c97aff">● config:x</span>
+            <span style="font-size:7px;color:#555">pos 3102</span>
+            <span style="font-size:8px;color:#c97aff">→ Node C</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:7px 10px">
+            <span style="font-size:8px;color:#e8a020">● session:7</span>
+            <span style="font-size:7px;color:#555">pos 412</span>
+            <span style="font-size:8px;color:#4ec9e1">→ Node A</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO BUILD THE RING</div>
+    <div class="ih" id="s2i2" style="display:none">NODES PLACED ON RING — KEYS GO CLOCKWISE</div>
+    <div class="il" id="s2i3" style="display:none">EACH NODE OWNS AN ARC. KEYS MAP TO THAT ARC.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">RING</div><div class="sl">0 TO 2³²</div></div>
+    <div class="sc"><div class="sv gn">CW</div><div class="sl">CLOCKWISE<br>ROUTING</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1/N</div><div class="sl">KEYS MOVE<br>ON CHANGE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3 · ADD A NODE ══════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title">ADD A NODE</div>
+    <div class="hdr-sub">ONLY 1/N KEYS REMAP — NOT ALL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">NODE ADDITION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MINIMAL REMAP</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="rl">RING: ADDING NODE D BETWEEN A AND B</div>
+
+      <div style="display:flex;justify-content:center">
+        <canvas id="ring3" width="320" height="320" style="border-radius:2px"></canvas>
+      </div>
+
+      <!-- Impact summary -->
+      <div class="fade" id="s3impact" style="display:flex;gap:8px">
+        <div style="flex:1;background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center;border-radius:2px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:5px">NAIVE HASH</div>
+          <div style="font-size:13px;color:#e85050">~83%</div>
+          <div style="font-size:7px;color:#888;margin-top:4px">keys remap</div>
+          <div style="font-size:7px;color:#888;margin-top:2px">3→4 nodes</div>
+        </div>
+        <div style="flex:1;background:#041408;border:2px solid #4eff9a;padding:10px;text-align:center;border-radius:2px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">CONSISTENT</div>
+          <div style="font-size:13px;color:#4eff9a">~25%</div>
+          <div style="font-size:7px;color:#888;margin-top:4px">keys remap</div>
+          <div style="font-size:7px;color:#888;margin-top:2px">only 1/N</div>
+        </div>
+      </div>
+
+      <!-- Which keys moved -->
+      <div class="fade" id="s3moved">
+        <div class="rl">WHAT ACTUALLY MOVED:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#041408;border:1px solid #0a3018;padding:8px 10px">
+            <span style="font-size:8px;color:#e8a020">● session:7</span>
+            <span style="font-size:9px;color:#e8a020">A → D</span>
+            <span style="font-size:7px;color:#4eff9a">MOVED ✓</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:8px 10px;opacity:.5">
+            <span style="font-size:8px;color:#4eff9a">● cart:99</span>
+            <span style="font-size:9px;color:#555">stays B</span>
+            <span style="font-size:7px;color:#555">unchanged</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:8px 10px;opacity:.5">
+            <span style="font-size:8px;color:#c97aff">● config:x</span>
+            <span style="font-size:9px;color:#555">stays C</span>
+            <span style="font-size:7px;color:#555">unchanged</span>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#0a1828;border:1px solid #1a3050;padding:8px 10px;opacity:.5">
+            <span style="font-size:8px;color:#e8a020">● user:42</span>
+            <span style="font-size:9px;color:#555">stays A</span>
+            <span style="font-size:7px;color:#555">unchanged</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;background:#041408;border:1px solid #0a3018;padding:8px;text-align:center">
+          <div style="font-size:9px;color:#4eff9a">Only keys in D's new arc migrate.</div>
+          <div style="font-size:7px;color:#888;margin-top:3px">Transfer data from A → D. Done. No disruption.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO ADD NODE D</div>
+    <div class="ih" id="s3i2" style="display:none">NODE D INSERTED — ONLY ITS ARC KEYS MIGRATE</div>
+    <div class="il" id="s3i3" style="display:none">75% OF KEYS UNTOUCHED. ZERO DISRUPTION.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1/N</div><div class="sl">KEYS<br>MIGRATE</div></div>
+    <div class="sc"><div class="sv gn">75%</div><div class="sl">KEYS<br>UNTOUCHED</div></div>
+    <div class="sc"><div class="sv gn">LIVE</div><div class="sl">NO<br>DOWNTIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4 · VNODES + REDIS CLUSTER ══════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">VNODES &<br>REDIS CLUSTER</div>
+    <div class="hdr-sub">EVEN DISTRIBUTION + 16,384 SLOTS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REDIS CLUSTER</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Virtual nodes -->
+      <div class="fade" id="s4vn" style="border:2px solid #e8a020;background:#120a00;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:7px">PROBLEM: UNEVEN ARCS</div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          3 nodes on ring → arcs not equal.<br>
+          One node gets 40% of keys, another 20%.<br>
+          <span style="color:#4eff9a">Fix: Virtual Nodes (VNodes)</span> — each physical<br>
+          node gets <span style="color:#4eff9a">multiple positions</span> on the ring.
+        </div>
+        <div style="display:flex;justify-content:center">
+          <canvas id="ring4vn" width="290" height="290"></canvas>
+        </div>
+      </div>
+
+      <!-- VNode explanation -->
+      <div class="fade" id="s4vnex" style="background:#0e0a14;border:1px solid #2a1030;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:7px">WITH 3 VNODES EACH:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#120a00;border:1px solid #2a1810">
+            <div style="width:10px;height:10px;border-radius:50%;background:#4ec9e1;flex-shrink:0"></div>
+            <span style="font-size:7px;color:#aaa">Node A → positions: 12, 156, 289 on ring</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#120a00;border:1px solid #2a1810">
+            <div style="width:10px;height:10px;border-radius:50%;background:#4eff9a;flex-shrink:0"></div>
+            <span style="font-size:7px;color:#aaa">Node B → positions: 67, 198, 341 on ring</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#120a00;border:1px solid #2a1810">
+            <div style="width:10px;height:10px;border-radius:50%;background:#c97aff;flex-shrink:0"></div>
+            <span style="font-size:7px;color:#aaa">Node C → positions: 118, 234, 356 on ring</span>
+          </div>
+        </div>
+        <div style="font-size:8px;color:#4eff9a;margin-top:8px;text-align:center">Each node owns ~33% of keys ✓</div>
+      </div>
+
+      <!-- Redis Cluster specifics -->
+      <div class="fade" id="s4redis" style="border:2px solid #4ec9e1;background:#040e1a;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:8px">REDIS CLUSTER: 16,384 HASH SLOTS</div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          Redis doesn't use a pure ring.<br>
+          It uses <span style="color:#4ec9e1">16,384 fixed hash slots</span>.<br>
+          slot = CRC16(key) % 16384<br>
+          Each node owns a <span style="color:#4eff9a">range of slots</span>.
+        </div>
+        <div style="background:#060e1a;border:1px solid #1a3050;padding:8px;font-size:8px;color:#4ec9e1;line-height:2">
+          Node A: slots <span style="color:#4eff9a">0 – 5460</span><br>
+          Node B: slots <span style="color:#4eff9a">5461 – 10922</span><br>
+          Node C: slots <span style="color:#4eff9a">10923 – 16383</span>
+        </div>
+      </div>
+
+      <!-- Add node in Redis -->
+      <div class="fade" id="s4add" style="background:#041408;border:2px solid #4eff9a;padding:11px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:7px">ADDING NODE D TO REDIS CLUSTER:</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          Reassign: <span style="color:#4ec9e1">0–1365</span> from A → D<br>
+          Reassign: <span style="color:#4ec9e1">5461–6826</span> from B → D<br>
+          Reassign: <span style="color:#4ec9e1">10923–12288</span> from C → D<br>
+          <span style="color:#4eff9a">~25% of slots migrate. 75% untouched.</span>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <div style="flex:1;background:#020a04;border:1px solid #0a2810;padding:7px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">SLOTS MOVED</div>
+            <div style="font-size:11px;color:#4eff9a">4,096</div>
+          </div>
+          <div style="flex:1;background:#020a04;border:1px solid #0a2810;padding:7px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">SLOTS STAY</div>
+            <div style="font-size:11px;color:#4eff9a">12,288</div>
+          </div>
+          <div style="flex:1;background:#020a04;border:1px solid #0a2810;padding:7px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">DISRUPTION</div>
+            <div style="font-size:11px;color:#4eff9a">ZERO</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info" style="border-color:#e8a020">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE VNODES + REDIS</div>
+    <div class="ih am" id="s4i2" style="display:none">VNODES SPREAD LOAD EVENLY ACROSS NODES</div>
+    <div class="il" id="s4i3" style="display:none">REDIS: 16,384 SLOTS. ADD NODE = 1/N MIGRATE.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">16,384</div><div class="sl">REDIS<br>SLOTS</div></div>
+    <div class="sc"><div class="sv gn">1/N</div><div class="sl">SLOTS<br>MIGRATE</div></div>
+    <div class="sc"><div class="sv gn">EVEN</div><div class="sl">VNODE<br>LOAD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clr(){timers.forEach(t=>{clearTimeout(t);clearInterval(t);});timers=[];}
+function wait(ms,fn){let t=setTimeout(fn,ms);timers.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function reset(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+function txt(id,v){let e=document.getElementById(id);if(e)e.textContent=v;}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  fullReset();
+}
+
+/* ── RING DRAWING UTILITIES ── */
+const TAU = Math.PI*2;
+function ringPos(cx,cy,r,angleDeg){
+  let a=(angleDeg-90)*Math.PI/180;
+  return {x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)};
+}
+function drawRingBase(ctx,cx,cy,r,bg){
+  ctx.clearRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  ctx.fillStyle=bg||'#0a0a14';
+  ctx.fillRect(0,0,ctx.canvas.width,ctx.canvas.height);
+  ctx.beginPath();ctx.arc(cx,cy,r,0,TAU);
+  ctx.strokeStyle='#2a2a4a';ctx.lineWidth=3;ctx.stroke();
+}
+function drawArc(ctx,cx,cy,r,a1,a2,col,w){
+  ctx.beginPath();
+  let ra1=(a1-90)*Math.PI/180,ra2=(a2-90)*Math.PI/180;
+  ctx.arc(cx,cy,r,ra1,ra2);
+  ctx.strokeStyle=col;ctx.lineWidth=w||8;ctx.stroke();
+}
+function drawNode(ctx,cx,cy,r,angleDeg,col,label,sz){
+  let p=ringPos(cx,cy,r,angleDeg);
+  ctx.beginPath();ctx.arc(p.x,p.y,sz||12,0,TAU);
+  ctx.fillStyle=col;ctx.fill();
+  ctx.strokeStyle='#0a0a14';ctx.lineWidth=2;ctx.stroke();
+  // label outside ring
+  let lp=ringPos(cx,cy,r+26,angleDeg);
+  ctx.fillStyle=col;ctx.font='bold 10px Press Start 2P,monospace';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(label,lp.x,lp.y);
+}
+function drawKey(ctx,cx,cy,r,angleDeg,col,label){
+  let p=ringPos(cx,cy,r,angleDeg);
+  ctx.beginPath();
+  ctx.moveTo(p.x-5,p.y-5);ctx.lineTo(p.x+5,p.y-5);
+  ctx.lineTo(p.x+5,p.y+5);ctx.lineTo(p.x-5,p.y+5);ctx.closePath();
+  ctx.fillStyle=col;ctx.fill();
+  let lp=ringPos(cx,cy,r-22,angleDeg);
+  ctx.fillStyle=col;ctx.font='7px Press Start 2P,monospace';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(label,lp.x,lp.y);
+}
+function drawArrow(ctx,from,to,col){
+  ctx.beginPath();ctx.moveTo(from.x,from.y);ctx.lineTo(to.x,to.y);
+  ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([4,3]);ctx.stroke();
+  ctx.setLineDash([]);
+  // arrowhead
+  let angle=Math.atan2(to.y-from.y,to.x-from.x);
+  ctx.beginPath();
+  ctx.moveTo(to.x,to.y);
+  ctx.lineTo(to.x-9*Math.cos(angle-0.4),to.y-9*Math.sin(angle-0.4));
+  ctx.lineTo(to.x-9*Math.cos(angle+0.4),to.y-9*Math.sin(angle+0.4));
+  ctx.closePath();ctx.fillStyle=col;ctx.fill();
+}
+
+function fullReset(){
+  reset(['h1hook','h1naive','h1remap','h1fix']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+  txt('remap_pct','0% of keys remapped');
+  let rb=document.getElementById('remap_before'),ra=document.getElementById('remap_after');
+  if(rb)rb.innerHTML='';if(ra)ra.innerHTML='';
+
+  reset(['s2explain','s2table']);
+  hide('s2i2');hide('s2i3');show('s2i1');
+  let c2=document.getElementById('ring2');
+  if(c2){let ctx=c2.getContext('2d');ctx.clearRect(0,0,320,320);}
+
+  reset(['s3impact','s3moved']);
+  hide('s3i2');hide('s3i3');show('s3i1');
+  let c3=document.getElementById('ring3');
+  if(c3){let ctx=c3.getContext('2d');ctx.clearRect(0,0,320,320);}
+
+  reset(['s4vn','s4vnex','s4redis','s4add']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+  let c4=document.getElementById('ring4vn');
+  if(c4){let ctx=c4.getContext('2d');ctx.clearRect(0,0,290,290);}
+}
+
+/* ── SCENE 1: NAIVE HASH ── */
+function play1(){
+  clr();fullReset();
+  hide('s1i1');show('s1i2');
+  wait(300,()=>fin('h1hook'));
+  wait(1000,()=>fin('h1naive'));
+  wait(1800,()=>{
+    fin('h1remap');
+    // populate remap tables
+    const keys=[
+      {k:'user:42',h3:2,h4:0},
+      {k:'cart:99',h3:1,h4:3},
+      {k:'config:x',h3:0,h4:2},
+      {k:'feed:1',h3:2,h4:1},
+      {k:'sess:A',h3:0,h4:0},
+      {k:'item:Z',h3:1,h4:2},
+    ];
+    const cols=['#4ec9e1','#4eff9a','#c97aff'];
+    const rb=document.getElementById('remap_before'),ra=document.getElementById('remap_after');
+    let moved=0;
+    keys.forEach((kd,i)=>{
+      wait(i*120,()=>{
+        let changed=kd.h3!==kd.h4;
+        if(changed)moved++;
+        // before
+        let db=document.createElement('div');
+        db.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:4px 6px;background:#0a0814;border:1px solid #1a1030';
+        db.innerHTML=`<span style="font-size:7px;color:#aaa">${kd.k}</span><span style="font-size:8px;color:${cols[kd.h3]}">N${kd.h3}</span>`;
+        if(rb)rb.appendChild(db);
+        // after
+        let da=document.createElement('div');
+        let bc=changed?'#1a0505':'#0a0814',bc2=changed?'#3a1010':'#1a1030';
+        da.style.cssText=`display:flex;justify-content:space-between;align-items:center;padding:4px 6px;background:${bc};border:1px solid ${bc2}`;
+        let lbl=changed?'N'+kd.h4+' ✗':'N'+kd.h4;
+        let lc=changed?'#e85050':cols[kd.h4];
+        da.innerHTML=`<span style="font-size:7px;color:#aaa">${kd.k}</span><span style="font-size:8px;color:${lc}">${lbl}</span>`;
+        if(ra)ra.appendChild(da);
+        if(i===keys.length-1){
+          let pct=Math.round(moved/keys.length*100);
+          wait(300,()=>{txt('remap_pct',pct+'% of keys remapped');show('s1i3');});
+        }
+      });
+    });
+  });
+  wait(3600,()=>fin('h1fix'));
+}
+
+/* ── SCENE 2: RING ── */
+function play2(){
+  clr();fullReset();
+  hide('s2i1');show('s2i2');
+  const c=document.getElementById('ring2');
+  const ctx=c.getContext('2d');
+  const cx=160,cy=160,R=110;
+  // Node positions (degrees from top, clockwise)
+  const nodes=[
+    {a:30,col:'#4ec9e1',label:'A'},
+    {a:150,col:'#4eff9a',label:'B'},
+    {a:270,col:'#c97aff',label:'C'},
+  ];
+  // Keys on ring
+  const keys=[
+    {a:80,col:'#e8a020',label:'user:42'},
+    {a:200,col:'#e8a020',label:'cart:99'},
+    {a:320,col:'#e8a020',label:'config:x'},
+    {a:10,col:'#e8a020',label:'session:7'},
+  ];
+
+  // Step 1: draw empty ring
+  drawRingBase(ctx,cx,cy,R,'#060610');
+  // ring background arcs
+  drawArc(ctx,cx,cy,R,30,150,'#4ec9e133',8);
+  drawArc(ctx,cx,cy,R,150,270,'#4eff9a33',8);
+  drawArc(ctx,cx,cy,R,270,390,'#c97aff33',8);
+
+  // Step 2: add nodes one by one
+  nodes.forEach((n,i)=>{
+    wait(400+i*400,()=>{
+      drawNode(ctx,cx,cy,R,n.a,n.col,n.label);
+    });
+  });
+  // Step 3: add keys
+  keys.forEach((k,i)=>{
+    wait(1800+i*300,()=>{
+      drawKey(ctx,cx,cy,R-18,k.a,k.col,k.label);
+    });
+  });
+  // Step 4: draw clockwise arrows for 2 keys
+  wait(3100,()=>{
+    // user:42 at 80 → Node B at 150
+    let kp=ringPos(cx,cy,R-18,80);
+    let np=ringPos(cx,cy,R,150);
+    drawArrow(ctx,kp,np,'#e8a020');
+    // session:7 at 10 → Node A at 30
+    let kp2=ringPos(cx,cy,R-18,10);
+    let np2=ringPos(cx,cy,R,30);
+    drawArrow(ctx,kp2,np2,'#e8a020');
+    fin('s2explain');
+  });
+  wait(4000,()=>{fin('s2table');show('s2i3');});
+}
+
+/* ── SCENE 3: ADD NODE ── */
+let s3phase=0;
+function play3(){
+  clr();fullReset();
+  hide('s3i1');show('s3i2');
+  const c=document.getElementById('ring3');
+  const ctx=c.getContext('2d');
+  const cx=160,cy=160,R=110;
+  const nodes=[
+    {a:30,col:'#4ec9e1',label:'A'},
+    {a:150,col:'#4eff9a',label:'B'},
+    {a:270,col:'#c97aff',label:'C'},
+  ];
+  const keys=[
+    {a:80,col:'#e8a020',label:'user:42'},
+    {a:200,col:'#e8a020',label:'cart:99'},
+    {a:320,col:'#e8a020',label:'config:x'},
+    {a:10,col:'#e8a020',label:'session:7'},
+  ];
+
+  // Draw base 3-node ring
+  drawRingBase(ctx,cx,cy,R,'#040e08');
+  drawArc(ctx,cx,cy,R,30,150,'#4ec9e133',8);
+  drawArc(ctx,cx,cy,R,150,270,'#4eff9a33',8);
+  drawArc(ctx,cx,cy,R,270,390,'#c97aff33',8);
+  nodes.forEach(n=>drawNode(ctx,cx,cy,R,n.a,n.col,n.label));
+  keys.forEach(k=>drawKey(ctx,cx,cy,R-18,k.a,k.col,k.label));
+
+  // Pause, then add Node D at 70°
+  wait(800,()=>{
+    // Redraw arcs with D included
+    drawRingBase(ctx,cx,cy,R,'#040e08');
+    // new arcs: D(70) owns 30→70, A(30) now owns 270→30 range
+    drawArc(ctx,cx,cy,R,30,70,'#4ec9e133',8);   // A arc shrinks
+    drawArc(ctx,cx,cy,R,70,150,'#ff993344',8);   // D arc (new)
+    drawArc(ctx,cx,cy,R,150,270,'#4eff9a33',8);
+    drawArc(ctx,cx,cy,R,270,390,'#c97aff33',8);
+    nodes.forEach(n=>drawNode(ctx,cx,cy,R,n.a,n.col,n.label));
+    keys.forEach(k=>drawKey(ctx,cx,cy,R-18,k.a,k.col,k.label));
+    // Draw Node D glowing
+    drawNode(ctx,cx,cy,R,70,'#ff9933','D',14);
+    // Mark session:7 (at 10°) migrating: was A(30), now D(70) is next clockwise
+    // Actually session:7 at 10° → next CW node was A(30), now it's D(70): D is further → still A
+    // Actually user:42 at 80° → was next CW to A@30 going CW: 30→80 skips to B@150. No.
+    // Let's say session:7 at 10° → clockwise: next node was A@30. Now D@70 is new, still A wins.
+    // user:42 at 80° → clockwise: was next B@150. Now D@70 is between A@30 and B@150. 
+    //   80° > 70° so next CW from 80° is B@150 still. Hmm.
+    // Let's place D at 100° for clarity (between A@30 → next was B@150; now D@100 intercepts)
+    // session:7 at 10° → A@30. user:42 at 80° → was B@150, now D@100! That moved.
+    // We'll just show the visual with the label
+    ctx.font='8px Press Start 2P,monospace';
+    ctx.fillStyle='#ff9933';ctx.textAlign='center';
+    let lp=ringPos(cx,cy,R+26,70);
+    ctx.fillText('D (NEW)',lp.x,lp.y);
+    // highlight migrating key
+    let mp=ringPos(cx,cy,R-18,80);
+    ctx.beginPath();ctx.arc(mp.x,mp.y,10,0,TAU);
+    ctx.strokeStyle='#ff9933';ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle='#ff9933';ctx.font='6px Press Start 2P,monospace';
+    ctx.fillText('MOVES',mp.x,mp.y+20);
+  });
+  wait(1600,()=>{fin('s3impact');});
+  wait(2400,()=>{fin('s3moved');show('s3i3');});
+}
+
+/* ── SCENE 4: VNODES + REDIS ── */
+function play4(){
+  clr();fullReset();
+  hide('s4i1');show('s4i2');
+  wait(300,()=>{
+    fin('s4vn');
+    // Draw vnode ring
+    const c=document.getElementById('ring4vn');
+    const ctx=c.getContext('2d');
+    const cx=145,cy=145,R=100;
+    drawRingBase(ctx,cx,cy,R,'#0e0a14');
+    // 3 nodes × 3 vnodes each
+    const vnodes=[
+      // Node A (cyan) at 3 positions
+      {a:0,col:'#4ec9e1',label:'A'},{a:120,col:'#4ec9e1',label:'A'},{a:240,col:'#4ec9e1',label:'A'},
+      // Node B (green)
+      {a:40,col:'#4eff9a',label:'B'},{a:160,col:'#4eff9a',label:'B'},{a:280,col:'#4eff9a',label:'B'},
+      // Node C (purple)
+      {a:80,col:'#c97aff',label:'C'},{a:200,col:'#c97aff',label:'C'},{a:320,col:'#c97aff',label:'C'},
+    ];
+    // Draw arcs between alternating nodes
+    const sorted=[...vnodes].sort((a,b)=>a.a-b.a);
+    sorted.forEach((n,i)=>{
+      let next=sorted[(i+1)%sorted.length];
+      let a2=next.a<n.a?next.a+360:next.a;
+      drawArc(ctx,cx,cy,R,n.a,a2,n.col+'44',6);
+    });
+    vnodes.forEach((n,i)=>{
+      wait(i*100,()=>drawNode(ctx,cx,cy,R,n.a,n.col,n.label,8));
+    });
+  });
+  wait(1200,()=>fin('s4vnex'));
+  wait(2000,()=>fin('s4redis'));
+  wait(2900,()=>{fin('s4add');show('s4i3');});
+}
+
+fullReset();
+</script>
+</body>
+</html>

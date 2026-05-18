@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Path MTU Discovery</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden;}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* helpers */
+.fade{opacity:0;transition:opacity .4s ease}
+.fade.in{opacity:1}
+
+/* node boxes */
+.node{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:2px solid #333;background:#130d1e;flex-shrink:0}
+.node .ico{font-size:16px;line-height:1}
+.node .lbl{font-size:6px;text-align:center;line-height:1.4}
+
+/* packet pill */
+.pkt{display:inline-flex;align-items:center;justify-content:center;border-radius:2px;font-size:6px;font-family:'Press Start 2P',monospace;height:18px;white-space:nowrap}
+
+/* beam track */
+.track{position:relative;height:8px;background:#1a1a2e;border-radius:2px;overflow:hidden;flex-shrink:0}
+.fill{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:none}
+.fill.rtl{right:0;left:auto}
+
+/* layer stack for TLS scene */
+.layer{height:24px;display:flex;align-items:center;padding:0 10px;border-radius:2px;font-size:7px;margin-bottom:3px;opacity:0;transition:opacity .3s}
+
+/* spinner */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+
+/* iptables code block */
+.code{background:#0a0f1a;border:1px solid #1a3a5a;border-radius:2px;padding:8px 10px;font-size:7px;color:#4ec9e1;line-height:2;letter-spacing:.3px}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════
+     SCENE 1 — The Mystery: HTTP ok, HTTPS hangs
+══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">PATH MTU DISCOVERY</div>
+    <div class="hdr-sub">WHY HTTPS BREAKS BUT HTTP WORKS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE BUG</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">MYSTERIOUS</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s1_hook" style="text-align:center;font-size:8px;color:#888;line-height:1.9">
+        Same server. Same client.<br>
+        <span style="color:#4eff9a">HTTP:80 → loads instantly</span><br>
+        <span style="color:#e85050">HTTPS:443 → hangs forever</span>
+      </div>
+
+      <!-- HTTP row -->
+      <div class="fade" id="s1_http">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">✓ HTTP/80 — SMALL RESPONSE</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="node" style="width:58px;height:52px;border-color:#4eff9a">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4eff9a">CLIENT</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div class="track"><div class="fill" id="s1_hb" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center" id="s1_htxt">→ GET / HTTP/1.1 (tiny request)</div>
+            <div class="track"><div class="fill rtl" id="s1_hrep" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;text-align:right" id="s1_hrtxt">200 OK &lt;600B ←</div>
+          </div>
+          <div class="node" style="width:58px;height:52px;border-color:#4eff9a">
+            <div class="ico">🌐</div>
+            <div class="lbl" style="color:#4eff9a">SERVER</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;text-align:center;margin-top:4px">Fits in one 1500B packet — no problem ✓</div>
+      </div>
+
+      <!-- HTTPS row -->
+      <div class="fade" id="s1_https">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">✗ HTTPS/443 — TLS HANDSHAKE LARGE</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="node" style="width:58px;height:52px;border-color:#4ec9e1">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4ec9e1">CLIENT</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div class="track"><div class="fill" id="s1_tb" style="background:#4ec9e1"></div></div>
+            <div style="font-size:6px;color:#4ec9e1;text-align:center">→ TLS ClientHello + certs (~1500B+)</div>
+            <div style="font-size:6px;color:#e85050;text-align:center" id="s1_hang">⏳ <span class="spin" id="s1_spinner">⏳</span> waiting… waiting… timeout</div>
+          </div>
+          <div class="node" style="width:58px;height:52px;border-color:#e85050">
+            <div class="ico">🌐</div>
+            <div class="lbl" style="color:#e85050">SERVER</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#e85050;text-align:center;margin-top:4px">Packet silently dropped mid-path — no error!</div>
+      </div>
+
+      <!-- size comparison -->
+      <div class="fade" id="s1_sizes" style="border:1px solid #2a1f3d;padding:10px;background:#120d1f">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">PAYLOAD SIZE COMPARISON</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#888;width:72px">HTTP req</div>
+            <div style="flex:1;height:14px;background:#4eff9a22;border-radius:2px;position:relative;overflow:hidden">
+              <div style="height:100%;background:#4eff9a;width:0;transition:width .6s ease-out;border-radius:2px" id="s1_bar1"></div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a;width:36px;text-align:right">~200B</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#888;width:72px">HTTP resp</div>
+            <div style="flex:1;height:14px;background:#4eff9a22;border-radius:2px;position:relative;overflow:hidden">
+              <div style="height:100%;background:#4eff9a;width:0;transition:width .6s .2s ease-out;border-radius:2px" id="s1_bar2"></div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a;width:36px;text-align:right">~500B</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#888;width:72px">TLS hello</div>
+            <div style="flex:1;height:14px;background:#e8505022;border-radius:2px;position:relative;overflow:hidden">
+              <div style="height:100%;background:#e85050;width:0;transition:width .6s .4s ease-out;border-radius:2px" id="s1_bar3"></div>
+            </div>
+            <div style="font-size:7px;color:#e85050;width:36px;text-align:right">~1600B</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#888;width:72px">MTU limit</div>
+            <div style="flex:1;height:3px;background:#e8a020;border-radius:2px"></div>
+            <div style="font-size:7px;color:#e8a020;width:36px;text-align:right">1500B ▲</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s1_clue" style="background:#1a0d0d;border-left:3px solid #e85050;padding:8px 10px;font-size:7px;color:#ccc;line-height:2">
+        <span style="color:#e85050">ROOT CAUSE:</span> TLS pushes packets past MTU.<br>
+        DF bit set → router drops → ICMP silenced<br>
+        → sender retransmits endlessly → timeout.
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">HTTP fits in 1500B. TLS certs exceed it.</div>
+    <div class="ih rd" id="s1_status">► Press PLAY to see the mystery unfold</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 2 — DF Bit + PMTUD normal operation
+══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">PATH MTU DISCOVERY</div>
+    <div class="hdr-sub">THE DF BIT AND HOW PMTUD SHOULD WORK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DF BIT MECHANICS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">NORMAL PMTUD</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s2_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        TCP sets <span style="color:#4ec9e1">DF (Don't Fragment)</span> in IP header.<br>
+        Router can't split it → must report back.
+      </div>
+
+      <!-- IP header anatomy -->
+      <div class="fade" id="s2_hdr" style="border:1px solid #1a3a5a;padding:8px 10px;background:#0a1520">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:7px">IP HEADER FLAGS FIELD</div>
+        <div style="display:flex;gap:2px;height:28px;border:1px solid #333;overflow:hidden;border-radius:2px">
+          <div style="width:12%;background:#333;display:flex;align-items:center;justify-content:center;font-size:6px;color:#888">Rsv<br>0</div>
+          <div style="width:18%;background:#e8a020;display:flex;align-items:center;justify-content:center;font-size:6px;color:#000;font-weight:bold" id="s2_df">DF=1</div>
+          <div style="width:18%;background:#1a3050;display:flex;align-items:center;justify-content:center;font-size:6px;color:#666">MF=0</div>
+          <div style="flex:1;background:#0d1a30;display:flex;align-items:center;justify-content:center;font-size:6px;color:#555">FRAG OFFSET = 0</div>
+        </div>
+        <div style="font-size:6px;color:#e8a020;margin-top:5px">DF=1: "Do NOT fragment this packet — ever."</div>
+      </div>
+
+      <!-- Normal PMTUD flow -->
+      <div class="fade" id="s2_flow">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:7px">WHEN PMTUD WORKS CORRECTLY:</div>
+
+        <!-- step 1 -->
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px" id="s2_step1">
+          <div class="node" style="width:56px;height:50px;border-color:#4ec9e1">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4ec9e1">HOST</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div class="track"><div class="fill" id="s2_b1" style="background:#e8a020"></div></div>
+            <div style="font-size:6px;color:#e8a020;text-align:center">1500B pkt, DF=1 →</div>
+          </div>
+          <div class="node" style="width:60px;height:50px;border-color:#e85050" id="s2_rtr">
+            <div class="ico">📡</div>
+            <div class="lbl" style="color:#e85050">ROUTER<br><span style="color:#e85050">MTU=576</span></div>
+          </div>
+        </div>
+
+        <!-- step 2: router sends icmp back -->
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+          <div class="node" style="width:56px;height:50px;border-color:#4eff9a" id="s2_host2">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4eff9a">HOST<br><span style="color:#4eff9a;font-size:5px">MTU←576</span></div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div class="track"><div class="fill rtl" id="s2_b2" style="background:#e85050"></div></div>
+            <div style="font-size:6px;color:#e85050;text-align:center">← ICMP T3C4: "Max=576B"</div>
+          </div>
+          <div class="node" style="width:60px;height:50px;border-color:#e85050">
+            <div class="ico">📡</div>
+            <div class="lbl" style="color:#e85050">ROUTER</div>
+          </div>
+        </div>
+
+        <!-- step 3: retransmit small -->
+        <div style="display:flex;align-items:center;gap:5px">
+          <div class="node" style="width:56px;height:50px;border-color:#4eff9a">
+            <div class="ico">💻</div>
+            <div class="lbl" style="color:#4eff9a">HOST</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div class="track"><div class="fill" id="s2_b3" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">576B pkt → fits! forwarded ✓</div>
+          </div>
+          <div class="node" style="width:60px;height:50px;border-color:#4eff9a">
+            <div class="ico">🌐</div>
+            <div class="lbl" style="color:#4eff9a">DEST</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MTU discovery cache -->
+      <div class="fade" id="s2_cache" style="border:1px solid #2a3a4d;padding:8px 10px;background:#0a1520;font-size:7px;line-height:2.1">
+        <span style="color:#4ec9e1">OS PATH MTU CACHE:</span><br>
+        <span style="color:#4eff9a">93.184.216.34 → MTU: 576B &nbsp; TTL:10m</span><br>
+        <span style="color:#888">Future packets auto-sized to 576B ✓</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">DF=1 → router can't fragment → must ICMP back</div>
+    <div class="ih" id="s2_status">► Watch normal PMTUD in action</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 3 — PMTUD Black Hole (firewall blocks ICMP)
+══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505">
+    <div class="hdr-title">PATH MTU DISCOVERY</div>
+    <div class="hdr-sub">THE PMTUD BLACK HOLE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ICMP BLOCKED</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BLACK HOLE</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s3_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Firewall has rule: <span style="color:#e85050">DROP all ICMP</span><br>
+        Router tries to report back — packet dies at FW.<br>Sender retransmits forever.
+      </div>
+
+      <!-- topology -->
+      <div class="fade" id="s3_topo" style="display:flex;align-items:center;justify-content:space-between;padding:0 4px;gap:2px">
+        <div class="node" style="width:52px;height:52px;border-color:#4ec9e1">
+          <div class="ico">💻</div>
+          <div class="lbl" style="color:#4ec9e1;font-size:5px">HOST</div>
+        </div>
+        <div style="font-size:8px;color:#333">───</div>
+        <div class="node" style="width:52px;height:52px;border-color:#e85050" id="s3_fw">
+          <div class="ico">🔥</div>
+          <div class="lbl" style="color:#e85050;font-size:5px">FIREWALL<br>DROP ICMP</div>
+        </div>
+        <div style="font-size:8px;color:#333">───</div>
+        <div class="node" style="width:52px;height:52px;border-color:#888" id="s3_rtr">
+          <div class="ico">📡</div>
+          <div class="lbl" style="color:#888;font-size:5px">ROUTER<br>MTU=576</div>
+        </div>
+        <div style="font-size:8px;color:#333">───</div>
+        <div class="node" style="width:52px;height:52px;border-color:#555">
+          <div class="ico">🌐</div>
+          <div class="lbl" style="color:#555;font-size:5px">DEST</div>
+        </div>
+      </div>
+
+      <!-- retransmit loop -->
+      <div class="fade" id="s3_loop">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">THE SILENT DEATH LOOP:</div>
+
+        <div style="border:1px solid #3a1010;background:#120808;padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">①</div>
+            <div class="track" style="flex:1"><div class="fill" id="s3_b1" style="background:#4ec9e1"></div></div>
+            <div style="font-size:6px;color:#4ec9e1;width:80px;text-align:right">1500B pkt,DF=1→</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">②</div>
+            <div style="flex:1;height:8px;background:#e8505030;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e85050">💥 ROUTER DROPS — too big</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">③</div>
+            <div class="track" style="flex:1"><div class="fill rtl" id="s3_b2" style="background:#e85050"></div></div>
+            <div style="font-size:6px;color:#e85050;width:80px;text-align:right">←ICMP T3C4</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">④</div>
+            <div style="flex:1;height:8px;background:#3a100030;border:1px solid #e85050;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e85050">🔥 FIREWALL KILLS ICMP</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">⑤</div>
+            <div class="track" style="flex:1"><div class="fill" id="s3_b3" style="background:#4ec9e1;opacity:.5"></div></div>
+            <div style="font-size:6px;color:#666;width:80px;text-align:right">1500B again…</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:7px;color:#e8a020;width:14px">⑥</div>
+            <div style="flex:1;height:8px;background:#e8505030;display:flex;align-items:center;justify-content:center;font-size:6px;color:#e85050">💥 DROPPED again — loop forever</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TCP behavior -->
+      <div class="fade" id="s3_tcp" style="border:1px solid #3a1010;padding:8px 10px;background:#0f0808;font-size:7px;line-height:2.1">
+        <span style="color:#e8a020">TCP RETRANSMIT BEHAVIOUR:</span><br>
+        <span style="color:#ccc">Retransmit 1 → dropped (no ACK)</span><br>
+        <span style="color:#ccc">Retransmit 2 → dropped (1s wait)</span><br>
+        <span style="color:#ccc">Retransmit 3 → dropped (2s wait)</span><br>
+        <span style="color:#e85050">Connection timeout after ~90s ⏱</span>
+      </div>
+
+      <!-- why HTTPS specifically -->
+      <div class="fade" id="s3_why" style="border-left:3px solid #e8a020;padding:8px 10px;font-size:7px;color:#aaa;line-height:2;background:#1a1005">
+        <span style="color:#e8a020">WHY HTTPS, NOT HTTP?</span><br>
+        TLS Certificate chain = ~4KB<br>
+        Sent in first Server Hello packet<br>
+        <span style="color:#e85050">Immediately exceeds 1500B MTU</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">ICMP blocked → sender never learns MTU</div>
+    <div class="ih rd" id="s3_status">► Watch the silent infinite retry loop</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" style="border-color:#e85050;color:#e85050" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 4 — VPN makes it worse
+══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d102e">
+  <div class="hdr" style="background:#0d102e">
+    <div class="hdr-title">PATH MTU DISCOVERY</div>
+    <div class="hdr-sub">VPN TUNNELS SHRINK MTU FURTHER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">VPN OVERHEAD</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">MAKES IT WORSE</span>
+  </div>
+  <div class="anim" style="background:#0d102e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s4_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        VPN wraps your packet inside another packet.<br>
+        <span style="color:#e8a020">Each wrapper costs bytes off your MTU.</span>
+      </div>
+
+      <!-- packet encapsulation diagram -->
+      <div class="fade" id="s4_enc" style="border:1px solid #2a2a4d;padding:10px;background:#080b1f">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">PACKET ENCAPSULATION:</div>
+
+        <!-- original -->
+        <div style="font-size:7px;color:#888;margin-bottom:4px">Original packet (Ethernet frame):</div>
+        <div style="display:flex;gap:1px;height:22px;border-radius:2px;overflow:hidden;margin-bottom:8px">
+          <div style="width:14%;background:#4ec9e1;display:flex;align-items:center;justify-content:center;font-size:5px;color:#000">ETH<br>14B</div>
+          <div style="width:14%;background:#4eff9a;display:flex;align-items:center;justify-content:center;font-size:5px;color:#000">IP<br>20B</div>
+          <div style="width:12%;background:#e8a020;display:flex;align-items:center;justify-content:center;font-size:5px;color:#000">TCP<br>20B</div>
+          <div style="flex:1;background:#1a2a4a;display:flex;align-items:center;justify-content:center;font-size:5px;color:#aaa">DATA ~1446B</div>
+        </div>
+        <div style="font-size:6px;color:#888;text-align:right;margin-bottom:8px">Total: 1500B ← fits in Ethernet MTU</div>
+
+        <!-- vpn wrapped -->
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">After VPN (WireGuard example) wraps it:</div>
+        <div style="display:flex;gap:1px;height:22px;border-radius:2px;overflow:hidden;margin-bottom:4px">
+          <div style="width:14%;background:#4ec9e1;display:flex;align-items:center;justify-content:center;font-size:5px;color:#000">ETH<br>14B</div>
+          <div style="width:10%;background:#e85050;display:flex;align-items:center;justify-content:center;font-size:5px;color:#fff">IP<br>20B</div>
+          <div style="width:7%;background:#e85050;display:flex;align-items:center;justify-content:center;font-size:4px;color:#fff">UDP<br>8B</div>
+          <div style="width:10%;background:#e8504080;display:flex;align-items:center;justify-content:center;font-size:4px;color:#ffaa00">WG<br>32B</div>
+          <div style="width:9%;background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:4px;color:#e8a020">[IP<br>20B]</div>
+          <div style="width:8%;background:#2a1a1a;display:flex;align-items:center;justify-content:center;font-size:4px;color:#e8a020">[TCP<br>20B]</div>
+          <div style="flex:1;background:#0f1830;display:flex;align-items:center;justify-content:center;font-size:5px;color:#666">DATA</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px">
+          <span style="color:#e85050">Overhead: ~60–80B</span>
+          <span style="color:#e8a020">Effective MTU: ~1420B</span>
+        </div>
+      </div>
+
+      <!-- overhead table -->
+      <div class="fade" id="s4_table" style="border:1px solid #2a2a4d;padding:8px 10px;background:#080b1f">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:7px">VPN OVERHEAD BY PROTOCOL:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">No VPN (Ethernet)</span>
+            <span style="color:#4eff9a">MTU: 1500B</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">WireGuard</span>
+            <span style="color:#e8a020">MTU: ~1420B</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">OpenVPN (UDP)</span>
+            <span style="color:#e8a020">MTU: ~1400B</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">IPSec (ESP+UDP)</span>
+            <span style="color:#e85050">MTU: ~1350B</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">Double VPN</span>
+            <span style="color:#e85050">MTU: &lt;1300B</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- real world impact -->
+      <div class="fade" id="s4_impact" style="border-left:3px solid #e8a020;padding:8px 10px;font-size:7px;line-height:2;color:#aaa;background:#1a1005">
+        <span style="color:#e8a020">REAL PROD INCIDENT PATTERN:</span><br>
+        "Everything works except over VPN"<br>
+        "SSH connects but git clone hangs"<br>
+        "Web works, large file downloads fail"<br>
+        <span style="color:#e85050">→ All the same root cause: MTU too small</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">VPN adds 60–150B overhead, shrinking usable MTU</div>
+    <div class="ih am" id="s4_status">► See how encapsulation eats your MTU</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play am" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     SCENE 5 — The Fix: MSS Clamping
+══════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#051a0d">
+  <div class="hdr" style="background:#051a0d">
+    <div class="hdr-title">PATH MTU DISCOVERY</div>
+    <div class="hdr-sub">THE FIX: MSS CLAMPING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">MSS CLAMPING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">THE FIX</span>
+  </div>
+  <div class="anim" style="background:#051a0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s5_intro" style="font-size:8px;color:#888;text-align:center;line-height:1.9">
+        Can't fix broken ICMP everywhere.<br>
+        <span style="color:#4eff9a">MSS clamping intercepts TCP handshake<br>and forces a smaller segment size.</span>
+      </div>
+
+      <!-- MSS vs MTU explanation -->
+      <div class="fade" id="s5_mss" style="border:1px solid #0d3a1a;padding:10px;background:#030f07">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:8px">MTU vs MSS:</div>
+        <div style="display:flex;gap:1px;height:24px;border-radius:2px;overflow:hidden;margin-bottom:4px">
+          <div style="width:14%;background:#2a3a2a;display:flex;align-items:center;justify-content:center;font-size:5px;color:#888">ETH<br>14B</div>
+          <div style="width:12%;background:#4ec9e140;display:flex;align-items:center;justify-content:center;font-size:5px;color:#4ec9e1">IP<br>20B</div>
+          <div style="width:12%;background:#e8a02040;display:flex;align-items:center;justify-content:center;font-size:5px;color:#e8a020">TCP<br>20B</div>
+          <div style="flex:1;background:#4eff9a30;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center;font-size:6px;color:#4eff9a">MSS = 1460B</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;margin-top:3px">
+          <span style="color:#888">← MTU = 1500B (full frame) →</span>
+          <span style="color:#4eff9a">MSS = MTU−40B</span>
+        </div>
+      </div>
+
+      <!-- clamping flow -->
+      <div class="fade" id="s5_clamp">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">HOW CLAMPING INTERCEPTS SYN:</div>
+        <div style="border:1px solid #0d3a1a;background:#030f07;padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#4ec9e1;width:14px">①</div>
+            <div class="track" style="flex:1"><div class="fill" id="s5_b1" style="background:#4ec9e1"></div></div>
+            <div style="font-size:6px;color:#4ec9e1;width:90px;text-align:right">TCP SYN, MSS=1460→</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding-left:20px">
+            <div style="font-size:6px;color:#4eff9a;flex:1;border:1px solid #4eff9a30;padding:4px 6px;background:#051a08">
+              🔧 iptables TCPMSS rule:<br>
+              <span style="color:#fff">rewrites MSS → 1360</span><br>
+              (VPN MTU 1420 − 60B headers)
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#4eff9a;width:14px">②</div>
+            <div class="track" style="flex:1"><div class="fill" id="s5_b2" style="background:#4eff9a"></div></div>
+            <div style="font-size:6px;color:#4eff9a;width:90px;text-align:right">SYN, MSS=1360 →</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#4eff9a;width:14px">③</div>
+            <div style="flex:1;height:8px;background:#4eff9a20;border:1px solid #4eff9a30;display:flex;align-items:center;justify-content:center;font-size:6px;color:#4eff9a">Server uses 1360B segments — always fits! ✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- iptables commands -->
+      <div class="fade" id="s5_cmd">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">THE ACTUAL FIX COMMANDS:</div>
+        <div class="code" id="s5_code1" style="opacity:0;transition:opacity .4s">
+          # For VPN interface (tun0)<br>
+          iptables -t mangle -A FORWARD \<br>
+          &nbsp;&nbsp;-p tcp --tcp-flags SYN,RST SYN \<br>
+          &nbsp;&nbsp;-o tun0 \<br>
+          &nbsp;&nbsp;-j TCPMSS --clamp-mss-to-pmtu
+        </div>
+        <div class="code" style="margin-top:6px;opacity:0;transition:opacity .4s" id="s5_code2">
+          # Or set fixed MSS (VPN MTU−40):<br>
+          iptables -t mangle -A FORWARD \<br>
+          &nbsp;&nbsp;-p tcp --tcp-flags SYN,RST SYN \<br>
+          &nbsp;&nbsp;-j TCPMSS --set-mss 1360
+        </div>
+      </div>
+
+      <!-- verify -->
+      <div class="fade" id="s5_verify" style="border-left:3px solid #4eff9a;padding:8px 10px;font-size:7px;color:#aaa;line-height:2;background:#030f07">
+        <span style="color:#4eff9a">VERIFY IT'S WORKING:</span><br>
+        <span style="color:#4ec9e1">$ ping -M do -s 1400 8.8.8.8</span><br>
+        If no reply → MTU problem confirmed.<br>
+        <span style="color:#4ec9e1">$ ip route show cache</span><br>
+        Shows cached PMTU per destination.
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Clamp MSS at SYN — bypasses broken PMTUD</div>
+    <div class="ih" id="s5_status">► See how MSS clamping saves the connection</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur = 1;
+
+function goScene(n) {
+  document.getElementById('s'+cur).classList.remove('active');
+  cur = n;
+  document.getElementById('s'+cur).classList.add('active');
+  resetScene(cur);
+}
+
+function resetScene(n) {
+  document.querySelectorAll('#s'+n+' .fade').forEach(f => f.classList.remove('in'));
+  document.querySelectorAll('#s'+n+' .fill').forEach(b => {
+    b.style.transition = 'none';
+    b.style.width = '0';
+  });
+  // reset progress bars in scene 1
+  ['s1_bar1','s1_bar2','s1_bar3'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el){ el.style.transition='none'; el.style.width='0'; }
+  });
+  const sp = document.getElementById('s1_spinner');
+  if(sp) sp.style.display='inline-block';
+}
+
+function delay(fn, ms) { setTimeout(fn, ms); }
+
+function beam(id, ms, dur) {
+  delay(() => {
+    const b = document.getElementById(id);
+    if(!b) return;
+    b.style.transition = `width ${dur||0.55}s ease-out`;
+    b.style.width = '100%';
+  }, ms);
+}
+
+function fadeIn(id, ms) {
+  delay(() => {
+    const el = document.getElementById(id);
+    if(el) el.classList.add('in');
+  }, ms);
+}
+
+function bar(id, pct, ms) {
+  delay(() => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.style.transition = el.style.transition || 'width .6s ease-out';
+    el.style.width = pct;
+  }, ms);
+}
+
+function status(scene, txt, ms) {
+  delay(() => {
+    const el = document.getElementById('s'+scene+'_status');
+    if(el) el.textContent = txt;
+  }, ms);
+}
+
+function playScene(n) {
+  resetScene(n);
+  delay(() => runScene(n), 60);
+}
+
+function runScene(n) {
+  if(n===1) runS1();
+  if(n===2) runS2();
+  if(n===3) runS3();
+  if(n===4) runS4();
+  if(n===5) runS5();
+}
+
+function runS1() {
+  status(1, 'HTTP: small packets — no problem', 0);
+  fadeIn('s1_hook', 100);
+  fadeIn('s1_http', 400);
+  beam('s1_hb', 700, 0.5);
+  beam('s1_hrep', 1350, 0.5);
+  status(1, 'HTTP works fine. Now try HTTPS…', 1500);
+  fadeIn('s1_https', 1800);
+  beam('s1_tb', 2100, 0.5);
+  // spinner stays, no reply beam
+  status(1, '⏳ HTTPS packet silently dropped — no error!', 2900);
+  fadeIn('s1_sizes', 3400);
+  bar('s1_bar1', '13%', 3700);
+  bar('s1_bar2', '33%', 3900);
+  bar('s1_bar3', '100%', 4100);
+  fadeIn('s1_clue', 5000);
+  status(1, 'TLS exceeds MTU. ICMP blocked. Hang.', 5200);
+}
+
+function runS2() {
+  status(2, 'DF=1 set — router cannot fragment', 0);
+  fadeIn('s2_intro', 100);
+  fadeIn('s2_hdr', 500);
+  delay(() => {
+    const df = document.getElementById('s2_df');
+    if(df){ df.style.boxShadow='0 0 0 3px #e8a020'; }
+  }, 900);
+  fadeIn('s2_flow', 1200);
+  beam('s2_b1', 1500, 0.55);
+  status(2, '1500B packet hits small-MTU router!', 1800);
+  delay(() => {
+    const r = document.getElementById('s2_rtr');
+    if(r) r.style.boxShadow='0 0 0 3px #e85050';
+  }, 2150);
+  beam('s2_b2', 2300, 0.55);
+  status(2, 'Router sends ICMP T3C4 back to host', 2600);
+  delay(() => {
+    const h = document.getElementById('s2_host2');
+    if(h) h.style.boxShadow='0 0 0 3px #4eff9a';
+  }, 2950);
+  beam('s2_b3', 3200, 0.55);
+  status(2, '576B packet fits — connection proceeds ✓', 3600);
+  fadeIn('s2_cache', 4200);
+}
+
+function runS3() {
+  status(3, 'Sending 1500B packet through firewall…', 0);
+  fadeIn('s3_intro', 100);
+  fadeIn('s3_topo', 400);
+  delay(() => {
+    const fw = document.getElementById('s3_fw');
+    if(fw) fw.style.animation = 'none';
+  }, 800);
+  fadeIn('s3_loop', 1000);
+  // animate the steps
+  beam('s3_b1', 1300, 0.45);
+  status(3, 'Packet hits router — dropped (too big)!', 1850);
+  beam('s3_b2', 2100, 0.45);
+  status(3, 'ICMP heads back — firewall kills it 🔥', 2650);
+  delay(() => {
+    const fw = document.getElementById('s3_fw');
+    if(fw) fw.style.boxShadow='0 0 0 4px #e85050';
+  }, 2700);
+  beam('s3_b3', 3200, 0.45);
+  status(3, 'Host retransmits blindly — loop forever', 3800);
+  fadeIn('s3_tcp', 4200);
+  fadeIn('s3_why', 5100);
+  status(3, 'TCP times out after ~90s. HTTPS broken.', 5300);
+}
+
+function runS4() {
+  status(4, 'Examining VPN packet overhead…', 0);
+  fadeIn('s4_intro', 100);
+  fadeIn('s4_enc', 500);
+  status(4, 'WireGuard wraps packet — ~80B overhead', 1400);
+  fadeIn('s4_table', 2000);
+  status(4, 'Every VPN layer costs more MTU headroom', 3000);
+  fadeIn('s4_impact', 3600);
+  status(4, '"Works without VPN" = classic PMTUD black hole', 4400);
+}
+
+function runS5() {
+  status(5, 'MSS clamping intercepts the TCP SYN…', 0);
+  fadeIn('s5_intro', 100);
+  fadeIn('s5_mss', 500);
+  status(5, 'MSS = MTU − 40B (IP+TCP headers)', 1200);
+  fadeIn('s5_clamp', 1700);
+  beam('s5_b1', 2000, 0.5);
+  delay(() => {
+    status(5, 'iptables rewrites MSS in SYN packet!', 2600);
+  }, 0);
+  beam('s5_b2', 2900, 0.5);
+  status(5, 'Server uses 1360B segments — always fits ✓', 3500);
+  fadeIn('s5_cmd', 4000);
+  delay(() => {
+    const c1 = document.getElementById('s5_code1');
+    if(c1) c1.style.opacity = '1';
+  }, 4400);
+  delay(() => {
+    const c2 = document.getElementById('s5_code2');
+    if(c2) c2.style.opacity = '1';
+  }, 5100);
+  fadeIn('s5_verify', 5700);
+  status(5, 'Clamp MSS — fix PMTUD black holes forever ✓', 6000);
+}
+
+window.addEventListener('load', () => {
+  delay(() => playScene(1), 400);
+});
+</script>
+</body>
+</html>

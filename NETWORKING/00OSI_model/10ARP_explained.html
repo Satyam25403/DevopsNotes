@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ARP — How IP Finds MAC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1a2e}
+.hdr-title{font-size:11px;color:#e8a020;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1208;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a0a0a;border:1px solid #1a1408;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e8a020;text-align:center}
+.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#a060c0}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e8a020;background:transparent;color:#e8a020;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8a02020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #1a1408;border-radius:2px;border-left:3px solid #e8a020;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-block.pu{border-left-color:#a060c0}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#e8a020;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.cy{color:#4ec9e1}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.am{color:#e8a020}.gn{color:#4eff9a}.cy{color:#4ec9e1}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* ripple broadcast */
+@keyframes rippleOut{
+  0%{r:24;opacity:.9;stroke-width:2.5}
+  100%{r:70;opacity:0;stroke-width:.5}
+}
+.rp1{animation:rippleOut 1.8s ease-out infinite}
+.rp2{animation:rippleOut 1.8s ease-out .6s infinite}
+.rp3{animation:rippleOut 1.8s ease-out 1.2s infinite}
+
+/* unicast reply beam */
+@keyframes beamGrow{
+  0%{stroke-dashoffset:200}
+  100%{stroke-dashoffset:0}
+}
+.beam-path{
+  stroke-dasharray:200;
+  stroke-dashoffset:200;
+}
+.beam-path.animating{
+  animation:beamGrow .9s ease-out forwards;
+}
+
+/* device flash */
+@keyframes deviceFlash{
+  0%,100%{opacity:1}
+  50%{opacity:.3}
+}
+.flash{animation:deviceFlash .4s ease-in-out 2}
+
+/* ARP table row reveal */
+.arp-row{
+  opacity:0;transform:translateX(-10px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.arp-row.visible{opacity:1;transform:translateX(0)}
+
+/* packet label slide */
+.pkt-label{
+  opacity:0;
+  transition:opacity .25s;
+}
+.pkt-label.visible{opacity:1}
+
+/* terminal blink */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* node pulse */
+@keyframes nodePulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(232,160,32,.0)}
+  50%{box-shadow:0 0 0 5px rgba(232,160,32,.2)}
+}
+.pulse-node{animation:nodePulse 1.2s ease-in-out 3}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SCENE 1: HOOK ════════════════ -->
+<div class="scene active" id="s1" style="background:#0a0908">
+  <div class="hdr" style="background:#0a0908">
+    <div class="hdr-title">ARP — ADDRESS RESOLUTION</div>
+    <div class="hdr-sub">HOW IP FINDS MAC · L2/L3 BOUNDARY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">HOOK</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">EVERY REQUEST</span>
+  </div>
+
+  <div class="anim" style="background:#0a0908">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero -->
+      <div id="s1-hero" style="border:2px solid #e8a020;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0b04">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:2px;margin-bottom:10px">BEFORE EVERY WEB REQUEST</div>
+        <div style="font-size:9px;color:#ffe8a0;line-height:1.9;margin-bottom:10px">YOUR COMPUTER<br>BROADCASTS A QUESTION<br>TO YOUR ENTIRE<br>NETWORK</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">"Who has 192.168.1.1?<br>Tell 192.168.1.50"<br>Every device hears it.<br>Only one answers.</div>
+      </div>
+
+      <!-- the gap diagram — why ARP exists -->
+      <div id="s1-gap" style="opacity:0;transition:opacity .5s;border:1px solid #1a1408;border-radius:3px;padding:12px;background:#0a0908">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:10px;text-align:center">THE PROBLEM ARP SOLVES</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;border:2px solid #a060c0;border-radius:3px;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#a060c0;margin-bottom:4px">LAYER 3</div>
+            <div style="font-size:7px;color:#d090f0">192.168.1.1</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">IP address<br>known ✓</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:14px;color:#e85050">?</div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px">need<br>to map</div>
+          </div>
+          <div style="flex:1;border:2px solid #e8a020;border-radius:3px;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#e8a020;margin-bottom:4px">LAYER 2</div>
+            <div style="font-size:7px;color:#ffd080">??:??:??<br>:??:??:??</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">MAC address<br>unknown ✗</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;text-align:center;border:1px solid #1a2a10;border-radius:2px;padding:7px;background:#080f06">
+          <div style="font-size:7px;color:#4eff9a">ARP bridges the gap between IP and MAC</div>
+          <div style="font-size:6px;color:#555;margin-top:3px">Operates at the L2/L3 boundary — not quite either layer</div>
+        </div>
+      </div>
+
+      <!-- quick facts -->
+      <div id="s1-facts" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #1a1408;border-radius:2px;padding:8px;text-align:center;background:#0d0b04">
+          <div style="font-size:10px;color:#e8a020;margin-bottom:3px">0x0806</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">EtherType for<br>ARP frames</div>
+        </div>
+        <div style="border:1px solid #1a1408;border-radius:2px;padding:8px;text-align:center;background:#0d0b04">
+          <div style="font-size:10px;color:#e8a020;margin-bottom:3px">28B</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">ARP payload<br>size</div>
+        </div>
+        <div style="border:1px solid #1a1408;border-radius:2px;padding:8px;text-align:center;background:#0d0b04">
+          <div style="font-size:10px;color:#4eff9a;margin-bottom:3px">~20s</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">default ARP<br>cache timeout</div>
+        </div>
+        <div style="border:1px solid #1a1408;border-radius:2px;padding:8px;text-align:center;background:#0d0b04">
+          <div style="font-size:10px;color:#e85050;margin-bottom:3px">0 auth</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">ARP has no<br>authentication</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE ARP IN ACTION
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ADDRESS RESOLUTION PROTOCOL</div>
+    <div class="ih">Maps Layer 3 IP → Layer 2 MAC</div>
+    <div class="il" style="font-size:7px">Without ARP, your computer can't send a single frame. IP gives you the destination. ARP translates it to the hardware address the switch actually uses.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">ARP</div><div class="sl">RFC 826<br>1982</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">auth or<br>verification</div></div>
+    <div class="sc"><div class="sv gn">L2/L3</div><div class="sl">boundary<br>protocol</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 2: ARP REQUEST BROADCAST ════════════════ -->
+<div class="scene" id="s2" style="background:#0a0908">
+  <div class="hdr" style="background:#0a0908">
+    <div class="hdr-title" style="color:#e8a020">STEP 1: ARP REQUEST</div>
+    <div class="hdr-sub">BROADCAST TO FF:FF:FF:FF:FF:FF</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">BROADCAST</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">WHO HAS?</span>
+  </div>
+
+  <div class="anim" style="background:#0a0908">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- broadcast network diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#e8a020;background:#0d0b04">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">ARP BROADCAST — ALL DEVICES RECEIVE</div>
+        <svg width="330" height="160" viewBox="0 0 330 160" id="s2-svg">
+          <!-- sender (bottom center) -->
+          <rect x="115" y="108" width="100" height="44" rx="4" fill="#0d0b04" stroke="#e8a020" stroke-width="2"/>
+          <text x="165" y="124" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6">YOUR PC</text>
+          <text x="165" y="135" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">192.168.1.50</text>
+          <text x="165" y="145" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">AA:BB:CC:11:22:33</text>
+
+          <!-- broadcast ripple circles from sender -->
+          <circle class="rp1" id="s2-r1" cx="165" cy="108" r="24" fill="none" stroke="#e8a020" opacity="0"/>
+          <circle class="rp2" id="s2-r2" cx="165" cy="108" r="24" fill="none" stroke="#e8a020" opacity="0"/>
+          <circle class="rp3" id="s2-r3" cx="165" cy="108" r="24" fill="none" stroke="#e8a020" opacity="0"/>
+
+          <!-- switch -->
+          <rect x="130" y="74" width="70" height="26" rx="3" fill="#0a0a08" stroke="#2a2a10" stroke-width="1.5"/>
+          <text x="165" y="84" text-anchor="middle" fill="#2a2a10" font-family="'Press Start 2P'" font-size="5">SWITCH</text>
+          <text x="165" y="93" text-anchor="middle" fill="#1a1a08" font-family="'Press Start 2P'" font-size="4">floods all ports</text>
+          <line x1="165" y1="108" x2="165" y2="100" stroke="#2a2a10" stroke-width="2"/>
+
+          <!-- Device top-left: gateway/router = TARGET -->
+          <rect x="10" y="10" width="90" height="52" rx="4" fill="#0a1008" stroke="#4eff9a" stroke-width="2" id="s2-target"/>
+          <text x="55" y="26" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ROUTER</text>
+          <text x="55" y="37" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">GATEWAY</text>
+          <text x="55" y="48" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.1</text>
+          <text x="55" y="56" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">DD:EE:FF:44:55:66</text>
+          <line x1="100" y1="36" x2="130" y2="84" stroke="#1a2a10" stroke-width="1.5"/>
+
+          <!-- Device top-right: laptop (ignored) -->
+          <rect x="230" y="10" width="90" height="52" rx="4" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="1.5" id="s2-dev2"/>
+          <text x="275" y="30" text-anchor="middle" fill="#2a2a2a" font-family="'Press Start 2P'" font-size="5">LAPTOP</text>
+          <text x="275" y="42" text-anchor="middle" fill="#1a1a1a" font-family="'Press Start 2P'" font-size="4">192.168.1.20</text>
+          <text x="275" y="52" text-anchor="middle" fill="#111" font-family="'Press Start 2P'" font-size="3">CC:DD:EE:77:88:99</text>
+          <line x1="230" y1="36" x2="200" y2="84" stroke="#1a1a10" stroke-width="1.5"/>
+
+          <!-- ARP packet label floating up from sender -->
+          <rect id="s2-pkt" x="120" y="84" width="90" height="22" rx="3" fill="#150d00" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s2-pkt-t1" x="165" y="93" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5" opacity="0">ARP REQUEST</text>
+          <text id="s2-pkt-t2" x="165" y="102" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">DST: FF:FF:FF:FF:FF:FF</text>
+
+          <!-- NOT ME labels -->
+          <text id="s2-notme" x="275" y="6" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5" opacity="0">NOT ME</text>
+          <!-- TARGET label -->
+          <text id="s2-itsme" x="55" y="6" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">THAT'S ME!</text>
+        </svg>
+      </div>
+
+      <!-- ARP packet structure -->
+      <div id="s2-packet" style="border:1px solid #1a1408;border-radius:3px;padding:10px;background:#0d0b04;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:7px">ARP REQUEST PACKET CONTENTS</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">SENDER IP</div>
+            <div style="font-size:7px;color:#e8a020;flex:1">192.168.1.50</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">SENDER MAC</div>
+            <div style="font-size:7px;color:#e8a020;flex:1">AA:BB:CC:11:22:33</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">TARGET IP</div>
+            <div style="font-size:7px;color:#4eff9a;flex:1">192.168.1.1</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">TARGET MAC</div>
+            <div style="font-size:7px;color:#e85050;flex:1">?? ?? ?? ?? ?? ??  ← this is what we need</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">DEST MAC</div>
+            <div style="font-size:7px;color:#e85050;flex:1">FF:FF:FF:FF:FF:FF  ← broadcast</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Your PC knows the <span class="am">destination IP</span> (192.168.1.1) but needs the <span class="am">MAC</span> to build an Ethernet frame. Layer 3 can't work without Layer 2.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">ARP request is sent to <span class="rd">FF:FF:FF:FF:FF:FF</span> — the broadcast MAC. The switch floods it out every port. Every device on the LAN receives the frame.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">Each device checks the <span class="am">target IP field</span>. If it doesn't match their IP, they silently discard the frame. Only 192.168.1.1 keeps processing.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ARP REQUEST</div>
+    <div class="ih">"Who has 192.168.1.1? Tell 192.168.1.50"</div>
+    <div class="il" style="font-size:7px">The broadcast is heard by every device on the segment. This is also why ARP is exploitable — any device can respond, not just the real owner.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">FF×6</div><div class="sl">broadcast<br>destination</div></div>
+    <div class="sc"><div class="sv am">ALL</div><div class="sl">devices<br>receive it</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">device should<br>respond</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 3: ARP REPLY ════════════════ -->
+<div class="scene" id="s3" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">STEP 2: ARP REPLY</div>
+    <div class="hdr-sub">UNICAST RESPONSE — I HAVE IT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">UNICAST</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HERE'S MY MAC</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- unicast reply diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4eff9a;background:#060f06">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">ARP REPLY — UNICAST BACK TO REQUESTER</div>
+        <svg width="330" height="150" viewBox="0 0 330 150" id="s3-svg">
+          <!-- router (top-left) — sender of reply -->
+          <rect x="10" y="10" width="100" height="54" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="2" id="s3-router"/>
+          <text x="60" y="26" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">ROUTER</text>
+          <text x="60" y="37" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.1</text>
+          <text x="60" y="47" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">DD:EE:FF</text>
+          <text x="60" y="56" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">:44:55:66</text>
+
+          <!-- switch -->
+          <rect x="120" y="72" width="90" height="24" rx="3" fill="#060906" stroke="#1a2a10" stroke-width="1.5"/>
+          <text x="165" y="84" text-anchor="middle" fill="#1a2a10" font-family="'Press Start 2P'" font-size="5">SWITCH</text>
+          <text x="165" y="92" text-anchor="middle" fill="#0d1a0d" font-family="'Press Start 2P'" font-size="4">unicast forward</text>
+
+          <!-- your PC (bottom-right) -->
+          <rect x="220" y="100" width="100" height="44" rx="4" fill="#060f06" stroke="#e8a020" stroke-width="1.5" id="s3-pc"/>
+          <text x="270" y="116" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">YOUR PC</text>
+          <text x="270" y="128" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.50</text>
+          <text x="270" y="138" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">AA:BB:CC:11:22:33</text>
+
+          <!-- wire: router -> switch -->
+          <line x1="110" y1="36" x2="120" y2="84" stroke="#1a2a10" stroke-width="2"/>
+          <!-- wire: switch -> PC -->
+          <line x1="210" y1="84" x2="220" y2="118" stroke="#1a2a10" stroke-width="2"/>
+
+          <!-- reply beam: router -> switch -->
+          <path id="s3-beam1" d="M110,36 L120,84" stroke="#4eff9a" stroke-width="2.5"
+            stroke-dasharray="200" stroke-dashoffset="200" fill="none" stroke-linecap="round"/>
+          <!-- reply beam: switch -> PC -->
+          <path id="s3-beam2" d="M210,84 L220,118" stroke="#4eff9a" stroke-width="2.5"
+            stroke-dasharray="200" stroke-dashoffset="200" fill="none" stroke-linecap="round"/>
+
+          <!-- ARP reply packet label -->
+          <rect id="s3-pkt" x="100" y="50" width="100" height="26" rx="3" fill="#040f04" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-pkt-t1" x="150" y="63" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">ARP REPLY</text>
+          <text id="s3-pkt-t2" x="150" y="72" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">unicast to AA:BB:CC:11:22:33</text>
+
+          <!-- received checkmark -->
+          <text id="s3-check" x="270" y="96" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="12" opacity="0">✓</text>
+        </svg>
+      </div>
+
+      <!-- reply packet contents -->
+      <div id="s3-packet" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#060f06;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">ARP REPLY PACKET CONTENTS</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">SENDER IP</div>
+            <div style="font-size:7px;color:#4eff9a;flex:1">192.168.1.1</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">SENDER MAC</div>
+            <div style="font-size:7px;color:#4eff9a;flex:1">DD:EE:FF:44:55:66  ← the answer!</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">TARGET IP</div>
+            <div style="font-size:7px;color:#e8a020;flex:1">192.168.1.50</div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="font-size:6px;color:#555;width:90px;flex-shrink:0">DEST MAC</div>
+            <div style="font-size:7px;color:#e8a020;flex:1">AA:BB:CC:11:22:33  ← unicast, not broadcast</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text">The router sees its IP in the request's target field. It sends a <span class="gn">unicast ARP reply</span> — directly to the requester's MAC. No broadcast needed for the reply.</div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text">The reply contains <span class="gn">the router's MAC address</span>. Your PC now has everything it needs: IP → MAC mapping. It can build the Ethernet frame and send the actual data.</div>
+      </div>
+      <div class="step-block gn" id="s3-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text"><span class="rd">Critical weakness:</span> ARP is stateless and unauthenticated. Any device can send a fake ARP reply. If an attacker replies first, they intercept your traffic — <span class="rd">ARP spoofing / MITM</span>.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">ARP REPLY</div>
+    <div class="ih gn">"192.168.1.1 is at DD:EE:FF:44:55:66"</div>
+    <div class="il" style="font-size:7px">The reply is unicast — only your PC receives it. Now the IP→MAC pair is cached in your ARP table so you don't broadcast again for a while.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">UNICAST</div><div class="sl">reply goes<br>direct only</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">round-trip<br>to resolve</div></div>
+    <div class="sc"><div class="sv rd">NO AUTH</div><div class="sl">anyone can<br>reply first</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 4: ARP TABLE + arp -a ════════════════ -->
+<div class="scene" id="s4" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title" style="color:#4ec9e1">ARP TABLE CACHE</div>
+    <div class="hdr-sub">arp -a · LOCAL IP→MAC MAP · TTL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CACHE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">arp -a</span>
+  </div>
+
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- terminal with arp -a output -->
+      <div id="s4-term" style="border:2px solid #4ec9e1;border-radius:3px;background:#040408;padding:12px;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:10px">TERMINAL — arp -a</div>
+
+        <div style="font-size:7px;line-height:2;font-family:'Press Start 2P',monospace">
+          <div style="color:#555">$ <span style="color:#fff">arp -a</span></div>
+          <div style="color:#555; margin-bottom:6px; font-size:6px">Interface: 192.168.1.50 --- 0x4</div>
+
+          <!-- table header -->
+          <div style="display:flex;gap:0;border-bottom:1px solid #1a1a3a;padding-bottom:4px;margin-bottom:4px">
+            <div style="font-size:6px;color:#4ec9e1;width:110px">Internet Address</div>
+            <div style="font-size:6px;color:#4ec9e1;width:130px">Physical Address</div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1">Type</div>
+          </div>
+
+          <!-- table rows -->
+          <div class="arp-row" id="ar1" style="display:flex;gap:0;padding:2px 0">
+            <div style="font-size:6px;color:#4eff9a;width:110px">192.168.1.1</div>
+            <div style="font-size:6px;color:#e8a020;width:130px">dd-ee-ff-44-55-66</div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1">dynamic</div>
+          </div>
+          <div class="arp-row" id="ar2" style="display:flex;gap:0;padding:2px 0">
+            <div style="font-size:6px;color:#4eff9a;width:110px">192.168.1.20</div>
+            <div style="font-size:6px;color:#e8a020;width:130px">cc-dd-ee-77-88-99</div>
+            <div style="font-size:6px;color:#4ec9e1;flex:1">dynamic</div>
+          </div>
+          <div class="arp-row" id="ar3" style="display:flex;gap:0;padding:2px 0">
+            <div style="font-size:6px;color:#4eff9a;width:110px">192.168.1.255</div>
+            <div style="font-size:6px;color:#e85050;width:130px">ff-ff-ff-ff-ff-ff</div>
+            <div style="font-size:6px;color:#888;flex:1">static</div>
+          </div>
+          <div class="arp-row" id="ar4" style="display:flex;gap:0;padding:2px 0">
+            <div style="font-size:6px;color:#4eff9a;width:110px">224.0.0.22</div>
+            <div style="font-size:6px;color:#a060c0;width:130px">01-00-5e-00-00-16</div>
+            <div style="font-size:6px;color:#888;flex:1">static</div>
+          </div>
+
+          <div style="margin-top:8px;color:#555;font-size:6px">$ <span class="blink">█</span></div>
+        </div>
+      </div>
+
+      <!-- TTL / timeout explanation -->
+      <div id="s4-ttl" style="border:1px solid #1a1a3a;border-radius:3px;padding:10px;background:#06060e;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px;letter-spacing:1px">ARP CACHE LIFETIME</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#aaa;width:70px;flex-shrink:0">Windows</div>
+            <div style="flex:1;height:10px;background:#0a0a14;border:1px solid #1a1a3a;border-radius:2px;overflow:hidden">
+              <div id="s4-w" style="height:100%;width:0%;background:#4ec9e1;transition:width 1.1s ease-out;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#4ec9e1;width:44px;text-align:right">~2 min</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#aaa;width:70px;flex-shrink:0">Linux</div>
+            <div style="flex:1;height:10px;background:#0a0a14;border:1px solid #1a1a3a;border-radius:2px;overflow:hidden">
+              <div id="s4-l" style="height:100%;width:0%;background:#4eff9a;transition:width 1.1s .15s ease-out;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#4eff9a;width:44px;text-align:right">~15-90s</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:7px;color:#aaa;width:70px;flex-shrink:0">macOS</div>
+            <div style="flex:1;height:10px;background:#0a0a14;border:1px solid #1a1a3a;border-radius:2px;overflow:hidden">
+              <div id="s4-m" style="height:100%;width:0%;background:#a060c0;transition:width 1.1s .3s ease-out;border-radius:2px"></div>
+            </div>
+            <div style="font-size:7px;color:#a060c0;width:44px;text-align:right">~20s</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#444;margin-top:8px;line-height:1.8">After timeout, the entry is flushed. Next packet to that IP triggers a new ARP request. Static entries (like broadcast) never expire.</div>
+      </div>
+
+      <div class="step-block cy" id="s4-s1">
+        <div class="step-num cy">01</div>
+        <div class="step-text"><span class="cy">ARP table</span> caches resolved IP→MAC pairs locally. Every OS keeps one. <span class="cy">arp -a</span> on Windows/Linux/macOS shows your current mappings.</div>
+      </div>
+      <div class="step-block cy" id="s4-s2">
+        <div class="step-num cy">02</div>
+        <div class="step-text"><span class="gn">Dynamic</span> entries come from ARP responses and expire. <span class="am">Static</span> entries are manually configured and never expire — used for permanent mappings like broadcast.</div>
+      </div>
+      <div class="step-block cy" id="s4-s3">
+        <div class="step-num cy">03</div>
+        <div class="step-text">Caching prevents a broadcast for <span class="cy">every single packet</span>. Without it, a 1-second video stream to your router would generate ~30 ARP broadcasts per second.</div>
+      </div>
+      <div class="step-block cy" id="s4-s4">
+        <div class="step-num cy">04</div>
+        <div class="step-text"><span class="rd">ARP cache poisoning:</span> attacker sends unsolicited ARP replies to overwrite your cache with their MAC. Now your traffic goes to them. No broadcast needed — OS accepts gratuitous ARPs.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">ARP CACHE</div>
+    <div class="ih cy">Local memory of who owns each IP</div>
+    <div class="il" style="font-size:7px">The cache is the target of ARP spoofing attacks. Overwrite one entry → intercept all traffic to that IP. No firewall can stop it at Layer 2.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">arp -a</div><div class="sl">view your<br>ARP table</div></div>
+    <div class="sc"><div class="sv am">~20s</div><div class="sl">typical cache<br>lifetime</div></div>
+    <div class="sc"><div class="sv rd">MITM</div><div class="sl">cache poisoning<br>attack</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 5: FULL ARP FLOW SUMMARY ════════════════ -->
+<div class="scene" id="s5" style="background:#0a0908">
+  <div class="hdr" style="background:#0a0908">
+    <div class="hdr-title" style="color:#e8a020">COMPLETE ARP FLOW</div>
+    <div class="hdr-sub">END-TO-END · L2/L3 BOUNDARY · ATTACK SURFACE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FULL PICTURE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0908">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s;padding:4px 0">STEP BY STEP — EVERY TIME YOU SEND A PACKET</div>
+
+      <!-- flow steps building top to bottom -->
+      <div id="s5-f1" style="display:flex;align-items:center;gap:10px;border:2px solid #1a1408;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#0d0b04">
+        <div style="font-size:18px;flex-shrink:0;width:30px;text-align:center">🔍</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:4px">CHECK ARP CACHE FIRST</div>
+          <div style="font-size:6px;color:#888;line-height:1.7">OS checks arp table. If IP→MAC entry exists and hasn't expired → skip ARP, send frame directly.</div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;flex-shrink:0">CACHE HIT</div>
+      </div>
+
+      <div style="text-align:center;font-size:8px;color:#333;opacity:0;transition:opacity .4s" id="s5-ar1">↓ cache miss</div>
+
+      <div id="s5-f2" style="display:flex;align-items:center;gap:10px;border:2px solid #3a1a00;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#0d0800">
+        <div style="font-size:18px;flex-shrink:0;width:30px;text-align:center">📢</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:4px">ARP REQUEST BROADCAST</div>
+          <div style="font-size:6px;color:#888;line-height:1.7">Send to FF:FF:FF:FF:FF:FF<br>"Who has 192.168.1.1? Tell 192.168.1.50"<br>Every device on LAN receives it.</div>
+        </div>
+        <div style="font-size:7px;color:#e85050;flex-shrink:0">BROADCAST</div>
+      </div>
+
+      <div style="text-align:center;font-size:8px;color:#333;opacity:0;transition:opacity .4s" id="s5-ar2">↓ target responds</div>
+
+      <div id="s5-f3" style="display:flex;align-items:center;gap:10px;border:2px solid #0d2a10;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#060f06">
+        <div style="font-size:18px;flex-shrink:0;width:30px;text-align:center">💬</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">ARP REPLY UNICAST</div>
+          <div style="font-size:6px;color:#888;line-height:1.7">Router sends back:<br>"192.168.1.1 is at DD:EE:FF:44:55:66"<br>Directly to your MAC. Unicast.</div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;flex-shrink:0">UNICAST</div>
+      </div>
+
+      <div style="text-align:center;font-size:8px;color:#333;opacity:0;transition:opacity .4s" id="s5-ar3">↓ update cache</div>
+
+      <div id="s5-f4" style="display:flex;align-items:center;gap:10px;border:2px solid #1a1a3a;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#08080e">
+        <div style="font-size:18px;flex-shrink:0;width:30px;text-align:center">💾</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:4px">CACHE + SEND</div>
+          <div style="font-size:6px;color:#888;line-height:1.7">Store IP→MAC in ARP table. Build Ethernet frame with resolved MAC. Deliver packet. Done.</div>
+        </div>
+        <div style="font-size:7px;color:#4ec9e1;flex-shrink:0">CACHED</div>
+      </div>
+
+      <!-- L2/L3 boundary callout -->
+      <div id="s5-boundary" style="border:2px solid #a060c0;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0818">
+        <div style="font-size:7px;color:#a060c0;letter-spacing:1px;margin-bottom:6px">L2 / L3 BOUNDARY</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:6px">
+          <div style="border:1px solid #a060c0;border-radius:2px;padding:5px 8px;font-size:7px;color:#d090f0">IP (L3)</div>
+          <div style="font-size:9px;color:#a060c0">⟷</div>
+          <div style="border:1px solid #e8a020;border-radius:2px;padding:5px 8px;font-size:7px;color:#e8a020">ARP</div>
+          <div style="font-size:9px;color:#a060c0">⟷</div>
+          <div style="border:1px solid #4eff9a;border-radius:2px;padding:5px 8px;font-size:7px;color:#4eff9a">MAC (L2)</div>
+        </div>
+        <div style="font-size:6px;color:#555;line-height:1.8">ARP sits between layers — not strictly L2 or L3. It uses L2 (Ethernet frames, EtherType 0x0806) to carry L3 (IP) resolution requests.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">THE FULL PICTURE</div>
+    <div class="ih">Cache miss → broadcast → unicast → cache → send</div>
+    <div class="il" style="font-size:7px">ARP runs silently before every first packet. Wireshark shows them as "Who has x.x.x.x? Tell y.y.y.y" — now you know exactly what that means.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">2</div><div class="sl">packets to<br>resolve MAC</div></div>
+    <div class="sc"><div class="sv am">&lt;1ms</div><div class="sl">typical<br>resolution time</div></div>
+    <div class="sc"><div class="sv pu">L2/L3</div><div class="sl">boundary<br>protocol</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-gap','s1-facts','s1-cta'].forEach(id=>{
+      document.getElementById(id).style.opacity='0';
+    });
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    document.getElementById('s2-packet').style.opacity='0';
+    ['s2-s1','s2-s2','s2-s3'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['s2-r1','s2-r2','s2-r3'].forEach(id=>{ const el=document.getElementById(id); if(el) el.setAttribute('opacity','0'); });
+    ['s2-pkt','s2-pkt-t1','s2-pkt-t2','s2-notme','s2-itsme'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.setAttribute('opacity','0');
+    });
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    document.getElementById('s3-packet').style.opacity='0';
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['s3-beam1','s3-beam2'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){ el.style.transition='none'; el.style.strokeDashoffset='200'; el.classList.remove('animating'); }
+    });
+    ['s3-pkt','s3-pkt-t1','s3-pkt-t2','s3-check'].forEach(id=>{
+      const el=document.getElementById(id); if(el) el.setAttribute('opacity','0');
+    });
+  }
+  if(n===4){
+    document.getElementById('s4-term').style.opacity='0';
+    document.getElementById('s4-ttl').style.opacity='0';
+    ['ar1','ar2','ar3','ar4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['s4-s1','s4-s2','s4-s3','s4-s4'].forEach(id=>document.getElementById(id).classList.remove('visible'));
+    ['s4-w','s4-l','s4-m'].forEach(id=>{ const el=document.getElementById(id); if(el){ el.style.transition='none'; el.style.width='0%'; } });
+  }
+  if(n===5){
+    ['s5-title','s5-f1','s5-ar1','s5-f2','s5-ar2','s5-f3','s5-ar3','s5-f4','s5-boundary'].forEach(id=>{
+      document.getElementById(id).style.opacity='0';
+    });
+  }
+}
+
+function playScene(n){
+  clearTimers();
+  resetScene(n);
+
+  if(n===1){
+    delay(()=>{ document.getElementById('s1-hero').style.opacity='1'; },200);
+    delay(()=>{ document.getElementById('s1-gap').style.opacity='1'; },900);
+    delay(()=>{ document.getElementById('s1-facts').style.opacity='1'; },1700);
+    delay(()=>{ document.getElementById('s1-cta').style.opacity='1'; },2300);
+  }
+
+  if(n===2){
+    delay(()=>{ document.getElementById('s2-hero').classList.add('visible'); },200);
+    // show ripples
+    delay(()=>{
+      ['s2-r1','s2-r2','s2-r3'].forEach(id=>{ document.getElementById(id).setAttribute('opacity','1'); });
+    },600);
+    // show packet label
+    delay(()=>{
+      ['s2-pkt','s2-pkt-t1','s2-pkt-t2'].forEach(id=>{ document.getElementById(id).setAttribute('opacity','1'); });
+    },900);
+    // show target reaction
+    delay(()=>{
+      document.getElementById('s2-itsme').setAttribute('opacity','1');
+      document.getElementById('s2-notme').setAttribute('opacity','1');
+    },1600);
+    delay(()=>{ document.getElementById('s2-packet').style.opacity='1'; },1200);
+    delay(()=>{ document.getElementById('s2-s1').classList.add('visible'); },600);
+    delay(()=>{ document.getElementById('s2-s2').classList.add('visible'); },1200);
+    delay(()=>{ document.getElementById('s2-s3').classList.add('visible'); },1900);
+  }
+
+  if(n===3){
+    delay(()=>{ document.getElementById('s3-hero').classList.add('visible'); },200);
+    // animate beams
+    delay(()=>{
+      ['s3-pkt','s3-pkt-t1','s3-pkt-t2'].forEach(id=>{ document.getElementById(id).setAttribute('opacity','1'); });
+      const b1=document.getElementById('s3-beam1');
+      if(b1){ b1.style.transition='stroke-dashoffset .7s ease-out'; b1.style.strokeDashoffset='0'; }
+    },700);
+    delay(()=>{
+      const b2=document.getElementById('s3-beam2');
+      if(b2){ b2.style.transition='stroke-dashoffset .6s ease-out'; b2.style.strokeDashoffset='0'; }
+    },1400);
+    delay(()=>{ document.getElementById('s3-check').setAttribute('opacity','1'); },2000);
+    delay(()=>{ document.getElementById('s3-packet').style.opacity='1'; },1100);
+    delay(()=>{ document.getElementById('s3-s1').classList.add('visible'); },600);
+    delay(()=>{ document.getElementById('s3-s2').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('s3-s3').classList.add('visible'); },2100);
+  }
+
+  if(n===4){
+    delay(()=>{ document.getElementById('s4-term').style.opacity='1'; },200);
+    // stagger table rows
+    delay(()=>{ document.getElementById('ar1').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('ar2').classList.add('visible'); },1000);
+    delay(()=>{ document.getElementById('ar3').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('ar4').classList.add('visible'); },1600);
+    delay(()=>{
+      document.getElementById('s4-ttl').style.opacity='1';
+      delay(()=>{
+        document.getElementById('s4-w').style.transition='width 1.1s ease-out';
+        document.getElementById('s4-w').style.width='75%';
+        delay(()=>{ document.getElementById('s4-l').style.width='55%'; },150);
+        delay(()=>{ document.getElementById('s4-m').style.width='30%'; },300);
+      },200);
+    },1900);
+    delay(()=>{ document.getElementById('s4-s1').classList.add('visible'); },700);
+    delay(()=>{ document.getElementById('s4-s2').classList.add('visible'); },1300);
+    delay(()=>{ document.getElementById('s4-s3').classList.add('visible'); },2300);
+    delay(()=>{ document.getElementById('s4-s4').classList.add('visible'); },2900);
+  }
+
+  if(n===5){
+    delay(()=>{ document.getElementById('s5-title').style.opacity='1'; },200);
+    delay(()=>{ document.getElementById('s5-f1').style.opacity='1'; },500);
+    delay(()=>{ document.getElementById('s5-ar1').style.opacity='1'; },900);
+    delay(()=>{ document.getElementById('s5-f2').style.opacity='1'; },1100);
+    delay(()=>{ document.getElementById('s5-ar2').style.opacity='1'; },1500);
+    delay(()=>{ document.getElementById('s5-f3').style.opacity='1'; },1700);
+    delay(()=>{ document.getElementById('s5-ar3').style.opacity='1'; },2100);
+    delay(()=>{ document.getElementById('s5-f4').style.opacity='1'; },2300);
+    delay(()=>{ document.getElementById('s5-boundary').style.opacity='1'; },2900);
+  }
+}
+
+window.addEventListener('load',()=>{ playScene(1); });
+</script>
+</body>
+</html>

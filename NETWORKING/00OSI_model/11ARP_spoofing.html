@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ARP Spoofing — The MITM Attack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a0808}
+.hdr-title{font-size:10px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#200808;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#aaa}
+.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0f0606;border:1px solid #200808;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #2a0808;border-radius:2px;border-left:3px solid #e85050;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-num{font-size:9px;color:#e85050;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.gn{color:#4eff9a}.step-num.cy{color:#4ec9e1}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.rd{color:#e85050}.am{color:#e8a020}.gn{color:#4eff9a}.cy{color:#4ec9e1}.pu{color:#a060c0}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* traffic beam animation */
+@keyframes beamFlow{
+  0%{stroke-dashoffset:200}
+  100%{stroke-dashoffset:0}
+}
+.beam{stroke-dasharray:200;stroke-dashoffset:200}
+.beam.go{animation:beamFlow .7s ease-out forwards}
+
+/* data packet travel */
+@keyframes pktMove{
+  0%{transform:translateX(0);opacity:1}
+  90%{opacity:1}
+  100%{transform:translateX(var(--travel));opacity:0}
+}
+.pkt-travel{animation:pktMove .9s ease-in-out forwards}
+
+/* attacker pulse */
+@keyframes attackerPulse{
+  0%,100%{filter:drop-shadow(0 0 0px #e85050)}
+  50%{filter:drop-shadow(0 0 8px #e85050)}
+}
+.attacker-glow{animation:attackerPulse 1.4s ease-in-out infinite}
+
+/* poison packet */
+@keyframes poisonSlide{
+  0%{opacity:0;transform:translateY(10px)}
+  20%{opacity:1;transform:translateY(0)}
+  80%{opacity:1;transform:translateY(0)}
+  100%{opacity:0;transform:translateY(-10px)}
+}
+.poison-pkt{animation:poisonSlide 1.8s ease forwards}
+
+/* red cross for blocked legit path */
+@keyframes crossFade{
+  0%{opacity:0;transform:scale(.5)}
+  100%{opacity:1;transform:scale(1)}
+}
+.cross-appear{animation:crossFade .4s ease forwards}
+
+/* blinking cursor */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* terminal line appear */
+.term-line{opacity:0;transition:opacity .3s}
+.term-line.visible{opacity:1}
+
+/* traffic arrow looping */
+@keyframes arrowPulse{
+  0%,100%{opacity:.3}50%{opacity:1}
+}
+.traffic-arrow{animation:arrowPulse 1s ease-in-out infinite}
+
+/* cache row */
+.cache-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.cache-row.visible{opacity:1;transform:translateX(0)}
+.cache-row.poison{border:1px solid #e85050 !important;background:#200808 !important}
+</style>
+</head>
+<body>
+
+<!-- ════════════ SCENE 1: HOOK ════════════ -->
+<div class="scene active" id="s1" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">ARP SPOOFING</div>
+    <div class="hdr-sub">MAN-IN-THE-MIDDLE · LAN ATTACK</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ REAL ATTACK</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero terminal -->
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;background:#080404;opacity:0;transition:opacity .5s">
+        <div style="padding:8px 12px;border-bottom:1px solid #2a0808;display:flex;align-items:center;gap:6px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#e85050;opacity:.8"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#e8a020;opacity:.5"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#4eff9a;opacity:.3"></div>
+          <span style="font-size:7px;color:#333;margin-left:4px">attacker@kali: ~</span>
+        </div>
+        <div style="padding:12px 14px;font-size:7px;line-height:2.2">
+          <div id="s1-t0" style="color:#555">$ <span style="color:#888"># enable IP forwarding so victim stays online</span></div>
+          <div id="s1-t1" class="term-line" style="color:#555">$ <span style="color:#fff">echo 1 > /proc/sys/net/ipv4/ip_forward</span></div>
+          <div id="s1-t2" class="term-line" style="color:#555;margin-top:4px">$ <span style="color:#888"># poison victim + gateway simultaneously</span></div>
+          <div id="s1-t3" class="term-line" style="color:#555">$ <span style="color:#e85050">arpspoof -i eth0 -t 192.168.1.50 192.168.1.1 &</span></div>
+          <div id="s1-t4" class="term-line" style="color:#555">$ <span style="color:#e85050">arpspoof -i eth0 -t 192.168.1.1 192.168.1.50</span></div>
+          <div id="s1-t5" class="term-line" style="color:#4eff9a;margin-top:6px">0:c:29:3a:4b:1f aa:bb:cc:11:22:33 0806 28: arp reply</div>
+          <div id="s1-t6" class="term-line" style="color:#4eff9a">192.168.1.1 is-at 0:c:29:3a:4b:1f</div>
+          <div id="s1-t7" class="term-line" style="color:#4eff9a">0:c:29:3a:4b:1f dd:ee:ff:44:55:66 0806 28: arp reply</div>
+          <div id="s1-t8" class="term-line" style="color:#4eff9a">192.168.1.50 is-at 0:c:29:3a:4b:1f</div>
+          <div id="s1-t9" class="term-line" style="color:#e8a020;margin-top:4px">▶ Intercepting all traffic... <span class="blink">█</span></div>
+        </div>
+      </div>
+
+      <!-- impact stats -->
+      <div id="s1-stats" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">2</div>
+          <div style="font-size:6px;color:#666;line-height:1.6">terminal commands<br>to execute</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">&lt;5s</div>
+          <div style="font-size:6px;color:#666;line-height:1.6">to intercept<br>all LAN traffic</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">FREE</div>
+          <div style="font-size:6px;color:#666;line-height:1.6">tools: arpspoof<br>bettercap, ettercap</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">0</div>
+          <div style="font-size:6px;color:#666;line-height:1.6">victim alerts<br>or warnings</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE HOW IT WORKS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ARP SPOOFING / POISONING</div>
+    <div class="ih">Exploits ARP's zero-authentication design</div>
+    <div class="il" style="font-size:7px">ARP has no way to verify who sent a reply. An attacker on the same LAN can poison every device's ARP cache — silently, in seconds, undetected.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">MITM</div><div class="sl">man in the<br>middle attack</div></div>
+    <div class="sc"><div class="sv am">Black Hat</div><div class="sl">demo'd annually<br>since 2003</div></div>
+    <div class="sc"><div class="sv rd">LAN only</div><div class="sl">same network<br>segment</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 2: NORMAL ROUTING ════════════ -->
+<div class="scene" id="s2" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">BEFORE: NORMAL ROUTING</div>
+    <div class="hdr-sub">CLEAN ARP TABLES · DIRECT DELIVERY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">BEFORE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CLEAN</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- normal network diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#4eff9a;background:#060f06">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">NORMAL LAN — VICTIM TALKS DIRECTLY TO GATEWAY</div>
+        <svg width="330" height="155" viewBox="0 0 330 155" id="s2-svg">
+          <!-- gateway/router top-left -->
+          <rect x="10" y="10" width="90" height="52" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="2"/>
+          <text x="55" y="26" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">GATEWAY</text>
+          <text x="55" y="37" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.1</text>
+          <text x="55" y="47" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">DD:EE:FF:44:55:66</text>
+          <text x="55" y="57" text-anchor="middle" fill="#1a6030" font-family="'Press Start 2P'" font-size="4">✓ real gateway</text>
+
+          <!-- victim bottom-left -->
+          <rect x="10" y="102" width="90" height="46" rx="4" fill="#060f06" stroke="#4ec9e1" stroke-width="2"/>
+          <text x="55" y="118" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">VICTIM</text>
+          <text x="55" y="129" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.50</text>
+          <text x="55" y="140" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">AA:BB:CC:11:22:33</text>
+
+          <!-- FIXED: attacker right — now visible with red tones -->
+          <rect x="230" y="56" width="90" height="52" rx="4" fill="#1a0808" stroke="#6a2020" stroke-width="1.5"/>
+          <text x="275" y="72" text-anchor="middle" fill="#a04040" font-family="'Press Start 2P'" font-size="5">ATTACKER</text>
+          <text x="275" y="83" text-anchor="middle" fill="#703030" font-family="'Press Start 2P'" font-size="4">192.168.1.99</text>
+          <text x="275" y="94" text-anchor="middle" fill="#5a2525" font-family="'Press Start 2P'" font-size="4">EV:IL:MA:C0:DE:00</text>
+          <text x="275" y="104" text-anchor="middle" fill="#7a3535" font-family="'Press Start 2P'" font-size="4">watching...</text>
+
+          <!-- FIXED: switch — now visible with green tones -->
+          <rect x="120" y="68" width="80" height="24" rx="3" fill="#0a1a0a" stroke="#2a5020" stroke-width="1.5"/>
+          <text x="160" y="80" text-anchor="middle" fill="#3a7030" font-family="'Press Start 2P'" font-size="5">SWITCH</text>
+          <text x="160" y="89" text-anchor="middle" fill="#2a5020" font-family="'Press Start 2P'" font-size="4">L2 forward</text>
+
+          <!-- wire: victim to switch -->
+          <line x1="100" y1="125" x2="120" y2="84" stroke="#2a4a20" stroke-width="2"/>
+          <!-- wire: gateway to switch -->
+          <line x1="100" y1="36" x2="120" y2="76" stroke="#2a4a20" stroke-width="2"/>
+          <!-- wire: switch to attacker -->
+          <line x1="200" y1="80" x2="230" y2="82" stroke="#3a2020" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+          <!-- DIRECT traffic beam: victim → gateway -->
+          <path id="s2-beam1" d="M100,125 Q110,90 100,36"
+            stroke="#4eff9a" stroke-width="2.5" fill="none"
+            stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- data packet bouncing back and forth -->
+          <rect id="s2-pkt" x="88" y="75" width="36" height="14" rx="3" fill="#060f06" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s2-pkt-t" x="106" y="85" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">DATA ✓</text>
+
+          <!-- no traffic to attacker cross -->
+          <text id="s2-cross" x="218" y="82" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="10" opacity="0">✕</text>
+
+          <!-- victim ARP cache clean label -->
+          <rect x="10" y="150" width="200" height="5" rx="1" fill="#0a1a0a" stroke="none"/>
+          <text id="s2-cache-lbl" x="5" y="154" fill="#1a4020" font-family="'Press Start 2P'" font-size="4" opacity="0">ARP: 192.168.1.1 → DD:EE:FF:44:55:66 ✓</text>
+        </svg>
+      </div>
+
+      <!-- clean ARP table -->
+      <div id="s2-cache" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#060f06;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">VICTIM'S CLEAN ARP TABLE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #0d2010;padding-bottom:4px;margin-bottom:5px">
+          <div style="font-size:6px;color:#4eff9a;width:110px">IP Address</div>
+          <div style="font-size:6px;color:#4eff9a;width:140px">MAC Address</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">Status</div>
+        </div>
+        <div class="cache-row" id="s2-cr1" style="display:flex;padding:3px 0;border-radius:2px">
+          <div style="font-size:6px;color:#ccc;width:110px">192.168.1.1</div>
+          <div style="font-size:6px;color:#4eff9a;width:140px">DD:EE:FF:44:55:66</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">✓ LEGIT</div>
+        </div>
+        <div class="cache-row" id="s2-cr2" style="display:flex;padding:3px 0;border-radius:2px">
+          <div style="font-size:6px;color:#ccc;width:110px">192.168.1.99</div>
+          <div style="font-size:6px;color:#888;width:140px">EV:IL:MA:C0:DE:00</div>
+          <div style="font-size:6px;color:#888;flex:1">unknown</div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s2-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text">In a clean network, the victim's ARP table correctly maps <span class="gn">192.168.1.1 → DD:EE:FF:44:55:66</span> (the real gateway MAC). All traffic routes directly.</div>
+      </div>
+      <div class="step-block gn" id="s2-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text">The attacker is on the same LAN but <span class="gn">receives no victim traffic</span> — the switch only sends frames to the port with the matching MAC in the CAM table.</div>
+      </div>
+      <div class="step-block gn" id="s2-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text">This is what the attacker wants to change. Their goal: make the <span class="rd">victim think the attacker IS the gateway</span>, and make the gateway think the attacker is the victim.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">CLEAN STATE</div>
+    <div class="ih gn">Victim ARP table is correct — traffic is direct</div>
+    <div class="il" style="font-size:7px">The switch forwards only to correct ports. The attacker sees none of the victim's traffic. This is about to change with two arpspoof commands.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DIRECT</div><div class="sl">victim ↔<br>gateway</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">attacker<br>traffic seen</div></div>
+    <div class="sc"><div class="sv am">CAM</div><div class="sl">switch routes<br>correctly</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 3: ARP POISONING ════════════ -->
+<div class="scene" id="s3" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">ARP CACHE POISONING</div>
+    <div class="hdr-sub">FAKE REPLIES TO VICTIM + GATEWAY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">POISON</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">INJECTING</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- poison animation diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#e85050;background:#0f0606">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">ATTACKER SENDS FAKE ARP REPLIES TO BOTH SIDES</div>
+        <svg width="330" height="168" viewBox="0 0 330 168" id="s3-svg">
+          <!-- Gateway -->
+          <rect x="10" y="8" width="86" height="48" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="53" y="22" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">GATEWAY</text>
+          <text x="53" y="33" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.1</text>
+          <text x="53" y="43" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">DD:EE:FF:44:55:66</text>
+          <text id="s3-gw-lie" x="53" y="53" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">← poisoned!</text>
+
+          <!-- Victim -->
+          <rect x="10" y="118" width="86" height="46" rx="4" fill="#080810" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="53" y="132" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">VICTIM</text>
+          <text x="53" y="143" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.50</text>
+          <text x="53" y="153" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">AA:BB:CC:11:22:33</text>
+          <text id="s3-vc-lie" x="53" y="163" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">← poisoned!</text>
+
+          <!-- Attacker (center, highlighted) -->
+          <rect x="200" y="56" width="120" height="56" rx="4" fill="#200808" stroke="#e85050" stroke-width="2.5" id="s3-atk-box" class="attacker-glow"/>
+          <text x="260" y="72" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">ATTACKER</text>
+          <text x="260" y="84" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.99</text>
+          <text x="260" y="94" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4">EV:IL:MA:C0:DE:00</text>
+          <text x="260" y="105" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">IP forward: ON</text>
+
+          <!-- poison beam 1: attacker → victim -->
+          <path id="s3-beam-av" d="M200,95 L96,140" stroke="#e85050" stroke-width="2"
+            fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- poison beam 2: attacker → gateway -->
+          <path id="s3-beam-ag" d="M200,72 L96,36" stroke="#e85050" stroke-width="2"
+            fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- poison packet labels -->
+          <rect id="s3-ppkt1" x="104" y="108" width="90" height="22" rx="2" fill="#200808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3-pptxt1a" x="149" y="118" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">192.168.1.1</text>
+          <text id="s3-pptxt1b" x="149" y="127" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">is-at EV:IL:MA:C0:DE:00</text>
+
+          <rect id="s3-ppkt2" x="104" y="36" width="90" height="22" rx="2" fill="#200808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3-pptxt2a" x="149" y="46" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">192.168.1.50</text>
+          <text id="s3-pptxt2b" x="149" y="55" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">is-at EV:IL:MA:C0:DE:00</text>
+        </svg>
+      </div>
+
+      <!-- poisoned ARP table -->
+      <div id="s3-cache" style="border:1px solid #3a0808;border-radius:3px;padding:10px;background:#0f0606;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:7px">VICTIM'S POISONED ARP TABLE ⚠</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #2a0808;padding-bottom:4px;margin-bottom:5px">
+          <div style="font-size:6px;color:#e85050;width:110px">IP Address</div>
+          <div style="font-size:6px;color:#e85050;width:140px">MAC Address</div>
+          <div style="font-size:6px;color:#e85050;flex:1">Status</div>
+        </div>
+        <div class="cache-row poison" id="s3-cr1" style="display:flex;padding:4px 6px;border-radius:2px;gap:0">
+          <div style="font-size:6px;color:#ccc;width:110px">192.168.1.1</div>
+          <div style="font-size:6px;color:#e85050;width:140px">EV:IL:MA:C0:DE:00</div>
+          <div style="font-size:6px;color:#e85050;flex:1">⚠ FAKE!</div>
+        </div>
+        <div style="font-size:6px;color:#444;margin-top:5px;line-height:1.7;padding:0 2px">Gateway IP now points to attacker's MAC. Victim will send ALL traffic to attacker.</div>
+      </div>
+
+      <div class="step-block" id="s3-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Attacker sends <span class="rd">unsolicited ARP reply</span> to victim: "192.168.1.1 is at EV:IL:MA:C0:DE:00". No request needed — OS accepts gratuitous ARPs without question.</div>
+      </div>
+      <div class="step-block" id="s3-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">Simultaneously sends fake ARP to gateway: <span class="rd">"192.168.1.50 is at EV:IL:MA:C0:DE:00"</span>. Now both sides think the attacker is the other party.</div>
+      </div>
+      <div class="step-block" id="s3-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">Must send continuously — every <span class="am">~2 seconds</span>. ARP cache entries expire. If poisoning stops, caches self-heal. arpspoof runs in a loop automatically.</div>
+      </div>
+      <div class="step-block" id="s3-s4">
+        <div class="step-num">04</div>
+        <div class="step-text"><span class="gn">ip_forward = 1</span> keeps victim online. Attacker forwards traffic to the real gateway after inspection. Victim notices nothing. Connection stays alive.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ARP POISON</div>
+    <div class="ih">Both sides now have the wrong MAC for each other</div>
+    <div class="il" style="font-size:7px">The OS blindly updates the ARP cache on every reply received. No verification of sender identity. This is by design in RFC 826 — written in 1982 when trust was assumed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2</div><div class="sl">fake ARP<br>replies sent</div></div>
+    <div class="sc"><div class="sv am">~2s</div><div class="sl">re-poison<br>interval</div></div>
+    <div class="sc"><div class="sv gn">1982</div><div class="sl">ARP RFC826<br>no auth</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 4: TRAFFIC INTERCEPTED ════════════ -->
+<div class="scene" id="s4" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">TRAFFIC INTERCEPTED</div>
+    <div class="hdr-sub">ALL PACKETS FLOW THROUGH ATTACKER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">AFTER</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">INTERCEPTING</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- traffic flow diagram -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#e85050;background:#0f0606">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">POISONED — ALL TRAFFIC ROUTES VIA ATTACKER</div>
+        <svg width="330" height="172" viewBox="0 0 330 172" id="s4-svg">
+          <!-- Gateway top -->
+          <rect x="115" y="6" width="100" height="42" rx="4" fill="#060f06" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="165" y="20" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">GATEWAY</text>
+          <text x="165" y="30" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.1</text>
+          <text x="165" y="40" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">thinks victim=attacker</text>
+
+          <!-- Attacker center -->
+          <rect x="105" y="70" width="120" height="56" rx="4" fill="#200808" stroke="#e85050" stroke-width="2.5" class="attacker-glow"/>
+          <text x="165" y="86" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5">ATTACKER</text>
+          <text x="165" y="97" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4">192.168.1.99</text>
+          <text x="165" y="108" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">reading all traffic</text>
+          <text x="165" y="119" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">forwarding to GW</text>
+
+          <!-- Victim bottom -->
+          <rect x="115" y="148" width="100" height="20" rx="4" fill="#080810" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="165" y="158" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">VICTIM — 192.168.1.50</text>
+          <text x="165" y="166" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">thinks GW=attacker</text>
+
+          <!-- BEFORE: direct wire (crossed out) -->
+          <line x1="165" y1="48" x2="165" y2="70" stroke="#1a1a1a" stroke-width="1" stroke-dasharray="3,3"/>
+          <text id="s4-cross1" x="155" y="62" fill="#e85050" font-family="'Press Start 2P'" font-size="8" opacity="0">✕</text>
+
+          <!-- traffic: victim → attacker (POISON PATH) -->
+          <path id="s4-up1" d="M165,148 L165,126" stroke="#4ec9e1" stroke-width="2.5" fill="none"
+            stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- attacker → gateway -->
+          <path id="s4-up2" d="M165,70 L165,48" stroke="#e8a020" stroke-width="2.5" fill="none"
+            stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- gateway → attacker (return) -->
+          <path id="s4-dn1" d="M178,48 L178,70" stroke="#4eff9a" stroke-width="2" fill="none"
+            stroke-dasharray="200" stroke-dashoffset="200" opacity=".8"/>
+          <!-- attacker → victim (return) -->
+          <path id="s4-dn2" d="M178,126 L178,148" stroke="#4eff9a" stroke-width="2" fill="none"
+            stroke-dasharray="200" stroke-dashoffset="200" opacity=".8"/>
+
+          <!-- traffic labels -->
+          <rect id="s4-lbl1" x="10" y="122" width="90" height="16" rx="2" fill="#0a0810" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="s4-lbl1t" x="55" y="133" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">victim → GW</text>
+
+          <rect id="s4-lbl2" x="226" y="78" width="96" height="22" rx="2" fill="#150800" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s4-lbl2a" x="274" y="88" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">📷 CAPTURED</text>
+          <text id="s4-lbl2b" x="274" y="97" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">then forwarded</text>
+        </svg>
+      </div>
+
+      <!-- what attacker can see -->
+      <div id="s4-loot" style="border:2px solid #e85050;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px">WHAT ATTACKER CAN NOW READ</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="cache-row" id="s4-l1" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid #2a0808;border-radius:2px">
+            <span style="font-size:10px;flex-shrink:0">🔓</span>
+            <div><div style="font-size:7px;color:#e85050;margin-bottom:2px">HTTP credentials</div><div style="font-size:6px;color:#666;line-height:1.5">username/password in plain text on unencrypted sites</div></div>
+          </div>
+          <div class="cache-row" id="s4-l2" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid #2a0808;border-radius:2px">
+            <span style="font-size:10px;flex-shrink:0">🍪</span>
+            <div><div style="font-size:7px;color:#e8a020;margin-bottom:2px">Session cookies</div><div style="font-size:6px;color:#666;line-height:1.5">hijack authenticated sessions even on HTTP</div></div>
+          </div>
+          <div class="cache-row" id="s4-l3" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid #2a0808;border-radius:2px">
+            <span style="font-size:10px;flex-shrink:0">📧</span>
+            <div><div style="font-size:7px;color:#e8a020;margin-bottom:2px">DNS queries</div><div style="font-size:6px;color:#666;line-height:1.5">every domain victim visits. can spoof replies (DNS poisoning)</div></div>
+          </div>
+          <div class="cache-row" id="s4-l4" style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid #1a2a10;border-radius:2px">
+            <span style="font-size:10px;flex-shrink:0">🔒</span>
+            <div><div style="font-size:7px;color:#4eff9a;margin-bottom:2px">HTTPS traffic</div><div style="font-size:6px;color:#666;line-height:1.5">encrypted — but SSL strip attacks can downgrade to HTTP</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s4-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Every packet victim sends to the gateway <span class="rd">arrives at attacker first</span>. Attacker reads it, logs it, then forwards to real gateway. Victim sees no interruption.</div>
+      </div>
+      <div class="step-block" id="s4-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">Tools like <span class="am">bettercap</span> auto-capture credentials, cookies, images. <span class="am">ettercap</span> can inject content into HTTP responses in real-time — modify pages mid-flight.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">MAN IN THE MIDDLE</div>
+    <div class="ih">Attacker reads and forwards all traffic invisibly</div>
+    <div class="il" style="font-size:7px">The victim's connection works normally. No errors, no warnings. The only sign is a slightly higher ping — unnoticeable on busy hotel Wi-Fi.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">traffic via<br>attacker</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">victim<br>warnings</div></div>
+    <div class="sc"><div class="sv am">bettercap</div><div class="sl">auto-strip<br>& capture</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 5: DEFENSES ════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">HOW TO DEFEND</div>
+    <div class="hdr-sub">DAI · STATIC ARP · DETECTION · HTTPS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFEND</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MITIGATIONS</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-intro" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s;padding:4px 0">LAYERED DEFENSES AGAINST ARP SPOOFING</div>
+
+      <!-- Defense cards -->
+      <div id="s5-d1" style="border:2px solid #4eff9a;border-radius:3px;padding:11px;opacity:0;transition:opacity .4s;background:#060f06">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:16px">🛡</span>
+          <div style="font-size:8px;color:#4eff9a">DYNAMIC ARP INSPECTION (DAI)</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Cisco / Juniper switch feature. Switch maintains a <span style="color:#4eff9a">DHCP snooping table</span> mapping each port → IP → MAC. Any ARP reply that doesn't match is dropped at the switch port. Attacker's fake replies never reach victims.</div>
+        <div style="font-size:6px;color:#555;margin-top:5px">Config: <span style="color:#4ec9e1">ip arp inspection vlan 10</span> · Requires DHCP snooping enabled first</div>
+      </div>
+
+      <div id="s5-d2" style="border:2px solid #4ec9e1;border-radius:3px;padding:11px;opacity:0;transition:opacity .4s;background:#06080f">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:16px">📌</span>
+          <div style="font-size:8px;color:#4ec9e1">STATIC ARP ENTRIES</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Manually pin critical IP→MAC mappings. Static entries <span style="color:#4ec9e1">cannot be overwritten</span> by ARP replies. Practical for gateways on critical servers.</div>
+        <div style="font-size:6px;color:#555;margin-top:5px"><span style="color:#4ec9e1">arp -s 192.168.1.1 dd:ee:ff:44:55:66</span> (Linux/macOS)</div>
+      </div>
+
+      <div id="s5-d3" style="border:2px solid #e8a020;border-radius:3px;padding:11px;opacity:0;transition:opacity .4s;background:#0d0900">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:16px">🔍</span>
+          <div style="font-size:8px;color:#e8a020">DETECTION: arpwatch / XarpPlus</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Monitors ARP traffic. Alerts on <span style="color:#e8a020">MAC address changes for existing IPs</span> — the exact signature of ARP poisoning. Also look for duplicate IP alerts in Wireshark.</div>
+        <div style="font-size:6px;color:#555;margin-top:5px">Wireshark filter: <span style="color:#e8a020">arp.duplicate-address-detected</span></div>
+      </div>
+
+      <div id="s5-d4" style="border:2px solid #a060c0;border-radius:3px;padding:11px;opacity:0;transition:opacity .4s;background:#0d0818">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:16px">🔒</span>
+          <div style="font-size:8px;color:#a060c0">HTTPS + HSTS + VPN</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Even with MITM, <span style="color:#a060c0">TLS encryption prevents content reading</span>. HSTS prevents SSL stripping. A VPN tunnels above L2 — ARP poisoning can intercept the tunnel but can't decrypt it.</div>
+        <div style="font-size:6px;color:#555;margin-top:5px">Best combo: DAI at switch + HTTPS everywhere + VPN on untrusted networks</div>
+      </div>
+
+      <!-- what doesn't work -->
+      <div id="s5-d5" style="border:1px solid #2a0808;border-radius:3px;padding:10px;opacity:0;transition:opacity .4s;background:#0f0606">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">⚠ WHAT DOESN'T HELP</div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Firewalls · Antivirus · IDS/IPS · Strong passwords · Incognito mode</div>
+        <div style="font-size:6px;color:#555;margin-top:4px;line-height:1.7">All operate above L2. ARP spoofing happens before any of these see the traffic.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">KEY TAKEAWAY</div>
+    <div class="ih gn">DAI at the switch is the only real fix</div>
+    <div class="il" style="font-size:7px">All other defenses are workarounds. DAI validates ARP replies against ground-truth DHCP records at the switch level — the only point where the lie can be caught.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DAI</div><div class="sl">best<br>L2 defense</div></div>
+    <div class="sc"><div class="sv cy">arp -s</div><div class="sl">static entry<br>for gateway</div></div>
+    <div class="sc"><div class="sv pu">VPN</div><div class="sl">encrypt above<br>the attack</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function setAttr(id,attr,val){const el=document.getElementById(id);if(el)el.setAttribute(attr,val);}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function rmVisible(ids){ids.forEach(id=>{const el=document.getElementById(id);if(el)el.classList.remove('visible');});}
+function addVisible(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+
+function resetScene(n){
+  if(n===1){
+    setOp('s1-hero','0'); setOp('s1-stats','0'); setOp('s1-cta','0');
+    ['s1-t1','s1-t2','s1-t3','s1-t4','s1-t5','s1-t6','s1-t7','s1-t8','s1-t9'].forEach(id=>{
+      document.getElementById(id).classList.remove('visible');
+    });
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-cache','0');
+    rmVisible(['s2-cr1','s2-cr2','s2-s1','s2-s2','s2-s3']);
+    setAttr('s2-beam1','stroke-dashoffset','200');
+    ['s2-pkt','s2-pkt-t','s2-cross','s2-cache-lbl'].forEach(id=>setAttr(id,'opacity','0'));
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-cache','0');
+    rmVisible(['s3-cr1','s3-s1','s3-s2','s3-s3','s3-s4']);
+    ['s3-beam-av','s3-beam-ag'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+    });
+    ['s3-ppkt1','s3-pptxt1a','s3-pptxt1b','s3-ppkt2','s3-pptxt2a','s3-pptxt2b','s3-gw-lie','s3-vc-lie']
+      .forEach(id=>setAttr(id,'opacity','0'));
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    setOp('s4-loot','0');
+    rmVisible(['s4-l1','s4-l2','s4-l3','s4-l4','s4-s1','s4-s2']);
+    ['s4-up1','s4-up2','s4-dn1','s4-dn2'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+    });
+    ['s4-cross1','s4-lbl1','s4-lbl1t','s4-lbl2','s4-lbl2a','s4-lbl2b']
+      .forEach(id=>setAttr(id,'opacity','0'));
+  }
+  if(n===5){
+    setOp('s5-intro','0');
+    ['s5-d1','s5-d2','s5-d3','s5-d4','s5-d5'].forEach(id=>setOp(id,'0'));
+  }
+}
+
+function animBeam(id,ms){
+  delay(()=>{
+    const el=document.getElementById(id);
+    if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+  },0);
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    const lines=['s1-t1','s1-t2','s1-t3','s1-t4','s1-t5','s1-t6','s1-t7','s1-t8','s1-t9'];
+    lines.forEach((id,i)=>delay(()=>addVisible(id),600+i*280));
+    delay(()=>setOp('s1-stats','1'),600+lines.length*280+100);
+    delay(()=>setOp('s1-cta','1'),600+lines.length*280+700);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // animate beam
+    delay(()=>{
+      const b=document.getElementById('s2-beam1');
+      if(b){b.style.transition='stroke-dashoffset 1s ease-out';b.style.strokeDashoffset='0';}
+      setAttr('s2-pkt','opacity','1'); setAttr('s2-pkt-t','opacity','1');
+    },700);
+    delay(()=>setAttr('s2-cross','opacity','1'),1200);
+    delay(()=>setAttr('s2-cache-lbl','opacity','1'),1400);
+    delay(()=>{ setOp('s2-cache','1'); delay(()=>{ addVisible('s2-cr1'); delay(()=>addVisible('s2-cr2'),300); },200); },1600);
+    delay(()=>addVisible('s2-s1'),800);
+    delay(()=>addVisible('s2-s2'),1400);
+    delay(()=>addVisible('s2-s3'),2000);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // beam to victim
+    delay(()=>{
+      const b=document.getElementById('s3-beam-av');
+      if(b){b.style.transition='stroke-dashoffset .7s ease-out';b.style.strokeDashoffset='0';}
+      setAttr('s3-ppkt1','opacity','1'); setAttr('s3-pptxt1a','opacity','1'); setAttr('s3-pptxt1b','opacity','1');
+    },700);
+    delay(()=>setAttr('s3-vc-lie','opacity','1'),1400);
+    // beam to gateway
+    delay(()=>{
+      const b=document.getElementById('s3-beam-ag');
+      if(b){b.style.transition='stroke-dashoffset .7s ease-out';b.style.strokeDashoffset='0';}
+      setAttr('s3-ppkt2','opacity','1'); setAttr('s3-pptxt2a','opacity','1'); setAttr('s3-pptxt2b','opacity','1');
+    },1600);
+    delay(()=>setAttr('s3-gw-lie','opacity','1'),2200);
+    delay(()=>{ setOp('s3-cache','1'); delay(()=>addVisible('s3-cr1'),200); },2000);
+    delay(()=>addVisible('s3-s1'),600);
+    delay(()=>addVisible('s3-s2'),1200);
+    delay(()=>addVisible('s3-s3'),2400);
+    delay(()=>addVisible('s3-s4'),3000);
+  }
+
+  if(n===4){
+    delay(()=>document.getElementById('s4-hero').classList.add('visible'),200);
+    delay(()=>setAttr('s4-cross1','opacity','1'),600);
+    delay(()=>{ setAttr('s4-lbl1','opacity','1'); setAttr('s4-lbl1t','opacity','1'); },800);
+    delay(()=>{
+      const u1=document.getElementById('s4-up1');
+      if(u1){u1.style.transition='stroke-dashoffset .6s ease-out';u1.style.strokeDashoffset='0';}
+    },900);
+    delay(()=>{
+      const u2=document.getElementById('s4-up2');
+      if(u2){u2.style.transition='stroke-dashoffset .6s ease-out';u2.style.strokeDashoffset='0';}
+      setAttr('s4-lbl2','opacity','1'); setAttr('s4-lbl2a','opacity','1'); setAttr('s4-lbl2b','opacity','1');
+    },1400);
+    delay(()=>{
+      const d1=document.getElementById('s4-dn1');
+      const d2=document.getElementById('s4-dn2');
+      if(d1){d1.style.transition='stroke-dashoffset .6s ease-out';d1.style.strokeDashoffset='0';}
+      if(d2){d2.style.transition='stroke-dashoffset .6s ease-out';d2.style.strokeDashoffset='0';}
+    },1900);
+    delay(()=>{
+      setOp('s4-loot','1');
+      ['s4-l1','s4-l2','s4-l3','s4-l4'].forEach((id,i)=>delay(()=>addVisible(id),i*280));
+    },2300);
+    delay(()=>addVisible('s4-s1'),1000);
+    delay(()=>addVisible('s4-s2'),2800);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-intro','1'),200);
+    delay(()=>setOp('s5-d1','1'),500);
+    delay(()=>setOp('s5-d2','1'),1000);
+    delay(()=>setOp('s5-d3','1'),1500);
+    delay(()=>setOp('s5-d4','1'),2000);
+    delay(()=>setOp('s5-d5','1'),2500);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

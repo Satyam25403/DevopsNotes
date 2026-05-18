@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>How Switches Work — MAC Tables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Network diagram shared styles ── */
+.net-wrap{
+  background:#050e0a;border:2px solid #1a3028;border-radius:3px;
+  padding:10px;position:relative;
+}
+.net-device{
+  position:absolute;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:opacity .3s;
+}
+.net-device .dicon{
+  font-size:22px;line-height:1;
+  filter:grayscale(1) brightness(.5);
+  transition:filter .3s,transform .3s;
+}
+.net-device.lit .dicon{filter:none;transform:scale(1.12)}
+.net-device.recv .dicon{filter:none;transform:scale(1.18)}
+.net-device .dlabel{font-size:5.5px;color:#555;line-height:1.3;text-align:center;transition:color .3s}
+.net-device.lit .dlabel{color:#4eff9a}
+.net-device.recv .dlabel{color:#4ec9e1}
+.net-device.sender .dlabel{color:#e8a020}
+
+/* SVG wires */
+.net-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+
+/* Packet bubble */
+.pkt{
+  position:absolute;font-size:6px;padding:2px 5px;border-radius:2px;
+  background:#1e1408;border:1px solid #e8a020;color:#e8a020;
+  opacity:0;transition:opacity .2s,left .5s,top .5s;
+  pointer-events:none;white-space:nowrap;z-index:10;
+}
+.pkt.vis{opacity:1}
+
+/* CAM table */
+.cam-wrap{
+  background:#071510;border:1px solid #1a3028;border-radius:2px;
+  overflow:hidden;
+}
+.cam-hdr{display:flex;background:#0d2018;padding:5px 8px;gap:0}
+.cam-hdr-cell{font-size:6.5px;color:#4ec9e1;flex:1;text-align:center;letter-spacing:.5px}
+.cam-row{
+  display:flex;padding:5px 8px;gap:0;
+  border-top:1px solid #0d2018;
+  opacity:0;transform:translateX(-6px);
+  transition:opacity .35s,transform .35s,background .2s;
+}
+.cam-row.vis{opacity:1;transform:translateX(0)}
+.cam-row.new-entry{background:#0d2810}
+.cam-row.active-entry{background:#102820;border-left:2px solid #4eff9a}
+.cam-cell{font-size:6.5px;flex:1;text-align:center;color:#ccc;font-family:monospace;line-height:1.5}
+.cam-cell.mac{color:#4eff9a}
+.cam-cell.port{color:#4ec9e1}
+
+/* forwarding type cards */
+.fwd-card{
+  border-radius:2px;padding:9px 10px;
+  opacity:0;transform:translateY(5px);
+  transition:opacity .35s,transform .35s;
+}
+.fwd-card.vis{opacity:1;transform:translateY(0)}
+.fwd-title{font-size:8px;margin-bottom:5px;line-height:1.4}
+.fwd-vis{display:flex;align-items:center;gap:5px;margin:6px 0}
+.fwd-node{font-size:6.5px;padding:4px 6px;border-radius:2px;text-align:center;flex-shrink:0;line-height:1.4}
+.fwd-beam{height:3px;border-radius:1px;flex:1;width:0;transition:width .5s ease-out}
+.fwd-desc{font-size:6.5px;color:#aaa;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK — HUB VS SWITCH ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">SWITCHES & MAC TABLES</div>
+    <div class="hdr-sub">THE CRUCIAL L2 DIFFERENCE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">HUB = BAD</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Hook card -->
+      <div style="border:2px solid #e85050;border-radius:2px;background:#1e0808;text-align:center;padding:14px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:9px">THE KEY DIFFERENCE</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:10px">
+          <div style="text-align:center">
+            <div style="font-size:28px">🌐</div>
+            <div style="font-size:7px;color:#e85050;margin-top:3px">HUB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">DUMB</div>
+          </div>
+          <div style="font-size:16px;color:#555">≠</div>
+          <div style="text-align:center">
+            <div style="font-size:28px">🔀</div>
+            <div style="font-size:7px;color:#4eff9a;margin-top:3px">SWITCH</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">SMART</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">A hub shouts at everyone.<br>A switch whispers to exactly one.<br>That difference changes everything.</div>
+      </div>
+
+      <!-- Side-by-side comparison -->
+      <div style="display:flex;gap:6px;opacity:0;transition:opacity .5s" id="s1compare">
+        <div style="flex:1;background:#1e0808;border:2px solid #e85050;border-radius:2px;padding:10px">
+          <div style="font-size:8px;color:#e85050;margin-bottom:7px;text-align:center">🌐 HUB</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+            ❌ Broadcasts to ALL ports<br>
+            ❌ No memory<br>
+            ❌ Creates collisions<br>
+            ❌ Everyone sees traffic<br>
+            ❌ Half-duplex only
+          </div>
+        </div>
+        <div style="flex:1;background:#071510;border:2px solid #4eff9a;border-radius:2px;padding:10px">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:7px;text-align:center">🔀 SWITCH</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+            ✅ Sends to one port only<br>
+            ✅ Learns MAC addresses<br>
+            ✅ No collisions<br>
+            ✅ Traffic stays private<br>
+            ✅ Full-duplex per port
+          </div>
+        </div>
+      </div>
+
+      <!-- What makes it smart -->
+      <div style="background:#071510;border:1px solid #4eff9a;border-radius:2px;padding:9px 10px;opacity:0;transition:opacity .4s" id="s1smart">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">THE SECRET WEAPON</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">The switch maintains a <span style="color:#4ec9e1">CAM table</span> (Content Addressable Memory) that maps every MAC address it has seen to the port it came in on. It uses this table to forward frames only where they need to go.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">LAYER 2 DEVICE:</div>
+    <div class="ih rd">Hub = repeat to all. Switch = learn + target.</div>
+    <div class="il">Same ports, completely different behaviour.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">HUB</div><div class="sl">BROADCAST<br>ALL PORTS</div></div>
+    <div class="sc"><div class="sv gn">SWITCH</div><div class="sl">TARGET<br>ONE PORT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">CAM</div><div class="sl">MAC<br>TABLE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: HUB ANIMATION — BROADCAST HELL ══════════════ -->
+<div class="scene" id="s2" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">SWITCHES & MAC TABLES</div>
+    <div class="hdr-sub">HUB — EVERYBODY GETS THE FRAME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HUB DEMO</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BROADCAST</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s2intro">PC-A SENDS FRAME TO PC-D — WATCH WHAT HAPPENS</div>
+
+      <!-- Network diagram — HUB -->
+      <div class="net-wrap" style="height:200px" id="s2net">
+        <svg class="net-svg" id="s2svg" viewBox="0 0 366 200">
+          <!-- spokes from hub center (183,105) to devices -->
+          <!-- PC-A top-left -->
+          <line x1="183" y1="105" x2="58" y2="44" stroke="#1a2018" stroke-width="2" id="ws2_a"/>
+          <!-- PC-B top-right -->
+          <line x1="183" y1="105" x2="308" y2="44" stroke="#1a2018" stroke-width="2" id="ws2_b"/>
+          <!-- PC-C bottom-left -->
+          <line x1="183" y1="105" x2="58" y2="168" stroke="#1a2018" stroke-width="2" id="ws2_c"/>
+          <!-- PC-D bottom-right -->
+          <line x1="183" y1="105" x2="308" y2="168" stroke="#1a2018" stroke-width="2" id="ws2_d"/>
+        </svg>
+
+        <!-- Hub center -->
+        <div class="net-device" id="s2hub" style="left:50%;top:52%;transform:translate(-50%,-50%)">
+          <div class="dicon" style="font-size:28px">🌐</div>
+          <div class="dlabel">HUB<br>PORT 1-4</div>
+        </div>
+
+        <!-- PC-A sender -->
+        <div class="net-device sender" id="s2pca" style="left:10px;top:14px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-A<br>AA:AA</div>
+        </div>
+        <!-- PC-B -->
+        <div class="net-device" id="s2pcb" style="right:10px;top:14px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-B<br>BB:BB</div>
+        </div>
+        <!-- PC-C -->
+        <div class="net-device" id="s2pcc" style="left:10px;bottom:12px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-C<br>CC:CC</div>
+        </div>
+        <!-- PC-D target -->
+        <div class="net-device" id="s2pcd" style="right:10px;bottom:12px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-D<br>DD:DD</div>
+        </div>
+      </div>
+
+      <!-- Step log -->
+      <div style="background:#0d0808;border:1px solid #3a1010;border-radius:2px;padding:8px 9px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:.5px">FRAME LOG</div>
+        <div style="display:flex;flex-direction:column;gap:3px" id="s2log">
+          <div style="font-size:6.5px;color:#555" id="s2l1">▷ waiting…</div>
+          <div style="font-size:6.5px;color:#555;opacity:0;transition:opacity .3s" id="s2l2">▷ …</div>
+          <div style="font-size:6.5px;color:#555;opacity:0;transition:opacity .3s" id="s2l3">▷ …</div>
+          <div style="font-size:6.5px;color:#555;opacity:0;transition:opacity .3s" id="s2l4">▷ …</div>
+        </div>
+      </div>
+
+      <!-- What's wrong -->
+      <div class="panel" id="s2bad" style="border:2px solid #e85050;background:#1e0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">⚠ THE PROBLEMS WITH HUBS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.9">
+          <span style="color:#e85050">Privacy:</span> PC-B and PC-C receive PC-A's frame. A hacker with a hub can see <span style="color:#e85050">all traffic</span> — passive sniffing attack.<br><br>
+          <span style="color:#e85050">Performance:</span> Only one device can transmit at a time. All devices share bandwidth. 100 Mbps hub ÷ 4 devices = 25 Mbps each.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">HUB RULE:</div>
+    <div class="ih rd">Frame in on port 1 → out on ALL ports.</div>
+    <div class="il">No exceptions. No filtering. Just noise.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">×3</div><div class="sl">UNWANTED<br>COPIES</div></div>
+    <div class="sc"><div class="sv rd">÷4</div><div class="sl">BANDWIDTH<br>SHARED</div></div>
+    <div class="sc"><div class="sv rd">👁</div><div class="sl">SNIFFABLE<br>TRAFFIC</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: SWITCH LEARNING — CAM TABLE ══════════════ -->
+<div class="scene" id="s3" style="background:#071510">
+  <div class="hdr" style="background:#071510">
+    <div class="hdr-title">SWITCHES & MAC TABLES</div>
+    <div class="hdr-sub">SWITCH LEARNS THE MAC TABLE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SWITCH LEARNING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CAM TABLE</span>
+  </div>
+  <div class="anim" style="background:#071510">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s3intro">SWITCH WATCHES SOURCE MAC ON EVERY FRAME</div>
+
+      <!-- Network diagram — SWITCH -->
+      <div class="net-wrap" style="height:192px" id="s3net">
+        <svg class="net-svg" id="s3svg" viewBox="0 0 366 192">
+          <line x1="183" y1="100" x2="58" y2="40" stroke="#1a3028" stroke-width="2" id="ws3_a"/>
+          <line x1="183" y1="100" x2="308" y2="40" stroke="#1a3028" stroke-width="2" id="ws3_b"/>
+          <line x1="183" y1="100" x2="58" y2="162" stroke="#1a3028" stroke-width="2" id="ws3_c"/>
+          <line x1="183" y1="100" x2="308" y2="162" stroke="#1a3028" stroke-width="2" id="ws3_d"/>
+        </svg>
+        <!-- Switch center -->
+        <div class="net-device" id="s3sw" style="left:50%;top:52%;transform:translate(-50%,-50%)">
+          <div class="dicon" style="font-size:28px">🔀</div>
+          <div class="dlabel" id="s3swlbl">SWITCH<br>LEARNING</div>
+        </div>
+        <div class="net-device" id="s3pca" style="left:10px;top:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-A<br>P1</div>
+        </div>
+        <div class="net-device" id="s3pcb" style="right:10px;top:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-B<br>P2</div>
+        </div>
+        <div class="net-device" id="s3pcc" style="left:10px;bottom:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-C<br>P3</div>
+        </div>
+        <div class="net-device" id="s3pcd" style="right:10px;bottom:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-D<br>P4</div>
+        </div>
+      </div>
+
+      <!-- CAM table building live -->
+      <div class="cam-wrap" id="s3cam">
+        <div style="font-size:7px;color:#4eff9a;padding:6px 8px;background:#0d2018;letter-spacing:.5px">CAM TABLE — BUILDING…</div>
+        <div class="cam-hdr">
+          <div class="cam-hdr-cell">MAC ADDRESS</div>
+          <div class="cam-hdr-cell">PORT</div>
+          <div class="cam-hdr-cell">AGE</div>
+        </div>
+        <div class="cam-row" id="cr1">
+          <div class="cam-cell mac">AA:AA:AA:AA</div>
+          <div class="cam-cell port">Port 1</div>
+          <div class="cam-cell">0s</div>
+        </div>
+        <div class="cam-row" id="cr2">
+          <div class="cam-cell mac">BB:BB:BB:BB</div>
+          <div class="cam-cell port">Port 2</div>
+          <div class="cam-cell">0s</div>
+        </div>
+        <div class="cam-row" id="cr3">
+          <div class="cam-cell mac">CC:CC:CC:CC</div>
+          <div class="cam-cell port">Port 3</div>
+          <div class="cam-cell">0s</div>
+        </div>
+        <div class="cam-row" id="cr4">
+          <div class="cam-cell mac">DD:DD:DD:DD</div>
+          <div class="cam-cell port">Port 4</div>
+          <div class="cam-cell">0s</div>
+        </div>
+      </div>
+
+      <!-- learning steps -->
+      <div class="panel" id="s3steps" style="border:1px solid #1a3028;background:#071510">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">HOW THE SWITCH LEARNS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:2;display:flex;flex-direction:column;gap:1px">
+          <div><span style="color:#4eff9a">Step 1:</span> Frame arrives on Port 1 from PC-A</div>
+          <div><span style="color:#4eff9a">Step 2:</span> Read SOURCE MAC → AA:AA:AA:AA</div>
+          <div><span style="color:#4eff9a">Step 3:</span> Record "AA:AA → Port 1" in CAM table</div>
+          <div><span style="color:#4eff9a">Step 4:</span> Repeat for every device that sends</div>
+          <div><span style="color:#555">Note: </span><span style="color:#aaa">Entries age out after ~300 seconds if unused</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">LEARNING PROCESS:</div>
+    <div class="ih">Source MAC + arrival port → CAM table.</div>
+    <div class="il">Switch learns passively. No config needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">MACS<br>LEARNED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">300s</div><div class="sl">ENTRY<br>TIMEOUT</div></div>
+    <div class="sc"><div class="sv am">SRC</div><div class="sl">READS<br>SOURCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: SWITCH FORWARDING — TARGETED ══════════════ -->
+<div class="scene" id="s4" style="background:#071510">
+  <div class="hdr" style="background:#071510">
+    <div class="hdr-title">SWITCHES & MAC TABLES</div>
+    <div class="hdr-sub">SWITCH FORWARDS — ONLY ONE PORT LIGHTS UP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SWITCH DEMO</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">UNICAST</span>
+  </div>
+  <div class="anim" style="background:#071510">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s4intro">PC-A SENDS TO PC-D — WATCH THE DIFFERENCE</div>
+
+      <!-- Network diagram — SWITCH forwarding -->
+      <div class="net-wrap" style="height:192px" id="s4net">
+        <svg class="net-svg" id="s4svg" viewBox="0 0 366 192">
+          <line x1="183" y1="100" x2="58" y2="40" stroke="#1a3028" stroke-width="2" id="ws4_a"/>
+          <line x1="183" y1="100" x2="308" y2="40" stroke="#1a3028" stroke-width="2" id="ws4_b" stroke-dasharray="4,4" opacity=".3"/>
+          <line x1="183" y1="100" x2="58" y2="162" stroke="#1a3028" stroke-width="2" id="ws4_c" stroke-dasharray="4,4" opacity=".3"/>
+          <line x1="183" y1="100" x2="308" y2="162" stroke="#1a3028" stroke-width="2" id="ws4_d"/>
+        </svg>
+        <div class="net-device" id="s4sw" style="left:50%;top:52%;transform:translate(-50%,-50%)">
+          <div class="dicon" style="font-size:28px">🔀</div>
+          <div class="dlabel" id="s4swlbl">SWITCH<br>LOOKUP</div>
+        </div>
+        <div class="net-device sender" id="s4pca" style="left:10px;top:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-A<br>SRC</div>
+        </div>
+        <div class="net-device" id="s4pcb" style="right:10px;top:8px;opacity:.3">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-B<br>skip</div>
+        </div>
+        <div class="net-device" id="s4pcc" style="left:10px;bottom:8px;opacity:.3">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-C<br>skip</div>
+        </div>
+        <div class="net-device" id="s4pcd" style="right:10px;bottom:8px">
+          <div class="dicon">💻</div>
+          <div class="dlabel">PC-D<br>DST</div>
+        </div>
+      </div>
+
+      <!-- CAM lookup steps -->
+      <div style="background:#071510;border:1px solid #1a3028;border-radius:2px;padding:8px 9px;opacity:0;transition:opacity .4s" id="s4lookup">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px;letter-spacing:.5px">CAM TABLE LOOKUP</div>
+        <div style="display:flex;flex-direction:column;gap:3px" id="s4log">
+          <div style="font-size:6.5px;color:#555" id="s4l1">▷ waiting…</div>
+          <div style="font-size:6.5px;color:#555;opacity:0;transition:opacity .3s" id="s4l2"></div>
+          <div style="font-size:6.5px;color:#555;opacity:0;transition:opacity .3s" id="s4l3"></div>
+          <div style="font-size:6.5px;color:#4eff9a;opacity:0;transition:opacity .3s" id="s4l4"></div>
+        </div>
+      </div>
+
+      <!-- CAM table with active row highlighted -->
+      <div class="cam-wrap">
+        <div style="font-size:7px;color:#4eff9a;padding:6px 8px;background:#0d2018;letter-spacing:.5px">CAM TABLE — LOOKUP IN PROGRESS</div>
+        <div class="cam-hdr">
+          <div class="cam-hdr-cell">MAC ADDRESS</div>
+          <div class="cam-hdr-cell">PORT</div>
+          <div class="cam-hdr-cell">STATUS</div>
+        </div>
+        <div class="cam-row vis" id="cr4_1" style="opacity:1;transform:none">
+          <div class="cam-cell mac">AA:AA:AA:AA</div>
+          <div class="cam-cell port">Port 1</div>
+          <div class="cam-cell" style="color:#555">src</div>
+        </div>
+        <div class="cam-row vis" id="cr4_2" style="opacity:1;transform:none">
+          <div class="cam-cell mac">BB:BB:BB:BB</div>
+          <div class="cam-cell port">Port 2</div>
+          <div class="cam-cell" style="color:#555">skip</div>
+        </div>
+        <div class="cam-row vis" id="cr4_3" style="opacity:1;transform:none">
+          <div class="cam-cell mac">CC:CC:CC:CC</div>
+          <div class="cam-cell port">Port 3</div>
+          <div class="cam-cell" style="color:#555">skip</div>
+        </div>
+        <div class="cam-row vis" id="cr4_4" style="opacity:1;transform:none">
+          <div class="cam-cell mac">DD:DD:DD:DD</div>
+          <div class="cam-cell port">Port 4</div>
+          <div class="cam-cell" id="cr4_4s" style="color:#555">—</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">SWITCH FORWARD LOGIC:</div>
+    <div class="ih">Lookup DST MAC → send to that port only.</div>
+    <div class="il">PC-B and PC-C never see the frame.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">PORT<br>USED</div></div>
+    <div class="sc"><div class="sv gn">×0</div><div class="sl">WASTED<br>COPIES</div></div>
+    <div class="sc"><div class="sv gn">🔒</div><div class="sl">TRAFFIC<br>PRIVATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: UNICAST / BROADCAST / MULTICAST ══════════════ -->
+<div class="scene" id="s5" style="background:#0a1428">
+  <div class="hdr" style="background:#0a1428">
+    <div class="hdr-title">SWITCHES & MAC TABLES</div>
+    <div class="hdr-sub">FORWARDING TYPES & SECURITY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">FORWARDING + SECURITY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">L2</span>
+  </div>
+  <div class="anim" style="background:#0a1428">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s5intro">THREE WAYS A SWITCH CAN FORWARD A FRAME</div>
+
+      <!-- Unicast -->
+      <div class="fwd-card" id="fw1" style="background:#071510;border:2px solid #4eff9a">
+        <div class="fwd-title" style="color:#4eff9a">UNICAST — DST MAC KNOWN</div>
+        <div class="fwd-vis">
+          <div class="fwd-node" style="background:#0a2010;border:1px solid #4eff9a;color:#4eff9a">PC-A</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px;align-items:center">
+            <div class="fwd-beam" id="fb1" style="background:#4eff9a;width:0;align-self:flex-start"></div>
+            <div style="font-size:5.5px;color:#555">→ 🔀 →</div>
+            <div style="width:0;transition:width .5s .3s ease-out;height:3px;background:#555;border-radius:1px;align-self:flex-end" id="fb1x"></div>
+          </div>
+          <div class="fwd-node" style="background:#0a2010;border:1px solid #4eff9a;color:#4eff9a">PC-D</div>
+        </div>
+        <div class="fwd-desc">DST MAC is in the CAM table. Forward to Port 4 only. PC-B and PC-C see nothing. Most traffic is unicast.</div>
+      </div>
+
+      <!-- Broadcast -->
+      <div class="fwd-card" id="fw2" style="background:#1e1408;border:2px solid #e8a020">
+        <div class="fwd-title" style="color:#e8a020">BROADCAST — DST MAC = FF:FF:FF:FF:FF:FF</div>
+        <div class="fwd-vis">
+          <div class="fwd-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">PC-A</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px;align-items:center">
+            <div class="fwd-beam" id="fb2a" style="background:#e8a020;width:0;align-self:flex-start"></div>
+            <div style="font-size:5.5px;color:#555">→ 🔀 → ALL</div>
+            <div class="fwd-beam" id="fb2b" style="background:#e8a020;width:0;align-self:flex-start"></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px">
+            <div class="fwd-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">PC-B</div>
+            <div class="fwd-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">PC-C</div>
+            <div class="fwd-node" style="background:#2a1808;border:1px solid #e8a020;color:#e8a020">PC-D</div>
+          </div>
+        </div>
+        <div class="fwd-desc">DST is broadcast address. Switch floods all ports (except source). ARP requests use this. Contained within broadcast domain (VLAN).</div>
+      </div>
+
+      <!-- Unknown Unicast -->
+      <div class="fwd-card" id="fw3" style="background:#0d1a2e;border:2px solid #4ec9e1">
+        <div class="fwd-title" style="color:#4ec9e1">UNKNOWN UNICAST — DST MAC NOT IN TABLE</div>
+        <div class="fwd-desc" style="margin-bottom:6px">If the switch hasn't seen a MAC address yet, it floods all ports — just like a hub — until it learns. This is normal startup behaviour.</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #4ec9e1;color:#4ec9e1;border-radius:2px">FLOOD THEN LEARN</span>
+          <span style="font-size:6px;padding:2px 5px;border:1px solid #555;color:#aaa;border-radius:2px">TEMPORARY ONLY</span>
+        </div>
+      </div>
+
+      <!-- Security note -->
+      <div class="panel" id="s5sec" style="border:1px solid #e85050;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">⚠ MAC TABLE ATTACK — CAM FLOODING</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Attacker sends thousands of fake frames with random MACs. Switch fills its CAM table (limited size). When full, switch behaves <span style="color:#e85050">like a hub</span> — floods all ports. Attacker can now sniff all traffic. Mitigated by <span style="color:#4eff9a">port security</span> (limit MACs per port).</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">THREE MODES:</div>
+    <div class="ih">Unicast → 1 port. Broadcast → all ports.</div>
+    <div class="il">Unknown unicast → flood until learned.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">UNI</div><div class="sl">ONE<br>TARGET</div></div>
+    <div class="sc"><div class="sv am">BCAST</div><div class="sl">ALL<br>PORTS</div></div>
+    <div class="sc"><div class="sv rd">CAM</div><div class="sl">FLOOD<br>ATTACK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+
+function litDevice(id, type){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.classList.remove('lit','recv','sender');
+  if(type) el.classList.add(type);
+}
+function litWire(id, color){
+  const el=document.getElementById(id);
+  if(!el) return;
+  el.style.stroke = color || '#1a2018';
+  el.style.strokeWidth = color ? '3' : '2';
+  el.removeAttribute('stroke-dasharray');
+  if(color) el.style.opacity='1';
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1compare','s1smart'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.opacity='0';
+    });
+  }
+  if(n===2){
+    const e=document.getElementById('s2intro');if(e)e.style.opacity='0';
+    ['s2pca','s2pcb','s2pcc','s2pcd','s2hub'].forEach(id=>litDevice(id,null));
+    ['ws2_a','ws2_b','ws2_c','ws2_d'].forEach(id=>litWire(id,null));
+    document.getElementById('s2l1').textContent='▷ waiting…';
+    document.getElementById('s2l1').style.color='#555';
+    ['s2l2','s2l3','s2l4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';}});
+    const bad=document.getElementById('s2bad');if(bad)bad.style.opacity='0';
+  }
+  if(n===3){
+    const e=document.getElementById('s3intro');if(e)e.style.opacity='0';
+    ['s3pca','s3pcb','s3pcc','s3pcd','s3sw'].forEach(id=>litDevice(id,null));
+    ['ws3_a','ws3_b','ws3_c','ws3_d'].forEach(id=>litWire(id,null));
+    ['cr1','cr2','cr3','cr4'].forEach(id=>{
+      const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis','new-entry','active-entry');e.style.transform='translateX(-6px)';}
+    });
+    const st=document.getElementById('s3steps');if(st)st.style.opacity='0';
+  }
+  if(n===4){
+    const e=document.getElementById('s4intro');if(e)e.style.opacity='0';
+    ['s4pca','s4pcb','s4pcc','s4pcd','s4sw'].forEach(id=>litDevice(id,null));
+    const s4l=document.getElementById('s4lookup');if(s4l)s4l.style.opacity='0';
+    document.getElementById('s4l1').textContent='▷ waiting…';
+    document.getElementById('s4l1').style.color='#555';
+    ['s4l2','s4l3','s4l4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.textContent='';}});
+    ['cr4_1','cr4_2','cr4_3','cr4_4'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.classList.remove('active-entry');
+    });
+    const cs=document.getElementById('cr4_4s');if(cs){cs.textContent='—';cs.style.color='#555';}
+  }
+  if(n===5){
+    const e=document.getElementById('s5intro');if(e)e.style.opacity='0';
+    ['fw1','fw2','fw3','s5sec'].forEach(id=>{
+      const el=document.getElementById(id);if(el){el.style.opacity='0';el.classList.remove('vis');el.style.transform='translateY(5px)';}
+    });
+    ['fb1','fb1x','fb2a','fb2b'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.width='0';});
+  }
+}
+
+function showPanel(id, ms){
+  af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+}
+function showFwd(id, ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}
+  });
+}
+function log(id, txt, color, ms){
+  af(ms,()=>{
+    const e=document.getElementById(id);
+    if(e){e.textContent='▶ '+txt;e.style.color=color||'#aaa';e.style.opacity='1';}
+  });
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    af(150,()=>{const e=document.getElementById('s1hero');if(e)e.style.opacity='1';});
+    af(750,()=>{const e=document.getElementById('s1compare');if(e)e.style.opacity='1';});
+    af(1500,()=>{const e=document.getElementById('s1smart');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(100,()=>{const e=document.getElementById('s2intro');if(e)e.style.opacity='1';});
+
+    // PC-A sends
+    af(400,()=>{
+      litDevice('s2pca','sender');
+      litWire('ws2_a','#e8a020');
+      document.getElementById('s2l1').textContent='▶ PC-A sends frame to PC-D (DD:DD)';
+      document.getElementById('s2l1').style.color='#e8a020';
+    });
+    // Hub receives
+    af(900,()=>{
+      litDevice('s2hub','lit');
+    });
+    // Floods ALL
+    af(1200,()=>{
+      ['ws2_b','ws2_c','ws2_d'].forEach(id=>litWire(id,'#e85050'));
+      const l2=document.getElementById('s2l2');
+      if(l2){l2.textContent='▶ Hub has no MAC table — floods ALL ports!';l2.style.color='#e85050';l2.style.opacity='1';}
+    });
+    af(1500,()=>{
+      litDevice('s2pcb','lit');
+      litDevice('s2pcc','lit');
+      litDevice('s2pcd','recv');
+      const l3=document.getElementById('s2l3');
+      if(l3){l3.textContent='▶ PC-B, PC-C receive frame (not intended for them)';l3.style.color='#e85050';l3.style.opacity='1';}
+    });
+    af(2200,()=>{
+      const l4=document.getElementById('s2l4');
+      if(l4){l4.textContent='▶ Privacy violation! Anyone can sniff traffic.';l4.style.color='#e85050';l4.style.opacity='1';}
+    });
+    af(2700,()=>{
+      const bad=document.getElementById('s2bad');if(bad)bad.style.opacity='1';
+    });
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+
+    const learns=[
+      {dev:'s3pca', wire:'ws3_a', row:'cr1', ms:400, lbl:'PC-A → Port 1 learned'},
+      {dev:'s3pcb', wire:'ws3_b', row:'cr2', ms:1000, lbl:'PC-B → Port 2 learned'},
+      {dev:'s3pcc', wire:'ws3_c', row:'cr3', ms:1600, lbl:'PC-C → Port 3 learned'},
+      {dev:'s3pcd', wire:'ws3_d', row:'cr4', ms:2200, lbl:'PC-D → Port 4 learned'},
+    ];
+
+    learns.forEach(({dev,wire,row,ms})=>{
+      af(ms,()=>{
+        litDevice(dev,'lit');
+        litWire(wire,'#4eff9a');
+        litDevice('s3sw','lit');
+      });
+      af(ms+250,()=>{
+        const r=document.getElementById(row);
+        if(r){r.style.opacity='1';r.classList.add('vis','new-entry');r.style.transform='translateX(0)';}
+        litDevice(dev,null);
+        litWire(wire,null);
+      });
+    });
+
+    af(2800,()=>{
+      const swl=document.getElementById('s3swlbl');if(swl)swl.textContent='SWITCH\nTABLE FULL';
+      litDevice('s3sw','recv');
+    });
+    af(3000,()=>{
+      const st=document.getElementById('s3steps');if(st)st.style.opacity='1';
+    });
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+
+    // PC-A sends
+    af(400,()=>{
+      litDevice('s4pca','sender');
+      litWire('ws4_a','#e8a020');
+      const l=document.getElementById('s4lookup');if(l)l.style.opacity='1';
+      document.getElementById('s4l1').textContent='▶ PC-A sends frame → DST: DD:DD:DD:DD';
+      document.getElementById('s4l1').style.color='#e8a020';
+    });
+
+    // Switch looks up
+    af(950,()=>{
+      litDevice('s4sw','lit');
+      log('s4l2','Looking up DD:DD:DD:DD in CAM table…','#4ec9e1',0);
+    });
+
+    // Scan rows
+    af(1150,()=>{
+      document.getElementById('cr4_1').style.background='#102820';
+    });
+    af(1350,()=>{
+      document.getElementById('cr4_1').style.background='';
+      document.getElementById('cr4_2').style.background='#102820';
+    });
+    af(1550,()=>{
+      document.getElementById('cr4_2').style.background='';
+      document.getElementById('cr4_3').style.background='#102820';
+    });
+    af(1750,()=>{
+      document.getElementById('cr4_3').style.background='';
+      document.getElementById('cr4_4').classList.add('active-entry');
+      const cs=document.getElementById('cr4_4s');if(cs){cs.textContent='MATCH!';cs.style.color='#4eff9a';}
+      log('s4l3','Found! DD:DD → Port 4. Forward ONLY to Port 4.','#4eff9a',0);
+    });
+
+    // Forward to PC-D only
+    af(2150,()=>{
+      litWire('ws4_d','#4eff9a');
+      litDevice('s4pcd','recv');
+      log('s4l4','✓ PC-B and PC-C see nothing. Privacy preserved.','#4eff9a',0);
+    });
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+
+    // Unicast
+    af(300,()=>{showFwd('fw1',0);});
+    af(500,()=>{
+      const b=document.getElementById('fb1');if(b)b.style.width='100%';
+    });
+    af(800,()=>{
+      const b=document.getElementById('fb1x');if(b)b.style.width='0%';
+    });
+
+    // Broadcast
+    af(1200,()=>{showFwd('fw2',0);});
+    af(1400,()=>{
+      const a=document.getElementById('fb2a');if(a)a.style.width='100%';
+      const b=document.getElementById('fb2b');if(b)b.style.width='100%';
+    });
+
+    // Unknown unicast
+    af(2100,()=>{showFwd('fw3',0);});
+
+    // Security
+    af(2900,()=>{showPanel('s5sec',0);});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>
