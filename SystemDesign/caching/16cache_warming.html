@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Cache Warming</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#e8a020;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e8a020}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e8a020;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s}
+.fade.in{opacity:1}
+.rl{font-size:7px;color:#666;letter-spacing:1px;margin-bottom:4px}
+/* bar chart bars */
+.bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.bar-track{width:100%;background:#1a1a2e;border-radius:2px 2px 0 0;position:relative;overflow:hidden;display:flex;align-items:flex-end}
+.bar-fill{width:100%;height:0;border-radius:2px 2px 0 0;transition:height 0s}
+/* timeline step */
+.tstep{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border-radius:2px;border:1px solid}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1 · HOOK ══════════════════ -->
+<div class="scene active" id="s1">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CACHE WARMING</div>
+    <div class="hdr-sub">HOW TO SURVIVE A COLD START</div>
+    <div class="dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE COLD START</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DEPLOY BUG</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="h1hook" style="border:2px solid #e85050;background:#120505;padding:12px;border-radius:2px">
+        <div style="color:#fff;font-size:9px;line-height:1.9;margin-bottom:6px">"EVERY DEPLOY CAUSES A MINI-<br>OUTAGE. HERE'S THE FIX NOBODY<br>TEACHES YOU."</div>
+        <div style="color:#888;font-size:7px;line-height:1.8">Affects: rolling deploys, blue/green<br>switches, cache node restarts.</div>
+      </div>
+
+      <!-- What happens on cold start -->
+      <div class="fade" id="h1cold" style="border:2px solid #e8a020;background:#120a00;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:7px">WHAT IS A COLD CACHE?</div>
+        <div style="font-size:8px;color:#aaa;line-height:2">
+          New deployment → <span style="color:#e85050">cache is empty</span>.<br>
+          Every request = cache MISS.<br>
+          All misses → <span style="color:#e85050">DB gets 100% of traffic</span>.<br>
+          DB buckles. Users see timeouts.
+        </div>
+      </div>
+
+      <!-- Cold vs Avalanche distinction -->
+      <div class="fade" id="h1diff">
+        <div class="rl">COLD CACHE vs CACHE AVALANCHE</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#1a0505;border:1px solid #3a1010;padding:9px;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:6px">COLD CACHE</div>
+            <div style="font-size:7px;color:#aaa;line-height:1.9">Empty from start.<br>Deploy trigger.<br>Gradual fill-up.</div>
+          </div>
+          <div style="flex:1;background:#1a0a00;border:1px solid #3a2000;padding:9px;border-radius:2px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:6px">AVALANCHE</div>
+            <div style="font-size:7px;color:#aaa;line-height:1.9">Was warm, then<br>mass expiry hit.<br>Sudden collapse.</div>
+          </div>
+        </div>
+        <div style="margin-top:6px;background:#0e0a14;border:1px solid #2a1030;padding:8px;font-size:7px;color:#888;text-align:center;border-radius:2px">Both flood the DB. Cache warming fixes COLD.</div>
+      </div>
+
+      <!-- 3 strategies preview -->
+      <div class="fade" id="h1strat">
+        <div class="rl">3 WARMING STRATEGIES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:10px;background:#041408;border:1px solid #0a3018;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">📼</div>
+            <div><div style="font-size:8px;color:#4eff9a">Replay recent reads</div><div style="font-size:7px;color:#888;margin-top:3px">Pre-warm before go-live</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#051020;border:1px solid #1a3050;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">🔢</div>
+            <div><div style="font-size:8px;color:#4ec9e1">Pre-load top-N keys</div><div style="font-size:7px;color:#888;margin-top:3px">Background job fills hot keys</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;background:#1a0e00;border:1px solid #3a2800;padding:9px 10px;border-radius:2px">
+            <div style="font-size:14px">🔄</div>
+            <div><div style="font-size:8px;color:#e8a020">Dual-run overlap</div><div style="font-size:7px;color:#888;margin-top:3px">Keep old cache warm during switchover</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s1i1">▶ PRESS PLAY TO START</div>
+    <div class="ih rd" id="s1i2" style="display:none">COLD CACHE = 100% DB LOAD AT DEPLOY TIME</div>
+    <div class="il" id="s1i3" style="display:none">WARMING PREVENTS THE DB FLOOD BEFORE IT STARTS.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">DB LOAD<br>COLD START</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">REQUESTS<br>MISS</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">WARMING<br>STRATEGIES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2 · THE COLD START SPIKE ══════════════════ -->
+<div class="scene" id="s2">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">THE COLD START SPIKE</div>
+    <div class="hdr-sub">DB LOAD AT DEPLOY — WITHOUT WARMING</div>
+    <div class="dots"><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">NO WARMING</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Bar chart: DB load over time WITHOUT warming -->
+      <div style="background:#0e0a14;border:2px solid #e85050;padding:12px;border-radius:2px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:10px;text-align:center">DB LOAD — WITHOUT CACHE WARMING</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:110px" id="s2_chart">
+          <!-- 10 time bars, heights set by JS -->
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b0" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">t-2</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b1" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">t-1</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b2" style="background:#e85050"></div></div><div style="font-size:5px;color:#e85050">DEPLOY</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b3" style="background:#e85050"></div></div><div style="font-size:5px;color:#e85050">+1m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b4" style="background:#e85050"></div></div><div style="font-size:5px;color:#e85050">+2m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b5" style="background:#e85050"></div></div><div style="font-size:5px;color:#e85050">+3m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b6" style="background:#e8a020"></div></div><div style="font-size:5px;color:#e8a020">+5m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b7" style="background:#e8a020"></div></div><div style="font-size:5px;color:#e8a020">+8m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b8" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+12m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s2b9" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+15m</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:6px">
+          <span style="color:#4eff9a">Low (cached)</span>
+          <span style="color:#e85050">100% at deploy ↑</span>
+          <span style="color:#4eff9a">Recovers slowly</span>
+        </div>
+      </div>
+
+      <!-- What causes it -->
+      <div class="fade" id="s2why" style="display:flex;flex-direction:column;gap:5px">
+        <div class="tstep" style="background:#1a0505;border-color:#e85050">
+          <div style="font-size:14px;flex-shrink:0">💀</div>
+          <div><div style="font-size:8px;color:#e85050;margin-bottom:3px">t=0: DEPLOY</div><div style="font-size:7px;color:#aaa;line-height:1.8">New pods start. Cache is empty.<br>10K req/s all → MISS → all → DB.</div></div>
+        </div>
+        <div class="tstep" style="background:#1a0a00;border-color:#e8a020">
+          <div style="font-size:14px;flex-shrink:0">🔥</div>
+          <div><div style="font-size:8px;color:#e8a020;margin-bottom:3px">t=0–5m: DB OVERWHELMED</div><div style="font-size:7px;color:#aaa;line-height:1.8">DB CPU 100%. Queries queue up.<br>Latency spikes. Users see 503s.</div></div>
+        </div>
+        <div class="tstep" style="background:#041408;border-color:#4eff9a">
+          <div style="font-size:14px;flex-shrink:0">📈</div>
+          <div><div style="font-size:8px;color:#4eff9a;margin-bottom:3px">t=5–15m: CACHE FILLS SLOWLY</div><div style="font-size:7px;color:#aaa;line-height:1.8">Cache-aside pattern auto-fills.<br>Hit rate rises. DB load drops.</div></div>
+        </div>
+      </div>
+
+      <!-- Cache hit rate over time -->
+      <div class="fade" id="s2hitrate" style="background:#0e0a14;border:1px solid #2a1030;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">CACHE HIT RATE OVER TIME (WITHOUT WARMING)</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:44px">
+          <div style="flex:1;background:#e85050;height:2px;border-radius:1px 1px 0 0" id="hr0"></div>
+          <div style="flex:1;background:#e85050;height:0;border-radius:1px 1px 0 0" id="hr1"></div>
+          <div style="flex:1;background:#e85050;height:0;border-radius:1px 1px 0 0" id="hr2"></div>
+          <div style="flex:1;background:#e8a020;height:0;border-radius:1px 1px 0 0" id="hr3"></div>
+          <div style="flex:1;background:#e8a020;height:0;border-radius:1px 1px 0 0" id="hr4"></div>
+          <div style="flex:1;background:#e8a020;height:0;border-radius:1px 1px 0 0" id="hr5"></div>
+          <div style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0" id="hr6"></div>
+          <div style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0" id="hr7"></div>
+          <div style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0" id="hr8"></div>
+          <div style="flex:1;background:#4eff9a;height:0;border-radius:1px 1px 0 0" id="hr9"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:4px">
+          <span style="color:#e85050">0% hit</span><span>gradual fill →</span><span style="color:#4eff9a">~90% hit</span>
+        </div>
+        <div style="font-size:8px;color:#e85050;margin-top:6px;text-align:center">10–15 min of DB pain on every deploy</div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il" id="s2i1">▶ PRESS PLAY TO SEE THE SPIKE</div>
+    <div class="ih rd" id="s2i2" style="display:none">DEPLOY → EMPTY CACHE → DB TAKES 100% LOAD</div>
+    <div class="il" id="s2i3" style="display:none">TAKES 10–15 MINUTES TO RECOVER NATURALLY.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0%</div><div class="sl">HIT RATE<br>AT DEPLOY</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">DB LOAD<br>AT t=0</div></div>
+    <div class="sc"><div class="sv am">15min</div><div class="sl">RECOVERY<br>TIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3 · THE FIX: WITH WARMING ══════════════════ -->
+<div class="scene" id="s3">
+  <div class="hdr" style="background:#0a1a10">
+    <div class="hdr-title">WITH CACHE WARMING</div>
+    <div class="hdr-sub">DB LOAD STAYS FLAT AT DEPLOY</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">WITH WARMING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIXED</span>
+  </div>
+  <div class="anim" style="background:#0a1a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Bar chart WITH warming — flat line -->
+      <div style="background:#041408;border:2px solid #4eff9a;padding:12px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:10px;text-align:center">DB LOAD — WITH CACHE WARMING</div>
+        <div style="display:flex;align-items:flex-end;gap:3px;height:110px" id="s3_chart">
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b0" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">t-2</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b1" style="background:#4ec9e1"></div></div><div style="font-size:5px;color:#4ec9e1">WARM</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b2" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#4eff9a">DEPLOY</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b3" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+1m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b4" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+2m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b5" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+3m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b6" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+5m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b7" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+8m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b8" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+12m</div></div>
+          <div class="bar-col"><div class="bar-track" style="height:100%"><div class="bar-fill" id="s3b9" style="background:#4eff9a"></div></div><div style="font-size:5px;color:#555">+15m</div></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:6px">
+          <span style="color:#4eff9a">Low (cached)</span>
+          <span style="color:#4ec9e1">↑ Pre-warmed</span>
+          <span style="color:#4eff9a">Stays flat ✓</span>
+        </div>
+      </div>
+
+      <!-- Before vs After comparison -->
+      <div class="fade" id="s3cmp">
+        <div class="rl">DEPLOY IMPACT: BEFORE vs AFTER WARMING</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;background:#1a0505;border:2px solid #e85050;padding:10px;text-align:center;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:6px">WITHOUT</div>
+            <div style="font-size:18px;color:#e85050">💀</div>
+            <div style="font-size:9px;color:#e85050;margin-top:5px">100% DB</div>
+            <div style="font-size:7px;color:#888;margin-top:3px">at t=0</div>
+          </div>
+          <div style="flex:1;background:#041408;border:2px solid #4eff9a;padding:10px;text-align:center;border-radius:2px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">WITH WARMING</div>
+            <div style="font-size:18px">✅</div>
+            <div style="font-size:9px;color:#4eff9a;margin-top:5px">~15% DB</div>
+            <div style="font-size:7px;color:#888;margin-top:3px">unchanged</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Warming timeline -->
+      <div class="fade" id="s3timeline" style="display:flex;flex-direction:column;gap:5px">
+        <div class="tstep" style="background:#051020;border-color:#4ec9e1">
+          <div style="font-size:14px;flex-shrink:0">📼</div>
+          <div><div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">t=-5m: PRE-WARM PHASE</div><div style="font-size:7px;color:#aaa;line-height:1.8">Replay last hour of read logs.<br>Top 10K keys loaded into new cache.</div></div>
+        </div>
+        <div class="tstep" style="background:#041408;border-color:#4eff9a">
+          <div style="font-size:14px;flex-shrink:0">🚀</div>
+          <div><div style="font-size:8px;color:#4eff9a;margin-bottom:3px">t=0: DEPLOY</div><div style="font-size:7px;color:#aaa;line-height:1.8">Cache already ~80% populated.<br>Requests hit cache immediately.</div></div>
+        </div>
+        <div class="tstep" style="background:#041408;border-color:#4eff9a">
+          <div style="font-size:14px;flex-shrink:0">📊</div>
+          <div><div style="font-size:8px;color:#4eff9a;margin-bottom:3px">t=0+: SMOOTH OPERATION</div><div style="font-size:7px;color:#aaa;line-height:1.8">DB load unchanged. Users happy.<br>No spike. No outage.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il" id="s3i1">▶ PRESS PLAY TO SEE WARMED DEPLOY</div>
+    <div class="ih" id="s3i2" style="display:none">PRE-WARM BEFORE DEPLOY → CACHE HIT AT t=0</div>
+    <div class="il" id="s3i3" style="display:none">DB LOAD STAYS FLAT. NO SPIKE. NO OUTAGE.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~80%</div><div class="sl">HIT RATE<br>AT DEPLOY</div></div>
+    <div class="sc"><div class="sv gn">FLAT</div><div class="sl">DB LOAD<br>UNCHANGED</div></div>
+    <div class="sc"><div class="sv gn">ZERO</div><div class="sl">OUTAGE<br>RISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4 · 3 STRATEGIES ══════════════════ -->
+<div class="scene" id="s4">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">3 WARMING STRATEGIES</div>
+    <div class="hdr-sub">PICK THE ONE THAT FITS YOUR SYSTEM</div>
+    <div class="dots"><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div></div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STRATEGIES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PICK ONE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Strategy 1 -->
+      <div class="fade" id="s4s1" style="border:2px solid #4eff9a;background:#041408;padding:11px;border-radius:2px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <div style="font-size:16px">📼</div>
+          <div style="font-size:9px;color:#4eff9a">STRATEGY 1: REPLAY READS</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          Log all DB reads for the last hour.<br>
+          Before deploy: replay those reads into<br>
+          the new cache instance. Go live warm.
+        </div>
+        <div style="background:#020a04;border:1px solid #0a2810;padding:8px;font-size:8px;color:#4eff9a;line-height:2">
+          <span style="color:#555"># Before deploy script</span><br>
+          cat read_log_last_1h.txt |<br>
+          &nbsp;&nbsp;xargs -I{} redis-cli GET {} &gt;/dev/null
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1;font-size:7px;color:#4eff9a;line-height:1.9">✓ Real traffic shape<br>✓ Warms exact keys</div>
+          <div style="flex:1;font-size:7px;color:#e8a020;line-height:1.9">⚠ Needs read logging<br>⚠ Replay takes time</div>
+        </div>
+      </div>
+
+      <!-- Strategy 2 -->
+      <div class="fade" id="s4s2" style="border:2px solid #4ec9e1;background:#051020;padding:11px;border-radius:2px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <div style="font-size:16px">🔢</div>
+          <div style="font-size:9px;color:#4ec9e1">STRATEGY 2: PRE-LOAD TOP-N</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          Query DB for the top-N most accessed<br>
+          records. Background job loads them into<br>
+          cache before traffic is switched over.
+        </div>
+        <div style="background:#040e18;border:1px solid #1a3050;padding:8px;font-size:8px;color:#4ec9e1;line-height:2">
+          top_keys = db.query(<br>
+          &nbsp;&nbsp;"SELECT key FROM access_log<br>
+          &nbsp;&nbsp;&nbsp;ORDER BY hits DESC LIMIT 10000")<br>
+          <span style="color:#4eff9a">for</span> k <span style="color:#4eff9a">in</span> top_keys: cache.set(k, db.get(k))
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1;font-size:7px;color:#4eff9a;line-height:1.9">✓ Simple to implement<br>✓ No log needed</div>
+          <div style="flex:1;font-size:7px;color:#e8a020;line-height:1.9">⚠ Warms only hot keys<br>⚠ Not traffic-shaped</div>
+        </div>
+      </div>
+
+      <!-- Strategy 3 -->
+      <div class="fade" id="s4s3" style="border:2px solid #e8a020;background:#120a00;padding:11px;border-radius:2px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <div style="font-size:16px">🔄</div>
+          <div style="font-size:9px;color:#e8a020">STRATEGY 3: DUAL-RUN OVERLAP</div>
+        </div>
+        <div style="font-size:8px;color:#aaa;line-height:2;margin-bottom:8px">
+          Keep OLD deployment running in parallel<br>
+          while new one warms up organically.<br>
+          Switch traffic only when new hit rate ≥80%.
+        </div>
+        <div style="display:flex;gap:6px;align-items:stretch">
+          <div style="flex:1;background:#080400;border:1px solid #2a1800;padding:8px;text-align:center;border-radius:2px">
+            <div style="font-size:7px;color:#888;margin-bottom:4px">OLD</div>
+            <div style="font-size:8px;color:#4eff9a">WARM ✓</div>
+            <div style="font-size:7px;color:#888;margin-top:3px">serving traffic</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:10px;color:#e8a020;padding:0 4px">→</div>
+          <div style="flex:1;background:#080400;border:1px solid #2a1800;padding:8px;text-align:center;border-radius:2px">
+            <div style="font-size:7px;color:#888;margin-bottom:4px">NEW</div>
+            <div style="font-size:8px;color:#e8a020">FILLING...</div>
+            <div style="font-size:7px;color:#888;margin-top:3px">warming up</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:10px;color:#4eff9a;padding:0 4px">→</div>
+          <div style="flex:1;background:#041408;border:1px solid #0a2810;padding:8px;text-align:center;border-radius:2px">
+            <div style="font-size:7px;color:#888;margin-bottom:4px">NEW</div>
+            <div style="font-size:8px;color:#4eff9a">WARM ✓</div>
+            <div style="font-size:7px;color:#888;margin-top:3px">traffic switch</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <div style="flex:1;font-size:7px;color:#4eff9a;line-height:1.9">✓ Zero risk<br>✓ Blue/green native</div>
+          <div style="flex:1;font-size:7px;color:#e8a020;line-height:1.9">⚠ 2× infra cost<br>⚠ Needs health check</div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="fade" id="s4sum" style="background:#051020;border:2px solid #4ec9e1;padding:11px;border-radius:2px">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:8px">WHICH ONE TO USE?</div>
+        <div style="font-size:8px;color:#aaa;line-height:2.1">
+          <span style="color:#4eff9a">Small system:</span> Top-N pre-load is enough<br>
+          <span style="color:#4ec9e1">Medium:</span> Replay reads + TTL jitter<br>
+          <span style="color:#e8a020">Critical system:</span> Dual-run + health gate<br>
+          <span style="color:#888">Always combine with TTL jitter too.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il" id="s4i1">▶ PRESS PLAY TO SEE STRATEGIES</div>
+    <div class="ih" id="s4i2" style="display:none">3 WAYS TO PRE-WARM BEFORE TRAFFIC HITS</div>
+    <div class="il" id="s4i3" style="display:none">COMBINE WITH TTL JITTER FOR FULL PROTECTION.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a">REPLAY</div><div class="sl">STRATEGY 1<br>READS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">TOP-N</div><div class="sl">STRATEGY 2<br>HOT KEYS</div></div>
+    <div class="sc"><div class="sv am">DUAL</div><div class="sl">STRATEGY 3<br>OVERLAP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){let t=setTimeout(fn,ms);T.push(t);}
+function fin(id){let e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('in');}}
+function hide(id){let e=document.getElementById(id);if(e)e.style.display='none';}
+function show(id){let e=document.getElementById(id);if(e)e.style.display='';}
+function rst(ids){ids.forEach(id=>{let e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('in');}});}
+
+function goScene(n){
+  clr();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  fullReset();
+}
+
+function animBar(id, targetH, delay, duration){
+  af(delay,()=>{
+    let e=document.getElementById(id);
+    if(!e)return;
+    e.style.transition='none';e.style.height='0';
+    af(30,()=>{
+      e.style.transition=`height ${duration}ms ease-out`;
+      e.style.height=targetH+'px';
+    });
+  });
+}
+
+function fullReset(){
+  rst(['h1hook','h1cold','h1diff','h1strat']);
+  hide('s1i2');hide('s1i3');show('s1i1');
+
+  // reset s2 bars
+  const s2heights=[22,18,108,104,96,88,60,38,18,16];
+  s2heights.forEach((_,i)=>{let e=document.getElementById('s2b'+i);if(e){e.style.transition='none';e.style.height='0';}});
+  rst(['s2why','s2hitrate']);
+  const hrids=[...Array(10).keys()];
+  hrids.forEach(i=>{let e=document.getElementById('hr'+i);if(e){e.style.transition='none';e.style.height='0';}});
+  // hr0 always at 2px (baseline before deploy)
+  af(50,()=>{let e=document.getElementById('hr0');if(e)e.style.height='2px';});
+  hide('s2i2');hide('s2i3');show('s2i1');
+
+  // reset s3 bars
+  [...Array(10).keys()].forEach(i=>{let e=document.getElementById('s3b'+i);if(e){e.style.transition='none';e.style.height='0';}});
+  rst(['s3cmp','s3timeline']);
+  hide('s3i2');hide('s3i3');show('s3i1');
+
+  rst(['s4s1','s4s2','s4s3','s4sum']);
+  hide('s4i2');hide('s4i3');show('s4i1');
+}
+
+/* ── S1 ── */
+function play1(){
+  clr();fullReset();
+  af(300,()=>fin('h1hook'));
+  af(1000,()=>{fin('h1cold');hide('s1i1');show('s1i2');});
+  af(1700,()=>fin('h1diff'));
+  af(2500,()=>{fin('h1strat');show('s1i3');});
+}
+
+/* ── S2: Cold start spike ── */
+function play2(){
+  clr();fullReset();
+  hide('s2i1');show('s2i2');
+  // DB load bars: heights in px (out of 110px track)
+  const dbH=[22,18,108,104,96,88,60,38,18,16];
+  dbH.forEach((h,i)=>{animBar('s2b'+i, h, 200+i*150, 500);});
+  af(1900,()=>{fin('s2why');show('s2i3');});
+  // hit rate bars
+  const hrH=[2,2,2,8,18,28,38,42,44,44];
+  af(2600,()=>{
+    fin('s2hitrate');
+    hrH.forEach((h,i)=>{
+      af(i*120,()=>{
+        let e=document.getElementById('hr'+i);
+        if(e){e.style.transition='height .4s ease-out';e.style.height=h+'px';}
+      });
+    });
+  });
+}
+
+/* ── S3: With warming ── */
+function play3(){
+  clr();fullReset();
+  hide('s3i1');show('s3i2');
+  // DB load bars — flat around 20px throughout
+  const dbH=[22,20,20,20,18,20,22,20,18,20];
+  // t=1 (WARM phase) shown in cyan, slightly elevated
+  dbH.forEach((h,i)=>{
+    let e=document.getElementById('s3b'+i);
+    if(e)e.style.background = i===1 ? '#4ec9e1' : '#4eff9a';
+    animBar('s3b'+i, i===1?26:h, 200+i*150, 500);
+  });
+  af(1800,()=>{fin('s3cmp');show('s3i3');});
+  af(2600,()=>fin('s3timeline'));
+}
+
+/* ── S4: Strategies ── */
+function play4(){
+  clr();fullReset();
+  hide('s4i1');show('s4i2');
+  af(200,()=>fin('s4s1'));
+  af(1200,()=>fin('s4s2'));
+  af(2200,()=>fin('s4s3'));
+  af(3200,()=>{fin('s4sum');show('s4i3');});
+}
+
+fullReset();
+</script>
+</body>
+</html>

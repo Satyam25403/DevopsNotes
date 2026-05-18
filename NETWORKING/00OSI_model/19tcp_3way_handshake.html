@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>TCP 3-Way Handshake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Message Sequence Diagram ── */
+.msd-wrap{
+  background:#050d0a;border:2px solid #0d2018;border-radius:3px;
+  position:relative;
+}
+
+/* Endpoint boxes */
+.ep-box{
+  position:absolute;top:10px;
+  width:86px;height:52px;border-radius:2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:border-color .3s,background .3s;
+  border:2px solid #1a3028;background:#071510;
+}
+.ep-box.active{border-color:#4eff9a;background:#0a2010}
+.ep-box.recv{border-color:#4ec9e1;background:#0d1a2e}
+.ep-icon{font-size:20px;line-height:1}
+.ep-label{font-size:6px;color:#4eff9a;font-family:'Press Start 2P',monospace;letter-spacing:.3px}
+.ep-state{font-size:5.5px;font-family:'Press Start 2P',monospace;line-height:1.3;text-align:center;transition:color .3s}
+
+/* Lifelines */
+.lifeline{
+  position:absolute;top:62px;width:2px;
+  background:repeating-linear-gradient(to bottom,#1a3028 0,#1a3028 6px,transparent 6px,transparent 12px);
+}
+
+/* Message arrows */
+.msg-row{
+  position:relative;height:44px;
+  opacity:0;transition:opacity .35s;
+}
+.msg-row.vis{opacity:1}
+
+/* Arrow beam that grows */
+.arrow-beam{
+  position:absolute;height:2px;top:50%;transform:translateY(-50%);
+  border-radius:1px;width:0;
+  transition:width .5s ease-out;
+}
+/* Arrowhead */
+.arrow-head{
+  position:absolute;top:50%;transform:translateY(-50%);
+  font-size:10px;line-height:1;opacity:0;transition:opacity .15s;
+  font-family:'Press Start 2P',monospace;
+}
+
+/* Message label above arrow */
+.msg-label{
+  position:absolute;top:3px;
+  font-size:6.5px;font-family:'Press Start 2P',monospace;
+  white-space:nowrap;letter-spacing:.3px;
+}
+/* Flag pill */
+.flag-pill{
+  display:inline-block;font-size:5.5px;padding:1px 4px;border-radius:2px;
+  font-family:'Press Start 2P',monospace;border:1px solid currentColor;
+  margin-left:3px;vertical-align:middle;
+}
+/* Seq/ack note below arrow */
+.msg-note{
+  position:absolute;bottom:2px;
+  font-size:5.5px;font-family:'Press Start 2P',monospace;color:#555;
+  white-space:nowrap;
+}
+
+/* TCP Flags grid */
+.flag-grid{display:flex;gap:5px;flex-wrap:wrap}
+.flag-card{
+  flex:1;min-width:82px;border-radius:2px;padding:7px 8px;
+  opacity:0;transform:translateY(5px);
+  transition:opacity .35s,transform .35s;
+  border:1px solid #1a3028;background:#071510;
+}
+.flag-card.vis{opacity:1;transform:translateY(0)}
+.flag-name{font-size:9px;margin-bottom:4px;line-height:1.3}
+.flag-desc{font-size:6px;color:#aaa;line-height:1.6}
+.flag-bit{font-size:6.5px;padding:2px 5px;border-radius:2px;border:1px solid currentColor;margin-top:4px;display:inline-block;font-family:'Press Start 2P',monospace}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TCP 3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">THE RITUAL BEFORE EVERY CONNECTION</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">INTRO</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">L4 TCP</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="border:2px solid #4ec9e1;border-radius:2px;background:#0d1a2e;text-align:center;padding:15px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:9px">THE RULE</div>
+        <div style="font-size:22px;margin-bottom:9px">🤝</div>
+        <div style="font-size:10px;color:#4ec9e1;line-height:1.9;margin-bottom:8px">3 MESSAGES.<br>BEFORE 1 BYTE<br>OF DATA MOVES.</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">TCP is connection-oriented. Both sides<br>must agree on sequence numbers<br>before any data is exchanged.</div>
+      </div>
+
+      <!-- Preview of 3 steps -->
+      <div style="display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .5s" id="s1steps">
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 10px;background:#0d1a2e;border:1px solid #4ec9e1;border-radius:2px">
+          <div style="font-size:20px;flex-shrink:0">1️⃣</div>
+          <div>
+            <div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">SYN</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.6">Client → Server. "I want to connect. My seq starts at X."</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 10px;background:#071510;border:1px solid #4eff9a;border-radius:2px">
+          <div style="font-size:20px;flex-shrink:0">2️⃣</div>
+          <div>
+            <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">SYN-ACK</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.6">Server → Client. "OK, I acknowledge X. My seq starts at Y."</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:9px 10px;background:#1a1408;border:1px solid #e8a020;border-radius:2px">
+          <div style="font-size:20px;flex-shrink:0">3️⃣</div>
+          <div>
+            <div style="font-size:8px;color:#e8a020;margin-bottom:3px">ACK</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.6">Client → Server. "Got it. I acknowledge Y. Connection open."</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#071510;border:1px solid #4eff9a;border-radius:2px;padding:9px 10px;opacity:0;transition:opacity .4s" id="s1why">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">WHY 3 MESSAGES?</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Two messages aren't enough — the server would never confirm the client heard its SYN-ACK. Three is the minimum to prove both directions work and exchange sequence numbers reliably.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">TCP IS CONNECTION-ORIENTED:</div>
+    <div class="ih">SYN → SYN-ACK → ACK. Then data flows.</div>
+    <div class="il">Both sides exchange starting sequence numbers.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3</div><div class="sl">MESSAGES<br>TO CONNECT</div></div>
+    <div class="sc"><div class="sv gn">ISN</div><div class="sl">RANDOM<br>SEQ START</div></div>
+    <div class="sc"><div class="sv am">2-WAY</div><div class="sl">BOTH DIRS<br>VERIFIED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: THE HANDSHAKE — SEQUENCE DIAGRAM ══════════════ -->
+<div class="scene" id="s2" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">TCP 3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">SYN → SYN-ACK → ACK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HANDSHAKE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CONNECT</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- MSD diagram -->
+      <div class="msd-wrap" style="height:248px" id="s2msd">
+        <!-- Lifelines -->
+        <div class="lifeline" id="ll_client" style="left:43px;height:180px;top:62px;opacity:0;transition:opacity .3s"></div>
+        <div class="lifeline" id="ll_server" style="right:43px;height:180px;top:62px;opacity:0;transition:opacity .3s"></div>
+
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible" viewBox="0 0 366 248" id="s2svg">
+          <!-- SYN beam: client(43) → server(323) at y=100 -->
+          <line x1="43" y1="113" x2="43" y2="113" stroke="#4ec9e1" stroke-width="2.5" stroke-linecap="round" id="syn_beam"/>
+          <!-- SYN-ACK beam: server(323) → client(43) at y=155 -->
+          <line x1="323" y1="157" x2="323" y2="157" stroke="#4eff9a" stroke-width="2.5" stroke-linecap="round" id="synack_beam"/>
+          <!-- ACK beam: client(43) → server(323) at y=200 -->
+          <line x1="43" y1="201" x2="43" y2="201" stroke="#e8a020" stroke-width="2.5" stroke-linecap="round" id="ack_beam"/>
+        </svg>
+
+        <!-- Endpoint boxes -->
+        <div class="ep-box" id="ep_client" style="left:0">
+          <div class="ep-icon">💻</div>
+          <div class="ep-label">CLIENT</div>
+          <div class="ep-state" id="cs_state" style="color:#555">CLOSED</div>
+        </div>
+        <div class="ep-box" id="ep_server" style="right:0">
+          <div class="ep-icon">🖥️</div>
+          <div class="ep-label">SERVER</div>
+          <div class="ep-state" id="sv_state" style="color:#555">LISTEN</div>
+        </div>
+
+        <!-- SYN label -->
+        <div id="syn_lbl" style="position:absolute;top:92px;left:48px;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#4ec9e1;font-family:'Press Start 2P',monospace">SYN</span>
+          <span class="flag-pill" style="color:#4ec9e1;border-color:#4ec9e1">SEQ=1000</span>
+          <span class="flag-pill" style="color:#4ec9e1;border-color:#4ec9e1">CTL=SYN</span>
+        </div>
+        <div id="syn_note" style="position:absolute;top:122px;left:48px;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"I want to connect. My ISN is 1000."</div>
+
+        <!-- SYN-ACK label -->
+        <div id="synack_lbl" style="position:absolute;top:138px;right:52px;text-align:right;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#4eff9a;font-family:'Press Start 2P',monospace">SYN-ACK</span>
+          <span class="flag-pill" style="color:#4eff9a;border-color:#4eff9a">SEQ=5000</span>
+          <span class="flag-pill" style="color:#4eff9a;border-color:#4eff9a">ACK=1001</span>
+        </div>
+        <div id="synack_note" style="position:absolute;top:167px;right:52px;text-align:right;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"OK. My ISN is 5000. I ack your 1001."</div>
+
+        <!-- ACK label -->
+        <div id="ack_lbl" style="position:absolute;top:183px;left:48px;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#e8a020;font-family:'Press Start 2P',monospace">ACK</span>
+          <span class="flag-pill" style="color:#e8a020;border-color:#e8a020">SEQ=1001</span>
+          <span class="flag-pill" style="color:#e8a020;border-color:#e8a020">ACK=5001</span>
+        </div>
+        <div id="ack_note" style="position:absolute;top:212px;left:48px;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"Got it. Connection ESTABLISHED."</div>
+
+        <!-- arrowheads -->
+        <div id="syn_head" style="position:absolute;top:107px;right:36px;font-size:12px;color:#4ec9e1;font-family:monospace;opacity:0;transition:opacity .1s">▶</div>
+        <div id="synack_head" style="position:absolute;top:151px;left:32px;font-size:12px;color:#4eff9a;font-family:monospace;opacity:0;transition:opacity .1s">◀</div>
+        <div id="ack_head" style="position:absolute;top:195px;right:36px;font-size:12px;color:#e8a020;font-family:monospace;opacity:0;transition:opacity .1s">▶</div>
+
+        <!-- ESTABLISHED banner -->
+        <div id="s2estab" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);background:#0a2010;border:2px solid #4eff9a;border-radius:2px;padding:5px 12px;opacity:0;transition:opacity .4s;white-space:nowrap">
+          <span style="font-size:8px;color:#4eff9a;font-family:'Press Start 2P',monospace">✓ CONNECTION ESTABLISHED</span>
+        </div>
+      </div>
+
+      <!-- Sequence number explainer -->
+      <div class="panel" id="s2seq" style="border:1px solid #4ec9e1;background:#0d1a2e">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHY SEQUENCE NUMBERS MATTER</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">
+          <span style="color:#4ec9e1">ISN (Initial Sequence Number)</span> is chosen randomly to prevent TCP hijacking. Both sides track:<br>
+          <span style="color:#4eff9a">SEQ</span> = "this is byte N that I'm sending."<br>
+          <span style="color:#e8a020">ACK</span> = "I've received up to byte N, send N+1."<br>
+          Out-of-order segments are reordered. Missing ones are retransmitted.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">HANDSHAKE COMPLETE:</div>
+    <div class="ih">Both ISNs exchanged. Both dirs confirmed.</div>
+    <div class="il">Now data can flow. State = ESTABLISHED.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">SYN</div><div class="sl">MSG 1<br>CLIENT→SRV</div></div>
+    <div class="sc"><div class="sv gn">SYN-ACK</div><div class="sl">MSG 2<br>SRV→CLIENT</div></div>
+    <div class="sc"><div class="sv am">ACK</div><div class="sl">MSG 3<br>CLIENT→SRV</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: TCP FLAGS ══════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">TCP 3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">TCP FLAGS — THE CONTROL BITS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TCP FLAGS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">CONTROL BITS</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s3intro">6 FLAGS IN THE TCP HEADER — EACH IS 1 BIT</div>
+
+      <!-- Flag header byte visualisation -->
+      <div style="background:#071510;border:1px solid #1a3028;border-radius:2px;padding:8px 10px;opacity:0;transition:opacity .4s" id="s3header">
+        <div style="font-size:6.5px;color:#555;margin-bottom:5px;letter-spacing:.5px">TCP CONTROL BITS IN HEADER</div>
+        <div style="display:flex;gap:3px">
+          <div style="flex:1;background:#0d2018;border:1px solid #4ec9e150;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1">URG</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 5</div>
+          </div>
+          <div style="flex:1;background:#0d2018;border:2px solid #e8a020;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#e8a020">ACK</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 4</div>
+          </div>
+          <div style="flex:1;background:#0d2018;border:1px solid #a080c050;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#a080c0">PSH</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 3</div>
+          </div>
+          <div style="flex:1;background:#0d2018;border:2px solid #e85050;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#e85050">RST</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 2</div>
+          </div>
+          <div style="flex:1;background:#0d2018;border:2px solid #4eff9a;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">SYN</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 1</div>
+          </div>
+          <div style="flex:1;background:#0d2018;border:2px solid #7a9e30;border-radius:2px;padding:5px 3px;text-align:center">
+            <div style="font-size:7px;color:#7a9e30">FIN</div><div style="font-size:5.5px;color:#555;margin-top:2px">bit 0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flag cards -->
+      <div class="flag-card" id="fc_syn" style="border-color:#4eff9a;background:#071510">
+        <div class="flag-name" style="color:#4eff9a">SYN — Synchronise</div>
+        <div class="flag-desc">Initiates a connection. Carries the ISN. Set only in first two messages of handshake. SYN flood = DDoS attack using half-open connections.</div>
+        <span class="flag-bit" style="color:#4eff9a;border-color:#4eff9a">HANDSHAKE</span>
+      </div>
+
+      <div class="flag-card" id="fc_ack" style="border-color:#e8a020;background:#1a1408">
+        <div class="flag-name" style="color:#e8a020">ACK — Acknowledge</div>
+        <div class="flag-desc">Confirms receipt of data. The ACK field says "I've received up to byte N." Set on virtually every packet after the first SYN.</div>
+        <span class="flag-bit" style="color:#e8a020;border-color:#e8a020">ALMOST ALWAYS SET</span>
+      </div>
+
+      <div class="flag-card" id="fc_fin" style="border-color:#7a9e30;background:#111808">
+        <div class="flag-name" style="color:#7a9e30">FIN — Finish</div>
+        <div class="flag-desc">Graceful teardown. Signals no more data from sender. Requires FIN-ACK exchange in both directions. Connection enters TIME_WAIT after.</div>
+        <span class="flag-bit" style="color:#7a9e30;border-color:#7a9e30">TEARDOWN</span>
+      </div>
+
+      <div class="flag-card" id="fc_rst" style="border-color:#e85050;background:#1a0808">
+        <div class="flag-name" style="color:#e85050">RST — Reset</div>
+        <div class="flag-desc">Abrupt connection termination. No handshake needed. Port closed = RST. Firewall drops = silence (no RST). Used in port scanners like nmap.</div>
+        <span class="flag-bit" style="color:#e85050;border-color:#e85050">ABORT</span>
+      </div>
+
+      <div class="flag-card" id="fc_psh" style="border-color:#a080c0;background:#100820">
+        <div class="flag-name" style="color:#a080c0">PSH — Push</div>
+        <div class="flag-desc">Tell receiver to pass data to app immediately — don't buffer. Seen in interactive sessions (SSH keystrokes, HTTP responses). Often set with last segment of a message.</div>
+        <span class="flag-bit" style="color:#a080c0;border-color:#a080c0">FLUSH BUFFER</span>
+      </div>
+
+      <div class="flag-card" id="fc_urg" style="border-color:#555;background:#130d1e">
+        <div class="flag-name" style="color:#777">URG — Urgent</div>
+        <div class="flag-desc">Marks data as urgent — process before the rest of the buffer. Rarely used in modern protocols. Historically used for out-of-band signals (e.g. Ctrl+C in Telnet).</div>
+        <span class="flag-bit" style="color:#555;border-color:#555">LEGACY</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">FLAGS ARE 1-BIT EACH:</div>
+    <div class="ih">SYN+ACK can both be set simultaneously.</div>
+    <div class="il">Wireshark shows: [SYN] [SYN, ACK] [ACK]</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">SYN</div><div class="sl">CONNECT<br>INITIATE</div></div>
+    <div class="sc"><div class="sv rd">RST</div><div class="sl">HARD<br>ABORT</div></div>
+    <div class="sc"><div class="sv" style="color:#7a9e30">FIN</div><div class="sl">GRACEFUL<br>CLOSE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: CONNECTION TEARDOWN ══════════════ -->
+<div class="scene" id="s4" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">TCP 3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">TEARDOWN — THE 4-MESSAGE GOODBYE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#7a9e30">TEARDOWN</span>
+    <span class="sbadge" style="color:#7a9e30;border-color:#7a9e30">FIN SEQUENCE</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s4intro">CLOSING NEEDS 4 MESSAGES — EACH SIDE CLOSES INDEPENDENTLY</div>
+
+      <!-- Teardown MSD -->
+      <div class="msd-wrap" style="height:270px" id="s4msd">
+        <div class="lifeline" id="td_ll_c" style="left:43px;height:206px;top:62px;opacity:0;transition:opacity .3s"></div>
+        <div class="lifeline" id="td_ll_s" style="right:43px;height:206px;top:62px;opacity:0;transition:opacity .3s"></div>
+
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible" viewBox="0 0 366 270" id="s4svg">
+          <!-- FIN1: client→server at y=110 -->
+          <line x1="43" y1="115" x2="43" y2="115" stroke="#7a9e30" stroke-width="2.5" stroke-linecap="round" id="fin1_beam"/>
+          <!-- ACK1: server→client at y=155 -->
+          <line x1="323" y1="159" x2="323" y2="159" stroke="#e8a020" stroke-width="2.5" stroke-linecap="round" id="ack1_beam"/>
+          <!-- FIN2: server→client at y=196 -->
+          <line x1="323" y1="200" x2="323" y2="200" stroke="#7a9e30" stroke-width="2.5" stroke-linecap="round" id="fin2_beam"/>
+          <!-- ACK2: client→server at y=237 -->
+          <line x1="43" y1="241" x2="43" y2="241" stroke="#e8a020" stroke-width="2.5" stroke-linecap="round" id="ack2_beam"/>
+        </svg>
+
+        <div class="ep-box" id="td_client" style="left:0">
+          <div class="ep-icon">💻</div>
+          <div class="ep-label">CLIENT</div>
+          <div class="ep-state" id="td_cstate" style="color:#4eff9a">ESTAB</div>
+        </div>
+        <div class="ep-box" id="td_server" style="right:0">
+          <div class="ep-icon">🖥️</div>
+          <div class="ep-label">SERVER</div>
+          <div class="ep-state" id="td_sstate" style="color:#4eff9a">ESTAB</div>
+        </div>
+
+        <!-- Labels -->
+        <div id="fin1_lbl" style="position:absolute;top:96px;left:48px;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#7a9e30;font-family:'Press Start 2P',monospace">FIN</span>
+          <span class="flag-pill" style="color:#7a9e30;border-color:#7a9e30">SEQ=2000</span>
+        </div>
+        <div id="fin1_note" style="position:absolute;top:124px;left:48px;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"I'm done sending. Closing my side."</div>
+
+        <div id="ack1_lbl" style="position:absolute;top:140px;right:52px;text-align:right;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#e8a020;font-family:'Press Start 2P',monospace">ACK</span>
+          <span class="flag-pill" style="color:#e8a020;border-color:#e8a020">ACK=2001</span>
+        </div>
+        <div id="ack1_note" style="position:absolute;top:168px;right:52px;text-align:right;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"OK, I acknowledge. May still send data."</div>
+
+        <div id="fin2_lbl" style="position:absolute;top:181px;right:52px;text-align:right;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#7a9e30;font-family:'Press Start 2P',monospace">FIN</span>
+          <span class="flag-pill" style="color:#7a9e30;border-color:#7a9e30">SEQ=6000</span>
+        </div>
+        <div id="fin2_note" style="position:absolute;top:209px;right:52px;text-align:right;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"I'm done too. Closing server side."</div>
+
+        <div id="ack2_lbl" style="position:absolute;top:222px;left:48px;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#e8a020;font-family:'Press Start 2P',monospace">ACK</span>
+          <span class="flag-pill" style="color:#e8a020;border-color:#e8a020">ACK=6001</span>
+        </div>
+        <div id="ack2_note" style="position:absolute;top:250px;left:48px;font-size:5.5px;color:#555;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .2s">"Confirmed. Entering TIME_WAIT."</div>
+
+        <!-- arrowheads -->
+        <div id="fin1_hd" style="position:absolute;top:109px;right:36px;font-size:12px;color:#7a9e30;font-family:monospace;opacity:0">▶</div>
+        <div id="ack1_hd" style="position:absolute;top:153px;left:32px;font-size:12px;color:#e8a020;font-family:monospace;opacity:0">◀</div>
+        <div id="fin2_hd" style="position:absolute;top:194px;left:32px;font-size:12px;color:#7a9e30;font-family:monospace;opacity:0">◀</div>
+        <div id="ack2_hd" style="position:absolute;top:235px;right:36px;font-size:12px;color:#e8a020;font-family:monospace;opacity:0">▶</div>
+      </div>
+
+      <!-- TIME_WAIT note -->
+      <div class="panel" id="s4tw" style="border:1px solid #7a9e30;background:#111808">
+        <div style="font-size:7px;color:#7a9e30;margin-bottom:4px">TIME_WAIT — WHY IT EXISTS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">After sending final ACK, client waits <span style="color:#7a9e30">2×MSL (≈60–120s)</span> before fully closing. This ensures the final ACK arrives and any delayed packets from this connection have expired. Prevents old packets from corrupting a new connection on the same port pair.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#7a9e30">
+    <div class="il">TEARDOWN = 4 MESSAGES:</div>
+    <div class="ih" style="color:#7a9e30">FIN → ACK → FIN → ACK</div>
+    <div class="il">Each side closes independently. TIME_WAIT after.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#7a9e30">4</div><div class="sl">MSGS TO<br>TEARDOWN</div></div>
+    <div class="sc"><div class="sv" style="color:#7a9e30">FIN</div><div class="sl">GRACEFUL<br>CLOSE</div></div>
+    <div class="sc"><div class="sv am">2MSL</div><div class="sl">TIME_WAIT<br>PERIOD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: RST — WHAT HAPPENS WHEN SERVER IS UNREACHABLE ══════════════ -->
+<div class="scene" id="s5" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">TCP 3-WAY HANDSHAKE</div>
+    <div class="hdr-sub">RST & UNREACHABLE — WHEN IT GOES WRONG</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">RST & ERRORS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FAILURES</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s5intro">THREE THINGS CAN GO WRONG DURING A HANDSHAKE</div>
+
+      <!-- RST scenario -->
+      <div class="msd-wrap" style="height:200px" id="s5msd">
+        <div class="lifeline" id="rst_ll_c" style="left:43px;height:138px;top:62px;opacity:0;transition:opacity .3s"></div>
+        <div class="lifeline" id="rst_ll_s" style="right:43px;height:138px;top:62px;opacity:0;transition:opacity .3s"></div>
+
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:visible" viewBox="0 0 366 200" id="s5svg">
+          <line x1="43" y1="115" x2="43" y2="115" stroke="#4ec9e1" stroke-width="2.5" stroke-linecap="round" id="rst_syn"/>
+          <line x1="323" y1="159" x2="323" y2="159" stroke="#e85050" stroke-width="2.5" stroke-linecap="round" id="rst_rst"/>
+        </svg>
+
+        <div class="ep-box" id="rst_client" style="left:0">
+          <div class="ep-icon">💻</div><div class="ep-label">CLIENT</div>
+          <div class="ep-state" id="rst_cst" style="color:#555">SYN-SENT</div>
+        </div>
+        <div class="ep-box" id="rst_server" style="right:0">
+          <div class="ep-icon">🚫</div><div class="ep-label">PORT CLOSED</div>
+          <div class="ep-state" id="rst_sst" style="color:#e85050">CLOSED</div>
+        </div>
+
+        <div id="rst_syn_lbl" style="position:absolute;top:96px;left:48px;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#4ec9e1;font-family:'Press Start 2P',monospace">SYN</span>
+          <span class="flag-pill" style="color:#4ec9e1;border-color:#4ec9e1">PORT:8080</span>
+        </div>
+        <div id="rst_rst_lbl" style="position:absolute;top:140px;right:52px;text-align:right;opacity:0;transition:opacity .2s">
+          <span style="font-size:8px;color:#e85050;font-family:'Press Start 2P',monospace">RST</span>
+          <span class="flag-pill" style="color:#e85050;border-color:#e85050">PORT CLOSED</span>
+        </div>
+        <div id="rst_syn_hd" style="position:absolute;top:109px;right:36px;font-size:12px;color:#4ec9e1;font-family:monospace;opacity:0">▶</div>
+        <div id="rst_rst_hd" style="position:absolute;top:153px;left:32px;font-size:12px;color:#e85050;font-family:monospace;opacity:0">◀</div>
+      </div>
+
+      <!-- Three failure scenarios -->
+      <div style="display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .5s" id="s5fails">
+        <div style="background:#1a0808;border:2px solid #e85050;border-radius:2px;padding:9px 10px">
+          <div style="font-size:8px;color:#e85050;margin-bottom:5px">RST — PORT CLOSED</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">Server receives SYN on a closed port. Sends RST immediately. Client gets "connection refused." <span style="color:#e85050">nmap uses this</span> to detect closed ports vs open ports.</div>
+        </div>
+        <div style="background:#1a0808;border:1px solid #e8a020;border-radius:2px;padding:9px 10px">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:5px">SILENCE — FIREWALL DROPS</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">Firewall silently drops the SYN. Client waits, retransmits (×3), then times out. Slower than RST — can take 75s+. <span style="color:#e8a020">nmap marks this "filtered."</span></div>
+        </div>
+        <div style="background:#1a0808;border:1px solid #555;border-radius:2px;padding:9px 10px">
+          <div style="font-size:8px;color:#777;margin-bottom:5px">SYN FLOOD ATTACK</div>
+          <div style="font-size:6.5px;color:#ccc;line-height:1.8">Attacker sends millions of SYNs (spoofed src IP). Server sends SYN-ACKs that never get ACKed — half-open connections fill the table. Defense: <span style="color:#4eff9a">SYN cookies</span> (don't allocate state until ACK arrives).</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">RST vs SILENCE:</div>
+    <div class="ih rd">RST = port closed. Silence = firewall drop.</div>
+    <div class="il">SYN flood fills half-open table. Use SYN cookies.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">RST</div><div class="sl">PORT<br>CLOSED</div></div>
+    <div class="sc"><div class="sv am">SILENT</div><div class="sl">FIREWALL<br>FILTERED</div></div>
+    <div class="sc"><div class="sv rd">FLOOD</div><div class="sl">SYN<br>ATTACK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+// Grow an SVG line from x1,y1 to x2,y2
+function growLine(id, x1, y1, x2, y2, ms, dur){
+  af(ms,()=>{
+    const el=document.getElementById(id);
+    if(!el)return;
+    el.setAttribute('x1',x1); el.setAttribute('y1',y1);
+    el.setAttribute('x2',x1); el.setAttribute('y2',y1);
+    // animate via requestAnimationFrame
+    const start=performance.now();
+    function step(now){
+      const t=Math.min((now-start)/dur,1);
+      el.setAttribute('x2', x1+(x2-x1)*t);
+      el.setAttribute('y2', y1+(y2-y1)*t);
+      if(t<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+function setEpState(id, text, color){
+  const e=document.getElementById(id);
+  if(e){e.textContent=text;e.style.color=color||'#4eff9a';}
+}
+function setEpClass(id, cls){
+  const e=document.getElementById(id);
+  if(!e)return;
+  e.classList.remove('active','recv');
+  if(cls)e.classList.add(cls);
+}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1hero','s1steps','s1why'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+  if(n===2){
+    // reset SVG lines to zero length
+    [['syn_beam',43,113,43,113],['synack_beam',323,157,323,157],['ack_beam',43,201,43,201]].forEach(([id,x1,y1])=>{
+      const e=document.getElementById(id);if(e){e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x1);e.setAttribute('y2',y1);}
+    });
+    ['ll_client','ll_server'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['syn_lbl','syn_note','synack_lbl','synack_note','ack_lbl','ack_note','syn_head','synack_head','ack_head','s2estab'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['ep_client','ep_server'].forEach(id=>setEpClass(id,null));
+    setEpState('cs_state','CLOSED','#555');
+    setEpState('sv_state','LISTEN','#555');
+    const sp=document.getElementById('s2seq');if(sp){sp.style.opacity='0';sp.classList.remove('vis');}
+  }
+  if(n===3){
+    const ei=document.getElementById('s3intro');if(ei)ei.style.opacity='0';
+    const sh=document.getElementById('s3header');if(sh)sh.style.opacity='0';
+    ['fc_syn','fc_ack','fc_fin','fc_rst','fc_psh','fc_urg'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateY(5px)';}});
+  }
+  if(n===4){
+    const ei=document.getElementById('s4intro');if(ei)ei.style.opacity='0';
+    [['fin1_beam',43,115,43,115],['ack1_beam',323,159,323,159],['fin2_beam',323,200,323,200],['ack2_beam',43,241,43,241]].forEach(([id,x1,y1])=>{
+      const e=document.getElementById(id);if(e){e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x1);e.setAttribute('y2',y1);}
+    });
+    ['td_ll_c','td_ll_s'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['fin1_lbl','fin1_note','ack1_lbl','ack1_note','fin2_lbl','fin2_note','ack2_lbl','ack2_note','fin1_hd','ack1_hd','fin2_hd','ack2_hd'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['td_client','td_server'].forEach(id=>setEpClass(id,null));
+    setEpState('td_cstate','ESTAB','#4eff9a');
+    setEpState('td_sstate','ESTAB','#4eff9a');
+    const tw=document.getElementById('s4tw');if(tw){tw.style.opacity='0';tw.classList.remove('vis');}
+  }
+  if(n===5){
+    const ei=document.getElementById('s5intro');if(ei)ei.style.opacity='0';
+    [['rst_syn',43,115,43,115],['rst_rst',323,159,323,159]].forEach(([id,x1,y1])=>{
+      const e=document.getElementById(id);if(e){e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x1);e.setAttribute('y2',y1);}
+    });
+    ['rst_ll_c','rst_ll_s'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['rst_syn_lbl','rst_rst_lbl','rst_syn_hd','rst_rst_hd'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    ['rst_client','rst_server'].forEach(id=>setEpClass(id,null));
+    setEpState('rst_cst','SYN-SENT','#555');
+    setEpState('rst_sst','CLOSED','#e85050');
+    const sf=document.getElementById('s5fails');if(sf)sf.style.opacity='0';
+  }
+}
+
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    af(150,()=>{const e=document.getElementById('s1hero');if(e)e.style.opacity='1';});
+    af(800,()=>{const e=document.getElementById('s1steps');if(e)e.style.opacity='1';});
+    af(1600,()=>{const e=document.getElementById('s1why');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(200,()=>{
+      ['ll_client','ll_server'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});
+      setEpClass('ep_client','active');
+      setEpClass('ep_server',null);
+    });
+
+    // SYN
+    af(500,()=>{
+      setEpState('cs_state','SYN-SENT','#4ec9e1');
+      showEl('syn_lbl',0);
+    });
+    growLine('syn_beam',43,113,323,113,500,500);
+    af(1050,()=>{
+      showEl('syn_head',0);
+      showEl('syn_note',0);
+      setEpClass('ep_server','recv');
+      setEpState('sv_state','SYN-RCVD','#4ec9e1');
+    });
+
+    // SYN-ACK
+    af(1300,()=>showEl('synack_lbl',0));
+    growLine('synack_beam',323,157,43,157,1300,500);
+    af(1850,()=>{
+      showEl('synack_head',0);
+      showEl('synack_note',0);
+      setEpClass('ep_client','recv');
+      setEpState('cs_state','SYN-RCVD','#4eff9a');
+    });
+
+    // ACK
+    af(2100,()=>showEl('ack_lbl',0));
+    growLine('ack_beam',43,201,323,201,2100,500);
+    af(2650,()=>{
+      showEl('ack_head',0);
+      showEl('ack_note',0);
+      setEpClass('ep_client','active');
+      setEpClass('ep_server','active');
+      setEpState('cs_state','ESTABLISHED','#4eff9a');
+      setEpState('sv_state','ESTABLISHED','#4eff9a');
+    });
+    af(2900,()=>showEl('s2estab',0));
+    show('s2seq',3400);
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    af(300,()=>{const e=document.getElementById('s3header');if(e)e.style.opacity='1';});
+    ['fc_syn','fc_ack','fc_fin','fc_rst','fc_psh','fc_urg'].forEach((id,i)=>{
+      af(600+i*320,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}});
+    });
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    af(300,()=>{
+      ['td_ll_c','td_ll_s'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});
+      setEpClass('td_client','active');
+    });
+
+    // FIN1
+    af(500,()=>{showEl('fin1_lbl',0);setEpState('td_cstate','FIN-WAIT-1','#7a9e30');});
+    growLine('fin1_beam',43,115,323,115,500,480);
+    af(1030,()=>{showEl('fin1_hd',0);showEl('fin1_note',0);setEpClass('td_server','recv');setEpState('td_sstate','CLOSE-WAIT','#7a9e30');});
+
+    // ACK1
+    af(1280,()=>showEl('ack1_lbl',0));
+    growLine('ack1_beam',323,159,43,159,1280,480);
+    af(1810,()=>{showEl('ack1_hd',0);showEl('ack1_note',0);setEpState('td_cstate','FIN-WAIT-2','#e8a020');});
+
+    // FIN2
+    af(2060,()=>{showEl('fin2_lbl',0);setEpState('td_sstate','LAST-ACK','#7a9e30');});
+    growLine('fin2_beam',323,200,43,200,2060,480);
+    af(2590,()=>{showEl('fin2_hd',0);showEl('fin2_note',0);setEpState('td_cstate','TIME-WAIT','#e8a020');});
+
+    // ACK2
+    af(2840,()=>showEl('ack2_lbl',0));
+    growLine('ack2_beam',43,241,323,241,2840,480);
+    af(3370,()=>{
+      showEl('ack2_hd',0);showEl('ack2_note',0);
+      setEpState('td_sstate','CLOSED','#555');
+      setEpClass('td_client',null);setEpClass('td_server',null);
+    });
+    show('s4tw',3700);
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+    af(300,()=>{
+      ['rst_ll_c','rst_ll_s'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});
+      setEpClass('rst_client','active');
+    });
+
+    // SYN sent
+    af(500,()=>{showEl('rst_syn_lbl',0);setEpState('rst_cst','SYN-SENT','#4ec9e1');});
+    growLine('rst_syn',43,115,323,115,500,460);
+    af(1010,()=>showEl('rst_syn_hd',0));
+
+    // RST back
+    af(1200,()=>showEl('rst_rst_lbl',0));
+    growLine('rst_rst',323,159,43,159,1200,460);
+    af(1710,()=>{
+      showEl('rst_rst_hd',0);
+      setEpClass('rst_client',null);
+      setEpState('rst_cst','REFUSED','#e85050');
+      setEpClass('rst_server','active');
+    });
+
+    af(2100,()=>{const e=document.getElementById('s5fails');if(e)e.style.opacity='1';});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

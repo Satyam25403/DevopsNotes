@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>OSPF — How Routers Build a Map</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden;}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a2a3a}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a2030;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#aaa}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e115}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a15}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .4s ease}
+.fade.in{opacity:1}
+.fill{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:none}
+.fill.rtl{right:0;left:auto}
+.track{position:relative;height:7px;background:#0d1520;border-radius:2px;overflow:hidden}
+
+/* router node */
+.rtr{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;border:2px solid;flex-shrink:0;border-radius:3px}
+.rtr .ico{font-size:14px;line-height:1}
+.rtr .rlbl{font-size:6px;text-align:center;line-height:1.4}
+
+/* LSA packet pill */
+.lsapkt{display:inline-flex;align-items:center;justify-content:center;border-radius:2px;font-size:6px;font-family:'Press Start 2P',monospace;padding:0 5px;height:16px;white-space:nowrap}
+
+/* adjacency line */
+.adj{height:3px;border-radius:2px;position:relative;overflow:hidden}
+.adj-fill{position:absolute;top:0;left:0;height:100%;width:0;border-radius:2px;transition:none}
+
+/* cost badge */
+.cost{font-size:7px;padding:2px 5px;border-radius:2px;text-align:center}
+
+/* LSDB table */
+.lsdb-row{display:flex;gap:0;height:22px;font-size:6px;align-items:center;border-bottom:1px solid #0d1520;opacity:0;transition:opacity .35s}
+.lsdb-cell{flex:1;padding:0 5px;overflow:hidden;white-space:nowrap;height:100%;display:flex;align-items:center}
+
+.code{background:#040810;border:1px solid #1a2a4a;border-radius:2px;padding:7px 9px;font-size:6px;color:#4ec9e1;line-height:2.1}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — LSA Flooding: building the map
+════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060d18">
+  <div class="hdr" style="background:#060d18">
+    <div class="hdr-title">OSPF — ROUTERS BUILD A MAP</div>
+    <div class="hdr-sub">LINK-STATE ADVERTISEMENTS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">LSA FLOODING</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">STEP 1</span>
+  </div>
+  <div class="anim" style="background:#060d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s1_hook" style="font-size:8px;color:#666;text-align:center;line-height:1.9">
+        OSPF = <span style="color:#4ec9e1">link-state</span> protocol.<br>
+        Every router knows the <span style="color:#4eff9a">full topology</span>.<br>
+        It gets there by flooding LSAs.
+      </div>
+
+      <!-- topology: 4 routers in a diamond -->
+      <div class="fade" id="s1_topo" style="position:relative;height:190px;border:1px solid #0d1a2a;background:#040810">
+
+        <!-- R1 top-centre -->
+        <div id="r1" class="rtr" style="position:absolute;top:12px;left:50%;transform:translateX(-50%);width:58px;height:52px;border-color:#4ec9e1">
+          <div class="ico">📡</div>
+          <div class="rlbl" style="color:#4ec9e1">R1<br><span style="color:#555;font-size:5px">10.0.1.1</span></div>
+        </div>
+
+        <!-- R2 left -->
+        <div id="r2" class="rtr" style="position:absolute;top:70px;left:16px;width:58px;height:52px;border-color:#888">
+          <div class="ico">📡</div>
+          <div class="rlbl" style="color:#888">R2<br><span style="color:#555;font-size:5px">10.0.2.1</span></div>
+        </div>
+
+        <!-- R3 right -->
+        <div id="r3" class="rtr" style="position:absolute;top:70px;right:16px;width:58px;height:52px;border-color:#888">
+          <div class="ico">📡</div>
+          <div class="rlbl" style="color:#888">R3<br><span style="color:#555;font-size:5px">10.0.3.1</span></div>
+        </div>
+
+        <!-- R4 bottom-centre -->
+        <div id="r4" class="rtr" style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);width:58px;height:52px;border-color:#555">
+          <div class="ico">📡</div>
+          <div class="rlbl" style="color:#555">R4<br><span style="color:#555;font-size:5px">10.0.4.1</span></div>
+        </div>
+
+        <!-- SVG adjacency lines + LSA packets -->
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 190">
+          <!-- R1-R2 link -->
+          <line id="l_r1r2" x1="100" y1="60" x2="76" y2="95" stroke="#1a2a3a" stroke-width="2" stroke-linecap="round"/>
+          <line id="la_r1r2" x1="100" y1="60" x2="76" y2="95" stroke="#4ec9e1" stroke-width="2" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60" style="transition:stroke-dashoffset .5s ease-out"/>
+          <!-- R1-R3 link -->
+          <line id="l_r1r3" x1="266" y1="60" x2="292" y2="95" stroke="#1a2a3a" stroke-width="2" stroke-linecap="round"/>
+          <line id="la_r1r3" x1="266" y1="60" x2="292" y2="95" stroke="#4ec9e1" stroke-width="2" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60" style="transition:stroke-dashoffset .5s ease-out"/>
+          <!-- R2-R4 link -->
+          <line id="l_r2r4" x1="76" y1="122" x2="164" y2="158" stroke="#1a2a3a" stroke-width="2" stroke-linecap="round"/>
+          <line id="la_r2r4" x1="76" y1="122" x2="164" y2="158" stroke="#4eff9a" stroke-width="2" stroke-linecap="round" stroke-dasharray="100" stroke-dashoffset="100" style="transition:stroke-dashoffset .6s ease-out"/>
+          <!-- R3-R4 link -->
+          <line id="l_r3r4" x1="292" y1="122" x2="202" y2="158" stroke="#1a2a3a" stroke-width="2" stroke-linecap="round"/>
+          <line id="la_r3r4" x1="292" y1="122" x2="202" y2="158" stroke="#4eff9a" stroke-width="2" stroke-linecap="round" stroke-dasharray="100" stroke-dashoffset="100" style="transition:stroke-dashoffset .6s ease-out"/>
+
+          <!-- LSA packets (circles travelling along links) -->
+          <circle id="lsa1" cx="100" cy="60" r="6" fill="#4ec9e1" opacity="0" style="transition:cx .4s linear,cy .4s linear,opacity .2s"/>
+          <circle id="lsa2" cx="266" cy="60" r="6" fill="#4ec9e1" opacity="0" style="transition:cx .4s linear,cy .4s linear,opacity .2s"/>
+          <circle id="lsa3" cx="76" cy="122" r="6" fill="#4eff9a" opacity="0" style="transition:cx .45s linear,cy .45s linear,opacity .2s"/>
+          <circle id="lsa4" cx="292" cy="122" r="6" fill="#4eff9a" opacity="0" style="transition:cx .45s linear,cy .45s linear,opacity .2s"/>
+
+          <!-- cost labels -->
+          <text id="c12" x="82" y="76" font-size="8" fill="#e8a020" font-family="'Press Start 2P'" opacity="0" style="transition:opacity .3s">10</text>
+          <text id="c13" x="278" y="76" font-size="8" fill="#e8a020" font-family="'Press Start 2P'" opacity="0" style="transition:opacity .3s">10</text>
+          <text id="c24" x="96" y="148" font-size="8" fill="#4eff9a" font-family="'Press Start 2P'" opacity="0" style="transition:opacity .3s">1</text>
+          <text id="c34" x="256" y="148" font-size="8" fill="#4eff9a" font-family="'Press Start 2P'" opacity="0" style="transition:opacity .3s">1</text>
+        </svg>
+      </div>
+
+      <!-- what LSA contains -->
+      <div class="fade" id="s1_lsa">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHAT AN LSA CONTAINS:</div>
+        <div style="border:1px solid #0d1a2a;background:#040810;padding:7px 9px;display:flex;gap:2px;height:26px;border-radius:2px;overflow:hidden;font-size:5px">
+          <div style="flex:1.2;background:#4ec9e140;border:1px solid #4ec9e1;display:flex;align-items:center;justify-content:center;color:#4ec9e1">ROUTER ID</div>
+          <div style="flex:1;background:#e8a02040;border:1px solid #e8a020;display:flex;align-items:center;justify-content:center;color:#e8a020">SEQ #</div>
+          <div style="flex:1.5;background:#4eff9a40;border:1px solid #4eff9a;display:flex;align-items:center;justify-content:center;color:#4eff9a">NEIGHBORS+COSTS</div>
+          <div style="flex:1;background:#88888840;border:1px solid #888;display:flex;align-items:center;justify-content:center;color:#888">CHECKSUM</div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:4px">LSAs are re-flooded every 30 min or on topology change</div>
+      </div>
+
+      <!-- LSDB building up -->
+      <div class="fade" id="s1_lsdb">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">LINK-STATE DATABASE (LSDB) FILLING:</div>
+        <div style="border:1px solid #0d1a2a;background:#040810;overflow:hidden;border-radius:2px">
+          <div style="display:flex;gap:0;height:20px;font-size:6px;background:#0d1a2a">
+            <div style="flex:1;padding:0 5px;display:flex;align-items:center;color:#4ec9e1">Router</div>
+            <div style="flex:2;padding:0 5px;display:flex;align-items:center;color:#4ec9e1">Neighbors</div>
+            <div style="flex:1;padding:0 5px;display:flex;align-items:center;color:#4ec9e1">Costs</div>
+            <div style="flex:1;padding:0 5px;display:flex;align-items:center;color:#4ec9e1">Seq</div>
+          </div>
+          <div class="lsdb-row" id="db1">
+            <div class="lsdb-cell" style="color:#4ec9e1">R1</div>
+            <div class="lsdb-cell" style="color:#888">R2, R3</div>
+            <div class="lsdb-cell" style="color:#e8a020">10,10</div>
+            <div class="lsdb-cell" style="color:#555">001</div>
+          </div>
+          <div class="lsdb-row" id="db2">
+            <div class="lsdb-cell" style="color:#4eff9a">R2</div>
+            <div class="lsdb-cell" style="color:#888">R1, R4</div>
+            <div class="lsdb-cell" style="color:#e8a020">10,1</div>
+            <div class="lsdb-cell" style="color:#555">001</div>
+          </div>
+          <div class="lsdb-row" id="db3">
+            <div class="lsdb-cell" style="color:#4eff9a">R3</div>
+            <div class="lsdb-cell" style="color:#888">R1, R4</div>
+            <div class="lsdb-cell" style="color:#e8a020">10,1</div>
+            <div class="lsdb-cell" style="color:#555">001</div>
+          </div>
+          <div class="lsdb-row" id="db4">
+            <div class="lsdb-cell" style="color:#888">R4</div>
+            <div class="lsdb-cell" style="color:#888">R2, R3</div>
+            <div class="lsdb-cell" style="color:#e8a020">1,1</div>
+            <div class="lsdb-cell" style="color:#555">001</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s1_note" style="border-left:3px solid #4ec9e1;padding:6px 9px;font-size:7px;color:#888;line-height:2;background:#030810;border-radius:0 2px 2px 0">
+        All routers end up with <span style="color:#4ec9e1">identical LSDBs</span>.<br>
+        Each then runs Dijkstra independently.
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">LSA = router's announcement of its own links</div>
+    <div class="ih" id="s1_status">► Watch LSAs flood the topology</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — DR/BDR Election
+════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1020">
+  <div class="hdr" style="background:#0d1020">
+    <div class="hdr-title">OSPF — ROUTERS BUILD A MAP</div>
+    <div class="hdr-sub">DR / BDR ELECTION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">MULTI-ACCESS SEGMENT</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ELECTION</span>
+  </div>
+  <div class="anim" style="background:#0d1020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s2_intro" style="font-size:8px;color:#666;text-align:center;line-height:1.9">
+        On Ethernet segments, without DR/BDR<br>
+        <span style="color:#e85050">N² adjacencies flood the segment</span>.<br>
+        DR/BDR reduces this to <span style="color:#4eff9a">N adjacencies</span>.
+      </div>
+
+      <!-- problem: O(N²) -->
+      <div class="fade" id="s2_prob">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">WITHOUT DR: 4 routers = 6 adj pairs 😱</div>
+        <div style="position:relative;height:100px;border:1px solid #2a1010;background:#0f0808">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 100">
+            <!-- all pairs connected messily -->
+            <line x1="60"  y1="24" x2="306" y2="24" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <line x1="60"  y1="24" x2="60"  y2="76" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <line x1="60"  y1="24" x2="306" y2="76" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <line x1="306" y1="24" x2="60"  y2="76" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <line x1="306" y1="24" x2="306" y2="76" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <line x1="60"  y1="76" x2="306" y2="76" stroke="#e85050" stroke-width="1" opacity=".4"/>
+            <!-- routers -->
+            <rect x="36"  y="8"  width="48" height="32" rx="4" fill="#1a0808" stroke="#e85050" stroke-width="1.5"/>
+            <text x="60"  y="28" text-anchor="middle" font-size="8" fill="#e85050" font-family="'Press Start 2P'">RA</text>
+            <rect x="282" y="8"  width="48" height="32" rx="4" fill="#1a0808" stroke="#e85050" stroke-width="1.5"/>
+            <text x="306" y="28" text-anchor="middle" font-size="8" fill="#e85050" font-family="'Press Start 2P'">RB</text>
+            <rect x="36"  y="60" width="48" height="32" rx="4" fill="#1a0808" stroke="#e85050" stroke-width="1.5"/>
+            <text x="60"  y="80" text-anchor="middle" font-size="8" fill="#e85050" font-family="'Press Start 2P'">RC</text>
+            <rect x="282" y="60" width="48" height="32" rx="4" fill="#1a0808" stroke="#e85050" stroke-width="1.5"/>
+            <text x="306" y="80" text-anchor="middle" font-size="8" fill="#e85050" font-family="'Press Start 2P'">RD</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- solution: DR/BDR -->
+      <div class="fade" id="s2_sol">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">WITH DR/BDR: only 4 adjacencies ✓</div>
+        <div style="position:relative;height:120px;border:1px solid #0d2a1a;background:#040f08">
+          <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 120">
+            <!-- DR in centre -->
+            <rect x="149" y="44" width="68" height="36" rx="5" fill="#0d2010" stroke="#4eff9a" stroke-width="2" id="dr_box"/>
+            <text x="183" y="60" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P'" id="dr_lbl">DR</text>
+            <text x="183" y="74" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P'" id="dr_rid">RB</text>
+            <!-- spokes from DR to each -->
+            <line id="dr_ra" x1="149" y1="58" x2="80"  y2="24" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="50" stroke-dashoffset="50" style="transition:stroke-dashoffset .4s ease-out"/>
+            <line id="dr_rc" x1="149" y1="72" x2="80"  y2="98" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="50" stroke-dashoffset="50" style="transition:stroke-dashoffset .4s .1s ease-out"/>
+            <line id="dr_rd" x1="217" y1="62" x2="285" y2="62" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="68" stroke-dashoffset="68" style="transition:stroke-dashoffset .4s .2s ease-out"/>
+            <!-- other routers -->
+            <rect x="36"  y="8"  width="48" height="32" rx="4" fill="#040f08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="60"  y="28" text-anchor="middle" font-size="8" fill="#4ec9e1" font-family="'Press Start 2P'">RA</text>
+            <rect x="36"  y="82" width="48" height="32" rx="4" fill="#040f08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="60"  y="102" text-anchor="middle" font-size="8" fill="#4ec9e1" font-family="'Press Start 2P'">RC</text>
+            <rect x="283" y="46" width="48" height="32" rx="4" fill="#040f08" stroke="#888" stroke-width="1.5"/>
+            <text x="307" y="62" text-anchor="middle" font-size="7" fill="#888" font-family="'Press Start 2P'">RD</text>
+            <text x="307" y="72" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P'">BDR</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- election rules -->
+      <div class="fade" id="s2_rules" style="border:1px solid #1a2030;padding:8px 9px;background:#040810">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">ELECTION RULES:</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:7px;line-height:1.8">
+          <div><span style="color:#4eff9a">Highest priority wins DR</span> (default 1)</div>
+          <div><span style="color:#4ec9e1">Tie → highest Router ID wins</span></div>
+          <div><span style="color:#e8a020">Priority 0 → never elected DR/BDR</span></div>
+          <div><span style="color:#e85050">Election is non-preemptive</span> — winner keeps role until it dies</div>
+        </div>
+      </div>
+
+      <!-- priority table -->
+      <div class="fade" id="s2_table" style="border:1px solid #1a2030;background:#040810;overflow:hidden;border-radius:2px">
+        <div style="display:flex;height:20px;font-size:6px;background:#0d1a2a">
+          <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#4ec9e1">Router</div>
+          <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#4ec9e1">Priority</div>
+          <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#4ec9e1">Router ID</div>
+          <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#4ec9e1">Role</div>
+        </div>
+        <div class="lsdb-row" id="el1" style="opacity:1">
+          <div class="lsdb-cell" style="color:#4ec9e1">RA</div>
+          <div class="lsdb-cell" style="color:#e8a020">1</div>
+          <div class="lsdb-cell" style="color:#888">10.0.0.1</div>
+          <div class="lsdb-cell" style="color:#888">DROTHER</div>
+        </div>
+        <div class="lsdb-row" id="el2" style="opacity:1">
+          <div class="lsdb-cell" style="color:#4eff9a">RB</div>
+          <div class="lsdb-cell" style="color:#4eff9a">5</div>
+          <div class="lsdb-cell" style="color:#4eff9a">10.0.0.4</div>
+          <div class="lsdb-cell" style="color:#4eff9a">DR ★</div>
+        </div>
+        <div class="lsdb-row" id="el3" style="opacity:1">
+          <div class="lsdb-cell" style="color:#888">RC</div>
+          <div class="lsdb-cell" style="color:#e8a020">1</div>
+          <div class="lsdb-cell" style="color:#888">10.0.0.2</div>
+          <div class="lsdb-cell" style="color:#888">DROTHER</div>
+        </div>
+        <div class="lsdb-row" id="el4" style="opacity:1">
+          <div class="lsdb-cell" style="color:#4ec9e1">RD</div>
+          <div class="lsdb-cell" style="color:#4ec9e1">3</div>
+          <div class="lsdb-cell" style="color:#4ec9e1">10.0.0.3</div>
+          <div class="lsdb-cell" style="color:#4ec9e1">BDR</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">DR floods LSAs for segment — reduces N² to N</div>
+    <div class="ih am" id="s2_status">► Watch election collapse 6 adj to 4</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — Dijkstra SPF
+════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060d10">
+  <div class="hdr" style="background:#060d10">
+    <div class="hdr-title">OSPF — ROUTERS BUILD A MAP</div>
+    <div class="hdr-sub">DIJKSTRA SHORTEST PATH FIRST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SPF ALGORITHM</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SHORTEST PATH</span>
+  </div>
+  <div class="anim" style="background:#060d10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s3_intro" style="font-size:8px;color:#666;text-align:center;line-height:1.9">
+        From R1's perspective, Dijkstra runs<br>
+        against the LSDB to find<br>
+        <span style="color:#4eff9a">minimum-cost path to every network</span>.
+      </div>
+
+      <!-- graph with costs -->
+      <div class="fade" id="s3_graph" style="position:relative;height:180px;border:1px solid #0d1a0d;background:#030a04">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%" viewBox="0 0 366 180">
+          <!-- edges with costs -->
+          <line x1="100" y1="50"  x2="76"  y2="100" stroke="#1a2a1a" stroke-width="2" stroke-linecap="round"/>
+          <line x1="266" y1="50"  x2="290" y2="100" stroke="#1a2a1a" stroke-width="2" stroke-linecap="round"/>
+          <line x1="76"  y1="128" x2="164" y2="158" stroke="#1a2a1a" stroke-width="2" stroke-linecap="round"/>
+          <line x1="290" y1="128" x2="202" y2="158" stroke="#1a2a1a" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- SPF path highlights -->
+          <line id="spf12" x1="100" y1="50" x2="76"  y2="100" stroke="#4eff9a" stroke-width="2.5" stroke-linecap="round" opacity="0" style="transition:opacity .3s"/>
+          <line id="spf13" x1="266" y1="50" x2="290" y2="100" stroke="#4eff9a" stroke-width="2.5" stroke-linecap="round" opacity="0" style="transition:opacity .3s"/>
+          <line id="spf24" x1="76"  y1="128" x2="164" y2="158" stroke="#4ec9e1" stroke-width="2.5" stroke-linecap="round" opacity="0" style="transition:opacity .3s"/>
+          <line id="spf34" x1="290" y1="128" x2="202" y2="158" stroke="#e8a020" stroke-width="2.5" stroke-linecap="round" opacity="0" style="transition:opacity .3s"/>
+
+          <!-- cost labels -->
+          <text x="78"  y="74"  font-size="8" fill="#e8a020" font-family="'Press Start 2P'" text-anchor="middle">10</text>
+          <text x="284" y="74"  font-size="8" fill="#e8a020" font-family="'Press Start 2P'" text-anchor="middle">10</text>
+          <text x="108" y="150" font-size="8" fill="#4eff9a" font-family="'Press Start 2P'" text-anchor="middle">1</text>
+          <text x="258" y="150" font-size="8" fill="#4eff9a" font-family="'Press Start 2P'" text-anchor="middle">1</text>
+
+          <!-- router nodes -->
+          <rect x="78"  y="30" width="44" height="30" rx="4" fill="#040a04" stroke="#4ec9e1" stroke-width="2" id="spf_r1"/>
+          <text x="100" y="50" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#4ec9e1" font-family="'Press Start 2P'">R1</text>
+
+          <rect x="54"  y="100" width="44" height="30" rx="4" fill="#040a04" stroke="#555" stroke-width="1.5" id="spf_r2"/>
+          <text x="76"  y="115" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#555" font-family="'Press Start 2P'" id="spf_r2t">R2</text>
+
+          <rect x="268" y="100" width="44" height="30" rx="4" fill="#040a04" stroke="#555" stroke-width="1.5" id="spf_r3"/>
+          <text x="290" y="115" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#555" font-family="'Press Start 2P'" id="spf_r3t">R3</text>
+
+          <rect x="142" y="148" width="44" height="30" rx="4" fill="#040a04" stroke="#555" stroke-width="1.5" id="spf_r4"/>
+          <text x="164" y="163" text-anchor="middle" dominant-baseline="central" font-size="8" fill="#555" font-family="'Press Start 2P'" id="spf_r4t">R4</text>
+        </svg>
+      </div>
+
+      <!-- SPF step display -->
+      <div class="fade" id="s3_steps">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">SPF ITERATIONS FROM R1:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div id="spf_s1" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #0d2a0d;background:#030a04;font-size:7px">
+            <div style="color:#4ec9e1;flex-shrink:0">①</div>
+            <div><span style="color:#4ec9e1">R1 (self)</span> → cost 0. Add to SPT.</div>
+          </div>
+          <div id="spf_s2" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #0d2a0d;background:#030a04;font-size:7px">
+            <div style="color:#4eff9a;flex-shrink:0">②</div>
+            <div><span style="color:#4eff9a">R2</span> = 10, <span style="color:#4eff9a">R3</span> = 10. Best = tie → pick R2.</div>
+          </div>
+          <div id="spf_s3" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #0d2a0d;background:#030a04;font-size:7px">
+            <div style="color:#4eff9a;flex-shrink:0">③</div>
+            <div><span style="color:#4eff9a">R3</span> = 10. <span style="color:#4ec9e1">R4 via R2</span> = 10+1=<span style="color:#4eff9a">11</span>.</div>
+          </div>
+          <div id="spf_s4" style="opacity:0;transition:opacity .3s;display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #0d2a0d;background:#030a04;font-size:7px">
+            <div style="color:#4eff9a;flex-shrink:0">④</div>
+            <div><span style="color:#4eff9a">R4</span> via R3 = 10+1=11. Same. Both paths kept.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- resulting RIB -->
+      <div class="fade" id="s3_rib" style="border:1px solid #0d2a0d;padding:7px 9px;background:#030a04">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">RESULTING ROUTING TABLE (R1):</div>
+        <div style="font-size:6px;line-height:2.2;color:#888">
+          <span style="color:#4ec9e1">10.0.2.0/24</span> via R2 &nbsp; cost <span style="color:#e8a020">10</span> &nbsp; [110/10]<br>
+          <span style="color:#4ec9e1">10.0.3.0/24</span> via R3 &nbsp; cost <span style="color:#e8a020">10</span> &nbsp; [110/10]<br>
+          <span style="color:#4ec9e1">10.0.4.0/24</span> via R2 &nbsp; cost <span style="color:#4eff9a">11</span> &nbsp; [110/11]<br>
+          <span style="color:#4ec9e1">10.0.4.0/24</span> via R3 &nbsp; cost <span style="color:#4eff9a">11</span> &nbsp; [110/11] ECMP
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">SPF runs on each router independently from LSDB</div>
+    <div class="ih" id="s3_status">► Watch Dijkstra settle shortest paths</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — Cost Calculation
+════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#100808">
+  <div class="hdr" style="background:#100808">
+    <div class="hdr-title">OSPF — ROUTERS BUILD A MAP</div>
+    <div class="hdr-sub">OSPF COST = 100 Mbps ÷ BANDWIDTH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">INTERFACE COST</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">METRIC</span>
+  </div>
+  <div class="anim" style="background:#100808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s4_intro" style="font-size:8px;color:#666;text-align:center;line-height:1.9">
+        OSPF cost = <span style="color:#e8a020">10⁸ ÷ interface_bw_bps</span><br>
+        Lower cost = faster link = preferred.<br>
+        <span style="color:#e85050">10G and 1G both give cost 1 by default!</span>
+      </div>
+
+      <!-- cost table -->
+      <div class="fade" id="s4_table">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">STANDARD COSTS (ref-bw = 100 Mbps):</div>
+        <div style="border:1px solid #2a1010;background:#0f0808;overflow:hidden;border-radius:2px">
+          <div style="display:flex;height:20px;font-size:6px;background:#1a0d0d">
+            <div style="flex:2;padding:0 6px;display:flex;align-items:center;color:#e8a020">Interface</div>
+            <div style="flex:1.5;padding:0 6px;display:flex;align-items:center;color:#e8a020">Bandwidth</div>
+            <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#e8a020">Cost</div>
+            <div style="flex:1;padding:0 6px;display:flex;align-items:center;color:#e8a020">Fix?</div>
+          </div>
+          <div id="ct1" style="opacity:0;transition:opacity .3s" class="lsdb-row"><div class="lsdb-cell" style="color:#888">Serial T1</div><div class="lsdb-cell" style="color:#888">1.544 Mbps</div><div class="lsdb-cell" style="color:#e85050">64</div><div class="lsdb-cell" style="color:#555">—</div></div>
+          <div id="ct2" style="opacity:0;transition:opacity .3s" class="lsdb-row"><div class="lsdb-cell" style="color:#888">FastEth</div><div class="lsdb-cell" style="color:#888">100 Mbps</div><div class="lsdb-cell" style="color:#4eff9a">1</div><div class="lsdb-cell" style="color:#555">—</div></div>
+          <div id="ct3" style="opacity:0;transition:opacity .3s" class="lsdb-row"><div class="lsdb-cell" style="color:#888">GigEth</div><div class="lsdb-cell" style="color:#888">1000 Mbps</div><div class="lsdb-cell" style="color:#e85050">1 ⚠</div><div class="lsdb-cell" style="color:#e8a020">yes!</div></div>
+          <div id="ct4" style="opacity:0;transition:opacity .3s" class="lsdb-row"><div class="lsdb-cell" style="color:#888">10GigEth</div><div class="lsdb-cell" style="color:#888">10000 Mbps</div><div class="lsdb-cell" style="color:#e85050">1 ⚠</div><div class="lsdb-cell" style="color:#e8a020">yes!</div></div>
+        </div>
+      </div>
+
+      <!-- the problem with default ref bw -->
+      <div class="fade" id="s4_prob" style="border:2px solid #e8505040;padding:8px 9px;background:#0f0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">⚠ THE 10G PROBLEM:</div>
+        <div style="font-size:7px;color:#aaa;line-height:2">
+          Default ref-bw = 100 Mbps.<br>
+          100Mbps: cost = 100/100 = <span style="color:#e8a020">1</span><br>
+          1G: &nbsp;&nbsp;&nbsp; cost = 100/1000 = <span style="color:#e85050">0.1 → rounds to 1</span><br>
+          10G: &nbsp;&nbsp; cost = 100/10000 = <span style="color:#e85050">0.01 → rounds to 1</span><br>
+          <span style="color:#e85050">OSPF treats 100M = 1G = 10G!</span>
+        </div>
+      </div>
+
+      <!-- fix: change ref-bw -->
+      <div class="fade" id="s4_fix" style="border:1px solid #0d2a1a;padding:8px 9px;background:#040f08">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">FIX — SET HIGHER REFERENCE BANDWIDTH:</div>
+        <div class="code">
+          ! Set ref-bw to 10G on all routers<br>
+          router ospf 1<br>
+          &nbsp;auto-cost reference-bandwidth 10000<br><br>
+          ! Now:<br>
+          ! 100M → cost 100<br>
+          ! 1G &nbsp;→ cost 10<br>
+          ! 10G → cost 1<br>
+          ! Must match on ALL routers!
+        </div>
+      </div>
+
+      <div class="fade" id="s4_note" style="border-left:3px solid #e8a020;padding:6px 9px;font-size:7px;color:#888;line-height:2;background:#100808;border-radius:0 2px 2px 0">
+        Or override per-interface: <span style="color:#4ec9e1">ip ospf cost &lt;n&gt;</span><br>
+        Useful when connected to mismatched vendor gear.
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Cost = 10⁸ ÷ bw. 10G and 100M look identical!</div>
+    <div class="ih am" id="s4_status">► See why default ref-bw breaks on modern links</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 5 — No Auth + LSA Injection
+════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505">
+    <div class="hdr-title">OSPF — ROUTERS BUILD A MAP</div>
+    <div class="hdr-sub">NO AUTH → LSA INJECTION ATTACK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">OSPF SECURITY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div class="fade" id="s5_intro" style="font-size:8px;color:#666;text-align:center;line-height:1.9">
+        OSPF has <span style="color:#e85050">no authentication by default</span>.<br>
+        Any router on the segment can<br>
+        inject fake LSAs and corrupt the LSDB.
+      </div>
+
+      <!-- attack flow -->
+      <div class="fade" id="s5_atk">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">ROGUE ROUTER INJECTS FAKE LSA:</div>
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
+          <div class="rtr" style="width:58px;height:52px;border-color:#e85050">
+            <div class="ico">😈</div>
+            <div class="rlbl" style="color:#e85050">ROGUE<br>ROUTER</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div style="position:relative;height:7px;background:#2a0d0d;border-radius:2px;overflow:hidden">
+              <div class="fill" id="s5_lsa" style="background:#e85050"></div>
+            </div>
+            <div style="font-size:5px;color:#e85050;text-align:center">Fake LSA: "I am R1, route 0.0.0.0/0 via me"</div>
+          </div>
+          <div class="rtr" style="width:58px;height:52px;border-color:#888" id="s5_r2">
+            <div class="ico">📡</div>
+            <div class="rlbl" style="color:#888">LEGIT<br>ROUTERS</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#e85050;text-align:center" id="s5_poison">⚠ All routers accept and flood the fake LSA!</div>
+      </div>
+
+      <!-- impact -->
+      <div class="fade" id="s5_impact" style="border:1px solid #3a1010;padding:8px 9px;background:#0f0808">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">WHAT AN ATTACKER CAN DO:</div>
+        <div style="font-size:7px;color:#aaa;line-height:2">
+          • <span style="color:#e85050">Blackhole traffic</span> → fake low-cost route to null<br>
+          • <span style="color:#e85050">MitM all traffic</span> → route all hosts via attacker<br>
+          • <span style="color:#e85050">Partition the network</span> → inject costs=65535<br>
+          • <span style="color:#e85050">Replay old LSAs</span> → confuse sequence numbers
+        </div>
+      </div>
+
+      <!-- fix: auth -->
+      <div class="fade" id="s5_fix">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">FIX — ENABLE SHA-256 AUTHENTICATION:</div>
+        <div class="code">
+          ! Define key chain<br>
+          key chain OSPF-KEYS<br>
+          &nbsp;key 1<br>
+          &nbsp;&nbsp;key-string <span style="color:#4eff9a">S3cur3P@ssw0rd!</span><br>
+          &nbsp;&nbsp;cryptographic-algorithm hmac-sha-256<br><br>
+          ! Apply to interface<br>
+          interface GigabitEthernet0/0<br>
+          &nbsp;ip ospf authentication key-chain OSPF-KEYS
+        </div>
+      </div>
+
+      <!-- md5 vs sha note -->
+      <div class="fade" id="s5_alg" style="display:flex;gap:6px">
+        <div style="flex:1;border:1px solid #e8505030;padding:6px 8px;background:#0f0808;font-size:6px;line-height:1.9">
+          <div style="color:#e85050;margin-bottom:3px">MD5 (avoid)</div>
+          <div style="color:#aaa">Still supported.<br>Collision attacks<br>known since 2004.</div>
+        </div>
+        <div style="flex:1;border:1px solid #4eff9a30;padding:6px 8px;background:#030a04;font-size:6px;line-height:1.9">
+          <div style="color:#4eff9a;margin-bottom:3px">SHA-256 / HMAC</div>
+          <div style="color:#aaa">Current best practice.<br>RFC 7166.<br>Use this.</div>
+        </div>
+      </div>
+
+      <div class="fade" id="s5_note" style="border-left:3px solid #4eff9a;padding:6px 9px;font-size:7px;color:#888;line-height:2;background:#030a04;border-radius:0 2px 2px 0">
+        Auth must match on both ends of each link.<br>
+        Mismatched key → adjacency won't form.
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">No OSPF auth = any device can poison the LSDB</div>
+    <div class="ih rd" id="s5_status">► Watch rogue LSA corrupt the routing table</div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" style="border-color:#e85050;color:#e85050" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1;
+function goScene(n){document.getElementById('s'+cur).classList.remove('active');cur=n;document.getElementById('s'+cur).classList.add('active');resetScene(cur);}
+function resetScene(n){
+  document.querySelectorAll('#s'+n+' .fade').forEach(f=>f.classList.remove('in'));
+  document.querySelectorAll('#s'+n+' .fill').forEach(b=>{b.style.transition='none';b.style.width='0';});
+  // reset SVG animated elements
+  const pairs=[['la_r1r2','60'],['la_r1r3','60'],['la_r2r4','100'],['la_r3r4','100'],
+               ['dr_ra','50'],['dr_rc','50'],['dr_rd','68'],
+               ['spf12','0'],['spf13','0'],['spf24','0'],['spf34','0']];
+  pairs.forEach(([id,v])=>{const e=document.getElementById(id);if(e){e.style.transition='none';if(id.startsWith('la_'))e.setAttribute('stroke-dashoffset',v);else e.style.opacity='0';}});
+  // reset LSA circles
+  ['lsa1','lsa2','lsa3','lsa4'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  // cost labels
+  ['c12','c13','c24','c34'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  // LSDB rows
+  ['db1','db2','db3','db4'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  // SPF steps
+  ['spf_s1','spf_s2','spf_s3','spf_s4'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  // spf router node glows
+  ['spf_r2','spf_r3','spf_r4'].forEach(id=>{const e=document.getElementById(id);if(e){e.setAttribute('stroke','#555');e.setAttribute('stroke-width','1.5');}});
+  ['spf_r2t','spf_r3t','spf_r4t'].forEach(id=>{const e=document.getElementById(id);if(e)e.setAttribute('fill','#555');});
+  // cost table rows
+  ['ct1','ct2','ct3','ct4'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  // s5
+  const s5p=document.getElementById('s5_poison');if(s5p)s5p.style.opacity='0';
+  const s5r=document.getElementById('s5_r2');if(s5r)s5r.style.boxShadow='none';
+}
+
+function fi(id,ms){setTimeout(()=>{const e=document.getElementById(id);if(e)e.classList.add('in');},ms);}
+function fo(id,ms,v='1'){setTimeout(()=>{const e=document.getElementById(id);if(e)e.style.opacity=v;},ms);}
+function beam(id,ms,dur){setTimeout(()=>{const b=document.getElementById(id);if(!b)return;b.style.transition=`width ${dur||.55}s ease-out`;b.style.width='100%';},ms);}
+function svgLine(id,ms,dur,offset='0'){setTimeout(()=>{const e=document.getElementById(id);if(!e)return;e.style.transition=`stroke-dashoffset ${dur||.45}s ease-out`;e.setAttribute('stroke-dashoffset',offset);},ms);}
+function st(s,t,ms){setTimeout(()=>{const e=document.getElementById('s'+s+'_status');if(e)e.textContent=t;},ms);}
+function svgAttr(id,attr,val,ms){setTimeout(()=>{const e=document.getElementById(id);if(e)e.setAttribute(attr,val);},ms);}
+
+function playScene(n){resetScene(n);setTimeout(()=>runScene(n),80);}
+function runScene(n){[runS1,runS2,runS3,runS4,runS5][n-1]();}
+
+function runS1(){
+  st(1,'R1 generating LSA for its links…',0);
+  fi('s1_hook',100);
+  fi('s1_topo',500);
+  // form adjacencies: animate lines
+  setTimeout(()=>{
+    document.getElementById('la_r1r2').style.transition='stroke-dashoffset .5s ease-out';
+    document.getElementById('la_r1r2').setAttribute('stroke-dashoffset','0');
+    document.getElementById('la_r1r3').style.transition='stroke-dashoffset .5s ease-out';
+    document.getElementById('la_r1r3').setAttribute('stroke-dashoffset','0');
+    st(1,'R1-R2 and R1-R3 adjacencies forming…',0);
+  },800);
+  // show cost labels
+  fo('c12',1200);fo('c13',1300);
+  // LSA flood r1->r2
+  setTimeout(()=>{
+    const p=document.getElementById('lsa1');p.style.opacity='1';
+    p.style.transition='cx .4s linear,cy .4s linear,opacity .2s';
+    p.setAttribute('cx','76');p.setAttribute('cy','95');
+  },1400);
+  // LSA flood r1->r3
+  setTimeout(()=>{
+    const p=document.getElementById('lsa2');p.style.opacity='1';
+    p.setAttribute('cx','290');p.setAttribute('cy','95');
+  },1700);
+  // R2,R3 glow + continue flooding
+  setTimeout(()=>{
+    document.getElementById('la_r2r4').style.transition='stroke-dashoffset .55s ease-out';
+    document.getElementById('la_r2r4').setAttribute('stroke-dashoffset','0');
+    document.getElementById('la_r3r4').style.transition='stroke-dashoffset .55s ease-out';
+    document.getElementById('la_r3r4').setAttribute('stroke-dashoffset','0');
+    st(1,'LSAs re-flooded to R4 — full topology known',0);
+  },2000);
+  fo('c24',2200);fo('c34',2400);
+  setTimeout(()=>{const p=document.getElementById('lsa3');p.style.opacity='1';p.setAttribute('cx','164');p.setAttribute('cy','158');},2300);
+  setTimeout(()=>{const p=document.getElementById('lsa4');p.style.opacity='1';p.setAttribute('cx','202');p.setAttribute('cy','158');},2600);
+  fi('s1_lsa',2800);
+  // LSDB fills
+  fo('db1',3400);fo('db2',3800);fo('db3',4200);fo('db4',4600);
+  st(1,'LSDB identical on all 4 routers ✓',4800);
+  fi('s1_lsdb',3200);
+  fi('s1_note',5200);
+}
+
+function runS2(){
+  st(2,'4 routers on Ethernet: N² = 6 adjacency pairs…',0);
+  fi('s2_intro',100);
+  fi('s2_prob',500);
+  st(2,'Without DR: each router maintains 3 adj — chaos',1200);
+  fi('s2_sol',1600);
+  // DR spokes appear
+  setTimeout(()=>{
+    document.getElementById('dr_ra').style.transition='stroke-dashoffset .4s ease-out';
+    document.getElementById('dr_ra').setAttribute('stroke-dashoffset','0');
+  },2000);
+  setTimeout(()=>{
+    document.getElementById('dr_rc').style.transition='stroke-dashoffset .4s .1s ease-out';
+    document.getElementById('dr_rc').setAttribute('stroke-dashoffset','0');
+  },2100);
+  setTimeout(()=>{
+    document.getElementById('dr_rd').style.transition='stroke-dashoffset .4s .2s ease-out';
+    document.getElementById('dr_rd').setAttribute('stroke-dashoffset','0');
+    st(2,'DR (RB) = central hub — only N adj pairs needed',0);
+  },2200);
+  fi('s2_rules',3000);
+  fi('s2_table',4000);
+  st(2,'Priority 5 wins. Priority 0 = never elected.',4500);
+}
+
+function runS3(){
+  st(3,'Dijkstra starts at R1 (cost 0)…',0);
+  fi('s3_intro',100);
+  fi('s3_graph',500);
+  fo('spf_s1',900);
+  st(3,'Step 1: R1 added to shortest path tree',1000);
+  // R1 glows
+  setTimeout(()=>{
+    document.getElementById('spf_r1').setAttribute('stroke','#4eff9a');
+    document.getElementById('spf_r1').setAttribute('stroke-width','2.5');
+  },800);
+  // highlight R1-R2 and R1-R3
+  fo('spf12',1300);fo('spf13',1400);
+  fo('spf_s2',1400);
+  svgAttr('spf_r2','stroke','#4eff9a',1500);svgAttr('spf_r2','stroke-width','2',1500);
+  svgAttr('spf_r2t','fill','#4eff9a',1500);
+  svgAttr('spf_r3','stroke','#4eff9a',1600);svgAttr('spf_r3','stroke-width','2',1600);
+  svgAttr('spf_r3t','fill','#4eff9a',1600);
+  st(3,'R2=10, R3=10 — visit R2 (tie-break)',1800);
+  fo('spf_s3',2400);
+  fo('spf24',2700);
+  svgAttr('spf_r4','stroke','#4ec9e1',2800);svgAttr('spf_r4','stroke-width','2',2800);
+  svgAttr('spf_r4t','fill','#4ec9e1',2800);
+  st(3,'Via R2: R4=11. Via R3: R4=11. ECMP!',3200);
+  fo('spf_s4',3300);
+  fo('spf34',3500);
+  fi('s3_steps',800);
+  fi('s3_rib',4200);
+  st(3,'R4 reachable via two equal-cost paths ✓',4500);
+}
+
+function runS4(){
+  st(4,'Examining OSPF cost formula…',0);
+  fi('s4_intro',100);
+  fi('s4_table',600);
+  fo('ct1',900);fo('ct2',1300);fo('ct3',1700);fo('ct4',2100);
+  st(4,'100M and 10G both give cost 1 — OSPF blind!',2300);
+  fi('s4_prob',2700);
+  fi('s4_fix',3600);
+  fi('s4_note',4600);
+  st(4,'Set auto-cost ref-bw 10000 on ALL routers',4000);
+}
+
+function runS5(){
+  st(5,'Attacker brings up OSPF adjacency…',0);
+  fi('s5_intro',100);
+  fi('s5_atk',600);
+  beam('s5_lsa',900,.55);
+  setTimeout(()=>{
+    const r=document.getElementById('s5_r2');if(r)r.style.boxShadow='0 0 0 3px #e85050';
+    const p=document.getElementById('s5_poison');if(p)p.style.opacity='1';
+    st(5,'Fake LSA floods — all routers accept it!',0);
+  },1600);
+  fi('s5_impact',2200);
+  fi('s5_fix',3200);
+  fi('s5_alg',4200);
+  fi('s5_note',5000);
+  st(5,'Enable HMAC-SHA-256 auth on all OSPF links',3500);
+}
+
+window.addEventListener('load',()=>setTimeout(()=>playScene(1),400));
+</script>
+</body>
+</html>

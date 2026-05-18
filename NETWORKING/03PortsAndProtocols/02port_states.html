@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TCP Port States</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+/* scene-specific */
+.pkt{display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s}
+.pkt.show{opacity:1}
+.pkt-box{font-size:8px;padding:6px 10px;border:2px solid;border-radius:2px;white-space:nowrap}
+.arrow-row{display:flex;align-items:center;gap:0;width:100%}
+.arrow-line{height:2px;flex:1;transition:width .5s}
+.arrow-head{font-size:12px}
+.resp-box{font-size:8px;padding:6px 10px;border:2px solid;border-radius:2px;white-space:nowrap;min-width:80px;text-align:center}
+.node-box{background:#1a1a2e;border:2px solid #3a2f5d;border-radius:4px;padding:10px 12px;font-size:8px;line-height:1.8;color:#ccc}
+.node-title{font-size:9px;margin-bottom:6px;letter-spacing:.5px}
+.flow-step{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #2a1f3d;border-radius:2px;opacity:0;transition:opacity .4s}
+.flow-step.show{opacity:1}
+.flow-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.decision-box{border:2px solid;border-radius:4px;padding:10px 12px;margin:4px 0;font-size:8px;line-height:1.9}
+.branch{display:flex;gap:6px;margin:4px 0}
+.branch-item{flex:1;border:1px solid;border-radius:3px;padding:8px 6px;font-size:7px;line-height:1.8;text-align:center}
+.timeline-bar{height:14px;border-radius:2px;transition:width .8s ease-out;width:0}
+.timer-label{font-size:8px;color:#666;margin-top:3px}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ SCENE 1: HOOK ═══ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TCP PORT STATES</div>
+    <div class="hdr-sub">WHAT YOUR SCANNER ACTUALLY SEES</div>
+    <div class="dots">
+      <div class="dot active" id="d1_1"></div>
+      <div class="dot" id="d1_2"></div>
+      <div class="dot" id="d1_3"></div>
+      <div class="dot" id="d1_4"></div>
+      <div class="dot" id="d1_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE QUESTION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="border:2px solid #4ec9e1;border-radius:4px;padding:14px 12px;background:#0d1a2e">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:8px;letter-spacing:.5px">SCANNER OUTPUT</div>
+        <div style="font-family:monospace;font-size:11px;line-height:2;color:#ccc">
+          PORT&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;STATE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;SERVICE<br>
+          <span id="s1_port1" style="opacity:0;transition:opacity .4s">22/tcp&nbsp;&nbsp;&nbsp;<span style="color:#4eff9a">open</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ssh</span><br>
+          <span id="s1_port2" style="opacity:0;transition:opacity .4s">80/tcp&nbsp;&nbsp;&nbsp;<span style="color:#e85050">closed</span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;http</span><br>
+          <span id="s1_port3" style="opacity:0;transition:opacity .4s">443/tcp&nbsp;&nbsp;<span style="color:#e8a020">filtered</span>&nbsp;&nbsp;&nbsp;&nbsp;https</span>
+        </div>
+      </div>
+
+      <div id="s1_q" style="opacity:0;transition:opacity .5s;border:1px solid #3a2f5d;border-radius:4px;padding:12px 12px;background:#130d1e">
+        <div style="font-size:8px;color:#e8a020;line-height:2">
+          "filtered" doesn't mean<br>HTTPS is blocked —<br>it means the <span style="color:#fff">firewall is<br>not responding</span> at all.
+        </div>
+      </div>
+
+      <div id="s1_imp" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:8px;color:#888;line-height:2;padding:0 2px">
+          These 3 states encode completely<br>
+          different truths about the target.<br>
+          <span style="color:#4ec9e1">Getting them wrong</span> = wrong conclusions.
+        </div>
+      </div>
+
+      <div id="s1_states" style="opacity:0;transition:opacity .5s;display:flex;gap:6px">
+        <div style="flex:1;background:#0a1a0a;border:1px solid #4eff9a33;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">OPEN</div>
+          <div style="font-size:7px;color:#888">SYN-ACK</div>
+        </div>
+        <div style="flex:1;background:#1a0a0a;border:1px solid #e8505033;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:8px;color:#e85050;margin-bottom:4px">CLOSED</div>
+          <div style="font-size:7px;color:#888">RST</div>
+        </div>
+        <div style="flex:1;background:#1a110a;border:1px solid #e8a02033;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:4px">FILTERED</div>
+          <div style="font-size:7px;color:#888">silence</div>
+        </div>
+        <div style="flex:1;background:#0a0a1a;border:1px solid #4ec9e133;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:4px">OPEN|<br>FILT</div>
+          <div style="font-size:7px;color:#888">UDP</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Each state = a different packet response.</div>
+    <div class="ih am">Filtered ≠ closed. Silence speaks volumes.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">4</div><div class="sl">PORT STATES</div></div>
+    <div class="sc"><div class="sv gn">TCP</div><div class="sl">PROTOCOL</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">SYN</div><div class="sl">PROBE TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" id="s1_prev" onclick="prev(1)" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ SCENE 2: OPEN ═══ -->
+<div class="scene" id="s2" style="background:#0a1a0a">
+  <div class="hdr" style="background:#0a1a0a">
+    <div class="hdr-title">TCP PORT STATES</div>
+    <div class="hdr-sub">STATE: OPEN</div>
+    <div class="dots">
+      <div class="dot done" id="d2_1"></div>
+      <div class="dot active" id="d2_2"></div>
+      <div class="dot" id="d2_3"></div>
+      <div class="dot" id="d2_4"></div>
+      <div class="dot" id="d2_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">OPEN PORT</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SYN-ACK</span>
+  </div>
+  <div class="anim" style="background:#0a1a0a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Scanner + Target -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+        <div style="text-align:center">
+          <div style="font-size:20px;margin-bottom:4px">💻</div>
+          <div style="font-size:7px;color:#888">SCANNER</div>
+        </div>
+        <div style="flex:1;margin:0 10px;position:relative;height:24px">
+          <div id="s2_line1" style="position:absolute;top:50%;left:0;height:2px;background:#4eff9a;width:0;transition:width .6s ease-out;transform:translateY(-50%)"></div>
+          <div id="s2_line2" style="position:absolute;top:50%;right:0;height:2px;background:#4ec9e1;width:0;transition:width .6s ease-out;transform:translateY(-50%)"></div>
+          <div id="s2_lbl1" style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#4eff9a;opacity:0;transition:opacity .3s;white-space:nowrap">SYN →</div>
+          <div id="s2_lbl2" style="position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#4ec9e1;opacity:0;transition:opacity .3s;white-space:nowrap">← SYN-ACK</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;margin-bottom:4px">🖥️</div>
+          <div style="font-size:7px;color:#888">TARGET</div>
+        </div>
+      </div>
+
+      <!-- Packet flow detail -->
+      <div id="s2_step1" class="flow-step" style="border-color:#4eff9a22">
+        <div class="flow-dot" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Scanner sends <span style="color:#4eff9a">SYN</span> packet to port 443
+        </div>
+      </div>
+      <div id="s2_step2" class="flow-step" style="border-color:#4ec9e122">
+        <div class="flow-dot" style="background:#4ec9e1"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Target replies: <span style="color:#4ec9e1">SYN-ACK</span><br>
+          <span style="font-size:7px;color:#888">A process IS listening on this port</span>
+        </div>
+      </div>
+      <div id="s2_step3" class="flow-step" style="border-color:#4eff9a22">
+        <div class="flow-dot" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Scanner sends <span style="color:#e85050">RST</span> to close cleanly<br>
+          <span style="font-size:7px;color:#888">(avoids completing full 3-way handshake)</span>
+        </div>
+      </div>
+
+      <!-- What this means -->
+      <div id="s2_meaning" style="opacity:0;transition:opacity .5s;background:#0d200d;border:1px solid #4eff9a44;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">▶ WHAT THIS MEANS</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          • A service is actively running<br>
+          • Firewall is NOT blocking this port<br>
+          • Next move: <span style="color:#4eff9a">banner grab, version scan</span>
+        </div>
+      </div>
+
+      <!-- No firewall indicator -->
+      <div id="s2_fw" style="opacity:0;transition:opacity .4s;display:flex;align-items:center;gap:8px;padding:6px 10px;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px">
+        <div style="font-size:14px">🔓</div>
+        <div style="font-size:7px;color:#888;line-height:1.9">No firewall interference — packet<br>reached the port and was accepted</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">SYN-ACK = service is listening.</div>
+    <div class="ih">Firewall allowed the packet through.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">SYN-ACK</div><div class="sl">RESPONSE</div></div>
+    <div class="sc"><div class="sv gn">YES</div><div class="sl">SERVICE UP</div></div>
+    <div class="sc"><div class="sv gn">NONE</div><div class="sl">FW BLOCK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ SCENE 3: CLOSED ═══ -->
+<div class="scene" id="s3" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">TCP PORT STATES</div>
+    <div class="hdr-sub">STATE: CLOSED</div>
+    <div class="dots">
+      <div class="dot done" id="d3_1"></div>
+      <div class="dot done" id="d3_2"></div>
+      <div class="dot active" id="d3_3"></div>
+      <div class="dot" id="d3_4"></div>
+      <div class="dot" id="d3_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">CLOSED PORT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RST</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Scanner + Target -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+        <div style="text-align:center">
+          <div style="font-size:20px;margin-bottom:4px">💻</div>
+          <div style="font-size:7px;color:#888">SCANNER</div>
+        </div>
+        <div style="flex:1;margin:0 10px;position:relative;height:24px">
+          <div id="s3_line1" style="position:absolute;top:50%;left:0;height:2px;background:#e8a020;width:0;transition:width .6s ease-out;transform:translateY(-50%)"></div>
+          <div id="s3_line2" style="position:absolute;top:50%;right:0;height:2px;background:#e85050;width:0;transition:width .6s ease-out;transform:translateY(-50%)"></div>
+          <div id="s3_lbl1" style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#e8a020;opacity:0;transition:opacity .3s;white-space:nowrap">SYN →</div>
+          <div id="s3_lbl2" style="position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#e85050;opacity:0;transition:opacity .3s;white-space:nowrap">← RST</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:20px;margin-bottom:4px">🖥️</div>
+          <div style="font-size:7px;color:#888">TARGET</div>
+        </div>
+      </div>
+
+      <div id="s3_step1" class="flow-step" style="border-color:#e8a02022">
+        <div class="flow-dot" style="background:#e8a020"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Scanner sends <span style="color:#e8a020">SYN</span> packet to port 80
+        </div>
+      </div>
+      <div id="s3_step2" class="flow-step" style="border-color:#e8505022">
+        <div class="flow-dot" style="background:#e85050"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Target replies: <span style="color:#e85050">RST/ACK</span><br>
+          <span style="font-size:7px;color:#888">OS stack rejected — nothing listening</span>
+        </div>
+      </div>
+
+      <!-- Key insight: no firewall -->
+      <div id="s3_insight" style="opacity:0;transition:opacity .5s;background:#200d0d;border:1px solid #e8505044;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">⚠ KEY INSIGHT</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          RST = target is <span style="color:#fff">reachable</span><br>
+          No firewall is in the way!<br>
+          Service just isn't running.
+        </div>
+      </div>
+
+      <!-- Comparison vs filtered -->
+      <div id="s3_comp" style="opacity:0;transition:opacity .5s;display:flex;gap:6px">
+        <div style="flex:1;padding:8px 8px;background:#1a0808;border:1px solid #e8505044;border-radius:3px;text-align:center">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">CLOSED</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">Host is alive<br>Port is reachable<br>No service running</div>
+        </div>
+        <div style="flex:1;padding:8px 8px;background:#1a110a;border:1px solid #e8a02044;border-radius:3px;text-align:center">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:4px">FILTERED</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">Maybe alive<br>Firewall eating pkts<br>State unknown</div>
+        </div>
+      </div>
+
+      <div id="s3_move" style="opacity:0;transition:opacity .4s;padding:8px 10px;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px">
+        <div style="font-size:7px;color:#888;line-height:2">
+          Next move: <span style="color:#4ec9e1">confirm host is alive</span>,<br>look for open ports elsewhere
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">RST = no process listening.</div>
+    <div class="ih rd">But the host IS reachable — no firewall block.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">RST</div><div class="sl">RESPONSE</div></div>
+    <div class="sc"><div class="sv rd">NO</div><div class="sl">SERVICE UP</div></div>
+    <div class="sc"><div class="sv gn">NONE</div><div class="sl">FW BLOCK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ SCENE 4: FILTERED ═══ -->
+<div class="scene" id="s4" style="background:#1a1000">
+  <div class="hdr" style="background:#1a1000">
+    <div class="hdr-title">TCP PORT STATES</div>
+    <div class="hdr-sub">STATE: FILTERED</div>
+    <div class="dots">
+      <div class="dot done" id="d4_1"></div>
+      <div class="dot done" id="d4_2"></div>
+      <div class="dot done" id="d4_3"></div>
+      <div class="dot active" id="d4_4"></div>
+      <div class="dot" id="d4_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">FILTERED PORT</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">SILENCE</span>
+  </div>
+  <div class="anim" style="background:#1a1000">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Scanner + Firewall + Target -->
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px">
+        <div style="text-align:center">
+          <div style="font-size:18px;margin-bottom:4px">💻</div>
+          <div style="font-size:7px;color:#888">SCANNER</div>
+        </div>
+        <div style="flex:1;margin:0 4px;position:relative;height:24px">
+          <div id="s4_line1" style="position:absolute;top:50%;left:0;height:2px;background:#e8a020;width:0;transition:width .6s ease-out;transform:translateY(-50%)"></div>
+          <div id="s4_lbl1" style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#e8a020;opacity:0;transition:opacity .3s;white-space:nowrap">SYN →</div>
+        </div>
+        <div id="s4_fw" style="text-align:center;opacity:0;transition:opacity .4s">
+          <div style="font-size:18px;margin-bottom:4px">🔥</div>
+          <div style="font-size:7px;color:#e85050">FIREWALL</div>
+        </div>
+        <div style="flex:1;margin:0 4px;position:relative;height:24px">
+          <div id="s4_lbl2" style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:7px;color:#e85050;opacity:0;transition:opacity .3s;white-space:nowrap">DROP</div>
+        </div>
+        <div style="text-align:center;opacity:.4">
+          <div style="font-size:18px;margin-bottom:4px">🖥️</div>
+          <div style="font-size:7px;color:#555">TARGET</div>
+        </div>
+      </div>
+
+      <!-- Timeout indicator -->
+      <div id="s4_timeout" style="opacity:0;transition:opacity .5s;background:#1a1000;border:1px solid #e8a02033;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#888;margin-bottom:6px">WAITING FOR RESPONSE...</div>
+        <div style="background:#0a0800;height:10px;border-radius:2px;overflow:hidden">
+          <div id="s4_timebar" style="height:100%;background:#e8a020;width:0;transition:width 2.5s linear;border-radius:2px"></div>
+        </div>
+        <div id="s4_timeout_lbl" style="font-size:7px;color:#e85050;margin-top:4px;opacity:0;transition:opacity .3s">TIMEOUT — no response received</div>
+      </div>
+
+      <div id="s4_step1" class="flow-step" style="border-color:#e8a02022">
+        <div class="flow-dot" style="background:#e8a020"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          SYN sent — firewall <span style="color:#e85050">silently drops</span> it<br>
+          <span style="font-size:7px;color:#888">No ICMP unreachable, no RST</span>
+        </div>
+      </div>
+      <div id="s4_step2" class="flow-step" style="border-color:#e8a02022">
+        <div class="flow-dot" style="background:#888"></div>
+        <div style="font-size:8px;line-height:1.8;color:#ccc">
+          Scanner retries 1-2x, then<br>
+          marks port: <span style="color:#e8a020">filtered</span>
+        </div>
+      </div>
+
+      <div id="s4_meaning" style="opacity:0;transition:opacity .5s;background:#1a0d00;border:1px solid #e8a02044;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:6px">▶ WHAT THIS MEANS</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          • Firewall <span style="color:#e8a020">confirmed present</span><br>
+          • Service state: <span style="color:#fff">unknown</span><br>
+          • Next move: <span style="color:#4ec9e1">try evasion, alt ports,<br>&nbsp;&nbsp;or protocol switching</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Silence = firewall dropping packets.</div>
+    <div class="ih am">Port may be open behind it — you can't tell.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">NONE</div><div class="sl">RESPONSE</div></div>
+    <div class="sc"><div class="sv am">???</div><div class="sl">SERVICE</div></div>
+    <div class="sc"><div class="sv rd">YES</div><div class="sl">FW BLOCK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="next(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ SCENE 5: DECISION TREE ═══ -->
+<div class="scene" id="s5" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">TCP PORT STATES</div>
+    <div class="hdr-sub">DECISION TREE + OPEN|FILTERED</div>
+    <div class="dots">
+      <div class="dot done" id="d5_1"></div>
+      <div class="dot done" id="d5_2"></div>
+      <div class="dot done" id="d5_3"></div>
+      <div class="dot done" id="d5_4"></div>
+      <div class="dot active" id="d5_5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">FULL PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DECISION</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Decision tree -->
+      <div id="s5_tree" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;letter-spacing:.5px">PACKET SENT → RESPONSE?</div>
+
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div style="flex:1;background:#0a1a0a;border:1px solid #4eff9a55;border-radius:3px;padding:8px 6px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">SYN-ACK</div>
+            <div style="font-size:9px;color:#4eff9a;font-weight:bold">OPEN</div>
+            <div style="font-size:7px;color:#666;margin-top:3px;line-height:1.6">service running<br>FW not blocking</div>
+          </div>
+          <div style="flex:1;background:#1a0808;border:1px solid #e8505055;border-radius:3px;padding:8px 6px;text-align:center">
+            <div style="font-size:7px;color:#e85050;margin-bottom:3px">RST</div>
+            <div style="font-size:9px;color:#e85050;font-weight:bold">CLOSED</div>
+            <div style="font-size:7px;color:#666;margin-top:3px;line-height:1.6">no service<br>FW not blocking</div>
+          </div>
+          <div style="flex:1;background:#1a1000;border:1px solid #e8a02055;border-radius:3px;padding:8px 6px;text-align:center">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:3px">SILENCE</div>
+            <div style="font-size:9px;color:#e8a020;font-weight:bold">FILTERED</div>
+            <div style="font-size:7px;color:#666;margin-top:3px;line-height:1.6">FW dropping<br>state unknown</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- OPEN|FILTERED special case -->
+      <div id="s5_udp" style="opacity:0;transition:opacity .5s;background:#0d1a2e;border:2px solid #4ec9e133;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:6px">⚡ OPEN|FILTERED</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          UDP &amp; stealth scans: if no response,<br>
+          nmap can't tell open vs filtered.<br>
+          <span style="color:#888">Both states produce silence.</span>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:6px">
+          <div style="flex:1;background:#0a1214;border:1px solid #4ec9e122;border-radius:3px;padding:6px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:2px">OPEN (UDP)</div>
+            <div style="font-size:7px;color:#666">no reply</div>
+          </div>
+          <div style="font-size:14px;display:flex;align-items:center;color:#888">=</div>
+          <div style="flex:1;background:#1a110a;border:1px solid #e8a02022;border-radius:3px;padding:6px;text-align:center">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:2px">FILTERED</div>
+            <div style="font-size:7px;color:#666">no reply</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Next move summary -->
+      <div id="s5_next" style="opacity:0;transition:opacity .5s;background:#130d1e;border:1px solid #2a1f3d;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;letter-spacing:.5px">YOUR NEXT MOVE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:8px;color:#4eff9a;min-width:58px">OPEN</div>
+            <div style="font-size:7px;color:#888;line-height:1.8">enumerate service, version, vulns</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:8px;color:#e85050;min-width:58px">CLOSED</div>
+            <div style="font-size:7px;color:#888;line-height:1.8">confirm host alive, probe other ports</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:8px;color:#e8a020;min-width:58px">FILTERED</div>
+            <div style="font-size:7px;color:#888;line-height:1.8">try evasion: decoy, frag, alt ports</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <div style="font-size:8px;color:#4ec9e1;min-width:58px">OPN|FILT</div>
+            <div style="font-size:7px;color:#888;line-height:1.8">switch to TCP, try version scan</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">State = evidence about two things:</div>
+    <div class="ih">1) is a service running? 2) is a FW present?</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">OPEN</div><div class="sl">SYN-ACK</div></div>
+    <div class="sc"><div class="sv rd">CLOSED</div><div class="sl">RST</div></div>
+    <div class="sc"><div class="sv am">FLTRD</div><div class="sl">SILENCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" id="s5_next_btn" onclick="next(5)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+const TOTAL = 5;
+let timers = {};
+
+function clearTimers(scene) {
+  if (timers[scene]) { timers[scene].forEach(clearTimeout); timers[scene] = []; }
+}
+
+function t(scene, fn, delay) {
+  if (!timers[scene]) timers[scene] = [];
+  timers[scene].push(setTimeout(fn, delay));
+}
+
+function show(el) { if (el) el.style.opacity = '1'; }
+function hide(el) { if (el) el.style.opacity = '0'; }
+function showEl(id) { const e = document.getElementById(id); if(e){ e.style.opacity='1'; if(e.classList.contains('flow-step')) e.classList.add('show'); } }
+function hideEl(id) { const e = document.getElementById(id); if(e){ e.style.opacity='0'; if(e.classList.contains('flow-step')) e.classList.remove('show'); } }
+
+function resetScene(n) {
+  clearTimers(n);
+  if (n === 1) {
+    hideEl('s1_port1'); hideEl('s1_port2'); hideEl('s1_port3'); hideEl('s1_q'); hideEl('s1_imp'); hideEl('s1_states');
+  } else if (n === 2) {
+    const l1=document.getElementById('s2_line1'), l2=document.getElementById('s2_line2');
+    const lb1=document.getElementById('s2_lbl1'), lb2=document.getElementById('s2_lbl2');
+    if(l1){l1.style.transition='none';l1.style.width='0';} if(l2){l2.style.transition='none';l2.style.width='0';}
+    if(lb1){lb1.style.opacity='0';} if(lb2){lb2.style.opacity='0';}
+    setTimeout(()=>{ if(l1)l1.style.transition='width .6s ease-out'; if(l2)l2.style.transition='width .6s ease-out'; },20);
+    hideEl('s2_step1'); hideEl('s2_step2'); hideEl('s2_step3'); hideEl('s2_meaning'); hideEl('s2_fw');
+  } else if (n === 3) {
+    const l1=document.getElementById('s3_line1'), l2=document.getElementById('s3_line2');
+    const lb1=document.getElementById('s3_lbl1'), lb2=document.getElementById('s3_lbl2');
+    if(l1){l1.style.transition='none';l1.style.width='0';} if(l2){l2.style.transition='none';l2.style.width='0';}
+    if(lb1){lb1.style.opacity='0';} if(lb2){lb2.style.opacity='0';}
+    setTimeout(()=>{ if(l1)l1.style.transition='width .6s ease-out'; if(l2)l2.style.transition='width .6s ease-out'; },20);
+    hideEl('s3_step1'); hideEl('s3_step2'); hideEl('s3_insight'); hideEl('s3_comp'); hideEl('s3_move');
+  } else if (n === 4) {
+    const l1=document.getElementById('s4_line1');
+    const lb1=document.getElementById('s4_lbl1'), lb2=document.getElementById('s4_lbl2');
+    if(l1){l1.style.transition='none';l1.style.width='0';} setTimeout(()=>{ if(l1)l1.style.transition='width .6s ease-out'; },20);
+    if(lb1)lb1.style.opacity='0'; if(lb2)lb2.style.opacity='0';
+    hideEl('s4_fw'); hideEl('s4_timeout'); hideEl('s4_timeout_lbl');
+    const tb=document.getElementById('s4_timebar'); if(tb){tb.style.transition='none';tb.style.width='0';setTimeout(()=>{tb.style.transition='width 2.5s linear';},20);}
+    hideEl('s4_step1'); hideEl('s4_step2'); hideEl('s4_meaning');
+  } else if (n === 5) {
+    hideEl('s5_tree'); hideEl('s5_udp'); hideEl('s5_next');
+  }
+}
+
+function play(n) {
+  resetScene(n);
+  setTimeout(() => animate(n), 50);
+}
+
+function animate(n) {
+  if (n === 1) {
+    t(1, ()=>showEl('s1_port1'), 300);
+    t(1, ()=>showEl('s1_port2'), 700);
+    t(1, ()=>showEl('s1_port3'), 1100);
+    t(1, ()=>showEl('s1_q'), 1700);
+    t(1, ()=>showEl('s1_imp'), 2400);
+    t(1, ()=>showEl('s1_states'), 3100);
+  } else if (n === 2) {
+    const l1=document.getElementById('s2_line1'), l2=document.getElementById('s2_line2');
+    const lb1=document.getElementById('s2_lbl1'), lb2=document.getElementById('s2_lbl2');
+    t(2, ()=>{ if(lb1)lb1.style.opacity='1'; if(l1)l1.style.width='100%'; }, 300);
+    t(2, ()=>showEl('s2_step1'), 700);
+    t(2, ()=>{ if(lb2)lb2.style.opacity='1'; if(l2)l2.style.width='100%'; }, 1200);
+    t(2, ()=>showEl('s2_step2'), 1600);
+    t(2, ()=>showEl('s2_step3'), 2300);
+    t(2, ()=>showEl('s2_meaning'), 3000);
+    t(2, ()=>showEl('s2_fw'), 3700);
+  } else if (n === 3) {
+    const l1=document.getElementById('s3_line1'), l2=document.getElementById('s3_line2');
+    const lb1=document.getElementById('s3_lbl1'), lb2=document.getElementById('s3_lbl2');
+    t(3, ()=>{ if(lb1)lb1.style.opacity='1'; if(l1)l1.style.width='100%'; }, 300);
+    t(3, ()=>showEl('s3_step1'), 700);
+    t(3, ()=>{ if(lb2)lb2.style.opacity='1'; if(l2)l2.style.width='100%'; }, 1200);
+    t(3, ()=>showEl('s3_step2'), 1600);
+    t(3, ()=>showEl('s3_insight'), 2400);
+    t(3, ()=>showEl('s3_comp'), 3200);
+    t(3, ()=>showEl('s3_move'), 3900);
+  } else if (n === 4) {
+    const l1=document.getElementById('s4_line1');
+    const lb1=document.getElementById('s4_lbl1'), lb2=document.getElementById('s4_lbl2');
+    t(4, ()=>{ if(lb1)lb1.style.opacity='1'; if(l1)l1.style.width='100%'; }, 300);
+    t(4, ()=>showEl('s4_fw'), 800);
+    t(4, ()=>{ if(lb2)lb2.style.opacity='1'; }, 1000);
+    t(4, ()=>showEl('s4_timeout'), 1400);
+    t(4, ()=>{ const tb=document.getElementById('s4_timebar'); if(tb)tb.style.width='100%'; }, 1600);
+    t(4, ()=>showEl('s4_step1'), 1800);
+    t(4, ()=>showEl('s4_step2'), 2600);
+    t(4, ()=>{ const tl=document.getElementById('s4_timeout_lbl'); if(tl)tl.style.opacity='1'; }, 4000);
+    t(4, ()=>showEl('s4_meaning'), 4400);
+  } else if (n === 5) {
+    t(5, ()=>showEl('s5_tree'), 400);
+    t(5, ()=>showEl('s5_udp'), 1400);
+    t(5, ()=>showEl('s5_next'), 2400);
+  }
+}
+
+function next(n) {
+  resetScene(n);
+  const cur = document.getElementById('s' + n);
+  const nxt = document.getElementById('s' + (n < TOTAL ? n + 1 : 1));
+  if (cur) cur.classList.remove('active');
+  if (nxt) nxt.classList.add('active');
+  const nextN = n < TOTAL ? n + 1 : 1;
+  setTimeout(() => animate(nextN), 100);
+}
+
+function prev(n) {
+  if (n <= 1) return;
+  resetScene(n);
+  const cur = document.getElementById('s' + n);
+  const prv = document.getElementById('s' + (n - 1));
+  if (cur) cur.classList.remove('active');
+  if (prv) prv.classList.add('active');
+  const prevN = n - 1;
+  setTimeout(() => animate(prevN), 100);
+}
+
+// Auto-play scene 1 on load
+window.addEventListener('load', () => setTimeout(() => animate(1), 400));
+</script>
+</body>
+</html>

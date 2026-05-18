@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Layer 4 — TCP vs UDP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0a1a2e}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0a1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#06080f;border:1px solid #0a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.pu{color:#a060c0}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0a1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.pu{color:#a060c0}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* Packet slide animation */
+@keyframes pktRight{
+  0%{transform:translateX(0);opacity:1}
+  80%{opacity:1}
+  100%{transform:translateX(180px);opacity:0}
+}
+@keyframes pktLeft{
+  0%{transform:translateX(0);opacity:1}
+  80%{opacity:1}
+  100%{transform:translateX(-180px);opacity:0}
+}
+@keyframes ackRight{
+  0%{transform:translateX(0);opacity:1}
+  100%{transform:translateX(180px);opacity:1}
+}
+
+/* UDP papers scatter */
+@keyframes paperFly1{
+  0%{transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(60px,-30px) rotate(25deg);opacity:0}
+}
+@keyframes paperFly2{
+  0%{transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(80px,10px) rotate(-15deg);opacity:0}
+}
+@keyframes paperFly3{
+  0%{transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(70px,-50px) rotate(40deg);opacity:0}
+}
+@keyframes paperFly4{
+  0%{transform:translate(0,0) rotate(0deg);opacity:1}
+  100%{transform:translate(50px,30px) rotate(-30deg);opacity:0}
+}
+
+/* handshake line grow */
+@keyframes lineGrow{stroke-dashoffset:0}
+.hs-line{stroke-dasharray:200;stroke-dashoffset:200;transition:stroke-dashoffset .6s ease-out}
+.hs-line.go{stroke-dashoffset:0}
+
+/* feature row */
+.feat-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.feat-row.visible{opacity:1;transform:translateX(0)}
+
+/* use case badge */
+.uc-badge{
+  opacity:0;transform:scale(.8);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.uc-badge.visible{opacity:1;transform:scale(1)}
+
+/* port chip */
+.port-chip{
+  opacity:0;transform:translateY(6px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.port-chip.visible{opacity:1;transform:translateY(0)}
+
+/* compare card */
+.cmp-card{
+  opacity:0;transform:translateY(10px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.cmp-card.visible{opacity:1;transform:translateY(0)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* receipt tick */
+@keyframes tickPop{
+  0%{transform:scale(0);opacity:0}
+  60%{transform:scale(1.3)}
+  100%{transform:scale(1);opacity:1}
+}
+.tick-pop{animation:tickPop .4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">LAYER 4 — TRANSPORT</div>
+    <div class="hdr-sub">TCP vs UDP · PORTS · WHEN TO USE EACH</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">L4</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero -->
+      <div id="s1-hero" style="border:2px solid #4ec9e1;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px">THE QUESTION</div>
+        <div style="font-size:9px;color:#cce8ff;line-height:1.9;margin-bottom:8px">WHY DOES YOUR<br>VIDEO CALL USE UDP<br>BUT YOUR BANK<br>USES TCP?</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Because reliability and speed<br>are a trade-off. Layer 4<br>lets you choose.</div>
+      </div>
+
+      <!-- split preview -->
+      <div id="s1-split" style="opacity:0;transition:opacity .5s;display:flex;gap:8px">
+        <div style="flex:1;border:2px solid #4ec9e1;border-radius:3px;padding:10px;text-align:center;background:#04060c">
+          <div style="font-size:9px;color:#4ec9e1;margin-bottom:6px">TCP</div>
+          <div style="font-size:16px;margin-bottom:6px">📦</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Guaranteed<br>delivery<br>Ordered<br>Slower</div>
+          <div style="margin-top:7px;font-size:6px;color:#4ec9e1">bank · SSH · email</div>
+        </div>
+        <div style="flex:1;border:2px solid #4eff9a;border-radius:3px;padding:10px;text-align:center;background:#04060c">
+          <div style="font-size:9px;color:#4eff9a;margin-bottom:6px">UDP</div>
+          <div style="font-size:16px;margin-bottom:6px">🌬</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Best effort<br>No order<br>No retransmit<br>Faster</div>
+          <div style="margin-top:7px;font-size:6px;color:#4eff9a">video · gaming · DNS</div>
+        </div>
+      </div>
+
+      <!-- facts -->
+      <div id="s1-facts" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #0a1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#4ec9e1;margin-bottom:3px">65535</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">ports per<br>protocol</div>
+        </div>
+        <div style="border:1px solid #0a1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">3-way</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">TCP handshake<br>before data</div>
+        </div>
+        <div style="border:1px solid #0a1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">20B</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">TCP header<br>overhead</div>
+        </div>
+        <div style="border:1px solid #0a1a2e;border-radius:2px;padding:8px;text-align:center;background:#04060c">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">8B</div>
+          <div style="font-size:6px;color:#555;line-height:1.5">UDP header<br>overhead</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO UNDERSTAND TCP
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LAYER 4 — TRANSPORT</div>
+    <div class="ih">Sits above IP, below HTTP/SSH/DNS</div>
+    <div class="il" style="font-size:7px">Layer 3 delivers packets between machines. Layer 4 delivers data between applications on those machines — using ports to route to the right process.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">TCP</div><div class="sl">reliable<br>ordered</div></div>
+    <div class="sc"><div class="sv gn">UDP</div><div class="sl">fast<br>best-effort</div></div>
+    <div class="sc"><div class="sv am">ports</div><div class="sl">0–65535<br>per proto</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: TCP — RELIABLE DELIVERY ══════════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">TCP — RELIABLE DELIVERY</div>
+    <div class="hdr-sub">3-WAY HANDSHAKE · ACKS · RETRANSMIT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TCP</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">RELIABLE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- 3-way handshake diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#4ec9e1;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px;text-align:center">TCP 3-WAY HANDSHAKE THEN DATA + ACK</div>
+        <svg width="330" height="180" viewBox="0 0 330 180">
+          <!-- client -->
+          <rect x="8" y="8" width="70" height="36" rx="4" fill="#04060c" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="43" y="22" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">CLIENT</text>
+          <text x="43" y="34" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">:55234</text>
+          <!-- server -->
+          <rect x="252" y="8" width="70" height="36" rx="4" fill="#04060c" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="287" y="22" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">SERVER</text>
+          <text x="287" y="34" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">:443</text>
+
+          <!-- vertical timelines -->
+          <line x1="43" y1="44" x2="43" y2="178" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="3,3"/>
+          <line x1="287" y1="44" x2="287" y2="178" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="3,3"/>
+
+          <!-- SYN -->
+          <path id="s2-syn" d="M43,54 L287,68" stroke="#4ec9e1" stroke-width="1.5" fill="none" class="hs-line"/>
+          <text id="s2-syn-lbl" x="165" y="57" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">SYN →</text>
+          <!-- SYN-ACK -->
+          <path id="s2-synack" d="M287,74 L43,88" stroke="#4eff9a" stroke-width="1.5" fill="none" class="hs-line"/>
+          <text id="s2-synack-lbl" x="165" y="77" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">← SYN-ACK</text>
+          <!-- ACK -->
+          <path id="s2-ack" d="M43,94 L287,104" stroke="#4ec9e1" stroke-width="1.5" fill="none" class="hs-line"/>
+          <text id="s2-ack-lbl" x="165" y="97" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">ACK →</text>
+
+          <!-- handshake bracket -->
+          <text id="s2-hs-done" x="165" y="114" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">✓ CONNECTION ESTABLISHED</text>
+
+          <!-- DATA + ACK -->
+          <path id="s2-data1" d="M43,122 L287,132" stroke="#4ec9e1" stroke-width="2" fill="none" class="hs-line"/>
+          <text id="s2-data1-lbl" x="165" y="122" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">DATA [SEQ=1] →</text>
+          <path id="s2-data1-ack" d="M287,136 L43,146" stroke="#e8a020" stroke-width="1.5" fill="none" class="hs-line"/>
+          <text id="s2-da1-lbl" x="165" y="135" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">← ACK [SEQ=2]</text>
+
+          <path id="s2-data2" d="M43,150 L287,160" stroke="#4ec9e1" stroke-width="2" fill="none" class="hs-line"/>
+          <text id="s2-data2-lbl" x="165" y="150" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">DATA [SEQ=2] →</text>
+          <path id="s2-data2-ack" d="M287,164 L43,174" stroke="#e8a020" stroke-width="1.5" fill="none" class="hs-line"/>
+          <text id="s2-da2-lbl" x="165" y="163" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">← ACK [SEQ=3]</text>
+        </svg>
+      </div>
+
+      <!-- TCP feature checklist -->
+      <div id="s2-features" style="border:1px solid #0a1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">TCP GUARANTEES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="feat-row" id="f1" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #0a1020">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:7px;color:#4ec9e1">ORDERED DELIVERY</div><div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">Sequence numbers ensure packets arrive in order, even if network reorders them</div></div>
+          </div>
+          <div class="feat-row" id="f2" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #0a1020">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:7px;color:#4ec9e1">ACKNOWLEDGEMENTS</div><div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">Every segment ACKed. No ACK in timeout window → retransmit automatically</div></div>
+          </div>
+          <div class="feat-row" id="f3" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #0a1020">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:7px;color:#4ec9e1">FLOW CONTROL</div><div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">Receiver advertises window size. Sender won't overflow receiver buffer</div></div>
+          </div>
+          <div class="feat-row" id="f4" style="display:flex;align-items:center;gap:8px;padding:4px 0">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:7px;color:#4ec9e1">CONGESTION CONTROL</div><div style="font-size:6px;color:#666;margin-top:2px;line-height:1.6">Slow-start, AIMD. TCP backs off when network is congested. Plays nice.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text"><span class="cy">SYN → SYN-ACK → ACK</span>. No data until the handshake completes. Adds 1 round-trip latency upfront. That's why HTTPS feels slightly slower on first connect — worth it for a bank.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">If a segment is lost, <span class="cy">TCP retransmits it</span>. Receiver won't pass data to the app until all prior segments arrive. This is why TCP feels "laggy" on packet loss — it waits.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">TCP OVERHEAD</div>
+    <div class="ih">20-byte header + handshake + ACKs = reliability tax</div>
+    <div class="il" style="font-size:7px">Every guarantee costs something. TCP's reliability features add latency, CPU, and bandwidth overhead. For financial data, that's worth it. For a 30fps game, it isn't.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3-way</div><div class="sl">SYN SYN-ACK<br>ACK handshake</div></div>
+    <div class="sc"><div class="sv am">20B</div><div class="sl">min TCP<br>header</div></div>
+    <div class="sc"><div class="sv gn">seq#</div><div class="sl">ordering +<br>retransmit</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: UDP — FIRE AND FORGET ══════════════ -->
+<div class="scene" id="s3" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">UDP — FIRE AND FORGET</div>
+    <div class="hdr-sub">NO HANDSHAKE · NO ACK · ULTRA-LOW OVERHEAD</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">UDP</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAST</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- UDP "papers flying" diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4eff9a;background:#040c04">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">UDP — DATAGRAMS SENT INDEPENDENTLY</div>
+        <svg width="330" height="140" viewBox="0 0 330 140" id="s3-svg">
+          <!-- sender -->
+          <rect x="8" y="50" width="70" height="40" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="43" y="66" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">SENDER</text>
+          <text x="43" y="78" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">:5004 (RTP)</text>
+          <!-- receiver -->
+          <rect x="252" y="50" width="70" height="40" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="287" y="66" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">RECEIVER</text>
+          <text x="287" y="78" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">:5004</text>
+
+          <!-- datagrams - scattered, no order guarantee -->
+          <rect id="s3-d1" x="88" y="20" width="36" height="18" rx="3" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-d1t" x="106" y="32" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">PKT 1</text>
+
+          <rect id="s3-d2" x="140" y="70" width="36" height="18" rx="3" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-d2t" x="158" y="82" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">PKT 3</text>
+
+          <rect id="s3-d3" x="110" y="105" width="36" height="18" rx="3" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-d3t" x="128" y="117" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">PKT 2</text>
+
+          <!-- PKT DROPPED label -->
+          <rect id="s3-dropped" x="196" y="44" width="50" height="18" rx="3" fill="#200808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3-dropt" x="221" y="56" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">DROPPED</text>
+
+          <!-- No ACK label -->
+          <text id="s3-noack" x="165" y="130" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">No ACK sent back. Sender doesn't know or care.</text>
+
+          <!-- arrows showing datagrams traveling -->
+          <line id="s3-arr1" x1="78" y1="60" x2="88" y2="28" stroke="#1a2a1a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line id="s3-arr2" x1="78" y1="70" x2="140" y2="76" stroke="#1a2a1a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line id="s3-arr3" x1="78" y1="80" x2="110" y2="110" stroke="#1a2a1a" stroke-width="1" stroke-dasharray="2,2"/>
+
+          <!-- reaches receiver arrows -->
+          <line id="s3-reach1" x1="124" y1="28" x2="252" y2="58" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <line id="s3-reach2" x1="176" y1="76" x2="252" y2="68" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- UDP header - how tiny it is -->
+      <div id="s3-header" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#040c04;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px">UDP HEADER — ONLY 8 BYTES</div>
+        <div style="display:flex;gap:2px;margin-bottom:6px">
+          <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:6px 4px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">SRC PORT</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">2 bytes</div>
+          </div>
+          <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:6px 4px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">DST PORT</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">2 bytes</div>
+          </div>
+          <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:6px 4px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">LENGTH</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">2 bytes</div>
+          </div>
+          <div style="flex:1;background:#0a1a0d;border:1px solid #4eff9a;border-radius:2px;padding:6px 4px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">CHECKSUM</div>
+            <div style="font-size:5px;color:#555;margin-top:2px">2 bytes</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <div style="font-size:7px;color:#555">vs TCP:</div>
+          <div style="display:flex;gap:2px;flex:1">
+            <div style="height:8px;flex:1;background:#4eff9a;border-radius:1px;opacity:.7"></div>
+            <div style="height:8px;flex:1.5;background:#4ec9e1;border-radius:1px;opacity:.4"></div>
+          </div>
+          <div style="font-size:6px;color:#555">UDP 8B vs TCP 20B</div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">01</div>
+        <div class="step-text"><span class="gn">No connection setup.</span> Just send the datagram. No handshake overhead, no waiting for ACK, no retransmit. Each packet is independent — ideal when latest data beats complete data.</div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">02</div>
+        <div class="step-text">In a <span class="gn">video call</span>, a dropped frame is fine — you'll get the next one 33ms later. TCP would freeze everything waiting for the retransmit. UDP lets the stream continue with the occasional glitch.</div>
+      </div>
+      <div class="step-block gn" id="s3-s3">
+        <div class="step-num gn">03</div>
+        <div class="step-text"><span class="am">QUIC (HTTP/3)</span> is UDP underneath but adds its own reliability. Best of both worlds: UDP's speed, custom reliability logic. Google built it. Now the default for most Chrome connections.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">UDP PHILOSOPHY</div>
+    <div class="ih gn">"Send and forget. If it arrives, great."</div>
+    <div class="il" style="font-size:7px">UDP is the foundation for anything that needs raw speed: DNS (one small query/reply), live video, online games (position updates), VoIP, and QUIC/HTTP3 which layers its own logic on top.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">8B</div><div class="sl">header<br>vs 20B TCP</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">retransmit<br>guarantees</div></div>
+    <div class="sc"><div class="sv am">QUIC</div><div class="sl">UDP +<br>custom logic</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: PORTS ══════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e8a020">PORTS — LOGICAL ENDPOINTS</div>
+    <div class="hdr-sub">WHICH APP GETS THE DATA · WELL-KNOWN PORTS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">PORTS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">0–65535</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- port routing diagram -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#e8a020;background:#0c0800">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">SAME IP, DIFFERENT PORT → DIFFERENT APP</div>
+        <svg width="330" height="140" viewBox="0 0 330 140">
+          <!-- server box -->
+          <rect x="180" y="50" width="140" height="80" rx="4" fill="#0c0800" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="250" y="64" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">SERVER</text>
+          <text x="250" y="75" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">203.0.113.10</text>
+
+          <!-- port rows inside server -->
+          <rect x="188" y="82" width="124" height="14" rx="2" fill="#150d00" stroke="#4ec9e1" stroke-width="1"/>
+          <text x="250" y="92" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">:443 → HTTPS (nginx)</text>
+          <rect x="188" y="98" width="124" height="14" rx="2" fill="#150d00" stroke="#4eff9a" stroke-width="1"/>
+          <text x="250" y="108" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">:22 → SSH (sshd)</text>
+          <rect x="188" y="114" width="124" height="14" rx="2" fill="#150d00" stroke="#a060c0" stroke-width="1"/>
+          <text x="250" y="124" text-anchor="middle" fill="#a060c0" font-family="'Press Start 2P'" font-size="4">:5432 → PostgreSQL</text>
+
+          <!-- incoming packets from left -->
+          <rect id="s4-p1" x="8" y="14" width="60" height="18" rx="3" fill="#080c14" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s4-p1t" x="38" y="26" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">dst :443</text>
+
+          <rect id="s4-p2" x="8" y="62" width="60" height="18" rx="3" fill="#080c08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s4-p2t" x="38" y="74" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">dst :22</text>
+
+          <rect id="s4-p3" x="8" y="110" width="60" height="18" rx="3" fill="#0e0814" stroke="#a060c0" stroke-width="1.5" opacity="0"/>
+          <text id="s4-p3t" x="38" y="122" text-anchor="middle" fill="#a060c0" font-family="'Press Start 2P'" font-size="4" opacity="0">dst :5432</text>
+
+          <!-- routing arrows -->
+          <line id="s4-a1" x1="68" y1="22" x2="180" y2="88" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <line id="s4-a2" x1="68" y1="70" x2="180" y2="104" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <line id="s4-a3" x1="68" y1="118" x2="180" y2="120" stroke="#a060c0" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+
+          <text id="s4-ip-lbl" x="92" y="48" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="4" opacity="0">same IP</text>
+          <text id="s4-port-lbl" x="92" y="58" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">port = which app</text>
+        </svg>
+      </div>
+
+      <!-- well-known ports table -->
+      <div id="s4-ports-table" style="border:1px solid #1a1000;border-radius:3px;padding:10px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">WELL-KNOWN PORTS — MEMORISE THESE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a1000;padding-bottom:4px;margin-bottom:5px">
+          <div style="font-size:6px;color:#e8a020;width:46px">PORT</div>
+          <div style="font-size:6px;color:#e8a020;width:50px">PROTO</div>
+          <div style="font-size:6px;color:#e8a020;flex:1">SERVICE</div>
+        </div>
+        <div class="port-chip" id="pc1" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4ec9e1;width:46px">22</div>
+          <div style="font-size:6px;color:#888;width:50px">TCP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">SSH — secure shell</div>
+        </div>
+        <div class="port-chip" id="pc2" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4ec9e1;width:46px">53</div>
+          <div style="font-size:6px;color:#888;width:50px">UDP/TCP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">DNS — domain lookup</div>
+        </div>
+        <div class="port-chip" id="pc3" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4ec9e1;width:46px">80</div>
+          <div style="font-size:6px;color:#888;width:50px">TCP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">HTTP — web unencrypted</div>
+        </div>
+        <div class="port-chip" id="pc4" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4ec9e1;width:46px">443</div>
+          <div style="font-size:6px;color:#888;width:50px">TCP/UDP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">HTTPS / QUIC</div>
+        </div>
+        <div class="port-chip" id="pc5" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4eff9a;width:46px">5432</div>
+          <div style="font-size:6px;color:#888;width:50px">TCP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">PostgreSQL</div>
+        </div>
+        <div class="port-chip" id="pc6" style="display:flex;padding:3px 0;border-bottom:1px solid #0f0900">
+          <div style="font-size:6px;color:#4eff9a;width:46px">3306</div>
+          <div style="font-size:6px;color:#888;width:50px">TCP</div>
+          <div style="font-size:6px;color:#ccc;flex:1">MySQL</div>
+        </div>
+        <div class="port-chip" id="pc7" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#e8a020;width:46px">1024+</div>
+          <div style="font-size:6px;color:#888;width:50px">both</div>
+          <div style="font-size:6px;color:#ccc;flex:1">Ephemeral (client) ports</div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text">A port is a <span class="am">16-bit number (0–65535)</span> that tells the OS which process should receive the packet. Multiple servers on one IP — each on a different port. Like apartment numbers in a building.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">Ports 0–1023 are <span class="am">well-known ports</span> (root required on Linux). 1024–49151 are registered. 49152–65535 are ephemeral — used as temporary source ports for client connections.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">PORTS</div>
+    <div class="ih am">IP gets to the machine. Port gets to the app.</div>
+    <div class="il" style="font-size:7px">A socket = IP address + port + protocol. A server can handle thousands of simultaneous TCP connections because each has a unique (src-IP, src-port, dst-IP, dst-port) tuple.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">1024</div><div class="sl">well-known<br>port boundary</div></div>
+    <div class="sc"><div class="sv cy">4-tuple</div><div class="sl">unique per<br>connection</div></div>
+    <div class="sc"><div class="sv gn">65535</div><div class="sl">max ports<br>per proto</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: TCP vs UDP COMPARISON + USE CASES ══════════════ -->
+<div class="scene" id="s5" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">TCP vs UDP — WHEN TO USE EACH</div>
+    <div class="hdr-sub">COMPARISON · USE CASES · DECISION GUIDE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DECIDE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">SIDE BY SIDE COMPARISON</div>
+
+      <!-- comparison table -->
+      <div id="s5-table" style="border:1px solid #0a1a2e;border-radius:3px;overflow:hidden;opacity:0;transition:opacity .5s">
+        <div style="display:flex;background:#04060c">
+          <div style="flex:1;padding:6px;text-align:center;border-bottom:1px solid #0a1a2e;border-right:1px solid #0a1a2e">
+            <div style="font-size:7px;color:#555">FEATURE</div>
+          </div>
+          <div style="flex:1.2;padding:6px;text-align:center;border-bottom:1px solid #0a1a2e;border-right:1px solid #0a1a2e;background:#04080c">
+            <div style="font-size:7px;color:#4ec9e1">TCP</div>
+          </div>
+          <div style="flex:1.2;padding:6px;text-align:center;border-bottom:1px solid #0a1a2e;background:#040c04">
+            <div style="font-size:7px;color:#4eff9a">UDP</div>
+          </div>
+        </div>
+
+        <div class="cmp-card" id="c1" style="display:flex;border-bottom:1px solid #080c10">
+          <div style="flex:1;padding:6px;font-size:6px;color:#666;border-right:1px solid #0a1a2e;background:#04060c">Connection</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4ec9e1;border-right:1px solid #0a1a2e;background:#04080c;text-align:center">3-way handshake</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4eff9a;background:#040c04;text-align:center">Connectionless</div>
+        </div>
+        <div class="cmp-card" id="c2" style="display:flex;border-bottom:1px solid #080c10">
+          <div style="flex:1;padding:6px;font-size:6px;color:#666;border-right:1px solid #0a1a2e;background:#04060c">Delivery</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4ec9e1;border-right:1px solid #0a1a2e;background:#04080c;text-align:center">Guaranteed ✓</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#e85050;background:#040c04;text-align:center">Best effort ✕</div>
+        </div>
+        <div class="cmp-card" id="c3" style="display:flex;border-bottom:1px solid #080c10">
+          <div style="flex:1;padding:6px;font-size:6px;color:#666;border-right:1px solid #0a1a2e;background:#04060c">Order</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4ec9e1;border-right:1px solid #0a1a2e;background:#04080c;text-align:center">Ordered ✓</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#e85050;background:#040c04;text-align:center">No order ✕</div>
+        </div>
+        <div class="cmp-card" id="c4" style="display:flex;border-bottom:1px solid #080c10">
+          <div style="flex:1;padding:6px;font-size:6px;color:#666;border-right:1px solid #0a1a2e;background:#04060c">Header</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#e8a020;border-right:1px solid #0a1a2e;background:#04080c;text-align:center">20 bytes</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4eff9a;background:#040c04;text-align:center">8 bytes</div>
+        </div>
+        <div class="cmp-card" id="c5" style="display:flex">
+          <div style="flex:1;padding:6px;font-size:6px;color:#666;border-right:1px solid #0a1a2e;background:#04060c">Speed</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#e8a020;border-right:1px solid #0a1a2e;background:#04080c;text-align:center">Slower (overhead)</div>
+          <div style="flex:1.2;padding:6px;font-size:6px;color:#4eff9a;background:#040c04;text-align:center">Faster ⚡</div>
+        </div>
+      </div>
+
+      <!-- use case badges -->
+      <div id="s5-tcp-cases" style="opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px;letter-spacing:1px">USE TCP FOR</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <div class="uc-badge" id="ub1" style="border:1px solid #4ec9e1;border-radius:2px;padding:4px 7px;font-size:6px;color:#4ec9e1">🌐 HTTP/HTTPS</div>
+          <div class="uc-badge" id="ub2" style="border:1px solid #4ec9e1;border-radius:2px;padding:4px 7px;font-size:6px;color:#4ec9e1">🔐 SSH</div>
+          <div class="uc-badge" id="ub3" style="border:1px solid #4ec9e1;border-radius:2px;padding:4px 7px;font-size:6px;color:#4ec9e1">🗄 Databases</div>
+          <div class="uc-badge" id="ub4" style="border:1px solid #4ec9e1;border-radius:2px;padding:4px 7px;font-size:6px;color:#4ec9e1">📧 SMTP/IMAP</div>
+          <div class="uc-badge" id="ub5" style="border:1px solid #4ec9e1;border-radius:2px;padding:4px 7px;font-size:6px;color:#4ec9e1">🏦 Banking</div>
+        </div>
+      </div>
+
+      <div id="s5-udp-cases" style="opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:1px">USE UDP FOR</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <div class="uc-badge" id="ug1" style="border:1px solid #4eff9a;border-radius:2px;padding:4px 7px;font-size:6px;color:#4eff9a">🔎 DNS</div>
+          <div class="uc-badge" id="ug2" style="border:1px solid #4eff9a;border-radius:2px;padding:4px 7px;font-size:6px;color:#4eff9a">📹 VoIP</div>
+          <div class="uc-badge" id="ug3" style="border:1px solid #4eff9a;border-radius:2px;padding:4px 7px;font-size:6px;color:#4eff9a">🎮 Gaming</div>
+          <div class="uc-badge" id="ug4" style="border:1px solid #4eff9a;border-radius:2px;padding:4px 7px;font-size:6px;color:#4eff9a">📺 Live Video</div>
+          <div class="uc-badge" id="ug5" style="border:1px solid #4eff9a;border-radius:2px;padding:4px 7px;font-size:6px;color:#4eff9a">⚡ QUIC/HTTP3</div>
+        </div>
+      </div>
+
+      <!-- decision rule -->
+      <div id="s5-rule" style="border:2px solid #e8a020;border-radius:3px;padding:12px;opacity:0;transition:opacity .4s;text-align:center;background:#0c0800">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:6px">THE DECISION RULE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2;text-align:left">
+          <span style="color:#4ec9e1">Need every byte?</span> → TCP<br>
+          <span style="color:#4ec9e1">Order matters?</span> → TCP<br>
+          <span style="color:#4eff9a">Speed &gt; completeness?</span> → UDP<br>
+          <span style="color:#4eff9a">Latest data &gt; all data?</span> → UDP<br>
+          <span style="color:#e8a020">Need custom reliability?</span> → UDP + DIY (QUIC)
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">INTERVIEW ANSWER</div>
+    <div class="ih">TCP = reliability. UDP = speed. Trade-off by design.</div>
+    <div class="il" style="font-size:7px">If asked "TCP or UDP for X" — think: can the application tolerate dropped packets? If yes → UDP. If correctness is mandatory → TCP. QUIC is the modern answer that blurs the line.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">TCP</div><div class="sl">reliable<br>ordered</div></div>
+    <div class="sc"><div class="sv gn">UDP</div><div class="sl">fast<br>best-effort</div></div>
+    <div class="sc"><div class="sv am">QUIC</div><div class="sl">UDP +<br>custom logic</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function addHsLine(id){
+  const el=document.getElementById(id);
+  if(el){el.style.strokeDashoffset='200';el.style.transition='none';}
+}
+function goHsLine(id,ms){
+  const el=document.getElementById(id);
+  if(el){
+    el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;
+    el.style.strokeDashoffset='0';
+  }
+}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-split','s1-facts','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-features','0');
+    ['s2-s1','s2-s2'].forEach(id=>rmV(id));
+    ['f1','f2','f3','f4'].forEach(id=>rmV(id));
+    ['s2-syn','s2-synack','s2-ack','s2-data1','s2-data1-ack','s2-data2','s2-data2-ack'].forEach(id=>addHsLine(id));
+    ['s2-syn-lbl','s2-synack-lbl','s2-ack-lbl','s2-hs-done',
+     's2-data1-lbl','s2-da1-lbl','s2-data2-lbl','s2-da2-lbl'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-header','0');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>rmV(id));
+    ['s3-d1','s3-d1t','s3-d2','s3-d2t','s3-d3','s3-d3t',
+     's3-dropped','s3-dropt','s3-noack','s3-reach1','s3-reach2'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    setOp('s4-ports-table','0');
+    ['s4-s1','s4-s2'].forEach(id=>rmV(id));
+    ['pc1','pc2','pc3','pc4','pc5','pc6','pc7'].forEach(id=>rmV(id));
+    ['s4-p1','s4-p1t','s4-p2','s4-p2t','s4-p3','s4-p3t',
+     's4-a1','s4-a2','s4-a3','s4-ip-lbl','s4-port-lbl'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===5){
+    setOp('s5-title','0'); setOp('s5-table','0');
+    setOp('s5-tcp-cases','0'); setOp('s5-udp-cases','0'); setOp('s5-rule','0');
+    ['c1','c2','c3','c4','c5'].forEach(id=>rmV(id));
+    ['ub1','ub2','ub3','ub4','ub5','ug1','ug2','ug3','ug4','ug5'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-split','1'),900);
+    delay(()=>setOp('s1-facts','1'),1600);
+    delay(()=>setOp('s1-cta','1'),2300);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // SYN
+    delay(()=>{ goHsLine('s2-syn',500); svgOp('s2-syn-lbl','1'); },600);
+    // SYN-ACK
+    delay(()=>{ goHsLine('s2-synack',500); svgOp('s2-synack-lbl','1'); },1200);
+    // ACK
+    delay(()=>{ goHsLine('s2-ack',400); svgOp('s2-ack-lbl','1'); },1800);
+    // ESTABLISHED
+    delay(()=>svgOp('s2-hs-done','1'),2300);
+    // DATA 1
+    delay(()=>{ goHsLine('s2-data1',500); svgOp('s2-data1-lbl','1'); },2700);
+    delay(()=>{ goHsLine('s2-data1-ack',400); svgOp('s2-da1-lbl','1'); },3300);
+    // DATA 2
+    delay(()=>{ goHsLine('s2-data2',500); svgOp('s2-data2-lbl','1'); },3800);
+    delay(()=>{ goHsLine('s2-data2-ack',400); svgOp('s2-da2-lbl','1'); },4300);
+    delay(()=>{
+      setOp('s2-features','1');
+      ['f1','f2','f3','f4'].forEach((id,i)=>delay(()=>addV(id),i*250));
+    },3000);
+    delay(()=>addV('s2-s1'),1000);
+    delay(()=>addV('s2-s2'),2200);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // scattered datagrams appear
+    delay(()=>{ svgOp('s3-d1','1'); svgOp('s3-d1t','1'); },600);
+    delay(()=>{ svgOp('s3-d2','1'); svgOp('s3-d2t','1'); },900);
+    delay(()=>{ svgOp('s3-d3','1'); svgOp('s3-d3t','1'); },1200);
+    // some reach, some dropped
+    delay(()=>{ svgOp('s3-reach1','1'); svgOp('s3-reach2','1'); },1500);
+    delay(()=>{ svgOp('s3-dropped','1'); svgOp('s3-dropt','1'); },1800);
+    delay(()=>svgOp('s3-noack','1'),2200);
+    delay(()=>setOp('s3-header','1'),1400);
+    delay(()=>addV('s3-s1'),500);
+    delay(()=>addV('s3-s2'),1200);
+    delay(()=>addV('s3-s3'),2100);
+  }
+
+  if(n===4){
+    delay(()=>document.getElementById('s4-hero').classList.add('visible'),200);
+    delay(()=>{ svgOp('s4-p1','1'); svgOp('s4-p1t','1'); },500);
+    delay(()=>{ svgOp('s4-p2','1'); svgOp('s4-p2t','1'); },700);
+    delay(()=>{ svgOp('s4-p3','1'); svgOp('s4-p3t','1'); },900);
+    delay(()=>{ svgOp('s4-a1','1'); svgOp('s4-a2','1'); svgOp('s4-a3','1'); },1200);
+    delay(()=>{ svgOp('s4-ip-lbl','1'); svgOp('s4-port-lbl','1'); },1500);
+    delay(()=>{
+      setOp('s4-ports-table','1');
+      ['pc1','pc2','pc3','pc4','pc5','pc6','pc7'].forEach((id,i)=>delay(()=>addV(id),i*150));
+    },1700);
+    delay(()=>addV('s4-s1'),600);
+    delay(()=>addV('s4-s2'),1600);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-title','1'),200);
+    delay(()=>{
+      setOp('s5-table','1');
+      ['c1','c2','c3','c4','c5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },400);
+    delay(()=>{
+      setOp('s5-tcp-cases','1');
+      ['ub1','ub2','ub3','ub4','ub5'].forEach((id,i)=>delay(()=>addV(id),i*120));
+    },1500);
+    delay(()=>{
+      setOp('s5-udp-cases','1');
+      ['ug1','ug2','ug3','ug4','ug5'].forEach((id,i)=>delay(()=>addV(id),i*120));
+    },2100);
+    delay(()=>setOp('s5-rule','1'),2900);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>
