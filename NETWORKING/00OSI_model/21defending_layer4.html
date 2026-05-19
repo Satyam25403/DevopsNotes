@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Defending Layer 4 — SYN Cookies, Firewalls & IDS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #060f06}
+.hdr-title{font-size:10px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#060f06;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.cy{border-color:#4ec9e1}.info.am{border-color:#e8a020}.info.pu{border-color:#a060c0}.info.rd{border-color:#e85050}
+.il{color:#aaa}.ih{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.am{color:#e8a020}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#040c04;border:1px solid #0d2010;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4eff9a;text-align:center}
+.sv.cy{color:#4ec9e1}.sv.am{color:#e8a020}.sv.rd{color:#e85050}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4ec9e1;color:#4ec9e1}.btn.play:hover{background:#4ec9e120}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d2010;border-radius:2px;border-left:3px solid #4eff9a;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-block.am{border-left-color:#e8a020}
+.step-block.pu{border-left-color:#a060c0}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4eff9a;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.cy{color:#4ec9e1}.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.gn{color:#4eff9a}.cy{color:#4ec9e1}.am{color:#e8a020}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* traffic lane */
+.traffic-row{
+  opacity:0;transform:translateX(-12px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.traffic-row.visible{opacity:1;transform:translateX(0)}
+
+/* filter beam */
+.filter-beam{
+  stroke-dasharray:200;stroke-dashoffset:200;
+  transition:stroke-dashoffset .7s ease-out;
+}
+.filter-beam.go{stroke-dashoffset:0}
+
+/* terminal line */
+.tl{opacity:0;transition:opacity .3s}
+.tl.visible{opacity:1}
+
+/* stat bar */
+.stat-bar{height:10px;background:#040c04;border:1px solid #0d2010;border-radius:2px;overflow:hidden;margin-top:3px}
+.stat-fill{height:100%;width:0%;border-radius:2px;transition:width 1.2s ease-out}
+
+/* IDS alert row */
+.ids-row{
+  opacity:0;transform:scale(.92);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.ids-row.visible{opacity:1;transform:scale(1)}
+
+/* port row */
+.port-row{opacity:0;transform:translateX(-6px);transition:opacity .3s ease,transform .3s ease}
+.port-row.visible{opacity:1;transform:translateX(0)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* shield build layers */
+.shield-lyr{
+  opacity:0;transform:scaleX(.7);transform-origin:left;
+  transition:opacity .4s ease,transform .4s ease;
+}
+.shield-lyr.visible{opacity:1;transform:scaleX(1)}
+
+/* pulse good */
+@keyframes goodPulse{0%,100%{box-shadow:0 0 0 0 rgba(78,255,154,0)}50%{box-shadow:0 0 0 4px rgba(78,255,154,.2)}}
+.good-pulse{animation:goodPulse 1.4s ease-in-out 3}
+
+/* drop flash */
+@keyframes dropFlash{0%,100%{background:#200808}50%{background:#3a0808}}
+.drop-flash{animation:dropFlash .4s ease 3}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK ══════════════ -->
+<div class="scene active" id="s1" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title">DEFENDING LAYER 4</div>
+    <div class="hdr-sub">SYN COOKIES · FIREWALLS · RATE LIMITS · IDS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HOOK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">1 SYSCTL</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero terminal -->
+      <div id="s1-hero" style="border:2px solid #4eff9a;border-radius:3px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0d2010;display:flex;align-items:center;gap:5px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050;opacity:.7"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020;opacity:.5"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a;opacity:.6"></div>
+          <span style="font-size:6px;color:#333;margin-left:4px">root@prod-server</span>
+        </div>
+        <div style="padding:12px 14px;font-size:7px;line-height:2.2">
+          <div style="color:#555">$ <span style="color:#888"># check if SYN cookies are enabled</span></div>
+          <div id="s1-t1" class="tl" style="color:#555">$ <span style="color:#fff">sysctl net.ipv4.tcp_syncookies</span></div>
+          <div id="s1-t2" class="tl" style="color:#e85050">net.ipv4.tcp_syncookies = 0  ← VULNERABLE!</div>
+          <div id="s1-t3" class="tl" style="color:#555;margin-top:4px">$ <span style="color:#888"># one command to fix it</span></div>
+          <div id="s1-t4" class="tl" style="color:#555">$ <span style="color:#4eff9a">sysctl -w net.ipv4.tcp_syncookies=1</span></div>
+          <div id="s1-t5" class="tl" style="color:#4eff9a">net.ipv4.tcp_syncookies = 1  ✓ PROTECTED</div>
+          <div id="s1-t6" class="tl" style="color:#555;margin-top:4px">$ <span style="color:#888"># make permanent across reboots</span></div>
+          <div id="s1-t7" class="tl" style="color:#555">$ <span style="color:#4eff9a">echo "net.ipv4.tcp_syncookies=1" >> /etc/sysctl.conf</span></div>
+          <div id="s1-t8" class="tl" style="color:#4eff9a">Done. SYN flood immunity active. <span class="blink">█</span></div>
+        </div>
+      </div>
+
+      <!-- 5 defenses preview -->
+      <div id="s1-defenses" style="opacity:0;transition:opacity .5s;border:1px solid #0d2010;border-radius:3px;padding:10px;background:#020804">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px">5 DEFENSES COVERED</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span>🍪</span><span style="color:#4eff9a">SYN cookies — encode state, skip the table</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span>🧱</span><span style="color:#4ec9e1">Stateful firewall — only established sessions</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span>🚦</span><span style="color:#e8a020">Rate limiting per IP — iptables rules</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span>🔒</span><span style="color:#a060c0">Close unused ports — ss -tlnp</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span>👁</span><span style="color:#4eff9a">IDS — Snort/Suricata scan detection</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO BUILD YOUR LAYER 4 DEFENSE
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LAYER 4 DEFENSE</div>
+    <div class="ih">Most SYN flood attacks stopped with 1 kernel flag</div>
+    <div class="il" style="font-size:7px">SYN cookies + stateful firewall + rate limiting covers ~95% of common L4 attacks. None require expensive hardware — just correct OS configuration.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">FREE</div><div class="sl">all 5 defenses<br>cost nothing</div></div>
+    <div class="sc"><div class="sv am">1 cmd</div><div class="sl">SYN cookie<br>activation</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">excuses not<br>to enable</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: SYN COOKIES ══════════════ -->
+<div class="scene" id="s2" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title">SYN COOKIES</div>
+    <div class="hdr-sub">ENCODE STATE IN SEQUENCE NUMBER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSE #1</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SYN COOKIE</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- before vs after diagram -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#4eff9a;background:#020804">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">WITHOUT vs WITH SYN COOKIES</div>
+        <svg width="330" height="156" viewBox="0 0 330 156">
+          <!-- WITHOUT label -->
+          <text x="80" y="12" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4">WITHOUT (vulnerable)</text>
+          <!-- server -->
+          <rect x="220" y="4" width="106" height="68" rx="4" fill="#0d0404" stroke="#e85050" stroke-width="1.5"/>
+          <text x="273" y="16" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4">SERVER</text>
+          <text x="273" y="26" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">half-open table</text>
+          <!-- table cells filling red -->
+          <rect id="s2-c1" x="226" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c2" x="239" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c3" x="252" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c4" x="265" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c5" x="278" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c6" x="291" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c7" x="304" y="30" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c8" x="226" y="43" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c9" x="239" y="43" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c10" x="252" y="43" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c11" x="265" y="43" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <rect id="s2-c12" x="278" y="43" width="10" height="10" rx="1" fill="#200808" stroke="#e85050" stroke-width=".8"/>
+          <!-- FULL badge -->
+          <text id="s2-full" x="273" y="66" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">TABLE FULL ✕</text>
+          <!-- SYN arrows hitting server -->
+          <path id="s2-sa1" d="M4,20 L220,26" stroke="#e85050" stroke-width="1" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-sa2" d="M4,35 L220,36" stroke="#e85050" stroke-width="1.2" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-sa3" d="M4,50 L220,48" stroke="#e85050" stroke-width="1" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <text id="s2-flood-lbl" x="112" y="16" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3" opacity="0">millions of SYNs</text>
+
+          <!-- WITH label -->
+          <text x="80" y="86" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">WITH SYN COOKIES (safe)</text>
+          <!-- cookie server -->
+          <rect x="220" y="78" width="106" height="74" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="273" y="90" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">SERVER</text>
+          <text x="273" y="100" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">NO table entry</text>
+          <text x="273" y="109" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">state in seq #</text>
+          <rect x="228" y="116" width="88" height="28" rx="2" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1"/>
+          <text x="272" y="127" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">SYN-ACK</text>
+          <text x="272" y="138" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="3">seq = HMAC(src,dst,port)</text>
+          <!-- SYN arrows good -->
+          <path id="s2-ga1" d="M4,94 L220,104" stroke="#e85050" stroke-width="1" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-ga2" d="M4,110 L220,116" stroke="#e85050" stroke-width="1.2" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- cookie reply -->
+          <path id="s2-cookieback" d="M220,126 L60,120" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <text id="s2-cookie-lbl" x="112" y="115" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3" opacity="0">← SYN-ACK (cookie)</text>
+          <text id="s2-safe-lbl" x="112" y="150" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3" opacity="0">No ACK = no memory used. Immune!</text>
+        </svg>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Without SYN cookies: server allocates memory for each SYN. <span class="rd">Millions of SYNs → table full → server stops accepting legit connections.</span></div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">With SYN cookies: server encodes <span class="gn">connection state into the SYN-ACK sequence number</span> using HMAC(src_ip, src_port, dst_port, timestamp). No memory allocated.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">When the ACK arrives, server <span class="gn">verifies the cookie</span> by recomputing the HMAC. Valid → allocate connection. Fake SYN from flood → no ACK → <span class="gn">zero memory used. Flood is neutralized.</span></div>
+      </div>
+      <div class="step-block" id="s2-s4">
+        <div class="step-num">04</div>
+        <div class="step-text">Check and enable: <span class="cy">sysctl net.ipv4.tcp_syncookies</span> (should be 1). Persist: add to /etc/sysctl.conf. Also tune: <span class="cy">tcp_max_syn_backlog</span>, <span class="cy">tcp_synack_retries</span>.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">SYN COOKIE TRICK</div>
+    <div class="ih">State travels in the packet, not in server RAM</div>
+    <div class="il" style="font-size:7px">The genius: cryptographic proof of the handshake lives in the sequence number field TCP already uses. No protocol changes. No new fields. Completely backwards-compatible.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">HMAC</div><div class="sl">seq number<br>= signed state</div></div>
+    <div class="sc"><div class="sv gn">0B</div><div class="sl">memory per<br>SYN flood pkt</div></div>
+    <div class="sc"><div class="sv am">1991</div><div class="sl">invented by<br>D.J. Bernstein</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: STATEFUL FIREWALL + RATE LIMITING ══════════════ -->
+<div class="scene" id="s3" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title" style="color:#4ec9e1">STATEFUL FIREWALL</div>
+    <div class="hdr-sub">TRACK SESSIONS · DROP OUT-OF-STATE · IPTABLES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DEFENSE #2+3</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">FIREWALL</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- traffic filter diagram -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#4ec9e1;background:#02060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px;text-align:center">TRAFFIC FILTERED BEFORE REACHING SERVER</div>
+        <svg width="330" height="148" viewBox="0 0 330 148">
+          <!-- internet label -->
+          <text x="28" y="10" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">INTERNET</text>
+
+          <!-- traffic lanes: legit, scan, flood -->
+          <!-- LEGIT -->
+          <rect id="s3-legit" x="4" y="14" width="56" height="20" rx="3" fill="#0a1408" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-legit-t" x="32" y="27" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">LEGIT TCP</text>
+
+          <!-- SCAN -->
+          <rect id="s3-scan" x="4" y="64" width="56" height="20" rx="3" fill="#150800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s3-scan-t" x="32" y="77" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">PORT SCAN</text>
+
+          <!-- FLOOD -->
+          <rect id="s3-flood" x="4" y="114" width="56" height="20" rx="3" fill="#200808" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s3-flood-t" x="32" y="127" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">SYN FLOOD</text>
+
+          <!-- FIREWALL box -->
+          <rect x="118" y="8" width="94" height="132" rx="5" fill="#04060c" stroke="#4ec9e1" stroke-width="2"/>
+          <text x="165" y="22" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">FIREWALL</text>
+          <text x="165" y="32" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3">iptables / nftables</text>
+          <!-- rule rows -->
+          <rect x="124" y="38" width="82" height="14" rx="2" fill="#040c04" stroke="#4eff9a" stroke-width="1"/>
+          <text x="165" y="48" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3">ESTABLISHED→ACCEPT</text>
+          <rect x="124" y="55" width="82" height="14" rx="2" fill="#040c04" stroke="#e8a020" stroke-width="1"/>
+          <text x="165" y="65" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3">rate &gt;10/s→DROP</text>
+          <rect x="124" y="72" width="82" height="14" rx="2" fill="#040c04" stroke="#e85050" stroke-width="1"/>
+          <text x="165" y="82" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3">NEW+!SYN→DROP</text>
+          <rect x="124" y="89" width="82" height="14" rx="2" fill="#040c04" stroke="#e85050" stroke-width="1"/>
+          <text x="165" y="99" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3">INVALID→DROP</text>
+          <rect x="124" y="106" width="82" height="14" rx="2" fill="#0a1408" stroke="#4eff9a" stroke-width="1"/>
+          <text x="165" y="116" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3">NEW+SYN→ACCEPT</text>
+          <rect x="124" y="123" width="82" height="12" rx="2" fill="#200808" stroke="#e85050" stroke-width="1"/>
+          <text x="165" y="132" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3">default: DROP</text>
+
+          <!-- beams: legit through -->
+          <path id="s3-bl" d="M60,24 L118,45" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s3-bl2" d="M212,45 L276,24" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- scan blocked -->
+          <path id="s3-bs" d="M60,74 L118,62" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- flood blocked -->
+          <path id="s3-bf" d="M60,124 L118,96" stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- server -->
+          <rect x="276" y="14" width="50" height="36" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="301" y="27" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">SERVER</text>
+          <text x="301" y="38" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3">protected</text>
+
+          <!-- drop X marks -->
+          <text id="s3-dropx1" x="170" y="60" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="7" opacity="0">✕</text>
+          <text id="s3-dropt1" x="252" y="78" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3" opacity="0">rate limited</text>
+          <text id="s3-dropx2" x="170" y="96" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="7" opacity="0">✕</text>
+          <text id="s3-dropt2" x="252" y="128" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3" opacity="0">flood dropped</text>
+        </svg>
+      </div>
+
+      <!-- iptables rules terminal -->
+      <div id="s3-term" style="border:1px solid #0a1a2e;border-radius:3px;background:#02060c;padding:10px;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:7px">IPTABLES RULES — COPY-PASTE READY</div>
+        <div style="font-size:6px;line-height:2.1">
+          <div class="tl" id="r1" style="color:#555"># allow established sessions</div>
+          <div class="tl" id="r2" style="color:#4eff9a">iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT</div>
+          <div class="tl" id="r3" style="color:#555;margin-top:4px"># rate limit new SYNs per source IP</div>
+          <div class="tl" id="r4" style="color:#e8a020">iptables -A INPUT -p tcp --syn -m limit \</div>
+          <div class="tl" id="r5" style="color:#e8a020">&nbsp;&nbsp;--limit 10/s --limit-burst 20 -j ACCEPT</div>
+          <div class="tl" id="r6" style="color:#e85050">iptables -A INPUT -p tcp --syn -j DROP</div>
+          <div class="tl" id="r7" style="color:#555;margin-top:4px"># drop invalid packets</div>
+          <div class="tl" id="r8" style="color:#e85050">iptables -A INPUT -m state --state INVALID -j DROP</div>
+          <div class="tl" id="r9" style="color:#555;margin-top:4px"># default deny</div>
+          <div class="tl" id="r10" style="color:#e85050">iptables -P INPUT DROP</div>
+        </div>
+      </div>
+
+      <div class="step-block cy" id="s3-s1">
+        <div class="step-num cy">01</div>
+        <div class="step-text"><span class="cy">Stateful firewall</span> tracks connection state (NEW, ESTABLISHED, RELATED, INVALID). Only ESTABLISHED packets pass without scrutiny. NEW packets must pass rate checks first.</div>
+      </div>
+      <div class="step-block cy" id="s3-s2">
+        <div class="step-num cy">02</div>
+        <div class="step-text"><span class="am">Rate limiting</span>: max 10 new SYNs per second globally (tune per source with hashlimit module). Burst of 20 allows legitimate spikes. Anything beyond → DROP. SYN flood neutralized even without SYN cookies.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">STATEFUL FIREWALL</div>
+    <div class="ih cy">Track sessions. Only established packets pass freely.</div>
+    <div class="il" style="font-size:7px">The -m state --state ESTABLISHED rule is the most important line in any iptables config. All other rules are secondary. Without this, every packet fights to get through.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">ESTAB</div><div class="sl">existing sessions<br>auto-pass</div></div>
+    <div class="sc"><div class="sv am">10/s</div><div class="sl">max new<br>SYNs allowed</div></div>
+    <div class="sc"><div class="sv rd">DROP</div><div class="sl">default policy<br>deny all</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: CLOSE PORTS + ss -tlnp ══════════════ -->
+<div class="scene" id="s4" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title" style="color:#e8a020">CLOSE UNUSED PORTS</div>
+    <div class="hdr-sub">ss -tlnp · ATTACK SURFACE REDUCTION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">DEFENSE #4</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CLOSE PORTS</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ss terminal -->
+      <div id="s4-term" style="border:2px solid #e8a020;border-radius:3px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #1a1000;display:flex;align-items:center;gap:5px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050;opacity:.7"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020;opacity:.5"></div>
+          <span style="font-size:6px;color:#333;margin-left:4px">root@server — audit open ports</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.1">
+          <div class="tl" id="ss1" style="color:#555">$ <span style="color:#fff">ss -tlnp</span></div>
+          <div class="tl" id="ss2" style="color:#555;font-size:5px">State   Recv-Q  Local Address:Port  PID/Program</div>
+          <div style="height:1px;background:#1a1000;margin:3px 0"></div>
+          <div class="tl port-row" id="p1" style="display:flex;gap:8px;align-items:center;padding:1px 0">
+            <span style="color:#4eff9a;width:52px;flex-shrink:0">LISTEN</span>
+            <span style="color:#aaa;flex:1">0.0.0.0:22</span>
+            <span style="color:#4eff9a">sshd ✓</span>
+          </div>
+          <div class="port-row" id="p2" style="display:flex;gap:8px;align-items:center;padding:1px 0;opacity:0;transform:translateX(-6px);transition:opacity .3s ease,transform .3s ease">
+            <span style="color:#4eff9a;width:52px;flex-shrink:0">LISTEN</span>
+            <span style="color:#aaa;flex:1">0.0.0.0:443</span>
+            <span style="color:#4eff9a">nginx ✓</span>
+          </div>
+          <div class="port-row" id="p3" style="display:flex;gap:8px;align-items:center;padding:1px 0;opacity:0;transform:translateX(-6px);transition:opacity .3s ease,transform .3s ease">
+            <span style="color:#e85050;width:52px;flex-shrink:0">LISTEN</span>
+            <span style="color:#e85050;flex:1">0.0.0.0:3306</span>
+            <span style="color:#e85050">mysqld ← EXPOSED!</span>
+          </div>
+          <div class="port-row" id="p4" style="display:flex;gap:8px;align-items:center;padding:1px 0;opacity:0;transform:translateX(-6px);transition:opacity .3s ease,transform .3s ease">
+            <span style="color:#e85050;width:52px;flex-shrink:0">LISTEN</span>
+            <span style="color:#e85050;flex:1">0.0.0.0:6379</span>
+            <span style="color:#e85050">redis ← PUBLIC!</span>
+          </div>
+          <div class="port-row" id="p5" style="display:flex;gap:8px;align-items:center;padding:1px 0;opacity:0;transform:translateX(-6px);transition:opacity .3s ease,transform .3s ease">
+            <span style="color:#e8a020;width:52px;flex-shrink:0">LISTEN</span>
+            <span style="color:#e8a020;flex:1">0.0.0.0:8080</span>
+            <span style="color:#e8a020">java? ← why?</span>
+          </div>
+          <div style="margin-top:6px"></div>
+          <div class="tl" id="ss3" style="color:#e85050">⚠ MySQL and Redis are world-exposed!</div>
+          <div class="tl" id="ss4" style="color:#4eff9a"># fix: bind to 127.0.0.1 in config files</div>
+        </div>
+      </div>
+
+      <!-- bind fix -->
+      <div id="s4-fix" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">FIX — BIND TO LOCALHOST ONLY</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:6px">
+          <div class="tl" id="fx1" style="color:#555"># MySQL: in /etc/mysql/my.cnf</div>
+          <div class="tl" id="fx2" style="color:#4eff9a">bind-address = 127.0.0.1</div>
+          <div class="tl" id="fx3" style="color:#555;margin-top:3px"># Redis: in /etc/redis/redis.conf</div>
+          <div class="tl" id="fx4" style="color:#4eff9a">bind 127.0.0.1</div>
+          <div class="tl" id="fx5" style="color:#555;margin-top:3px"># If remote access needed: use SSH tunnel</div>
+          <div class="tl" id="fx6" style="color:#4ec9e1">ssh -L 3306:localhost:3306 user@server</div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text"><span class="am">ss -tlnp</span> (or netstat -tlnp on older systems) shows all listening TCP sockets with the process name. Run this on every server. Anything unexpected is a risk. Schedule it weekly.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">Databases (<span class="rd">MySQL :3306, Redis :6379, PostgreSQL :5432</span>) should <span class="am">NEVER</span> bind to 0.0.0.0. Bind to 127.0.0.1 and use SSH tunnels for remote access. Thousands of breaches from exposed Redis alone.</div>
+      </div>
+      <div class="step-block am" id="s4-s3">
+        <div class="step-num am">03</div>
+        <div class="step-text">Open ports you don't own are free footholds. An attacker's port scan takes <span class="am">~2 seconds</span> per host. Closing unnecessary ports doesn't slow legitimate traffic — it just reduces the attack surface to what you actually need.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">ATTACK SURFACE</div>
+    <div class="ih am">Every open port is a potential entry point</div>
+    <div class="il" style="font-size:7px">Run: ss -tlnp | grep '0.0.0.0'. Any database or cache port in that list = immediate fix required. Bind to 127.0.0.1. Use SSH tunnels. No exceptions.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">ss -tlnp</div><div class="sl">audit open<br>ports</div></div>
+    <div class="sc"><div class="sv gn">127.0.0.1</div><div class="sl">bind DBs<br>to localhost</div></div>
+    <div class="sc"><div class="sv cy">SSH</div><div class="sl">tunnel for<br>remote access</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: IDS + LAYERED SUMMARY ══════════════ -->
+<div class="scene" id="s5" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title" style="color:#4eff9a">IDS + LAYERED DEFENSE</div>
+    <div class="hdr-sub">SNORT · SURICATA · FULL STACK SUMMARY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSE #5</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">IDS + SUMMARY</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">SNORT / SURICATA — DETECT SCAN PATTERNS</div>
+
+      <!-- IDS alerts -->
+      <div id="s5-ids" style="border:2px solid #4eff9a;border-radius:3px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0d2010;font-size:6px;color:#4eff9a">SNORT ALERT LOG</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+          <div class="ids-row" id="id1" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #2a0808;border-radius:2px;background:#100404">
+            <span style="font-size:7px;color:#e85050;flex-shrink:0">HIGH</span>
+            <div style="flex:1;font-size:6px;color:#ccc;line-height:1.6">SYN flood detected: 1.2.3.4 → :80<br>Rate: 15,000 SYNs/s · Rule: ET DOS</div>
+          </div>
+          <div class="ids-row" id="id2" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #2a1400;border-radius:2px;background:#0c0700">
+            <span style="font-size:7px;color:#e8a020;flex-shrink:0">MED</span>
+            <div style="flex:1;font-size:6px;color:#ccc;line-height:1.6">Port scan: 5.6.7.8 scanned 4500 ports<br>in 2.3s · Rule: ET SCAN nmap SYN</div>
+          </div>
+          <div class="ids-row" id="id3" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #2a1400;border-radius:2px;background:#0c0700">
+            <span style="font-size:7px;color:#e8a020;flex-shrink:0">MED</span>
+            <div style="flex:1;font-size:6px;color:#ccc;line-height:1.6">SYN-only bursts: no ACK completing<br>half-open scan pattern · Rule: ET SCAN</div>
+          </div>
+          <div class="ids-row" id="id4" style="display:flex;align-items:center;gap:6px;padding:4px 6px;border:1px solid #0d2010;border-radius:2px;background:#040c04">
+            <span style="font-size:7px;color:#4eff9a;flex-shrink:0">LOW</span>
+            <div style="flex:1;font-size:6px;color:#ccc;line-height:1.6">Service banner grab: nmap -sV pattern<br>SSH, nginx version requested · INFO</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- layered defense stack -->
+      <div id="s5-stack-title" style="font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s;text-align:center">FULL LAYER 4 DEFENSE STACK</div>
+
+      <div class="shield-lyr" id="sl1" style="display:flex;align-items:center;gap:10px;border:2px solid #4eff9a;border-radius:3px;padding:9px;background:#020804">
+        <div style="font-size:14px;flex-shrink:0;width:24px;text-align:center">🍪</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">SYN COOKIES</div>
+          <div style="font-size:6px;color:#888;line-height:1.6">Stops SYN flood without touching firewall. First line.</div>
+        </div>
+        <div style="font-size:6px;color:#4eff9a;flex-shrink:0">FREE</div>
+      </div>
+
+      <div class="shield-lyr" id="sl2" style="display:flex;align-items:center;gap:10px;border:2px solid #4ec9e1;border-radius:3px;padding:9px;background:#020608">
+        <div style="font-size:14px;flex-shrink:0;width:24px;text-align:center">🧱</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">STATEFUL FIREWALL</div>
+          <div style="font-size:6px;color:#888;line-height:1.6">Only established sessions pass. Invalid packets dropped.</div>
+        </div>
+        <div style="font-size:6px;color:#4ec9e1;flex-shrink:0">FREE</div>
+      </div>
+
+      <div class="shield-lyr" id="sl3" style="display:flex;align-items:center;gap:10px;border:2px solid #e8a020;border-radius:3px;padding:9px;background:#080600">
+        <div style="font-size:14px;flex-shrink:0;width:24px;text-align:center">🚦</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#e8a020;margin-bottom:3px">RATE LIMITING</div>
+          <div style="font-size:6px;color:#888;line-height:1.6">10 SYN/s limit. hashlimit per-source IP throttling.</div>
+        </div>
+        <div style="font-size:6px;color:#e8a020;flex-shrink:0">FREE</div>
+      </div>
+
+      <div class="shield-lyr" id="sl4" style="display:flex;align-items:center;gap:10px;border:2px solid #a060c0;border-radius:3px;padding:9px;background:#060408">
+        <div style="font-size:14px;flex-shrink:0;width:24px;text-align:center">🔒</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#a060c0;margin-bottom:3px">CLOSE PORTS</div>
+          <div style="font-size:6px;color:#888;line-height:1.6">Bind DBs to 127.0.0.1. Audit with ss -tlnp weekly.</div>
+        </div>
+        <div style="font-size:6px;color:#a060c0;flex-shrink:0">FREE</div>
+      </div>
+
+      <div class="shield-lyr" id="sl5" style="display:flex;align-items:center;gap:10px;border:2px solid #4eff9a;border-radius:3px;padding:9px;background:#020804">
+        <div style="font-size:14px;flex-shrink:0;width:24px;text-align:center">👁</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">IDS (SNORT / SURICATA)</div>
+          <div style="font-size:6px;color:#888;line-height:1.6">Detect scan patterns, alert on anomalies. Can auto-block.</div>
+        </div>
+        <div style="font-size:6px;color:#4eff9a;flex-shrink:0">FREE</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">FULL STACK</div>
+    <div class="ih">5 free defenses. No excuses left.</div>
+    <div class="il" style="font-size:7px">SYN cookies + stateful firewall + rate limit + closed ports + IDS covers the vast majority of real Layer 4 attacks. Everything here ships with Linux. Zero budget required.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">5</div><div class="sl">defense<br>layers</div></div>
+    <div class="sc"><div class="sv gn">$0</div><div class="sl">total<br>cost</div></div>
+    <div class="sc"><div class="sv am">~95%</div><div class="sl">attacks<br>neutralized</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+function fillSVGCell(id,fill,stroke){
+  const el=document.getElementById(id);
+  if(el){el.setAttribute('fill',fill);el.setAttribute('stroke',stroke);}
+}
+function resetSVGCell(id){fillSVGCell(id,'#200808','#e85050');}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    setOp('s1-hero','0'); setOp('s1-defenses','0'); setOp('s1-cta','0');
+    ['s1-t1','s1-t2','s1-t3','s1-t4','s1-t5','s1-t6','s1-t7','s1-t8'].forEach(id=>rmV(id));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    ['s2-s1','s2-s2','s2-s3','s2-s4'].forEach(id=>rmV(id));
+    for(let i=1;i<=12;i++) resetSVGCell('s2-c'+i);
+    ['s2-sa1','s2-sa2','s2-sa3','s2-ga1','s2-ga2','s2-cookieback'].forEach(id=>resetBeam(id));
+    ['s2-full','s2-flood-lbl','s2-cookie-lbl','s2-safe-lbl'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-term','0');
+    ['s3-s1','s3-s2'].forEach(id=>rmV(id));
+    ['s3-legit','s3-legit-t','s3-scan','s3-scan-t','s3-flood','s3-flood-t'].forEach(id=>svgOp(id,'0'));
+    ['s3-bl','s3-bl2','s3-bs','s3-bf'].forEach(id=>resetBeam(id));
+    ['s3-dropx1','s3-dropt1','s3-dropx2','s3-dropt2'].forEach(id=>svgOp(id,'0'));
+    ['r1','r2','r3','r4','r5','r6','r7','r8','r9','r10'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    setOp('s4-term','0'); setOp('s4-fix','0');
+    ['s4-s1','s4-s2','s4-s3'].forEach(id=>rmV(id));
+    ['ss1','ss2','ss3','ss4','p1','p2','p3','p4','p5','fx1','fx2','fx3','fx4','fx5','fx6'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-title','0'); setOp('s5-ids','0'); setOp('s5-stack-title','0');
+    ['id1','id2','id3','id4'].forEach(id=>rmV(id));
+    ['sl1','sl2','sl3','sl4','sl5'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    const lines=['s1-t1','s1-t2','s1-t3','s1-t4','s1-t5','s1-t6','s1-t7','s1-t8'];
+    lines.forEach((id,i)=>delay(()=>addV(id),600+i*280));
+    delay(()=>setOp('s1-defenses','1'),600+lines.length*280);
+    delay(()=>setOp('s1-cta','1'),600+lines.length*280+700);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // WITHOUT — SYN flood fills cells
+    delay(()=>{ goBeam('s2-sa1',400); goBeam('s2-sa2',400); goBeam('s2-sa3',400); svgOp('s2-flood-lbl','1'); },600);
+    for(let i=1;i<=12;i++) delay(()=>fillSVGCell('s2-c'+i,'#3a0808','#e85050'),900+i*100);
+    delay(()=>svgOp('s2-full','1'),2100);
+    // WITH — cookies
+    delay(()=>{ goBeam('s2-ga1',400); goBeam('s2-ga2',400); },2500);
+    delay(()=>{ goBeam('s2-cookieback',600); svgOp('s2-cookie-lbl','1'); },3000);
+    delay(()=>svgOp('s2-safe-lbl','1'),3700);
+    delay(()=>addV('s2-s1'),700);
+    delay(()=>addV('s2-s2'),1500);
+    delay(()=>addV('s2-s3'),2300);
+    delay(()=>addV('s2-s4'),3200);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // show traffic types
+    delay(()=>{ svgOp('s3-legit','1'); svgOp('s3-legit-t','1'); },600);
+    delay(()=>{ svgOp('s3-scan','1'); svgOp('s3-scan-t','1'); },900);
+    delay(()=>{ svgOp('s3-flood','1'); svgOp('s3-flood-t','1'); },1200);
+    // beams
+    delay(()=>{ goBeam('s3-bl',500); },1500);
+    delay(()=>{ goBeam('s3-bs',400); svgOp('s3-dropx1','1'); svgOp('s3-dropt1','1'); },1900);
+    delay(()=>{ goBeam('s3-bf',400); svgOp('s3-dropx2','1'); svgOp('s3-dropt2','1'); },2300);
+    delay(()=>goBeam('s3-bl2',500),2700);
+    delay(()=>{
+      setOp('s3-term','1');
+      ['r1','r2','r3','r4','r5','r6','r7','r8','r9','r10'].forEach((id,i)=>delay(()=>addV(id),i*180));
+    },1800);
+    delay(()=>addV('s3-s1'),700);
+    delay(()=>addV('s3-s2'),2100);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-term','1'),200);
+    ['ss1','ss2','p1','p2','p3','p4','p5','ss3','ss4'].forEach((id,i)=>delay(()=>addV(id),500+i*250));
+    delay(()=>{
+      setOp('s4-fix','1');
+      ['fx1','fx2','fx3','fx4','fx5','fx6'].forEach((id,i)=>delay(()=>addV(id),i*180));
+    },2900);
+    delay(()=>addV('s4-s1'),700);
+    delay(()=>addV('s4-s2'),1800);
+    delay(()=>addV('s4-s3'),2600);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-title','1'),200);
+    delay(()=>{
+      setOp('s5-ids','1');
+      ['id1','id2','id3','id4'].forEach((id,i)=>delay(()=>addV(id),i*300));
+    },400);
+    delay(()=>setOp('s5-stack-title','1'),1700);
+    ['sl1','sl2','sl3','sl4','sl5'].forEach((id,i)=>delay(()=>addV(id),1900+i*400));
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>What is a Container Image?</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── SCENE 1: Blueprint ── */
+.bp-wrap{display:flex;flex-direction:column;align-items:center;gap:10px;padding:8px 14px}
+.bp-box{width:100%;border:2px solid #2050a0;background:#040e28;padding:10px 12px;position:relative}
+.bp-title{font-size:10px;color:#4090e0;margin-bottom:8px;letter-spacing:.5px}
+.bp-badge{position:absolute;top:8px;right:10px;font-size:6px;padding:2px 6px;border:1px solid #4090e0;color:#4090e0}
+.layer-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #0a1a40;opacity:0;transition:opacity .45s}
+.layer-row.vis{opacity:1}
+.layer-row:last-child{border-bottom:none}
+.layer-num{width:18px;height:18px;border:1px solid #2050a0;display:flex;align-items:center;justify-content:center;font-size:7px;color:#4090e0;flex-shrink:0}
+.layer-name{font-size:8px;color:#8ab8f0;flex:1}
+.layer-size{font-size:7px;color:#4a6090;text-align:right}
+.layer-bar{height:5px;background:#0a1a40;width:80px;flex-shrink:0;overflow:hidden}
+.layer-fill{height:100%;width:0;transition:width .8s ease-out}
+.immutable-tag{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 10px;border:1px solid #e8a020;background:#1a0e00;width:100%;opacity:0;transition:opacity .5s}
+.immutable-tag.vis{opacity:1}
+.lock-icon{font-size:14px}
+.immutable-text{font-size:8px;color:#e8a020;letter-spacing:.5px}
+
+/* ── SCENE 2: Cookie Cutter ── */
+.cookie-scene{display:flex;flex-direction:column;align-items:center;gap:0;padding:6px 10px}
+.cutter-wrap{display:flex;flex-direction:column;align-items:center;gap:4px;width:100%}
+.cutter-box{width:160px;border:3px solid #4ec9e1;background:#041820;padding:10px 14px;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative}
+.cutter-label{font-size:9px;color:#4ec9e1;text-align:center}
+.cutter-sub{font-size:7px;color:#2a6070;text-align:center;line-height:1.5}
+.cutter-icon{font-size:28px;margin:4px 0}
+.spawn-label{font-size:8px;color:#666;letter-spacing:.5px;margin:4px 0}
+
+.arrows-row{display:flex;justify-content:center;gap:28px;padding:4px 0;opacity:0;transition:opacity .4s}
+.arrows-row.vis{opacity:1}
+.arrow-down{display:flex;flex-direction:column;align-items:center;gap:0}
+.arrow-shaft{width:2px;background:#4eff9a;height:0;transition:height .5s ease-out;margin-bottom:0}
+.arrow-shaft.full{height:28px}
+.arrow-tip{color:#4eff9a;font-size:10px;opacity:0;transition:opacity .3s}
+.arrow-tip.vis{opacity:1}
+
+.cookies-row{display:flex;justify-content:center;gap:10px;width:100%;flex-wrap:nowrap}
+.cookie-box{flex:1;max-width:108px;border:2px solid #20a040;background:#04180c;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;opacity:0;transition:opacity .5s,transform .4s;transform:translateY(12px)}
+.cookie-box.vis{opacity:1;transform:translateY(0)}
+.cookie-icon{font-size:20px}
+.cookie-label{font-size:7px;color:#4eff9a;text-align:center;line-height:1.5}
+.cookie-pid{font-size:6px;color:#2a6040;text-align:center;margin-top:2px}
+.cookie-state{font-size:6px;padding:2px 5px;border:1px solid #20a040;color:#4eff9a;margin-top:2px}
+.readonly-badge{position:absolute;bottom:5px;right:6px;font-size:5px;padding:1px 4px;border:1px solid #4ec9e1;color:#4ec9e1}
+
+/* ── SCENE 3: Layers ── */
+.layers-wrap{padding:8px 12px;display:flex;flex-direction:column;gap:7px}
+.layer-card{border:2px solid #333;padding:8px 10px;opacity:0;transition:opacity .5s;position:relative}
+.layer-card.vis{opacity:1}
+.layer-card-title{font-size:8px;margin-bottom:4px;letter-spacing:.5px}
+.layer-card-desc{font-size:7px;color:#666;line-height:1.8}
+.layer-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.ltag{font-size:6px;padding:2px 6px;border:1px solid #333}
+.hash-badge{position:absolute;top:7px;right:8px;font-size:5px;color:#444;font-family:'Press Start 2P',monospace}
+
+.share-demo{background:#0a0f1a;border:1px solid #2a1f3d;padding:8px 10px;opacity:0;transition:opacity .5s}
+.share-demo.vis{opacity:1}
+.share-title{font-size:7px;color:#666;margin-bottom:6px;letter-spacing:.5px}
+.share-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.share-img{font-size:7px;color:#4ec9e1;flex:0 0 90px}
+.share-bar{flex:1;height:8px;background:#0a0f1a;border:1px solid #2a1f3d;overflow:hidden}
+.share-fill{height:100%;width:0;transition:width .9s ease-out}
+.share-val{font-size:6px;width:40px;text-align:right;flex-shrink:0}
+
+/* ── SCENE 4: Image vs Container diff ── */
+.diff-wrap{padding:8px 12px;display:flex;flex-direction:column;gap:8px}
+.diff-split{display:flex;gap:10px}
+.diff-col{flex:1;display:flex;flex-direction:column;gap:5px}
+.diff-hd{font-size:8px;text-align:center;padding:5px 4px;letter-spacing:.3px}
+.diff-row{padding:6px 8px;border:1px solid #2a1f3d;opacity:0;transition:opacity .4s}
+.diff-row.vis{opacity:1}
+.diff-key{font-size:6px;color:#555;letter-spacing:.5px;margin-bottom:3px}
+.diff-val{font-size:7px;line-height:1.6}
+
+.cmd-demo{border:1px solid #2a1f3d;background:#050510;padding:8px 10px;font-size:8px;opacity:0;transition:opacity .5s}
+.cmd-demo.vis{opacity:1}
+.cmd-label{font-size:6px;color:#555;margin-bottom:6px;letter-spacing:.5px}
+.cmd-line{color:#4eff9a;margin-bottom:4px;line-height:1.6}
+.cmd-comment{color:#444;font-size:6px;margin-bottom:6px;line-height:1.6}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor{display:inline-block;width:7px;height:11px;background:#4eff9a;animation:blink .8s infinite;vertical-align:middle;margin-left:2px}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — THE IMAGE IS A BLUEPRINT
+══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#040e28">
+  <div class="hdr" style="background:#040e28">
+    <div class="hdr-title">CONTAINER IMAGE</div>
+    <div class="hdr-sub">IMAGE ≠ CONTAINER. HERE'S WHY IT MATTERS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4090e0">THE IMAGE</span>
+    <span class="sbadge" style="color:#4090e0;border-color:#4090e0">BLUEPRINT</span>
+  </div>
+  <div class="anim" style="background:#040e28">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#2a5080;text-align:center;letter-spacing:.5px">AN IMAGE IS A READ-ONLY STACK OF LAYERS</div>
+
+      <div class="bp-wrap" style="padding:4px 0">
+        <div class="bp-box" style="width:100%">
+          <div class="bp-title">nginx:alpine</div>
+          <div class="bp-badge">IMAGE</div>
+
+          <div class="layer-row" id="l4">
+            <div class="layer-num">4</div>
+            <div class="layer-name">NGINX CONFIG</div>
+            <div class="layer-bar"><div class="layer-fill" id="lf4" style="background:#4eff9a;width:0"></div></div>
+            <div class="layer-size" style="color:#4eff9a">2 KB</div>
+          </div>
+          <div class="layer-row" id="l3">
+            <div class="layer-num">3</div>
+            <div class="layer-name">NGINX BINARY</div>
+            <div class="layer-bar"><div class="layer-fill" id="lf3" style="background:#4090e0;width:0"></div></div>
+            <div class="layer-size" style="color:#4090e0">8 MB</div>
+          </div>
+          <div class="layer-row" id="l2">
+            <div class="layer-num">2</div>
+            <div class="layer-name">ALPINE LIBS</div>
+            <div class="layer-bar"><div class="layer-fill" id="lf2" style="background:#9060d0;width:0"></div></div>
+            <div class="layer-size" style="color:#9060d0">5 MB</div>
+          </div>
+          <div class="layer-row" id="l1">
+            <div class="layer-num">1</div>
+            <div class="layer-name">ALPINE BASE OS</div>
+            <div class="layer-bar"><div class="layer-fill" id="lf1" style="background:#e8a020;width:0"></div></div>
+            <div class="layer-size" style="color:#e8a020">3.5 MB</div>
+          </div>
+        </div>
+
+        <div class="immutable-tag" id="imm">
+          <span class="lock-icon">🔒</span>
+          <span class="immutable-text">READ-ONLY — NEVER CHANGES</span>
+        </div>
+
+        <div style="width:100%;border:1px solid #0d2040;background:#020810;padding:8px 10px;opacity:0;transition:opacity .5s" id="hashbox">
+          <div style="font-size:6px;color:#2a4060;margin-bottom:4px;letter-spacing:.5px">CONTENT HASH (SHA256)</div>
+          <div style="font-size:7px;color:#3a6090;line-height:1.8;word-break:break-all">sha256:<span style="color:#4090e0">3f6bc054</span>27ca4b57<span style="color:#4090e0">a43a35bf</span>...</div>
+          <div style="font-size:6px;color:#2a4060;margin-top:4px">SAME HASH = IDENTICAL IMAGE, EVERYWHERE</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4090e0">
+    <div class="il">AN IMAGE IS: <span style="color:#4090e0">IMMUTABLE TEMPLATE</span></div>
+    <div class="il">Layers stacked bottom-up. Each layer only stores <span style="color:#4eff9a">what changed</span>. The whole stack is frozen — you can't edit it once built.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4090e0">4</div><div class="sl">LAYERS</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">~17 MB</div><div class="sl">TOTAL SIZE</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020">🔒</div><div class="sl">READ-ONLY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — COOKIE CUTTER ANALOGY
+══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#04180c">
+  <div class="hdr" style="background:#04180c">
+    <div class="hdr-title">CONTAINER IMAGE</div>
+    <div class="hdr-sub">ONE IMAGE → MANY CONTAINERS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SPAWN CONTAINERS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">INSTANCES</span>
+  </div>
+  <div class="anim" style="background:#04180c">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px;align-items:center">
+
+      <!-- The cutter / image -->
+      <div class="cutter-wrap">
+        <div style="font-size:7px;color:#2a6040;letter-spacing:.5px;text-align:center;margin-bottom:2px">THE IMAGE (COOKIE CUTTER)</div>
+        <div class="cutter-box" id="cutterbox">
+          <div class="cutter-icon">⬡</div>
+          <div class="cutter-label">nginx:alpine</div>
+          <div class="cutter-sub">read-only template</div>
+          <div class="readonly-badge">IMMUTABLE</div>
+        </div>
+      </div>
+
+      <!-- Arrows -->
+      <div style="font-size:7px;color:#2a6040;letter-spacing:.5px;margin:2px 0" id="spawning-label" style="opacity:0">docker run ×3</div>
+      <div class="arrows-row" id="arrows">
+        <div class="arrow-down"><div class="arrow-shaft" id="ash1"></div><div class="arrow-tip" id="atp1">▼</div></div>
+        <div class="arrow-down"><div class="arrow-shaft" id="ash2"></div><div class="arrow-tip" id="atp2">▼</div></div>
+        <div class="arrow-down"><div class="arrow-shaft" id="ash3"></div><div class="arrow-tip" id="atp3">▼</div></div>
+      </div>
+
+      <!-- Containers -->
+      <div style="font-size:7px;color:#2a6040;letter-spacing:.5px;text-align:center;margin-top:2px">CONTAINERS (RUNNING COOKIES)</div>
+      <div class="cookies-row">
+        <div class="cookie-box" id="ck1">
+          <div class="cookie-icon">🟢</div>
+          <div class="cookie-label">web-1</div>
+          <div class="cookie-pid">PID 3421</div>
+          <div class="cookie-state">RUNNING</div>
+          <div style="font-size:6px;color:#2a5030;margin-top:3px;text-align:center">port 8001</div>
+        </div>
+        <div class="cookie-box" id="ck2">
+          <div class="cookie-icon">🟢</div>
+          <div class="cookie-label">web-2</div>
+          <div class="cookie-pid">PID 3589</div>
+          <div class="cookie-state">RUNNING</div>
+          <div style="font-size:6px;color:#2a5030;margin-top:3px;text-align:center">port 8002</div>
+        </div>
+        <div class="cookie-box" id="ck3">
+          <div class="cookie-icon">🔴</div>
+          <div class="cookie-label">web-3</div>
+          <div class="cookie-pid">PID 3712</div>
+          <div class="cookie-state" style="border-color:#e85050;color:#e85050">STOPPED</div>
+          <div style="font-size:6px;color:#2a5030;margin-top:3px;text-align:center">port 8003</div>
+        </div>
+      </div>
+
+      <!-- Key difference -->
+      <div style="width:100%;border:1px solid #2a3a1a;background:#060f04;padding:8px 10px;opacity:0;transition:opacity .5s" id="keydiff">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px;letter-spacing:.5px">KEY DIFFERENCE</div>
+        <div style="font-size:7px;color:#555;line-height:1.9">
+          IMAGE → <span style="color:#4090e0">stopped / on disk</span><br>
+          CONTAINER → <span style="color:#4eff9a">image + running process</span><br>
+          STOP container → <span style="color:#e8a020">image still intact</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">IMAGE = <span style="color:#4eff9a">COOKIE CUTTER</span></div>
+    <div class="il">One cutter, infinite cookies. Each container gets its own <span style="color:#4eff9a">writable layer</span> on top. The image underneath is never touched.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4090e0">1</div><div class="sl">IMAGE</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">∞</div><div class="sl">CONTAINERS</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020">0</div><div class="sl">IMAGE CHANGES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — LAYER SHARING
+══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d0a1a">
+  <div class="hdr" style="background:#0d0a1a">
+    <div class="hdr-title">CONTAINER IMAGE</div>
+    <div class="hdr-sub">LAYERS ARE SHARED ACROSS IMAGES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#9060d0">LAYER SHARING</span>
+    <span class="sbadge" style="color:#9060d0;border-color:#9060d0">EFFICIENT</span>
+  </div>
+  <div class="anim" style="background:#0d0a1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#3a2060;text-align:center;letter-spacing:.5px">TWO IMAGES — BUT THEY SHARE BASE LAYERS</div>
+
+      <div class="layer-card" id="lc1" style="border-color:#e8a020;background:#1a0e00">
+        <div class="hash-badge">sha256:a3f…</div>
+        <div class="layer-card-title" style="color:#e8a020">LAYER 1 — alpine:3.18 base</div>
+        <div class="layer-card-desc">Minimal Alpine Linux. Shared by nginx:alpine AND node:alpine. Downloaded once, used by both.</div>
+        <div class="layer-tags">
+          <span class="ltag" style="color:#e8a020;border-color:#e8a020">3.5 MB</span>
+          <span class="ltag" style="color:#4eff9a;border-color:#4eff9a">SHARED ×2</span>
+          <span class="ltag" style="color:#666">CACHED ON DISK</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="lc2" style="border-color:#4090e0;background:#040e28">
+        <div class="hash-badge">sha256:7c2…</div>
+        <div class="layer-card-title" style="color:#4090e0">LAYER 2A — nginx binary</div>
+        <div class="layer-card-desc">Only in nginx:alpine. Pulled once. If you pull nginx:alpine again, this layer is already cached — skip download.</div>
+        <div class="layer-tags">
+          <span class="ltag" style="color:#4090e0;border-color:#4090e0">8 MB</span>
+          <span class="ltag" style="color:#666">nginx only</span>
+        </div>
+      </div>
+
+      <div class="layer-card" id="lc3" style="border-color:#4eff9a;background:#041808">
+        <div class="hash-badge">sha256:b91…</div>
+        <div class="layer-card-title" style="color:#4eff9a">LAYER 2B — node runtime</div>
+        <div class="layer-card-desc">Only in node:alpine. Same alpine base above, different app layer. Total unique bytes on disk is minimized.</div>
+        <div class="layer-tags">
+          <span class="ltag" style="color:#4eff9a;border-color:#4eff9a">40 MB</span>
+          <span class="ltag" style="color:#666">node only</span>
+        </div>
+      </div>
+
+      <div class="share-demo" id="sharedemo">
+        <div class="share-title">DISK USAGE — WITH LAYER SHARING</div>
+        <div class="share-row">
+          <div class="share-img">nginx:alpine</div>
+          <div class="share-bar"><div class="share-fill" id="sf1" style="background:#4090e0"></div></div>
+          <div class="share-val" style="color:#4090e0" id="sv1">0 MB</div>
+        </div>
+        <div class="share-row">
+          <div class="share-img">node:alpine</div>
+          <div class="share-bar"><div class="share-fill" id="sf2" style="background:#4eff9a"></div></div>
+          <div class="share-val" style="color:#4eff9a" id="sv2">0 MB</div>
+        </div>
+        <div class="share-row">
+          <div class="share-img" style="color:#e8a020">ACTUAL DISK</div>
+          <div class="share-bar"><div class="share-fill" id="sf3" style="background:#e8a020"></div></div>
+          <div class="share-val" style="color:#e8a020" id="sv3">0 MB</div>
+        </div>
+        <div style="font-size:6px;color:#3a2060;margin-top:5px">SHARED BASE LAYER COUNTS ONCE, NOT TWICE</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#9060d0">
+    <div class="il">LAYERS: <span style="color:#9060d0">SHARED, CACHED, REUSED</span></div>
+    <div class="il">Docker only downloads a layer if you <span style="color:#4eff9a">don't already have it</span>. 10 images sharing alpine base = alpine stored once. Saves GB of disk + bandwidth.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4090e0;font-size:10px">17 MB</div><div class="sl">nginx IMAGE</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:10px">44 MB</div><div class="sl">node IMAGE</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:10px">48 MB</div><div class="sl">ACTUAL DISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — IMAGE vs CONTAINER COMMANDS
+══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#050510">
+  <div class="hdr" style="background:#050510">
+    <div class="hdr-title">CONTAINER IMAGE</div>
+    <div class="hdr-sub">IMAGE vs CONTAINER — THE COMMANDS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">PUT IT TOGETHER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DOCKER CLI</span>
+  </div>
+  <div class="anim" style="background:#050510">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#2a2a40;text-align:center;letter-spacing:.5px">EVERY DOCKER COMMAND NOW MAKES SENSE</div>
+
+      <div class="diff-wrap" style="padding:0">
+        <div class="diff-split">
+          <div class="diff-col">
+            <div class="diff-hd" style="background:#040e28;border:1px solid #4090e0;color:#4090e0">IMAGE OPS</div>
+            <div class="diff-row" id="dr1" style="background:#040e28;border-color:#4090e0">
+              <div class="diff-key">BUILD</div>
+              <div class="diff-val" style="color:#4090e0">docker build</div>
+            </div>
+            <div class="diff-row" id="dr2" style="background:#040e28;border-color:#4090e0">
+              <div class="diff-key">DOWNLOAD</div>
+              <div class="diff-val" style="color:#4090e0">docker pull</div>
+            </div>
+            <div class="diff-row" id="dr3" style="background:#040e28;border-color:#4090e0">
+              <div class="diff-key">LIST</div>
+              <div class="diff-val" style="color:#4090e0">docker images</div>
+            </div>
+            <div class="diff-row" id="dr4" style="background:#040e28;border-color:#4090e0">
+              <div class="diff-key">SHARE</div>
+              <div class="diff-val" style="color:#4090e0">docker push</div>
+            </div>
+            <div class="diff-row" id="dr5" style="background:#040e28;border-color:#4090e0">
+              <div class="diff-key">DELETE</div>
+              <div class="diff-val" style="color:#4090e0">docker rmi</div>
+            </div>
+          </div>
+          <div class="diff-col">
+            <div class="diff-hd" style="background:#041808;border:1px solid #4eff9a;color:#4eff9a">CONTAINER OPS</div>
+            <div class="diff-row" id="dc1" style="background:#041808;border-color:#4eff9a">
+              <div class="diff-key">CREATE+RUN</div>
+              <div class="diff-val" style="color:#4eff9a">docker run</div>
+            </div>
+            <div class="diff-row" id="dc2" style="background:#041808;border-color:#4eff9a">
+              <div class="diff-key">LIST LIVE</div>
+              <div class="diff-val" style="color:#4eff9a">docker ps</div>
+            </div>
+            <div class="diff-row" id="dc3" style="background:#041808;border-color:#4eff9a">
+              <div class="diff-key">STOP</div>
+              <div class="diff-val" style="color:#4eff9a">docker stop</div>
+            </div>
+            <div class="diff-row" id="dc4" style="background:#041808;border-color:#4eff9a">
+              <div class="diff-key">EXEC IN</div>
+              <div class="diff-val" style="color:#4eff9a">docker exec</div>
+            </div>
+            <div class="diff-row" id="dc5" style="background:#041808;border-color:#4eff9a">
+              <div class="diff-key">DELETE</div>
+              <div class="diff-val" style="color:#4eff9a">docker rm</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="cmd-demo" id="cmddemo">
+        <div class="cmd-label">LIFECYCLE IN ONE SCRIPT</div>
+        <div class="cmd-line" id="cmd1" style="opacity:0;transition:opacity .4s"><span style="color:#4090e0">docker pull</span> nginx:alpine</div>
+        <div class="cmd-comment" id="cmt1" style="opacity:0;transition:opacity .4s"># image lives on disk. nothing running yet.</div>
+        <div class="cmd-line" id="cmd2" style="opacity:0;transition:opacity .4s"><span style="color:#4eff9a">docker run</span> -d --name web nginx:alpine</div>
+        <div class="cmd-comment" id="cmt2" style="opacity:0;transition:opacity .4s"># now there's a container. image unchanged.</div>
+        <div class="cmd-line" id="cmd3" style="opacity:0;transition:opacity .4s"><span style="color:#e85050">docker stop</span> web</div>
+        <div class="cmd-comment" id="cmt3" style="opacity:0;transition:opacity .4s"># container gone. image still there. reuse anytime.<div class="cursor"></div></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">MENTAL MODEL: <span style="color:#4eff9a">SHIP + VOYAGE</span></div>
+    <div class="il">Image = the ship blueprint. Container = the ship sailing. Same blueprint launches a fleet. Sink one ship — the blueprint is fine.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4090e0;font-size:9px">image</div><div class="sl">ON DISK</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">container</div><div class="sl">IN MEMORY</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:9px">Dockerfile</div><div class="sl">RECIPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+function vis(id){let e=document.getElementById(id);if(e)e.classList.add('vis');}
+function hide(id){let e=document.getElementById(id);if(e)e.classList.remove('vis');}
+function setO(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v;}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+// ── S1 ──
+function playS1(){
+  clearT();
+  ['l1','l2','l3','l4','imm','hashbox'].forEach(hide);
+  ['lf1','lf2','lf3','lf4'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+
+  t(()=>{vis('l1');t(()=>{let e=document.getElementById('lf1');if(e){e.style.transition='width .8s ease-out';e.style.width='40%';}},100)},300);
+  t(()=>{vis('l2');t(()=>{let e=document.getElementById('lf2');if(e){e.style.transition='width .8s ease-out';e.style.width='55%';}},100)},800);
+  t(()=>{vis('l3');t(()=>{let e=document.getElementById('lf3');if(e){e.style.transition='width .8s ease-out';e.style.width='75%';}},100)},1300);
+  t(()=>{vis('l4');t(()=>{let e=document.getElementById('lf4');if(e){e.style.transition='width .8s ease-out';e.style.width='15%';}},100)},1800);
+  t(()=>vis('imm'),2400);
+  t(()=>{let e=document.getElementById('hashbox');if(e)e.style.opacity='1';},2900);
+}
+
+// ── S2 ──
+function playS2(){
+  clearT();
+  ['ck1','ck2','ck3','arrows','keydiff'].forEach(hide);
+  ['ash1','ash2','ash3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.height='0';}});
+  ['atp1','atp2','atp3'].forEach(hide);
+  let sl=document.getElementById('spawning-label');if(sl)sl.style.opacity='0';
+
+  t(()=>{let sl=document.getElementById('spawning-label');if(sl)sl.style.opacity='1';},400);
+  t(()=>{vis('arrows');['ash1','ash2','ash3'].forEach(id=>{t(()=>{let e=document.getElementById(id);if(e){e.style.transition='height .5s ease-out';e.style.height='28px';}},0);});},600);
+  t(()=>['atp1','atp2','atp3'].forEach(vis),1200);
+  t(()=>vis('ck1'),1500);
+  t(()=>vis('ck2'),1900);
+  t(()=>vis('ck3'),2300);
+  t(()=>{let e=document.getElementById('keydiff');if(e)e.style.opacity='1';},2900);
+}
+
+// ── S3 ──
+function playS3(){
+  clearT();
+  ['lc1','lc2','lc3','sharedemo'].forEach(hide);
+  ['sf1','sf2','sf3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+
+  t(()=>vis('lc1'),300);
+  t(()=>vis('lc2'),900);
+  t(()=>vis('lc3'),1500);
+  t(()=>{
+    vis('sharedemo');
+    setTimeout(()=>{
+      // nginx: 17MB → ~32% of 54px-equivalent in pct
+      let e1=document.getElementById('sf1');
+      if(e1){e1.style.transition='width .9s ease-out';e1.style.width='31%';}
+      // node: 44MB → ~81%
+      let e2=document.getElementById('sf2');
+      if(e2){e2.style.transition='width .9s ease-out';e2.style.width='81%';}
+      // actual: 48MB → ~89%
+      let e3=document.getElementById('sf3');
+      if(e3){e3.style.transition='width .9s ease-out';e3.style.width='89%';}
+
+      // animate labels
+      let start=Date.now();
+      let step=()=>{
+        let p=Math.min(1,(Date.now()-start)/900);
+        let sv1=document.getElementById('sv1');if(sv1)sv1.textContent=Math.round(p*17)+' MB';
+        let sv2=document.getElementById('sv2');if(sv2)sv2.textContent=Math.round(p*44)+' MB';
+        let sv3=document.getElementById('sv3');if(sv3)sv3.textContent=Math.round(p*48)+' MB';
+        if(p<1)requestAnimationFrame(step);
+      };
+      step();
+    },100);
+  },2100);
+}
+
+// ── S4 ──
+function playS4(){
+  clearT();
+  ['dr1','dr2','dr3','dr4','dr5','dc1','dc2','dc3','dc4','dc5','cmddemo'].forEach(hide);
+  ['cmd1','cmt1','cmd2','cmt2','cmd3','cmt3'].forEach(id=>{let e=document.getElementById(id);if(e)e.style.opacity='0';});
+
+  let imgRows=['dr1','dr2','dr3','dr4','dr5'];
+  let cnRows=['dc1','dc2','dc3','dc4','dc5'];
+  imgRows.forEach((id,i)=>t(()=>vis(id),(i+1)*200));
+  cnRows.forEach((id,i)=>t(()=>vis(id),(i+1)*200+100));
+
+  t(()=>{
+    vis('cmddemo');
+    let steps=[
+      {id:'cmd1',d:200},{id:'cmt1',d:600},
+      {id:'cmd2',d:1100},{id:'cmt2',d:1500},
+      {id:'cmd3',d:2000},{id:'cmt3',d:2400}
+    ];
+    steps.forEach(s=>t(()=>{let e=document.getElementById(s.id);if(e)e.style.opacity='1';},s.d));
+  },1300);
+}
+
+playS1();
+</script>
+</body>
+</html>

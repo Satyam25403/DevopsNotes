@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Redis Sorted Sets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a2a1a}
+.hdr-title{font-size:13px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a2a1a;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.cy{border-color:#4ec9e1}.info.am{border-color:#e8a020}
+.il{color:#888}.ih{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a140a;border:1px solid #1a2a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4eff9a;text-align:center}
+.sv.cy{color:#4ec9e1}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── Redis command terminal ── */
+.cmd-box{background:#050f05;border:2px solid #1a3a1a;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.8;min-height:36px}
+.cmd-prompt{color:#4eff9a}
+.cmd-text{color:#ccc}
+.cmd-key{color:#4ec9e1}
+.cmd-score{color:#e8a020}
+.cmd-member{color:#fff}
+.cmd-result{color:#4eff9a;font-size:7px}
+.cmd-comment{color:#3a5a3a;font-size:7px}
+
+/* ── Leaderboard rows ── */
+.lb-row{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 8px;background:#091409;
+  border:1px solid #1a2a1a;border-radius:2px;
+  font-size:8px;transition:all 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  position:relative;
+}
+.lb-row.highlight{border-color:#4eff9a;background:#0a1f0a;animation:rowPop 0.4s ease}
+.lb-row.highlight-cy{border-color:#4ec9e1;background:#091520;animation:rowPop 0.4s ease}
+.lb-rank{width:22px;text-align:center;color:#555;font-size:7px;flex-shrink:0}
+.lb-rank.top1{color:#ffd700}
+.lb-rank.top2{color:#c0c0c0}
+.lb-rank.top3{color:#cd7f32}
+.lb-avatar{width:26px;height:26px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;border:1px solid #2a3a2a}
+.lb-name{flex:1;color:#ccc;font-size:7px;letter-spacing:.5px}
+.lb-name.active-player{color:#4eff9a}
+.lb-score{text-align:right;font-size:8px;flex-shrink:0}
+.lb-delta{font-size:6px;position:absolute;right:6px;top:-10px;opacity:0;transition:opacity 0.3s}
+.lb-delta.show{opacity:1}
+
+@keyframes rowPop{0%{transform:scale(1.02)}50%{transform:scale(1.04)}100%{transform:scale(1)}}
+@keyframes floatUp{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-20px);opacity:0}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 0.6s ease 3}
+
+/* ── Complexity badge ── */
+.big-n{font-size:22px;color:#4eff9a;font-family:'Press Start 2P',monospace;text-align:center;line-height:1.4}
+.op-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:#0a140a;border:1px solid #1a2a1a;border-radius:2px;opacity:0;transition:all 0.5s}
+.op-row.show{opacity:1}
+.op-cmd{font-size:7px;color:#4eff9a;min-width:90px}
+.op-complexity{font-size:7px;color:#e8a020;min-width:68px}
+.op-desc{font-size:6px;color:#777;flex:1;line-height:1.6}
+
+/* ── Skip list viz ── */
+.skip-level{display:flex;align-items:center;gap:0;height:26px;margin-bottom:2px}
+.skip-node{min-width:44px;height:22px;border:1px solid #1a3a1a;display:flex;align-items:center;justify-content:center;font-size:6px;color:#4eff9a;background:#091409;margin-right:3px;border-radius:1px;flex-shrink:0}
+.skip-node.active{border-color:#4eff9a;background:#0a1f0a;animation:rowPop 0.4s ease}
+.skip-node.nil{border-color:#1a2a1a;color:#2a3a2a;background:#050f05}
+.skip-line{flex:1;height:1px;background:#1a2a1a;margin:0 1px}
+
+/* ── ZRANK highlight ── */
+.rank-spotlight{background:#0a1f2a;border:2px solid #4ec9e1;animation:rowPop 0.5s ease}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — ZADD: BUILDING THE LEADERBOARD
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">REDIS SORTED SETS</div>
+    <div class="hdr-sub">10M PLAYERS · SUB-MILLISECOND RANK</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ZADD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">O(log N)</span>
+  </div>
+
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- Terminal -->
+      <div class="cmd-box" id="s1-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span class="cmd-text" id="s1-cmd-text">_</span>
+        <div class="cmd-comment" id="s1-cmd-sub" style="margin-top:3px"></div>
+      </div>
+
+      <!-- Leaderboard -->
+      <div style="font-size:7px;color:#3a5a3a;margin-bottom:-2px">▸ LEADERBOARD:global (auto-sorted by score)</div>
+      <div id="s1-lb" style="display:flex;flex-direction:column;gap:4px;min-height:180px">
+        <div style="font-size:7px;color:#2a3a2a;padding:20px;text-align:center">empty · waiting for ZADD...</div>
+      </div>
+
+      <!-- Result line -->
+      <div class="cmd-box" id="s1-result" style="opacity:0;transition:opacity 0.3s">
+        <span class="cmd-result" id="s1-result-text"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ZADD key score member</div>
+    <div class="ih" id="s1-info-text">inserts member at exact score position.<br>skip list keeps all members sorted.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" id="s1-members">0</div><div class="sl">MEMBERS<br>ADDED</div></div>
+    <div class="sc"><div class="sv am" id="s1-complexity">O(log N)</div><div class="sl">COMPLEXITY<br>PER INSERT</div></div>
+    <div class="sc"><div class="sv cy" id="s1-time">&lt;1ms</div><div class="sl">INSERT<br>TIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — LIVE SCORE UPDATES (bubbling)
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">REDIS SORTED SETS</div>
+    <div class="hdr-sub">SCORES UPDATE · RANKS SHIFT LIVE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ZADD NX/XX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LIVE UPDATE</span>
+  </div>
+
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-text">_</span>
+        <div class="cmd-comment" id="s2-cmd-sub" style="margin-top:3px"></div>
+      </div>
+
+      <div style="font-size:7px;color:#3a5a3a;margin-bottom:-2px">▸ LEADERBOARD:global · watch ranks shift ↑↓</div>
+      <div id="s2-lb" style="display:flex;flex-direction:column;gap:4px"></div>
+
+      <div class="cmd-box" id="s2-result" style="opacity:0;transition:opacity 0.3s">
+        <span class="cmd-result" id="s2-result-text"></span>
+      </div>
+
+      <!-- ZINCRBY explanation -->
+      <div id="s2-zincrby-box" style="opacity:0;transition:opacity 0.5s;background:#091409;border:1px solid #1a3a1a;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">ZINCRBY = atomic increment</div>
+        <div style="font-size:6px;color:#777;line-height:1.8">ZADD XX updates only if exists.<br>ZINCRBY adds delta to current score.<br>Both re-sort the set atomically.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">ZADD XX GT leaderboard &lt;score&gt; &lt;player&gt;</div>
+    <div class="ih" id="s2-info">sorted set re-ranks instantly on update.<br>no re-sort needed — it's always sorted.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" id="s2-updates">0</div><div class="sl">SCORE<br>UPDATES</div></div>
+    <div class="sc"><div class="sv am" id="s2-rank-changes">0</div><div class="sl">RANK<br>SHIFTS</div></div>
+    <div class="sc"><div class="sv cy">&lt;1ms</div><div class="sl">PER<br>UPDATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — ZRANGE + ZRANK: QUERY THE SET
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#080c14">
+  <div class="hdr" style="background:#080c14">
+    <div class="hdr-title">REDIS SORTED SETS</div>
+    <div class="hdr-sub">READ TOP-N · FIND YOUR RANK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">ZREVRANGE + ZRANK</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">QUERY</span>
+  </div>
+
+  <div class="anim" style="background:#080c14">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="cmd-box" id="s3-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s3-cmd-text" class="cmd-text">_</span>
+        <div id="s3-cmd-sub" class="cmd-comment" style="margin-top:3px"></div>
+      </div>
+
+      <div style="font-size:7px;color:#3a5a3a;margin-bottom:-2px" id="s3-lb-label">▸ top 5 results (ZREVRANGE 0 4 WITHSCORES)</div>
+      <div id="s3-lb" style="display:flex;flex-direction:column;gap:4px"></div>
+
+      <div class="cmd-box" id="s3-result" style="opacity:0;transition:opacity 0.3s;border-color:#4ec9e1">
+        <div class="cmd-result" style="color:#4ec9e1" id="s3-result-text"></div>
+      </div>
+
+      <!-- ZRANK spotlight -->
+      <div id="s3-rank-box" style="opacity:0;transition:opacity 0.5s;background:#091520;border:2px solid #4ec9e1;padding:10px;border-radius:2px;text-align:center">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">ZRANK leaderboard:global &quot;DragonX&quot;</div>
+        <div style="font-size:22px;color:#4eff9a" id="s3-rank-num">—</div>
+        <div style="font-size:7px;color:#555;margin-top:4px">rank (0-indexed) returned instantly</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">ZREVRANGE key 0 N-1 WITHSCORES</div>
+    <div class="ih cy" id="s3-info">O(log N + M) — traverses skip list once.<br>M = items returned. blindingly fast.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">O(log N<br>+M)</div><div class="sl">ZREVRANGE<br>COMPLEXITY</div></div>
+    <div class="sc"><div class="sv cy">O(log N)</div><div class="sl">ZRANK<br>COMPLEXITY</div></div>
+    <div class="sc"><div class="sv">&lt;1ms</div><div class="sl">10M<br>PLAYERS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn cy" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — WHY IT WORKS: SKIP LIST + SCALE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">REDIS SORTED SETS</div>
+    <div class="hdr-sub">WHY IT'S SO FAST AT SCALE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">INTERNALS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SKIP LIST</span>
+  </div>
+
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Skip list diagram -->
+      <div style="font-size:7px;color:#3a5a3a">▸ SKIP LIST — O(log N) search via express lanes</div>
+
+      <div id="s4-skip" style="background:#050f05;border:1px solid #1a2a1a;padding:8px;border-radius:2px;opacity:0;transition:opacity 0.5s">
+        <!-- levels rendered by JS -->
+        <div id="s4-skip-inner"></div>
+        <div style="font-size:6px;color:#2a4a2a;margin-top:6px;line-height:1.8">L3: express · L2: fast · L1: every node</div>
+      </div>
+
+      <!-- Operation complexity table -->
+      <div style="font-size:7px;color:#3a5a3a">▸ ALL OPERATIONS AT A GLANCE</div>
+      <div id="s4-ops" style="display:flex;flex-direction:column;gap:4px">
+        <div class="op-row" id="op1">
+          <span class="op-cmd">ZADD</span>
+          <span class="op-complexity">O(log N)</span>
+          <span class="op-desc">insert/update score + re-sort</span>
+        </div>
+        <div class="op-row" id="op2">
+          <span class="op-cmd">ZREVRANGE</span>
+          <span class="op-complexity">O(log N+M)</span>
+          <span class="op-desc">top-N read with scores</span>
+        </div>
+        <div class="op-row" id="op3">
+          <span class="op-cmd">ZRANK</span>
+          <span class="op-complexity">O(log N)</span>
+          <span class="op-desc">position of any member</span>
+        </div>
+        <div class="op-row" id="op4">
+          <span class="op-cmd">ZRANGEBYSCORE</span>
+          <span class="op-complexity">O(log N+M)</span>
+          <span class="op-desc">members in score range</span>
+        </div>
+        <div class="op-row" id="op5">
+          <span class="op-cmd">ZINCRBY</span>
+          <span class="op-complexity">O(log N)</span>
+          <span class="op-desc">atomic score increment</span>
+        </div>
+      </div>
+
+      <!-- Scale fact -->
+      <div id="s4-scale" style="opacity:0;transition:opacity 0.5s;background:#091409;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">10,000,000 PLAYERS</div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="text-align:center">
+            <div style="font-size:18px;color:#4eff9a">23</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">log₂(10M)<br>hops max</div>
+          </div>
+          <div style="font-size:8px;color:#2a4a2a">→</div>
+          <div style="flex:1;font-size:6px;color:#888;line-height:1.9">skip list jumps over millions of<br>nodes using express lanes.<br>result: rank any player in &lt;1ms.</div>
+        </div>
+      </div>
+
+      <!-- Use cases -->
+      <div id="s4-uses" style="opacity:0;transition:opacity 0.5s;display:flex;gap:5px;flex-wrap:wrap">
+        <div style="flex:1;min-width:100px;background:#0a140a;border:1px solid #1a2a1a;padding:7px;border-radius:2px;font-size:6px;color:#777;line-height:1.9;text-align:center">
+          <div style="color:#4eff9a;font-size:7px;margin-bottom:4px">🏆 LEADERBOARD</div>
+          game rankings<br>social scores
+        </div>
+        <div style="flex:1;min-width:100px;background:#0a140a;border:1px solid #1a2a1a;padding:7px;border-radius:2px;font-size:6px;color:#777;line-height:1.9;text-align:center">
+          <div style="color:#4ec9e1;font-size:7px;margin-bottom:4px">⏱ PRIORITY Q</div>
+          job queues<br>task scheduling
+        </div>
+        <div style="flex:1;min-width:100px;background:#0a140a;border:1px solid #1a2a1a;padding:7px;border-radius:2px;font-size:6px;color:#777;line-height:1.9;text-align:center">
+          <div style="color:#e8a020;font-size:7px;margin-bottom:4px">📊 RATE LIMIT</div>
+          sliding window<br>by timestamp
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">SORTED SET = hash map + skip list</div>
+    <div class="ih">O(log N) everything. 10M players, 23 hops,<br>sub-millisecond. that's the skip list.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">23</div><div class="sl">MAX HOPS<br>10M NODES</div></div>
+    <div class="sc"><div class="sv am">5</div><div class="sl">CORE<br>COMMANDS</div></div>
+    <div class="sc"><div class="sv cy">&lt;1ms</div><div class="sl">ANY OP<br>AT SCALE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── shared data ───────────────────────────────
+const players = [
+  { name:'DragonX',  emoji:'🐉', score:9420 },
+  { name:'NovaStar', emoji:'⭐', score:8810 },
+  { name:'IronFist', emoji:'👊', score:7650 },
+  { name:'ZephyrK',  emoji:'🌪', score:6200 },
+  { name:'LunaWolf', emoji:'🐺', score:5430 },
+];
+
+function rankClass(i){ return i===0?'top1':i===1?'top2':i===2?'top3':''; }
+function fmtScore(n){ return n.toLocaleString(); }
+
+function renderLbRow(p, rank, opts={}){
+  const rc = rankClass(rank);
+  let cls = 'lb-row';
+  if(opts.highlight) cls += ' highlight';
+  if(opts.highlightCy) cls += ' highlight-cy';
+  if(opts.rankSpot) cls += ' rank-spotlight';
+  return `<div class="${cls}" data-name="${p.name}">
+    <span class="lb-rank ${rc}">#${rank+1}</span>
+    <span class="lb-avatar" style="background:#0d1f0d">${p.emoji}</span>
+    <span class="lb-name${opts.active?' active-player':''}">${p.name}</span>
+    <span class="lb-score" style="color:${rc==='top1'?'#ffd700':rc==='top2'?'#c0c0c0':rc==='top3'?'#cd7f32':'#4eff9a'}">${fmtScore(p.score)}</span>
+  </div>`;
+}
+
+function renderLb(container, data, highlightName='', opts={}){
+  const sorted = [...data].sort((a,b)=>b.score-a.score);
+  container.innerHTML = sorted.map((p,i)=>{
+    const hl = p.name===highlightName;
+    return renderLbRow(p, i, {
+      highlight: hl && !opts.cy,
+      highlightCy: hl && opts.cy,
+      active: hl,
+      rankSpot: opts.rankSpot && hl
+    });
+  }).join('');
+}
+
+// ── scene management ──────────────────────────
+let timers = [];
+function clearT(){ timers.forEach(clearTimeout); timers=[]; }
+function T(fn, ms){ timers.push(setTimeout(fn, ms)); }
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1) playS1();
+  if(n===2) playS2();
+  if(n===3) playS3();
+  if(n===4) playS4();
+}
+
+// ── SCENE 1: ZADD ─────────────────────────────
+function playS1(){
+  clearT();
+  const lb = document.getElementById('s1-lb');
+  const cmdEl = document.getElementById('s1-cmd-text');
+  const subEl = document.getElementById('s1-cmd-sub');
+  const resBox = document.getElementById('s1-result');
+  const resTxt = document.getElementById('s1-result-text');
+  const memberCount = document.getElementById('s1-members');
+  lb.innerHTML = '<div style="font-size:7px;color:#2a3a2a;padding:16px;text-align:center">empty · waiting for ZADD...</div>';
+  cmdEl.textContent = '_';
+  subEl.textContent = '';
+  resBox.style.opacity = '0';
+  memberCount.textContent = '0';
+
+  const current = [];
+  const adds = [
+    { p: players[2], delay: 400 },
+    { p: players[4], delay: 1100 },
+    { p: players[1], delay: 1800 },
+    { p: players[3], delay: 2500 },
+    { p: players[0], delay: 3200 },
+  ];
+
+  adds.forEach(({p, delay}, idx) => {
+    T(()=>{
+      cmdEl.innerHTML = `<span class="cmd-key">ZADD</span> <span style="color:#ccc">leaderboard:global</span> <span class="cmd-score">${p.score}</span> <span class="cmd-member">"${p.name}"</span>`;
+      subEl.textContent = `# inserting ${p.emoji} ${p.name} at score ${p.score}`;
+      current.push({...p});
+      renderLb(lb, current, p.name);
+      memberCount.textContent = current.length;
+      resBox.style.opacity = '1';
+      resTxt.textContent = `(integer) 1   ← 1 new member added`;
+    }, delay);
+  });
+
+  T(()=>{
+    cmdEl.innerHTML = `<span class="cmd-key">ZADD</span> <span style="color:#ccc">leaderboard:global</span> <span class="cmd-score">9420</span> <span class="cmd-member">"DragonX"</span>`;
+    subEl.textContent = '# leaderboard fully populated — always sorted ✓';
+    renderLb(lb, current, '');
+  }, 3900);
+}
+
+// ── SCENE 2: LIVE UPDATES ─────────────────────
+function playS2(){
+  clearT();
+  const lb = document.getElementById('s2-lb');
+  const cmdEl = document.getElementById('s2-cmd-text');
+  const subEl = document.getElementById('s2-cmd-sub');
+  const resBox = document.getElementById('s2-result');
+  const resTxt = document.getElementById('s2-result-text');
+  const updEl = document.getElementById('s2-updates');
+  const rankEl = document.getElementById('s2-rank-changes');
+  const zinBox = document.getElementById('s2-zincrby-box');
+
+  resBox.style.opacity = '0';
+  zinBox.style.opacity = '0';
+  updEl.textContent = '0';
+  rankEl.textContent = '0';
+
+  const state = players.map(p=>({...p}));
+  renderLb(lb, state, '');
+
+  const updates = [
+    { name:'LunaWolf',  delta:+2100, label:'LunaWolf just got a killstreak!', delay:600 },
+    { name:'IronFist',  delta:+1800, label:'IronFist completes a dungeon run', delay:1600 },
+    { name:'NovaStar',  delta:-600,  label:'NovaStar loses a ranked match',   delay:2600 },
+    { name:'ZephyrK',   delta:+3200, label:'ZephyrK hits a perfect combo!!!', delay:3600 },
+    { name:'DragonX',   delta:+1500, label:'DragonX stays on top — barely',   delay:4600 },
+  ];
+
+  let updates_count = 0;
+  let rank_changes = 0;
+
+  updates.forEach(({name, delta, label, delay}) => {
+    T(()=>{
+      const sorted_before = [...state].sort((a,b)=>b.score-a.score).map(p=>p.name);
+      const p = state.find(x=>x.name===name);
+      p.score += delta;
+      const sorted_after = [...state].sort((a,b)=>b.score-a.score).map(p=>p.name);
+      const changed = sorted_before.some((n,i)=>n!==sorted_after[i]);
+      if(changed) rank_changes++;
+
+      const sign = delta>0?'+':'';
+      cmdEl.innerHTML = `<span class="cmd-key">ZINCRBY</span> <span style="color:#ccc">leaderboard:global</span> <span class="cmd-score">${sign}${delta}</span> <span class="cmd-member">"${name}"</span>`;
+      subEl.textContent = `# ${label}`;
+      updates_count++;
+      updEl.textContent = updates_count;
+      rankEl.textContent = rank_changes;
+
+      renderLb(lb, state, name);
+      resBox.style.opacity = '1';
+      resTxt.textContent = `"${fmtScore(p.score)}"   ← new score returned`;
+    }, delay);
+  });
+
+  T(()=>{ zinBox.style.opacity = '1'; }, 5600);
+}
+
+// ── SCENE 3: ZREVRANGE + ZRANK ────────────────
+function playS3(){
+  clearT();
+  const lb = document.getElementById('s3-lb');
+  const cmdEl = document.getElementById('s3-cmd-text');
+  const subEl = document.getElementById('s3-cmd-sub');
+  const resBox = document.getElementById('s3-result');
+  const resTxt = document.getElementById('s3-result-text');
+  const rankBox = document.getElementById('s3-rank-box');
+  const rankNum = document.getElementById('s3-rank-num');
+  const lbLabel = document.getElementById('s3-lb-label');
+
+  resBox.style.opacity='0'; rankBox.style.opacity='0';
+  rankNum.textContent='—'; lb.innerHTML=''; cmdEl.textContent='_'; subEl.textContent='';
+
+  const state = [
+    { name:'ZephyrK',  emoji:'🌪', score:9400 },
+    { name:'DragonX',  emoji:'🐉', score:9320 },
+    { name:'LunaWolf', emoji:'🐺', score:7530 },
+    { name:'IronFist', emoji:'👊', score:9450 },
+    { name:'NovaStar', emoji:'⭐', score:8210 },
+  ];
+  const sorted = [...state].sort((a,b)=>b.score-a.score);
+
+  T(()=>{
+    cmdEl.innerHTML = `<span class="cmd-key">ZREVRANGE</span> <span style="color:#ccc">leaderboard:global</span> <span class="cmd-score">0</span> <span class="cmd-score">4</span> <span style="color:#4ec9e1">WITHSCORES</span>`;
+    subEl.textContent = '# get top 5 players, highest first';
+    lbLabel.textContent = '▸ top 5 results (ZREVRANGE 0 4 WITHSCORES)';
+  }, 400);
+
+  sorted.forEach((p, i) => {
+    T(()=>{
+      const rows = sorted.slice(0, i+1).map((pp,ii)=>renderLbRow(pp, ii, {})).join('');
+      lb.innerHTML = rows;
+      if(i===4){
+        resBox.style.opacity='1';
+        resTxt.textContent = `5 members returned · O(log N + 5)`;
+      }
+    }, 800 + i * 350);
+  });
+
+  T(()=>{
+    cmdEl.innerHTML = `<span class="cmd-key">ZRANK</span> <span style="color:#ccc">leaderboard:global</span> <span class="cmd-member">"DragonX"</span>`;
+    subEl.textContent = '# where does DragonX rank among 10M players?';
+    lbLabel.textContent = '▸ highlighting DragonX rank lookup';
+    renderLb(lb, sorted, 'DragonX', {cy:true});
+    resBox.style.opacity='0';
+  }, 2800);
+
+  T(()=>{
+    rankBox.style.opacity='1';
+    rankNum.textContent='#2';
+    resBox.style.opacity='1';
+    resTxt.innerHTML = `(integer) 1   ← 0-indexed rank (= #2)`;
+    resTxt.style.color='#4ec9e1';
+  }, 3600);
+}
+
+// ── SCENE 4: INTERNALS ────────────────────────
+function playS4(){
+  clearT();
+  const skipEl = document.getElementById('s4-skip');
+  const skipInner = document.getElementById('s4-skip-inner');
+  const scaleEl = document.getElementById('s4-scale');
+  const usesEl = document.getElementById('s4-uses');
+  ['op1','op2','op3','op4','op5'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+    document.getElementById(id).style.opacity='0';
+  });
+  skipEl.style.opacity='0';
+  scaleEl.style.opacity='0';
+  usesEl.style.opacity='0';
+
+  // Build skip list
+  const nodes = [500, 1200, 3400, 6200, 7650, 8810, 9420];
+  const levels = [
+    [null, null, null, null, null, null, 9420],
+    [null, null, 3400, null, null, 8810, 9420],
+    [500, 1200, 3400, 6200, 7650, 8810, 9420],
+  ];
+
+  T(()=>{
+    skipEl.style.opacity='1';
+    skipInner.innerHTML = levels.map((lvl, li)=>{
+      const label = `<span style="font-size:6px;color:#2a4a2a;min-width:20px">L${3-li}</span>`;
+      const nodes = lvl.map(v=>
+        v===null
+          ? `<span class="skip-node nil">—</span>`
+          : `<span class="skip-node">${v}</span>`
+      ).join(`<span class="skip-line"></span>`);
+      return `<div class="skip-level">${label}${nodes}</div>`;
+    }).join('');
+  }, 300);
+
+  // Highlight search path after 900ms
+  T(()=>{
+    const spans = skipInner.querySelectorAll('.skip-node:not(.nil)');
+    // highlight L3 node 9420, then L2 8810 then 9420, then L1 7650,8810,9420
+    const path = [0, 5, 6, 4, 5, 6]; // indices roughly
+    spans.forEach((sp, i)=>{ if([0,5,6].includes(i)) setTimeout(()=>sp.classList.add('active'), i*200); });
+  }, 1000);
+
+  // Op table
+  ['op1','op2','op3','op4','op5'].forEach((id, i)=>{
+    T(()=>{
+      const el = document.getElementById(id);
+      el.classList.add('show');
+      el.style.opacity='1';
+    }, 1800 + i*300);
+  });
+
+  T(()=>{ scaleEl.style.opacity='1'; }, 3700);
+  T(()=>{ usesEl.style.opacity='1'; }, 4400);
+}
+
+// auto-play scene 1
+window.addEventListener('load', ()=>playS1());
+</script>
+</body>
+</html>

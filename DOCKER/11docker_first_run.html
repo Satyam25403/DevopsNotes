@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Your First Docker Run</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d2a0d}
+.hdr-title{font-size:13px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d2a0d;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#050f05;border:1px solid #0d2a0d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4eff9a;text-align:center}
+.sl{font-size:7px;color:#3a6040;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.cyan{border-color:#4ec9e1;color:#4ec9e1}.btn.cyan:hover{background:#4ec9e120}
+.btn.amber{border-color:#e8a020;color:#e8a020}.btn.amber:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── TERMINAL ── */
+.term{background:#0a0f0a;border:2px solid #1a3a1a;margin:0;font-size:8px;line-height:1}
+.term-bar{background:#1a3a1a;padding:5px 10px;display:flex;align-items:center;gap:6px}
+.term-dot{width:8px;height:8px;border-radius:50%}
+.term-title{font-size:7px;color:#3a6040;flex:1;text-align:center;letter-spacing:.5px}
+.term-body{padding:8px 10px;min-height:60px}
+/* FIX: tlines visible by default, animation adds the 'animated' class for scenes that animate */
+.tline{display:flex;align-items:baseline;gap:0;margin-bottom:5px;opacity:1;transition:opacity .3s}
+.tline.hidden{opacity:0}
+.tline.vis{opacity:1}
+.prompt{color:#4eff9a;margin-right:6px;flex-shrink:0}
+.tcmd{color:#fff;letter-spacing:.3px}
+.tcmd .flag{color:#4ec9e1}
+.tcmd .arg{color:#e8a020}
+.tline.out .tcmd{color:#888;font-size:7px}
+.tline.ok .tcmd{color:#4eff9a;font-size:7px}
+.tline.err .tcmd{color:#e85050;font-size:7px}
+.tline.dim .tcmd{color:#3a5030;font-size:7px}
+.cursor-inline{display:inline-block;width:6px;height:10px;background:#4eff9a;vertical-align:middle;margin-left:2px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink .7s infinite}
+
+/* ── FLOW DIAGRAM ── */
+.flow-wrap{padding:8px 12px;display:flex;flex-direction:column;gap:0;align-items:center}
+.flow-node{display:flex;flex-direction:column;align-items:center;gap:3px;opacity:0;transition:opacity .5s;width:100%}
+.flow-node.vis{opacity:1}
+.node-box{border:2px solid #333;padding:8px 12px;width:100%;display:flex;align-items:center;gap:10px}
+.node-icon{font-size:18px;flex-shrink:0}
+.node-text{flex:1}
+.node-title{font-size:8px;margin-bottom:3px;letter-spacing:.3px}
+.node-sub{font-size:6px;color:#555;line-height:1.7}
+.flow-arrow{display:flex;flex-direction:column;align-items:center;gap:0;padding:2px 0;opacity:0;transition:opacity .4s;width:100%}
+.flow-arrow.vis{opacity:1}
+.farr-shaft{width:2px;height:0;transition:height .4s ease-out;margin:0 auto}
+.farr-shaft.full{height:22px}
+.farr-label{font-size:6px;text-align:center;letter-spacing:.5px;margin-top:2px}
+.farr-tip{font-size:9px;text-align:center}
+
+/* annotation bubble */
+.ann{border:1px solid #333;background:#0a0f0a;padding:5px 8px;font-size:7px;color:#666;line-height:1.7;opacity:0;transition:opacity .5s;margin:4px 0;width:100%}
+.ann.vis{opacity:1}
+.ann span{color:#4eff9a}
+
+/* ── PULL PROGRESS ── */
+.pull-wrap{padding:4px 10px}
+.pull-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;opacity:0;transition:opacity .4s}
+.pull-row.vis{opacity:1}
+.pull-id{font-size:7px;color:#3a6040;width:70px;flex-shrink:0}
+.pull-bar-bg{flex:1;height:7px;background:#050f05;border:1px solid #0d2a0d;overflow:hidden}
+.pull-bar-fill{height:100%;width:0;transition:width 1s ease-out}
+.pull-status{font-size:6px;width:50px;text-align:right;flex-shrink:0}
+
+/* ── PS OUTPUT ── */
+.ps-wrap{padding:4px 10px}
+.ps-hdr{display:flex;gap:4px;padding:4px 0;border-bottom:1px solid #0d2a0d;margin-bottom:4px;opacity:0;transition:opacity .4s}
+.ps-hdr.vis{opacity:1}
+.pscol{font-size:6px;color:#2a5030;letter-spacing:.3px}
+.ps-row{display:flex;gap:4px;padding:4px 0;border-bottom:1px solid #050f05;opacity:0;transition:opacity .5s}
+.ps-row.vis{opacity:1}
+.psval{font-size:6px;color:#4eff9a}
+.psval.dim{color:#3a5030}
+
+/* port badge */
+.port-badge{display:inline-flex;align-items:center;gap:4px;border:1px solid #4eff9a;padding:3px 8px;font-size:7px;color:#4eff9a;margin-top:4px;opacity:0;transition:opacity .5s}
+.port-badge.vis{opacity:1}
+
+/* web preview */
+.web-preview{border:2px solid #1a3a1a;background:#050f05;padding:0;overflow:hidden;opacity:0;transition:opacity .5s;margin:4px 10px}
+.web-preview.vis{opacity:1}
+.web-bar{background:#0d2a0d;padding:4px 8px;display:flex;align-items:center;gap:6px}
+.web-url{font-size:6px;color:#4eff9a;flex:1}
+.web-body{padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.nginx-h1{font-size:11px;color:#4eff9a;border-bottom:1px solid #0d2a0d;padding-bottom:5px;margin-bottom:4px}
+.nginx-p{font-size:6px;color:#3a6040;line-height:1.8}
+
+/* progress counter */
+.pctr{font-size:7px;color:#3a6040;text-align:center;margin-top:3px}
+
+/* animated elements start hidden */
+.anim-hide{opacity:0;transition:opacity .3s}
+.anim-show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════
+  S1 — docker pull
+═══════════════════════════ -->
+<div class="scene active" id="s1" style="background:#050f05">
+  <div class="hdr" style="background:#050f05">
+    <div class="hdr-title">YOUR FIRST DOCKER RUN</div>
+    <div class="hdr-sub">TYPE ONE COMMAND. SPIN UP NGINX IN 10 SECONDS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 1</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">docker pull</span>
+  </div>
+  <div class="anim" style="background:#050f05">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <!-- FIX: all tlines start hidden, playS1 reveals them -->
+          <div class="tline hidden" id="t1a"><span class="prompt">$</span><span class="tcmd">docker pull <span class="arg">nginx:alpine</span></span></div>
+          <div class="tline out hidden" id="t1b"><span class="tcmd">alpine: Pulling from library/nginx</span></div>
+          <div class="tline out hidden" id="t1c"><span class="tcmd" id="t1ctext">Pulling fs layer: 3 layers</span></div>
+          <div class="tline ok hidden" id="t1d"><span class="tcmd">Status: Downloaded newer image for nginx:alpine</span></div>
+          <div class="tline dim hidden" id="t1e"><span class="tcmd">docker.io/library/nginx:alpine</span></div>
+          <div class="tline hidden" id="t1f"><span class="prompt">$</span><span class="cursor-inline blink"></span></div>
+        </div>
+      </div>
+
+      <div class="ann anim-hide" id="ann1a">WHAT HAPPENED BEHIND THE SCENES:</div>
+
+      <!-- mini flow for pull — FIXED: all 3 rows now correct -->
+      <div style="display:flex;flex-direction:column;gap:4px;padding:0 4px">
+
+        <!-- Row 1: CLI → DAEMON (pull request) -->
+        <div style="display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s" id="fl1">
+          <div style="border:1px solid #1a3a1a;background:#050f05;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">CLI</div>
+            <div style="font-size:6px;color:#2a5030;margin-top:2px">docker client</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+            <div style="font-size:5px;color:#3a6040;letter-spacing:.3px">pull request</div>
+            <div style="height:2px;background:#4eff9a;width:0;transition:width .6s ease-out" id="pipe1"></div>
+            <div style="font-size:8px;color:#4eff9a;align-self:flex-end">▶</div>
+          </div>
+          <div style="border:1px solid #1a3a1a;background:#050f05;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1">DAEMON</div>
+            <div style="font-size:6px;color:#2a4060;margin-top:2px">dockerd</div>
+          </div>
+        </div>
+
+        <!-- Row 2: DAEMON → HUB (fetch layers) — FIXED: left box = DAEMON -->
+        <div style="display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s" id="fl2">
+          <div style="border:1px solid #1a3a1a;background:#050f05;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1">DAEMON</div>
+            <div style="font-size:6px;color:#2a4060;margin-top:2px">dockerd</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+            <div style="font-size:5px;color:#3a6040;letter-spacing:.3px">fetch layers</div>
+            <div style="height:2px;background:#e8a020;width:0;transition:width .6s ease-out" id="pipe2"></div>
+            <div style="font-size:8px;color:#e8a020;align-self:flex-end">▶</div>
+          </div>
+          <div style="border:1px solid #2a1a00;background:#0f0800;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#e8a020">HUB</div>
+            <div style="font-size:6px;color:#4a3010;margin-top:2px">Docker Hub</div>
+          </div>
+        </div>
+
+        <!-- Row 3: HUB → DISK via DAEMON (store locally) — FIXED: arrow points left, HUB on right, DISK on left -->
+        <div style="display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s" id="fl3">
+          <div style="border:1px solid #1a3a1a;background:#050f05;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#9060d0">DISK</div>
+            <div style="font-size:6px;color:#3a2060;margin-top:2px">layer cache</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+            <div style="font-size:5px;color:#3a6040;letter-spacing:.3px">store locally</div>
+            <div style="height:2px;background:#9060d0;width:0;transition:width .6s ease-out" id="pipe3"></div>
+            <div style="font-size:8px;color:#9060d0;align-self:flex-start">◀</div>
+          </div>
+          <div style="border:1px solid #2a1a00;background:#0f0800;padding:5px 8px;flex:0 0 90px;text-align:center">
+            <div style="font-size:7px;color:#e8a020">HUB</div>
+            <div style="font-size:6px;color:#4a3010;margin-top:2px">Docker Hub</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="pull-wrap anim-hide" id="pullwrap">
+        <div style="font-size:7px;color:#3a6040;margin-bottom:5px;letter-spacing:.5px">LAYER DOWNLOAD PROGRESS</div>
+        <div class="pull-row" id="pr1">
+          <div class="pull-id">3f6bc054…</div>
+          <div class="pull-bar-bg"><div class="pull-bar-fill" id="pb1" style="background:#e8a020"></div></div>
+          <div class="pull-status" style="color:#e8a020" id="ps1">0%</div>
+        </div>
+        <div class="pull-row" id="pr2">
+          <div class="pull-id">alpine base</div>
+          <div class="pull-bar-bg"><div class="pull-bar-fill" id="pb2" style="background:#4ec9e1"></div></div>
+          <div class="pull-status" style="color:#4ec9e1" id="ps2">0%</div>
+        </div>
+        <div class="pull-row" id="pr3">
+          <div class="pull-id">nginx binary</div>
+          <div class="pull-bar-bg"><div class="pull-bar-fill" id="pb3" style="background:#4eff9a"></div></div>
+          <div class="pull-status" style="color:#4eff9a" id="ps3">0%</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il"><span style="color:#4eff9a">docker pull</span> tells the daemon:</div>
+    <div class="il">"Go fetch nginx:alpine from Docker Hub." The <span style="color:#4eff9a">daemon</span> downloads each layer and caches it. You never talk to Hub directly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">CLI</div><div class="sl">sends command</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">daemon</div><div class="sl">does the work</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020">Hub</div><div class="sl">serves layers</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS1()">▶ PLAY</button>
+    <button class="btn cyan" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════
+  S2 — docker run (internals)
+═══════════════════════════ -->
+<div class="scene" id="s2" style="background:#050f05">
+  <div class="hdr" style="background:#050f05">
+    <div class="hdr-title">YOUR FIRST DOCKER RUN</div>
+    <div class="hdr-sub">WHAT HAPPENS INSIDE docker run</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">STEP 2</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">docker run</span>
+  </div>
+  <div class="anim" style="background:#050f05">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <!-- FIX: start hidden, revealed by playS2 -->
+          <div class="tline hidden" id="t2a"><span class="prompt">$</span><span class="tcmd">docker run <span class="flag">-d</span> <span class="flag">-p</span> <span class="arg">8080:80</span> <span class="flag">--name</span> <span class="arg">web</span> nginx:alpine</span></div>
+          <div class="tline out hidden" id="t2wait"><span class="tcmd">Unable to find image locally, pulling…</span></div>
+          <div class="tline ok hidden" id="t2b"><span class="tcmd">3a9f1e2c8b7d4f6e9c2a5b8d1e4f7a0c3b6d9e2f5a8c1d4...</span></div>
+          <div class="tline hidden" id="t2c"><span class="prompt">$</span><span class="cursor-inline blink"></span></div>
+        </div>
+      </div>
+
+      <div style="font-size:7px;color:#2a4060;text-align:center;letter-spacing:.5px" id="s2label">DAEMON DOES 5 THINGS IN ORDER</div>
+
+      <div class="flow-wrap" style="padding:4px 0;gap:3px">
+
+        <div class="flow-node" id="fn1">
+          <div class="node-box" style="border-color:#4090e0;background:#040e28">
+            <div class="node-icon">🔍</div>
+            <div class="node-text">
+              <div class="node-title" style="color:#4090e0">1. FIND IMAGE</div>
+              <div class="node-sub">Checks local cache for nginx:alpine. Already pulled? Use it. Not found? Auto-pull from Hub.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow" id="fa1">
+          <div class="farr-shaft" id="fsh1" style="background:#4eff9a"></div>
+          <div class="farr-tip" style="color:#4eff9a">▼</div>
+        </div>
+
+        <div class="flow-node" id="fn2">
+          <div class="node-box" style="border-color:#9060d0;background:#100828">
+            <div class="node-icon">📦</div>
+            <div class="node-text">
+              <div class="node-title" style="color:#9060d0">2. CREATE CONTAINER</div>
+              <div class="node-sub">Adds a thin writable layer on top of the read-only image. Your writes go here. Image untouched.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow" id="fa2">
+          <div class="farr-shaft" id="fsh2" style="background:#4eff9a"></div>
+          <div class="farr-tip" style="color:#4eff9a">▼</div>
+        </div>
+
+        <div class="flow-node" id="fn3">
+          <div class="node-box" style="border-color:#e8a020;background:#140a00">
+            <div class="node-icon">🔒</div>
+            <div class="node-text">
+              <div class="node-title" style="color:#e8a020">3. SET UP NAMESPACES</div>
+              <div class="node-sub">PID, NET, MNT namespaces applied. Container gets its own process tree + network stack.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow" id="fa3">
+          <div class="farr-shaft" id="fsh3" style="background:#4eff9a"></div>
+          <div class="farr-tip" style="color:#4eff9a">▼</div>
+        </div>
+
+        <div class="flow-node" id="fn4">
+          <div class="node-box" style="border-color:#4ec9e1;background:#041820">
+            <div class="node-icon">🌐</div>
+            <div class="node-text">
+              <div class="node-title" style="color:#4ec9e1">4. WIRE PORT -p 8080:80</div>
+              <div class="node-sub">iptables rule: traffic on host:8080 → container:80. Your browser can now reach nginx.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-arrow" id="fa4">
+          <div class="farr-shaft" id="fsh4" style="background:#4eff9a"></div>
+          <div class="farr-tip" style="color:#4eff9a">▼</div>
+        </div>
+
+        <div class="flow-node" id="fn5">
+          <div class="node-box" style="border-color:#4eff9a;background:#041808">
+            <div class="node-icon">🚀</div>
+            <div class="node-text">
+              <div class="node-title" style="color:#4eff9a">5. START ENTRYPOINT</div>
+              <div class="node-sub">Runs <span style="color:#4eff9a">nginx -g 'daemon off'</span> as PID 1. Container is now LIVE. Flag -d keeps it in background.</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il"><span style="color:#4ec9e1">-d</span> = detached (background)  <span style="color:#4ec9e1">-p</span> = port map</div>
+    <div class="il">The returned hash (<span style="color:#4eff9a">3a9f1e2c…</span>) is the container ID. Daemon handles everything — CLI just sent the instruction.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:9px">writable</div><div class="sl">layer added</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">port map</div><div class="sl">8080 → 80</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">PID 1</div><div class="sl">nginx running</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS2()">▶ PLAY</button>
+    <button class="btn cyan" onclick="prev(2)">◀ PREV</button>
+    <button class="btn cyan" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════
+  S3 — docker ps
+═══════════════════════════ -->
+<div class="scene" id="s3" style="background:#050f05">
+  <div class="hdr" style="background:#050f05">
+    <div class="hdr-title">YOUR FIRST DOCKER RUN</div>
+    <div class="hdr-sub">INSPECT WHAT'S RUNNING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 3</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">docker ps</span>
+  </div>
+  <div class="anim" style="background:#050f05">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <div class="tline hidden" id="t3a"><span class="prompt">$</span><span class="tcmd">docker ps</span></div>
+          <div style="overflow-x:auto;scrollbar-width:none">
+            <div class="ps-hdr" id="t3hdr" style="flex-wrap:nowrap;min-width:320px">
+              <span class="pscol" style="width:70px;flex-shrink:0">CONTAINER ID</span>
+              <span class="pscol" style="width:72px;flex-shrink:0">IMAGE</span>
+              <span class="pscol" style="width:60px;flex-shrink:0">STATUS</span>
+              <span class="pscol" style="width:70px;flex-shrink:0">PORTS</span>
+              <span class="pscol" style="flex:1">NAMES</span>
+            </div>
+            <div class="ps-row" id="t3row" style="flex-wrap:nowrap;min-width:320px">
+              <span class="psval" style="width:70px;flex-shrink:0;font-size:6px">3a9f1e2c8b7d</span>
+              <span class="psval" style="width:72px;flex-shrink:0;font-size:6px">nginx:alpine</span>
+              <span class="psval" style="width:60px;flex-shrink:0;font-size:6px;color:#4eff9a">Up 12s</span>
+              <span class="psval" style="width:70px;flex-shrink:0;font-size:6px">0.0.0.0:8080→80</span>
+              <span class="psval" style="flex:1;font-size:6px">web</span>
+            </div>
+          </div>
+          <div class="tline hidden" id="t3b"><span class="prompt">$</span><span class="tcmd">curl <span class="arg">localhost:8080</span></span></div>
+          <div class="tline ok hidden" id="t3c"><span class="tcmd">&lt;!DOCTYPE html&gt; 200 OK ✓</span></div>
+          <div class="tline hidden" id="t3d"><span class="prompt">$</span><span class="cursor-inline blink"></span></div>
+        </div>
+      </div>
+
+      <!-- Annotated PS columns -->
+      <div style="border:1px solid #0d2a0d;background:#030a03;padding:8px 10px;opacity:0;transition:opacity .5s" id="psann">
+        <div style="font-size:7px;color:#2a5030;margin-bottom:5px;letter-spacing:.5px">READING docker ps OUTPUT</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:baseline">
+            <span style="font-size:7px;color:#4ec9e1;width:80px;flex-shrink:0">CONTAINER ID</span>
+            <span style="font-size:6px;color:#555;line-height:1.7">Short version of the full SHA256 hash. Use it in docker stop / exec commands.</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:baseline">
+            <span style="font-size:7px;color:#4ec9e1;width:80px;flex-shrink:0">STATUS</span>
+            <span style="font-size:6px;color:#555;line-height:1.7">"Up 12s" = running. "Exited (0)" = stopped cleanly. "Exited (1)" = crashed.</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:baseline">
+            <span style="font-size:7px;color:#4ec9e1;width:80px;flex-shrink:0">PORTS</span>
+            <span style="font-size:6px;color:#555;line-height:1.7">0.0.0.0:8080→80/tcp = all host IPs on 8080 forward to container port 80.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- web preview -->
+      <div class="web-preview" id="webprev">
+        <div class="web-bar">
+          <span style="font-size:7px;color:#e85050">●</span>
+          <span style="font-size:7px;color:#e8a020">●</span>
+          <span style="font-size:7px;color:#4eff9a">●</span>
+          <div class="web-url">http://localhost:8080</div>
+        </div>
+        <div class="web-body">
+          <div class="nginx-h1">Welcome to nginx!</div>
+          <div class="nginx-p">If you see this page, the nginx web server is successfully installed and working. Further configuration is required.</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:6px;flex-wrap:wrap;padding:0 2px;opacity:0;transition:opacity .5s" id="cmdbadges">
+        <span style="font-size:6px;padding:3px 7px;border:1px solid #0d2a0d;color:#4eff9a">docker stop web</span>
+        <span style="font-size:6px;padding:3px 7px;border:1px solid #0d2a0d;color:#4eff9a">docker rm web</span>
+        <span style="font-size:6px;padding:3px 7px;border:1px solid #0d2a0d;color:#4eff9a">docker logs web</span>
+        <span style="font-size:6px;padding:3px 7px;border:1px solid #0d2a0d;color:#4eff9a">docker exec -it web sh</span>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il"><span style="color:#4eff9a">docker ps</span> = your running containers</div>
+    <div class="il">Add <span style="color:#4eff9a">-a</span> to see stopped ones too. The NAMES column lets you use "web" instead of the hash in every other command.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">1</div><div class="sl">container up</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">8080:80</div><div class="sl">port mapped</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">200 OK</div><div class="sl">nginx live</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS3()">▶ PLAY</button>
+    <button class="btn cyan" onclick="prev(3)">◀ PREV</button>
+    <button class="btn cyan" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════
+  S4 — FULL PICTURE
+═══════════════════════════ -->
+<div class="scene" id="s4" style="background:#050f05">
+  <div class="hdr" style="background:#050f05">
+    <div class="hdr-title">YOUR FIRST DOCKER RUN</div>
+    <div class="hdr-sub">THE FULL CLIENT → DAEMON → REGISTRY PICTURE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">BIG PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ARCHITECTURE</span>
+  </div>
+  <div class="anim" style="background:#050f05">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#2a5030;text-align:center;letter-spacing:.5px">EVERY COMMAND FOLLOWS THIS PATH</div>
+
+      <!-- 3-column architecture -->
+      <div style="display:flex;gap:6px;align-items:stretch">
+        <!-- YOU -->
+        <div style="flex:1;border:2px solid #0d2a0d;background:#030a03;padding:7px 5px;display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0;transition:opacity .5s" id="arc1">
+          <div style="font-size:9px;color:#4eff9a;text-align:center">YOU</div>
+          <div style="font-size:18px">💻</div>
+          <div style="font-size:6px;color:#2a5030;text-align:center;line-height:1.7">docker CLI<br>terminal<br>commands</div>
+          <div style="width:100%;border-top:1px solid #0d2a0d;margin-top:3px;padding-top:4px">
+            <div style="font-size:5px;color:#1a3a1a;text-align:center;line-height:1.7">docker pull<br>docker run<br>docker ps</div>
+          </div>
+        </div>
+
+        <!-- arrows col -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex-shrink:0;width:28px">
+          <div style="display:flex;flex-direction:column;align-items:center;opacity:0;transition:opacity .4s" id="arr12">
+            <div style="font-size:6px;color:#4eff9a">▶</div>
+            <div style="font-size:5px;color:#2a5030;writing-mode:vertical-rl;letter-spacing:.3px;transform:rotate(180deg)">socket</div>
+            <div style="font-size:6px;color:#4eff9a">▶</div>
+          </div>
+        </div>
+
+        <!-- DAEMON -->
+        <div style="flex:1.2;border:2px solid #1a3060;background:#030818;padding:7px 5px;display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0;transition:opacity .5s" id="arc2">
+          <div style="font-size:9px;color:#4ec9e1;text-align:center">DAEMON</div>
+          <div style="font-size:18px">⚙️</div>
+          <div style="font-size:6px;color:#1a3050;text-align:center;line-height:1.7">dockerd<br>background svc<br>does all work</div>
+          <div style="width:100%;border-top:1px solid #1a3060;margin-top:3px;padding-top:4px">
+            <div style="font-size:5px;color:#0d1a30;text-align:center;line-height:1.7">pulls layers<br>builds containers<br>manages network</div>
+          </div>
+        </div>
+
+        <!-- arrows col -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;flex-shrink:0;width:28px">
+          <div style="display:flex;flex-direction:column;align-items:center;opacity:0;transition:opacity .4s" id="arr23">
+            <div style="font-size:6px;color:#e8a020">▶</div>
+            <div style="font-size:5px;color:#4a3010;writing-mode:vertical-rl;letter-spacing:.3px;transform:rotate(180deg)">HTTPS</div>
+            <div style="font-size:6px;color:#e8a020">◀</div>
+          </div>
+        </div>
+
+        <!-- REGISTRY -->
+        <div style="flex:1;border:2px solid #2a1a00;background:#080400;padding:7px 5px;display:flex;flex-direction:column;align-items:center;gap:5px;opacity:0;transition:opacity .5s" id="arc3">
+          <div style="font-size:9px;color:#e8a020;text-align:center">REGISTRY</div>
+          <div style="font-size:18px">☁️</div>
+          <div style="font-size:6px;color:#3a2010;text-align:center;line-height:1.7">Docker Hub<br>image store<br>layer CDN</div>
+          <div style="width:100%;border-top:1px solid #2a1a00;margin-top:3px;padding-top:4px">
+            <div style="font-size:5px;color:#1a0a00;text-align:center;line-height:1.7">nginx:alpine<br>ubuntu:22.04<br>postgres:16</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what daemon manages -->
+      <div style="border:1px solid #0d2a0d;background:#030a03;padding:8px 10px;opacity:0;transition:opacity .5s" id="daemonbox">
+        <div style="font-size:7px;color:#2a5030;margin-bottom:6px;letter-spacing:.5px">DAEMON ALSO MANAGES LOCALLY</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;border:1px solid #0d2a0d;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#9060d0">IMAGES</div>
+            <div style="font-size:6px;color:#3a2060;margin-top:2px;line-height:1.6">layer cache<br>on disk</div>
+          </div>
+          <div style="flex:1;border:1px solid #0d2a0d;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">CONTAINERS</div>
+            <div style="font-size:6px;color:#1a3a1a;margin-top:2px;line-height:1.6">running<br>processes</div>
+          </div>
+          <div style="flex:1;border:1px solid #0d2a0d;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1">NETWORKS</div>
+            <div style="font-size:6px;color:#0d2030;margin-top:2px;line-height:1.6">bridge<br>overlay</div>
+          </div>
+          <div style="flex:1;border:1px solid #0d2a0d;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#e8a020">VOLUMES</div>
+            <div style="font-size:6px;color:#3a2010;margin-top:2px;line-height:1.6">persistent<br>storage</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- cheatsheet -->
+      <div style="border:1px solid #0d2a0d;background:#030a03;padding:8px 10px;opacity:0;transition:opacity .5s" id="cheatsheet">
+        <div style="font-size:7px;color:#2a5030;margin-bottom:5px;letter-spacing:.5px">30-SECOND CHEATSHEET</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:6px"><span style="color:#4eff9a;font-size:7px;width:120px;flex-shrink:0">docker pull X</span><span style="color:#444;font-size:6px;line-height:1.7">download image X to disk</span></div>
+          <div style="display:flex;gap:6px"><span style="color:#4eff9a;font-size:7px;width:120px;flex-shrink:0">docker run X</span><span style="color:#444;font-size:6px;line-height:1.7">pull if needed + start container</span></div>
+          <div style="display:flex;gap:6px"><span style="color:#4eff9a;font-size:7px;width:120px;flex-shrink:0">docker ps</span><span style="color:#444;font-size:6px;line-height:1.7">list running containers</span></div>
+          <div style="display:flex;gap:6px"><span style="color:#4eff9a;font-size:7px;width:120px;flex-shrink:0">docker stop NAME</span><span style="color:#444;font-size:6px;line-height:1.7">graceful shutdown (SIGTERM)</span></div>
+          <div style="display:flex;gap:6px"><span style="color:#4eff9a;font-size:7px;width:120px;flex-shrink:0">docker images</span><span style="color:#444;font-size:6px;line-height:1.7">list images on disk</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">CLI = <span style="color:#4eff9a">messenger</span>. DAEMON = <span style="color:#4ec9e1">engine</span>. HUB = <span style="color:#e8a020">warehouse</span>.</div>
+    <div class="il">You never talk to Docker Hub directly. The daemon handles everything over a Unix socket at <span style="color:#4eff9a">/var/run/docker.sock</span>.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:9px">CLI</div><div class="sl">you type here</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">daemon</div><div class="sl">does the work</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:9px">Hub</div><div class="sl">image source</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS4()">▶ PLAY</button>
+    <button class="btn cyan" onclick="prev(4)">◀ PREV</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+
+// Show a .tline (removes 'hidden', adds 'vis')
+function showLine(id){
+  let e=document.getElementById(id);
+  if(!e)return;
+  e.classList.remove('hidden');
+  e.classList.add('vis');
+}
+// Show any element by opacity
+function so(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v;}
+// Show via class (for pull-rows, ps-rows, etc.)
+function vis(id){let e=document.getElementById(id);if(e)e.classList.add('vis');}
+
+function resetLines(ids){
+  ids.forEach(id=>{
+    let e=document.getElementById(id);
+    if(!e)return;
+    e.classList.remove('vis');
+    e.classList.add('hidden');
+    e.style.opacity=''; // clear inline so CSS class takes over
+  });
+}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+function animPipe(id,delay){
+  t(()=>{
+    let e=document.getElementById(id);
+    if(!e)return;
+    e.style.transition='none';e.style.width='0';
+    setTimeout(()=>{e.style.transition='width .6s ease-out';e.style.width='100%';},30);
+  },delay);
+}
+
+// ── S1 ──
+function playS1(){
+  clearT();
+  // Reset terminal lines
+  resetLines(['t1a','t1b','t1c','t1d','t1e','t1f']);
+  // Reset flow + pull
+  ['fl1','fl2','fl3'].forEach(id=>so(id,'0'));
+  ['pb1','pb2','pb3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  so('ann1a','0'); so('pullwrap','0');
+  ['pr1','pr2','pr3'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+
+  // Animate terminal lines
+  t(()=>showLine('t1a'),200);
+  t(()=>showLine('t1b'),700);
+  t(()=>showLine('t1c'),1000);
+  t(()=>showLine('t1d'),1400);
+  t(()=>showLine('t1e'),1700);
+  t(()=>showLine('t1f'),2000);
+
+  // Annotation + flow
+  t(()=>so('ann1a','1'),2300);
+  t(()=>{so('fl1','1');animPipe('pipe1',100);},2600);
+  t(()=>{so('fl2','1');animPipe('pipe2',100);},3200);
+  t(()=>{so('fl3','1');animPipe('pipe3',100);},3800);
+
+  // Pull progress bars
+  t(()=>{
+    so('pullwrap','1');
+    ['pr1','pr2','pr3'].forEach((id,i)=>t(()=>vis(id),i*200));
+    t(()=>{
+      let targets=[85,100,70];
+      ['pb1','pb2','pb3'].forEach((id,idx)=>{
+        let bar=document.getElementById(id);
+        let lbl=document.getElementById('ps'+(idx+1));
+        if(!bar)return;
+        bar.style.transition='none';bar.style.width='0';
+        setTimeout(()=>{
+          bar.style.transition='width 1.1s ease-out';
+          bar.style.width=targets[idx]+'%';
+        },30);
+        let tgt=targets[idx];
+        let start=Date.now();
+        let step=()=>{
+          let p=Math.min(1,(Date.now()-start)/1100);
+          if(lbl)lbl.textContent=Math.round(p*tgt)+'%';
+          if(p<1)requestAnimationFrame(step);
+        };
+        step();
+      });
+    },600);
+  },4400);
+}
+
+// ── S2 ──
+function playS2(){
+  clearT();
+  // Reset terminal lines
+  resetLines(['t2a','t2wait','t2b','t2c']);
+  // Reset flow nodes
+  let nodes=['fn1','fa1','fn2','fa2','fn3','fa3','fn4','fa4','fn5'];
+  nodes.forEach(id=>{let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}});
+  ['fsh1','fsh2','fsh3','fsh4'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.height='0';}});
+
+  // Animate terminal: show command, then "pulling..." line, then container ID
+  t(()=>showLine('t2a'),200);
+  t(()=>showLine('t2wait'),700);
+  t(()=>showLine('t2b'),1200);
+  t(()=>showLine('t2c'),1600);
+
+  // Cascade flow nodes
+  let seq=[
+    {node:'fn1',arr:'fa1',sh:'fsh1',delay:1900},
+    {node:'fn2',arr:'fa2',sh:'fsh2',delay:2600},
+    {node:'fn3',arr:'fa3',sh:'fsh3',delay:3300},
+    {node:'fn4',arr:'fa4',sh:'fsh4',delay:4000},
+    {node:'fn5',arr:null,sh:null,delay:4700},
+  ];
+  seq.forEach(s=>{
+    t(()=>{
+      let e=document.getElementById(s.node);if(e){e.classList.add('vis');e.style.opacity='1';}
+      if(s.arr){let a=document.getElementById(s.arr);if(a){a.classList.add('vis');a.style.opacity='1';}}
+      if(s.sh){
+        let sh=document.getElementById(s.sh);
+        if(sh){setTimeout(()=>{sh.style.transition='height .4s ease-out';sh.style.height='22px';},100);}
+      }
+    },s.delay);
+  });
+}
+
+// ── S3 ──
+function playS3(){
+  clearT();
+  resetLines(['t3a','t3b','t3c','t3d']);
+  ['t3hdr','t3row'].forEach(id=>{let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}});
+  so('psann','0'); so('webprev','0'); so('cmdbadges','0');
+
+  t(()=>showLine('t3a'),200);
+  t(()=>{let e=document.getElementById('t3hdr');if(e){e.classList.add('vis');e.style.opacity='1';}},700);
+  t(()=>{let e=document.getElementById('t3row');if(e){e.classList.add('vis');e.style.opacity='1';}},1100);
+  t(()=>showLine('t3b'),1600);
+  t(()=>showLine('t3c'),2100);
+  t(()=>showLine('t3d'),2400);
+  t(()=>so('psann','1'),2800);
+  t(()=>so('webprev','1'),3500);
+  t(()=>so('cmdbadges','1'),4200);
+}
+
+// ── S4 ──
+function playS4(){
+  clearT();
+  ['arc1','arc2','arc3','arr12','arr23','daemonbox','cheatsheet'].forEach(id=>so(id,'0'));
+
+  t(()=>so('arc1','1'),300);
+  t(()=>so('arr12','1'),800);
+  t(()=>so('arc2','1'),1100);
+  t(()=>so('arr23','1'),1700);
+  t(()=>so('arc3','1'),2000);
+  t(()=>so('daemonbox','1'),2700);
+  t(()=>so('cheatsheet','1'),3400);
+}
+
+playS1();
+</script>
+</body>
+</html>

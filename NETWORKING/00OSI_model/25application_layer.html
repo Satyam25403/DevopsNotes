@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Layer 7 — Application Layer Protocols</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a2a1a}
+.hdr-title{font-size:12px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a2a1a;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.cy{border-color:#4ec9e1}.info.am{border-color:#e8a020}.info.pu{border-color:#c97ef8}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.am{color:#e8a020}.ih.pu{color:#c97ef8}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a120a;border:1px solid #1a2a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4eff9a;text-align:center}
+.sv.cy{color:#4ec9e1}.sv.am{color:#e8a020}.sv.pu{color:#c97ef8}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.nav{border-color:#4ec9e1;color:#4ec9e1}.btn.nav:hover{background:#4ec9e120}
+.btn.restart{border-color:#e8a020;color:#e8a020}.btn.restart:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes travel{0%{left:0;opacity:1}100%{left:calc(100% - 20px);opacity:.6}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 1 — What Happens When You Type a URL
+═══════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#091209">
+  <div class="hdr" style="background:#091209">
+    <div class="hdr-title">LAYER 7 — APPLICATION</div>
+    <div class="hdr-sub">EVERY TAB = 3+ PROTOCOLS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">OSI LAYER 7</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">APPLICATION</span>
+  </div>
+  <div class="anim" style="background:#091209">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Browser bar typing -->
+      <div class="fade" id="s1-bar-label" style="font-size:7px;color:#888;letter-spacing:1px">YOU TYPE THIS INTO YOUR BROWSER:</div>
+
+      <div class="fade" id="s1-bar" style="background:#0d1a0d;border:2px solid #4eff9a;padding:10px 14px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px">🔒</span>
+        <span id="s1-url" style="font-size:9px;color:#4eff9a"></span>
+        <span id="s1-cursor" style="font-size:9px;color:#4eff9a;animation:blink 1s step-end infinite">█</span>
+      </div>
+
+      <!-- Three protocols fire -->
+      <div class="fade" id="s1-fires-label" style="font-size:7px;color:#888;letter-spacing:1px">3 PROTOCOLS FIRE IMMEDIATELY:</div>
+
+      <!-- DNS -->
+      <div class="fade" id="s1-dns" style="background:#0d1a0d;border:1px solid #4ec9e1;padding:10px 12px;display:flex;gap:10px;align-items:center">
+        <div style="font-size:22px">🔍</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4ec9e1;margin-bottom:4px">DNS — port 53</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">"What's the IP for github.com?" → 140.82.112.4</div>
+          <div id="s1-dns-beam" style="height:3px;background:#4ec9e1;width:0;transition:width .8s ease-out;margin-top:6px;border-radius:2px"></div>
+        </div>
+        <div style="font-size:7px;color:#4ec9e1;background:#0a1a20;padding:4px 7px;border:1px solid #4ec9e140">UDP</div>
+      </div>
+
+      <!-- TCP handshake -->
+      <div class="fade" id="s1-tcp" style="background:#0d1a0d;border:1px solid #c97ef8;padding:10px 12px;display:flex;gap:10px;align-items:center">
+        <div style="font-size:22px">🤝</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#c97ef8;margin-bottom:4px">TCP — port 443</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">SYN → SYN-ACK → ACK — connection opened</div>
+          <div id="s1-tcp-beam" style="height:3px;background:#c97ef8;width:0;transition:width .8s ease-out;margin-top:6px;border-radius:2px"></div>
+        </div>
+        <div style="font-size:7px;color:#c97ef8;background:#1a0a20;padding:4px 7px;border:1px solid #c97ef840">TCP</div>
+      </div>
+
+      <!-- HTTPS -->
+      <div class="fade" id="s1-https" style="background:#0d1a0d;border:1px solid #4eff9a;padding:10px 12px;display:flex;gap:10px;align-items:center">
+        <div style="font-size:22px">🔒</div>
+        <div style="flex:1">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">HTTPS — port 443</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">TLS handshake + GET /index.html</div>
+          <div id="s1-https-beam" style="height:3px;background:#4eff9a;width:0;transition:width .8s ease-out;margin-top:6px;border-radius:2px"></div>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;background:#0a1a0a;padding:4px 7px;border:1px solid #4eff9a40">TLS</div>
+      </div>
+
+      <!-- Port map -->
+      <div class="fade" id="s1-portmap-label" style="font-size:7px;color:#888;letter-spacing:1px;margin-top:2px">ALL LAYER 7 PORTS AT A GLANCE</div>
+
+      <div class="fade" id="s1-ports" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+        <div style="background:#0a120a;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#4eff9a">80</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">HTTP</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#4eff9a">443</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">HTTPS</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4ec9e140;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#4ec9e1">53</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">DNS</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #e8a02040;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#e8a020">25</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">SMTP</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #e8a02040;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#e8a020">143</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">IMAP</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #c97ef840;padding:8px;text-align:center">
+          <div style="font-size:10px;color:#c97ef8">22</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">SSH</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Every browser action maps to at least one L7 protocol</div>
+    <div class="ih">DNS resolves names · TCP connects · HTTPS transfers data</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">DNS</div><div class="sl">PORT 53</div></div>
+    <div class="sc"><div class="sv">HTTPS</div><div class="sl">PORT 443</div></div>
+    <div class="sc"><div class="sv am">SMTP</div><div class="sl">PORT 25</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 2 — HTTP / HTTPS Deep Dive
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#091209">
+  <div class="hdr" style="background:#091209">
+    <div class="hdr-title">HTTP / HTTPS</div>
+    <div class="hdr-sub">WEB BROWSING — THE REQUEST / RESPONSE CYCLE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HTTP · HTTPS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PORT 80 / 443</span>
+  </div>
+  <div class="anim" style="background:#091209">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="fade" id="s2-req-label" style="font-size:7px;color:#888;letter-spacing:1px">THE REQUEST — BROWSER → SERVER</div>
+
+      <div class="fade" id="s2-request" style="background:#061208;border:1px solid #4eff9a60;padding:12px;font-size:6px;line-height:2.2">
+        <div style="color:#4eff9a">GET /api/repos HTTP/1.1</div>
+        <div style="color:#4ec9e1">Host: api.github.com</div>
+        <div style="color:#c97ef8">Authorization: Bearer ghp_xxx</div>
+        <div style="color:#e8a020">Accept: application/json</div>
+        <div style="color:#888">User-Agent: Mozilla/5.0</div>
+      </div>
+
+      <!-- Methods -->
+      <div class="fade" id="s2-methods-label" style="font-size:7px;color:#888;letter-spacing:1px">HTTP VERBS — WHAT THE REQUEST DOES</div>
+
+      <div class="fade" id="s2-methods" style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+        <div style="background:#0a120a;border:1px solid #4eff9a40;padding:8px">
+          <div style="font-size:8px;color:#4eff9a">GET</div>
+          <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.8">Fetch a resource<br>No body · cacheable</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4ec9e140;padding:8px">
+          <div style="font-size:8px;color:#4ec9e1">POST</div>
+          <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.8">Create a resource<br>Has body · not cached</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #c97ef840;padding:8px">
+          <div style="font-size:8px;color:#c97ef8">PUT/PATCH</div>
+          <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.8">Update a resource<br>Full / partial update</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #e85050;padding:8px">
+          <div style="font-size:8px;color:#e85050">DELETE</div>
+          <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.8">Remove a resource<br>Idempotent</div>
+        </div>
+      </div>
+
+      <!-- Status codes -->
+      <div class="fade" id="s2-status-label" style="font-size:7px;color:#888;letter-spacing:1px">THE RESPONSE — STATUS CODES</div>
+
+      <div class="fade" id="s2-status" style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:center;gap:10px;background:#0a120a;border:1px solid #4eff9a40;padding:7px 10px">
+          <div style="font-size:9px;color:#4eff9a;width:36px">2xx</div>
+          <div style="flex:1;height:4px;background:#4eff9a;border-radius:2px"></div>
+          <div style="font-size:6px;color:#4eff9a">SUCCESS — 200 OK · 201 Created</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0a120a;border:1px solid #4ec9e140;padding:7px 10px">
+          <div style="font-size:9px;color:#4ec9e1;width:36px">3xx</div>
+          <div style="flex:1;height:4px;background:#4ec9e1;border-radius:2px"></div>
+          <div style="font-size:6px;color:#4ec9e1">REDIRECT — 301 Moved · 302 Found</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0a120a;border:1px solid #e8a02040;padding:7px 10px">
+          <div style="font-size:9px;color:#e8a020;width:36px">4xx</div>
+          <div style="flex:1;height:4px;background:#e8a020;border-radius:2px"></div>
+          <div style="font-size:6px;color:#e8a020">CLIENT ERR — 404 Not Found · 403</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;background:#0a120a;border:1px solid #e8505040;padding:7px 10px">
+          <div style="font-size:9px;color:#e85050;width:36px">5xx</div>
+          <div style="flex:1;height:4px;background:#e85050;border-radius:2px"></div>
+          <div style="font-size:6px;color:#e85050">SERVER ERR — 500 Internal · 503</div>
+        </div>
+      </div>
+
+      <!-- HTTP vs HTTPS quick diff -->
+      <div class="fade" id="s2-diff" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px">
+        <div style="background:#1a0808;border:2px solid #e85050;padding:10px;text-align:center">
+          <div style="font-size:10px;margin-bottom:4px">🔓</div>
+          <div style="font-size:8px;color:#e85050">HTTP</div>
+          <div style="font-size:6px;color:#888;margin-top:5px;line-height:1.9">Port 80<br>Plaintext<br>No TLS</div>
+        </div>
+        <div style="background:#0a1a0f;border:2px solid #4eff9a;padding:10px;text-align:center">
+          <div style="font-size:10px;margin-bottom:4px">🔒</div>
+          <div style="font-size:8px;color:#4eff9a">HTTPS</div>
+          <div style="font-size:6px;color:#888;margin-top:5px;line-height:1.9">Port 443<br>Encrypted<br>TLS 1.3</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">HTTP is stateless — each request is independent</div>
+    <div class="ih">HTTPS = HTTP + TLS · always use port 443 in prod</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:9px">GET</div><div class="sl">MOST COMMON</div></div>
+    <div class="sc"><div class="sv gn" style="color:#4eff9a">200</div><div class="sl">OK STATUS</div></div>
+    <div class="sc"><div class="sv rd" style="color:#e85050">404</div><div class="sl">NOT FOUND</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 3 — DNS + Email Protocols
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#090912">
+  <div class="hdr" style="background:#090912">
+    <div class="hdr-title">DNS + EMAIL PROTOCOLS</div>
+    <div class="hdr-sub">HOW NAMES RESOLVE · HOW MAIL TRAVELS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DNS · SMTP · IMAP</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">PORT 53 · 25 · 143</span>
+  </div>
+  <div class="anim" style="background:#090912">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- DNS resolution -->
+      <div class="fade" id="s3-dns-title" style="font-size:7px;color:#4ec9e1;letter-spacing:1px">DNS — THE INTERNET'S PHONE BOOK</div>
+
+      <div class="fade" id="s3-dns-flow" style="background:#090f18;border:2px solid #4ec9e1;padding:12px">
+        <div style="display:flex;align-items:center;gap:0;margin-bottom:10px">
+          <div style="text-align:center;width:58px">
+            <div style="font-size:18px">💻</div>
+            <div style="font-size:5px;color:#4ec9e1;margin-top:2px">YOU</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+            <div id="s3-dns-b1" style="height:2px;background:#4ec9e1;width:0;transition:width .5s ease-out;border-radius:1px"></div>
+            <div style="font-size:5px;color:#888">github.com?</div>
+          </div>
+          <div style="text-align:center;width:58px">
+            <div style="font-size:18px">🔁</div>
+            <div style="font-size:5px;color:#4ec9e1;margin-top:2px">RESOLVER</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:1px">
+            <div id="s3-dns-b2" style="height:2px;background:#4ec9e1;width:0;transition:width .5s ease-out 0.5s;border-radius:1px"></div>
+            <div style="font-size:5px;color:#888">ask root</div>
+          </div>
+          <div style="text-align:center;width:58px">
+            <div style="font-size:18px">🌐</div>
+            <div style="font-size:5px;color:#4ec9e1;margin-top:2px">ROOT NS</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+          <div style="text-align:right">
+            <div id="s3-dns-b3" style="height:2px;background:#4eff9a;width:0;transition:width .6s ease-out 1s;border-radius:1px;margin-left:auto"></div>
+            <div style="font-size:5px;color:#4eff9a;margin-top:2px">140.82.112.4 ← reply</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          ① Browser checks local cache → ② OS cache → ③ Resolver<br>
+          → ④ Root → ⑤ TLD (.com) → ⑥ Authoritative NS
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <div style="font-size:6px;color:#4ec9e1;background:#091218;padding:4px 8px;border:1px solid #4ec9e140">UDP/53 (query)</div>
+          <div style="font-size:6px;color:#4eff9a;background:#091208;padding:4px 8px;border:1px solid #4eff9a40">A record</div>
+          <div style="font-size:6px;color:#e8a020;background:#121006;padding:4px 8px;border:1px solid #e8a02040">MX record</div>
+        </div>
+      </div>
+
+      <!-- Email protocols -->
+      <div class="fade" id="s3-email-title" style="font-size:7px;color:#e8a020;letter-spacing:1px">EMAIL — THREE PROTOCOLS · THREE JOBS</div>
+
+      <div class="fade" id="s3-smtp" style="background:#120f00;border:1px solid #e8a020;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:8px;color:#e8a020">📤 SMTP — port 25</div>
+          <div style="font-size:6px;color:#888;background:#1a1200;padding:3px 7px;border:1px solid #e8a02040">SEND ONLY</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:6px;color:#aaa">
+          <span>You</span>
+          <div id="s3-smtp-beam" style="flex:1;height:2px;background:#e8a020;width:0;transition:width .7s ease-out;border-radius:1px"></div>
+          <span>Mail server → Recipient server</span>
+        </div>
+        <div style="font-size:6px;color:#888;margin-top:5px">Relays mail between servers · also used by apps to send alerts</div>
+      </div>
+
+      <div class="fade" id="s3-imap" style="background:#120f00;border:1px solid #4ec9e1;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:8px;color:#4ec9e1">📥 IMAP — port 143</div>
+          <div style="font-size:6px;color:#888;background:#091218;padding:3px 7px;border:1px solid #4ec9e140">SYNC</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Mail stays on server · multiple devices sync · folders + flags<br>Gmail / Outlook use IMAP under the hood</div>
+      </div>
+
+      <div class="fade" id="s3-pop3" style="background:#120f00;border:1px solid #c97ef8;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:8px;color:#c97ef8">📬 POP3 — port 110</div>
+          <div style="font-size:6px;color:#888;background:#100a18;padding:3px 7px;border:1px solid #c97ef840">DOWNLOAD</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Downloads &amp; deletes from server · one device · legacy<br>Still used in offline email clients</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">DNS translates names to IPs — every request uses it</div>
+    <div class="ih cy">SMTP sends · IMAP syncs · POP3 downloads and deletes</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">DNS</div><div class="sl">UDP PORT 53</div></div>
+    <div class="sc"><div class="sv am">SMTP</div><div class="sl">PORT 25</div></div>
+    <div class="sc"><div class="sv cy" style="font-size:9px">IMAP</div><div class="sl">PORT 143</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 4 — SSH vs Telnet
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0a12">
+  <div class="hdr" style="background:#0a0a12">
+    <div class="hdr-title">SSH vs TELNET</div>
+    <div class="hdr-sub">ENCRYPTED vs CLEARTEXT REMOTE ACCESS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c97ef8">SSH · TELNET</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PORT 22 · 23</span>
+  </div>
+  <div class="anim" style="background:#0a0a12">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Telnet — bad -->
+      <div class="fade" id="s4-telnet-title" style="font-size:7px;color:#e85050;letter-spacing:1px">TELNET — PORT 23 — NEVER USE THIS</div>
+
+      <div class="fade" id="s4-telnet" style="background:#1a0808;border:2px solid #e85050;padding:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="text-align:center">
+            <div style="font-size:22px">💻</div>
+            <div style="font-size:5px;color:#888;margin-top:2px">YOU</div>
+          </div>
+          <div style="flex:1;position:relative;height:28px">
+            <div id="s4-t-beam" style="position:absolute;top:12px;left:0;height:3px;background:#e85050;width:0;transition:width .8s ease-out;border-radius:1px"></div>
+            <div style="position:absolute;top:0;width:100%;text-align:center;font-size:6px;color:#e85050">PLAINTEXT ⚠</div>
+            <div style="position:absolute;bottom:0;width:100%;text-align:center;font-size:5px;color:#e85050">password=hunter2</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:22px">🖥️</div>
+            <div style="font-size:5px;color:#888;margin-top:2px">SERVER</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:center;margin-bottom:8px">
+          <div style="font-size:20px;animation:bounce 1.5s ease-in-out infinite" id="s4-attacker">😈</div>
+        </div>
+        <div style="font-size:6px;color:#e85050;text-align:center;margin-bottom:4px">ATTACKER ON SAME NETWORK READS EVERYTHING</div>
+        <div style="background:#0d0606;padding:6px 8px;font-size:6px;color:#e8a020;line-height:1.9">
+          login: admin<br>Password: hunter2<br>$ sudo rm -rf /
+        </div>
+      </div>
+
+      <!-- SSH — good -->
+      <div class="fade" id="s4-ssh-title" style="font-size:7px;color:#4eff9a;letter-spacing:1px">SSH — PORT 22 — ALWAYS USE THIS</div>
+
+      <div class="fade" id="s4-ssh" style="background:#0a1a0f;border:2px solid #4eff9a;padding:12px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <div style="text-align:center">
+            <div style="font-size:22px">💻</div>
+            <div style="font-size:5px;color:#888;margin-top:2px">YOU</div>
+          </div>
+          <div style="flex:1;position:relative;height:28px">
+            <div id="s4-s-beam" style="position:absolute;top:12px;left:0;height:3px;background:#4eff9a;width:0;transition:width .8s ease-out;border-radius:1px"></div>
+            <div style="position:absolute;top:0;width:100%;text-align:center;font-size:6px;color:#4eff9a">🔒 ENCRYPTED</div>
+            <div style="position:absolute;bottom:0;width:100%;text-align:center;font-size:5px;color:#4eff9a">x9Kp2mQr7fBz…</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:22px">🖥️</div>
+            <div style="font-size:5px;color:#888;margin-top:2px">SERVER</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.9">SSH features:</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px">
+          <div style="font-size:6px;color:#4eff9a;line-height:1.8">✓ AES-256 encrypted<br>✓ Public key auth<br>✓ Port forwarding</div>
+          <div style="font-size:6px;color:#4eff9a;line-height:1.8">✓ SFTP file transfer<br>✓ Tunnel other traffic<br>✓ Key fingerprint</div>
+        </div>
+      </div>
+
+      <!-- Quick usage -->
+      <div class="fade" id="s4-cmd" style="background:#060612;border:1px solid #c97ef860;padding:10px 12px;font-size:6px;line-height:2.2">
+        <div style="color:#888;margin-bottom:4px"># NEVER (telnet sends cleartext)</div>
+        <div style="color:#e85050">$ telnet myserver.com 23</div>
+        <div style="color:#888;margin-top:4px;margin-bottom:4px"># ALWAYS (ssh encrypts everything)</div>
+        <div style="color:#4eff9a">$ ssh -i ~/.ssh/id_rsa user@myserver.com</div>
+        <div style="color:#4ec9e1;margin-top:4px">$ ssh -L 8080:localhost:3000 user@remote</div>
+        <div style="color:#888;font-size:5px">               ↑ local port tunnel</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Telnet sends everything as cleartext — anyone can sniff it</div>
+    <div class="ih pu">SSH encrypts the full session · use key auth not passwords</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" style="color:#e85050;font-size:8px">23</div><div class="sl">TELNET PORT</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">22</div><div class="sl">SSH PORT</div></div>
+    <div class="sc"><div class="sv pu">AES</div><div class="sl">SSH CIPHER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 5 — WebSockets: Real-Time Full-Duplex
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#091209">
+  <div class="hdr" style="background:#091209">
+    <div class="hdr-title">WEBSOCKET</div>
+    <div class="hdr-sub">FULL-DUPLEX REAL-TIME BROWSER COMMS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">WEBSOCKET</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WS · WSS</span>
+  </div>
+  <div class="anim" style="background:#091209">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- HTTP vs WS comparison -->
+      <div class="fade" id="s5-http-label" style="font-size:7px;color:#e85050;letter-spacing:1px">HTTP — ONE REQUEST · ONE RESPONSE · CONNECTION CLOSED</div>
+
+      <div class="fade" id="s5-http-anim" style="background:#1a0808;border:1px solid #e8505060;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="font-size:16px">💻</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+            <div style="display:flex;align-items:center;gap:4px">
+              <div id="s5-hreq" style="height:3px;background:#e8a020;width:0;transition:width .5s ease-out;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#e8a020">GET →</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div id="s5-hres" style="height:3px;background:#888;width:0;transition:width .5s ease-out 0.7s;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#888">← 200 OK</div>
+            </div>
+          </div>
+          <div style="font-size:16px">🖥️</div>
+        </div>
+        <div style="font-size:6px;color:#e85050;margin-top:6px">Connection closes after each exchange — polling = wasteful</div>
+      </div>
+
+      <!-- WS persistent -->
+      <div class="fade" id="s5-ws-label" style="font-size:7px;color:#4eff9a;letter-spacing:1px">WEBSOCKET — ONE CONNECTION · DATA FLOWS BOTH WAYS</div>
+
+      <div class="fade" id="s5-ws-anim" style="background:#0a1a0f;border:2px solid #4eff9a;padding:12px">
+        <!-- Upgrade handshake -->
+        <div style="font-size:6px;color:#888;margin-bottom:6px;letter-spacing:1px">① HTTP UPGRADE HANDSHAKE</div>
+        <div style="background:#061208;padding:6px 10px;font-size:6px;line-height:2;margin-bottom:8px">
+          <div style="color:#4ec9e1">GET /chat HTTP/1.1</div>
+          <div style="color:#c97ef8">Upgrade: websocket</div>
+          <div style="color:#c97ef8">Connection: Upgrade</div>
+          <div style="color:#4eff9a">← 101 Switching Protocols</div>
+        </div>
+        <!-- Full-duplex animation -->
+        <div style="font-size:6px;color:#888;margin-bottom:6px;letter-spacing:1px">② PERSISTENT FULL-DUPLEX CHANNEL</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <div style="font-size:16px">💻</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:3px">
+              <div id="s5-ws1" style="height:3px;background:#4eff9a;width:0;transition:width .4s ease-out;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#4eff9a">msg →</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:3px">
+              <div id="s5-ws2" style="height:3px;background:#4ec9e1;width:0;transition:width .4s ease-out .3s;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#4ec9e1">← push</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:3px">
+              <div id="s5-ws3" style="height:3px;background:#4eff9a;width:0;transition:width .4s ease-out .6s;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#4eff9a">msg →</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:3px">
+              <div id="s5-ws4" style="height:3px;background:#4ec9e1;width:0;transition:width .4s ease-out .9s;border-radius:1px;flex:1"></div>
+              <div style="font-size:5px;color:#4ec9e1">← push</div>
+            </div>
+          </div>
+          <div style="font-size:16px">🖥️</div>
+        </div>
+        <div style="font-size:6px;color:#888">Connection stays open · server can push any time</div>
+      </div>
+
+      <!-- Use cases -->
+      <div class="fade" id="s5-uses-label" style="font-size:7px;color:#888;letter-spacing:1px">WHERE WEBSOCKETS ARE USED</div>
+
+      <div class="fade" id="s5-uses" style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+        <div style="background:#0a120a;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:16px">💬</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Chat<br>apps</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4ec9e140;padding:8px;text-align:center">
+          <div style="font-size:16px">📈</div>
+          <div style="font-size:6px;color:#4ec9e1;margin-top:4px;line-height:1.8">Live<br>prices</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #c97ef840;padding:8px;text-align:center">
+          <div style="font-size:16px">🎮</div>
+          <div style="font-size:6px;color:#c97ef8;margin-top:4px;line-height:1.8">Online<br>games</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #e8a02040;padding:8px;text-align:center">
+          <div style="font-size:16px">📊</div>
+          <div style="font-size:6px;color:#e8a020;margin-top:4px;line-height:1.8">Live<br>dashboards</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:16px">🤝</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Collab<br>editing</div>
+        </div>
+        <div style="background:#0a120a;border:1px solid #4ec9e140;padding:8px;text-align:center">
+          <div style="font-size:16px">🔔</div>
+          <div style="font-size:6px;color:#4ec9e1;margin-top:4px;line-height:1.8">Push<br>notifs</div>
+        </div>
+      </div>
+
+      <!-- wss note -->
+      <div class="fade" id="s5-wss" style="background:#0d1a0d;border:1px solid #4eff9a60;padding:8px 12px;font-size:6px;color:#888;line-height:1.9">
+        <span style="color:#4eff9a">ws://</span> = unencrypted (port 80) ·
+        <span style="color:#4eff9a">wss://</span> = TLS encrypted (port 443)<br>
+        Always use <span style="color:#4eff9a">wss://</span> in production
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">HTTP is request-response · WebSocket is always open</div>
+    <div class="ih cy">wss:// = WebSocket over TLS · same port 443 as HTTPS</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy" style="font-size:8px">WSS</div><div class="sl">SECURE WS</div></div>
+    <div class="sc"><div class="sv" style="font-size:8px">443</div><div class="sl">WS PORT</div></div>
+    <div class="sc"><div class="sv" style="font-size:7px">DUPLEX</div><div class="sl">BOTH WAYS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playS5()">▶ PLAY</button>
+    <button class="btn restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene = 1;
+
+function goScene(n) {
+  document.getElementById('s' + currentScene).classList.remove('active');
+  currentScene = n;
+  document.getElementById('s' + currentScene).classList.add('active');
+  resetAll(n);
+  setTimeout(() => autoPlay(n), 300);
+}
+function resetAll(n) {
+  if(n===1)resetS1();if(n===2)resetS2();if(n===3)resetS3();if(n===4)resetS4();if(n===5)resetS5();
+}
+function autoPlay(n) {
+  if(n===1)playS1();if(n===2)playS2();if(n===3)playS3();if(n===4)playS4();if(n===5)playS5();
+}
+
+// ── SCENE 1 ──────────────────────────────────
+const s1fades=['s1-bar-label','s1-bar','s1-fires-label','s1-dns','s1-tcp','s1-https','s1-portmap-label','s1-ports'];
+function resetS1(){
+  s1fades.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  const url=document.getElementById('s1-url');if(url)url.textContent='';
+  ['s1-dns-beam','s1-tcp-beam','s1-https-beam'].forEach(id=>{
+    const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}
+  });
+}
+function playS1(){
+  resetS1();
+  const bl=document.getElementById('s1-bar-label');if(bl)bl.style.opacity='1';
+  setTimeout(()=>{
+    const bar=document.getElementById('s1-bar');if(bar)bar.style.opacity='1';
+    const urlStr='https://github.com';
+    let i=0;
+    const ti=setInterval(()=>{
+      const u=document.getElementById('s1-url');
+      if(u&&i<urlStr.length){u.textContent+=urlStr[i];i++;}
+      else clearInterval(ti);
+    },70);
+  },300);
+  setTimeout(()=>{const e=document.getElementById('s1-fires-label');if(e)e.style.opacity='1';},1600);
+  setTimeout(()=>{
+    const e=document.getElementById('s1-dns');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s1-dns-beam');if(b){b.style.transition='width .8s ease-out';b.style.width='100%';}},100);
+  },2000);
+  setTimeout(()=>{
+    const e=document.getElementById('s1-tcp');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s1-tcp-beam');if(b){b.style.transition='width .8s ease-out';b.style.width='100%';}},100);
+  },2700);
+  setTimeout(()=>{
+    const e=document.getElementById('s1-https');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s1-https-beam');if(b){b.style.transition='width .8s ease-out';b.style.width='100%';}},100);
+  },3400);
+  setTimeout(()=>{const e=document.getElementById('s1-portmap-label');if(e)e.style.opacity='1';},4200);
+  setTimeout(()=>{const e=document.getElementById('s1-ports');if(e)e.style.opacity='1';},4600);
+}
+
+// ── SCENE 2 ──────────────────────────────────
+const s2fades=['s2-req-label','s2-request','s2-methods-label','s2-methods','s2-status-label','s2-status','s2-diff'];
+function resetS2(){s2fades.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});}
+function playS2(){
+  resetS2();
+  s2fades.forEach((id,i)=>setTimeout(()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';},200+i*450));
+}
+
+// ── SCENE 3 ──────────────────────────────────
+const s3fades=['s3-dns-title','s3-dns-flow','s3-email-title','s3-smtp','s3-imap','s3-pop3'];
+const s3beams=['s3-dns-b1','s3-dns-b2','s3-dns-b3','s3-smtp-beam'];
+function resetS3(){
+  s3fades.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  s3beams.forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+}
+function playS3(){
+  resetS3();
+  setTimeout(()=>{const e=document.getElementById('s3-dns-title');if(e)e.style.opacity='1';},200);
+  setTimeout(()=>{
+    const e=document.getElementById('s3-dns-flow');if(e)e.style.opacity='1';
+    setTimeout(()=>{
+      const b1=document.getElementById('s3-dns-b1');if(b1){b1.style.transition='width .5s ease-out';b1.style.width='100%';}
+    },200);
+    setTimeout(()=>{
+      const b2=document.getElementById('s3-dns-b2');if(b2){b2.style.transition='width .5s ease-out';b2.style.width='100%';}
+    },700);
+    setTimeout(()=>{
+      const b3=document.getElementById('s3-dns-b3');if(b3){b3.style.transition='width .6s ease-out';b3.style.width='100%';}
+    },1200);
+  },600);
+  setTimeout(()=>{const e=document.getElementById('s3-email-title');if(e)e.style.opacity='1';},2200);
+  setTimeout(()=>{
+    const e=document.getElementById('s3-smtp');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s3-smtp-beam');if(b){b.style.transition='width .7s ease-out';b.style.width='100%';}},200);
+  },2700);
+  setTimeout(()=>{const e=document.getElementById('s3-imap');if(e)e.style.opacity='1';},3400);
+  setTimeout(()=>{const e=document.getElementById('s3-pop3');if(e)e.style.opacity='1';},3900);
+}
+
+// ── SCENE 4 ──────────────────────────────────
+const s4fades=['s4-telnet-title','s4-telnet','s4-ssh-title','s4-ssh','s4-cmd'];
+const s4beams=['s4-t-beam','s4-s-beam'];
+function resetS4(){
+  s4fades.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  s4beams.forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+}
+function playS4(){
+  resetS4();
+  setTimeout(()=>{const e=document.getElementById('s4-telnet-title');if(e)e.style.opacity='1';},200);
+  setTimeout(()=>{
+    const e=document.getElementById('s4-telnet');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s4-t-beam');if(b){b.style.transition='width .8s ease-out';b.style.width='100%';}},200);
+  },700);
+  setTimeout(()=>{const e=document.getElementById('s4-ssh-title');if(e)e.style.opacity='1';},2000);
+  setTimeout(()=>{
+    const e=document.getElementById('s4-ssh');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s4-s-beam');if(b){b.style.transition='width .8s ease-out';b.style.width='100%';}},200);
+  },2500);
+  setTimeout(()=>{const e=document.getElementById('s4-cmd');if(e)e.style.opacity='1';},3600);
+}
+
+// ── SCENE 5 ──────────────────────────────────
+const s5fades=['s5-http-label','s5-http-anim','s5-ws-label','s5-ws-anim','s5-uses-label','s5-uses','s5-wss'];
+const s5beams=['s5-hreq','s5-hres','s5-ws1','s5-ws2','s5-ws3','s5-ws4'];
+function resetS5(){
+  s5fades.forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  s5beams.forEach(id=>{const e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+}
+function playS5(){
+  resetS5();
+  setTimeout(()=>{const e=document.getElementById('s5-http-label');if(e)e.style.opacity='1';},200);
+  setTimeout(()=>{
+    const e=document.getElementById('s5-http-anim');if(e)e.style.opacity='1';
+    setTimeout(()=>{const b=document.getElementById('s5-hreq');if(b){b.style.transition='width .5s ease-out';b.style.width='100%';}},100);
+    setTimeout(()=>{const b=document.getElementById('s5-hres');if(b){b.style.transition='width .5s ease-out';b.style.width='100%';}},800);
+  },700);
+  setTimeout(()=>{const e=document.getElementById('s5-ws-label');if(e)e.style.opacity='1';},1900);
+  setTimeout(()=>{
+    const e=document.getElementById('s5-ws-anim');if(e)e.style.opacity='1';
+    ['s5-ws1','s5-ws2','s5-ws3','s5-ws4'].forEach((id,i)=>{
+      setTimeout(()=>{const b=document.getElementById(id);if(b){b.style.transition='width .4s ease-out';b.style.width='100%';}},200+i*350);
+    });
+  },2400);
+  setTimeout(()=>{const e=document.getElementById('s5-uses-label');if(e)e.style.opacity='1';},4000);
+  setTimeout(()=>{const e=document.getElementById('s5-uses');if(e)e.style.opacity='1';},4400);
+  setTimeout(()=>{const e=document.getElementById('s5-wss');if(e)e.style.opacity='1';},4900);
+}
+
+window.addEventListener('load',()=>{ playS1(); });
+</script>
+</body>
+</html>

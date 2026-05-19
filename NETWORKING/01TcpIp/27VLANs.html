@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VLANs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#a06eff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.pu{color:#a06eff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center;line-height:1.3}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a06eff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fs{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid #2a1f3d;border-radius:2px;opacity:0;transition:opacity .4s}
+.fs.show{opacity:1}
+.fd{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ S1: HOOK ═══════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">ONE SWITCH · MULTIPLE NETWORKS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE QUESTION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s1_hook" style="opacity:0;transition:opacity .5s;border:2px solid #4ec9e1;border-radius:4px;padding:14px 12px;background:#0d1a2e">
+        <div style="font-size:8px;color:#4ec9e1;line-height:2.2">
+          "How does a hospital keep<br>
+          <span style="color:#e85050">patient monitors</span> from talking<br>
+          to the <span style="color:#4eff9a">guest Wi-Fi</span> —<br>
+          on the <span style="color:#fff">same switches?</span>"
+        </div>
+      </div>
+
+      <!-- Physical vs logical -->
+      <div id="s1_concept" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#666;text-align:center;margin-bottom:6px;letter-spacing:.5px">ONE PHYSICAL SWITCH → MULTIPLE LOGICAL NETWORKS</div>
+        <!-- Single physical switch split into 3 colored logical sections -->
+        <div style="border:2px solid #4ec9e1;border-radius:6px;overflow:hidden">
+          <div style="background:#0d1a2e;padding:5px 8px;font-size:7px;color:#4ec9e1;text-align:center;letter-spacing:.5px">PHYSICAL SWITCH</div>
+          <div style="display:flex;height:56px">
+            <div style="flex:1;background:#1a0808;border-right:1px solid #0a0a0f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px">
+              <div style="font-size:7px;color:#e85050">VLAN 10</div>
+              <div style="font-size:6px;color:#666">MEDICAL</div>
+              <div style="font-size:10px">🏥</div>
+            </div>
+            <div style="flex:1;background:#0a140a;border-right:1px solid #0a0a0f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px">
+              <div style="font-size:7px;color:#4eff9a">VLAN 20</div>
+              <div style="font-size:6px;color:#666">STAFF</div>
+              <div style="font-size:10px">👩‍💼</div>
+            </div>
+            <div style="flex:1;background:#0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px">
+              <div style="font-size:7px;color:#4ec9e1">VLAN 30</div>
+              <div style="font-size:6px;color:#666">GUEST</div>
+              <div style="font-size:10px">📶</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1_why" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="padding:8px 10px;background:#1a0808;border:1px solid #e8505033;border-radius:3px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">WITHOUT VLANs</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">All devices share one broadcast domain.<br>Any device can reach any other device.</div>
+        </div>
+        <div style="padding:8px 10px;background:#0a140a;border:1px solid #4eff9a33;border-radius:3px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">WITH VLANs</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">Separate broadcast domains per VLAN.<br>Cross-VLAN traffic requires a router.</div>
+        </div>
+      </div>
+
+      <div id="s1_aws" style="opacity:0;transition:opacity .5s;background:#0d1a2e;border:1px solid #4ec9e133;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">☁ CLOUD CONNECTION</div>
+        <div style="font-size:7px;color:#888;line-height:1.9">AWS subnets, Azure VNets, GCP subnets<br>are conceptually VLANs in the cloud.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">VLAN = separate broadcast domain.</div>
+    <div class="ih cy">Same wire, zero visibility between segments.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">VLAN 10</div><div class="sl">MEDICAL</div></div>
+    <div class="sc"><div class="sv gn">VLAN 20</div><div class="sl">STAFF</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">VLAN 30</div><div class="sl">GUEST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ S2: 802.1Q FRAME ══════════════════ -->
+<div class="scene" id="s2" style="background:#0d1025">
+  <div class="hdr" style="background:#0d1025">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">802.1Q — THE TAG INSIDE THE FRAME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a06eff">802.1Q TAG</span>
+    <span class="sbadge" style="color:#a06eff;border-color:#a06eff">4 BYTES</span>
+  </div>
+  <div class="anim" style="background:#0d1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Frame anatomy -->
+      <div id="s2_frame_title" style="opacity:0;transition:opacity .4s;font-size:8px;color:#a06eff;letter-spacing:.5px">ETHERNET FRAME WITH 802.1Q TAG</div>
+
+      <!-- Untagged frame -->
+      <div id="s2_untagged" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#666;margin-bottom:4px">NORMAL ETHERNET FRAME (no VLAN)</div>
+        <div style="display:flex;gap:2px;height:34px">
+          <div style="flex:2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">DST<br>MAC</div></div>
+          <div style="flex:2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">SRC<br>MAC</div></div>
+          <div style="flex:1.2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">TYPE</div></div>
+          <div style="flex:4;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#4eff9a44;text-align:center">PAYLOAD</div></div>
+          <div style="flex:1;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">FCS</div></div>
+        </div>
+      </div>
+
+      <!-- 802.1Q tagged frame -->
+      <div id="s2_tagged" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#a06eff;margin-bottom:4px">802.1Q TAGGED FRAME (VLAN trunk)</div>
+        <div style="display:flex;gap:2px;height:40px">
+          <div style="flex:2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">DST<br>MAC</div></div>
+          <div style="flex:2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">SRC<br>MAC</div></div>
+          <!-- 802.1Q tag - highlighted -->
+          <div id="s2_tag_box" style="flex:2;background:#2a1a40;border:2px solid #a06eff;border-radius:3px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;transition:box-shadow .3s">
+            <div style="font-size:5px;color:#a06eff;letter-spacing:.3px">802.1Q</div>
+            <div id="s2_vlan_id" style="font-size:7px;color:#fff;font-weight:bold">VLAN?</div>
+          </div>
+          <div style="flex:1.2;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">TYPE</div></div>
+          <div style="flex:4;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#4eff9a44;text-align:center">PAYLOAD</div></div>
+          <div style="flex:1;background:#1a1a2e;border:1px solid #3a3a6e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:6px;color:#888;text-align:center">FCS</div></div>
+        </div>
+      </div>
+
+      <!-- Tag breakdown -->
+      <div id="s2_breakdown" style="opacity:0;transition:opacity .5s;background:#150d25;border:1px solid #a06eff44;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#a06eff;margin-bottom:6px">802.1Q TAG STRUCTURE (4 bytes)</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="width:56px;font-size:6px;color:#888;flex-shrink:0">2 bytes</div>
+            <div style="flex:1;background:#1a0d2e;border:1px solid #a06eff44;border-radius:2px;padding:4px 6px">
+              <div style="font-size:7px;color:#a06eff">TPID — 0x8100</div>
+              <div style="font-size:6px;color:#666;margin-top:2px">Tag Protocol ID — marks frame as 802.1Q</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="width:56px;font-size:6px;color:#888;flex-shrink:0">3 bits</div>
+            <div style="flex:1;background:#1a0d2e;border:1px solid #4ec9e133;border-radius:2px;padding:4px 6px">
+              <div style="font-size:7px;color:#4ec9e1">PCP — Priority bits</div>
+              <div style="font-size:6px;color:#666;margin-top:2px">QoS / CoS traffic priority (0–7)</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="width:56px;font-size:6px;color:#888;flex-shrink:0">1 bit</div>
+            <div style="flex:1;background:#1a0d2e;border:1px solid #66666633;border-radius:2px;padding:4px 6px">
+              <div style="font-size:7px;color:#666">DEI — Drop Eligible</div>
+              <div style="font-size:6px;color:#555;margin-top:2px">Drop this frame first under congestion</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <div style="width:56px;font-size:6px;color:#e8a020;flex-shrink:0">12 bits ★</div>
+            <div style="flex:1;background:#200d00;border:2px solid #e8a020;border-radius:2px;padding:4px 6px">
+              <div style="font-size:7px;color:#e8a020">VID — VLAN Identifier</div>
+              <div style="font-size:6px;color:#888;margin-top:2px">0–4094 · This IS the VLAN number</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s2_note" class="fs" style="border-color:#e8a02033">
+        <div class="fd" style="background:#e8a020"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          12 bits = <span style="color:#e8a020">4096 possible VLANs</span> (0 &amp; 4095 reserved).<br>Usable: VLAN 1–4094.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">802.1Q inserts 4 bytes after source MAC.</div>
+    <div class="ih pu">12-bit VLAN ID = up to 4094 logical networks.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">4</div><div class="sl">BYTES<br>ADDED</div></div>
+    <div class="sc"><div class="sv am">12</div><div class="sl">BITS FOR<br>VLAN ID</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">4094</div><div class="sl">MAX<br>VLANs</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ S3: ACCESS PORTS ══════════════════ -->
+<div class="scene" id="s3" style="background:#0a120a">
+  <div class="hdr" style="background:#0a120a">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">ACCESS PORTS — END DEVICE FACING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ACCESS PORT</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">TAG STRIP</span>
+  </div>
+  <div class="anim" style="background:#0a120a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s3_def" style="opacity:0;transition:opacity .5s;background:#051205;border:1px solid #4eff9a33;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:5px">ACCESS PORT = ONE VLAN · NO TAG</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Connects switch to an <span style="color:#4eff9a">end device</span><br>
+          (PC, phone, printer, camera).<br>
+          Device never sees 802.1Q tags.
+        </div>
+      </div>
+
+      <!-- Access port animation -->
+      <div id="s3_anim" style="opacity:0;transition:opacity .5s;background:#030803;border:1px solid #0f2a0f;border-radius:4px;padding:10px 12px">
+        <div style="font-size:7px;color:#666;margin-bottom:8px;letter-spacing:.5px">FRAME FLOW THROUGH ACCESS PORT</div>
+
+        <!-- Inbound: device sends untagged -->
+        <div style="margin-bottom:10px">
+          <div style="font-size:6px;color:#888;margin-bottom:5px">① DEVICE → SWITCH (inbound)</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="text-align:center">
+              <div style="font-size:16px">💻</div>
+              <div style="font-size:6px;color:#888">PC</div>
+            </div>
+            <!-- untagged frame -->
+            <div style="display:flex;gap:1px;flex:1;height:28px">
+              <div style="flex:1.5;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">DST</div></div>
+              <div style="flex:1.5;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">SRC</div></div>
+              <div style="flex:3;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#4eff9a44">PAYLOAD</div></div>
+            </div>
+            <div style="font-size:10px;color:#e8a020">→</div>
+            <div style="text-align:center">
+              <div style="font-size:14px;padding:4px;border:1px solid #4eff9a;border-radius:3px;color:#4eff9a;font-size:7px">SW<br><span style="font-size:5px;color:#888">V20</span></div>
+            </div>
+          </div>
+          <div style="font-size:6px;color:#888;margin-top:4px;padding-left:28px">Switch <span style="color:#4eff9a">adds VLAN 20 tag</span> internally</div>
+        </div>
+
+        <!-- Divider -->
+        <div style="border-top:1px solid #0f2a0f;margin-bottom:10px"></div>
+
+        <!-- Outbound: switch strips tag -->
+        <div>
+          <div style="font-size:6px;color:#888;margin-bottom:5px">② SWITCH → DEVICE (outbound)</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="text-align:center">
+              <div style="font-size:14px;padding:4px;border:1px solid #4eff9a;border-radius:3px;color:#4eff9a;font-size:7px">SW<br><span style="font-size:5px;color:#888">V20</span></div>
+            </div>
+            <div style="font-size:10px;color:#e8a020">→</div>
+            <!-- tagged internally -->
+            <div style="display:flex;gap:1px;flex:1;height:28px">
+              <div style="flex:1.5;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">DST</div></div>
+              <div style="flex:1.5;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">SRC</div></div>
+              <div id="s3_tag_strip" style="flex:1.2;background:#2a1a40;border:2px solid #a06eff;border-radius:2px;display:flex;align-items:center;justify-content:center;transition:all .5s"><div style="font-size:5px;color:#a06eff">V20</div></div>
+              <div style="flex:3;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#4eff9a44">PAYLOAD</div></div>
+            </div>
+            <div style="font-size:10px;color:#e8a020">→</div>
+            <div style="text-align:center">
+              <div style="font-size:16px">💻</div>
+              <div style="font-size:6px;color:#888">PC</div>
+            </div>
+          </div>
+          <div id="s3_strip_lbl" style="font-size:6px;color:#e85050;margin-top:4px;opacity:0;transition:opacity .4s;padding-left:28px">Tag <span style="color:#e85050">stripped</span> before delivery — PC sees normal frame</div>
+        </div>
+      </div>
+
+      <div id="s3_config" style="opacity:0;transition:opacity .5s;background:#030803;border:1px solid #4eff9a22;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">CISCO CONFIG EXAMPLE</div>
+        <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#020602;padding:6px 8px;border-radius:2px">
+          interface GigabitEthernet0/1<br>
+          &nbsp;switchport mode <span style="color:#4eff9a">access</span><br>
+          &nbsp;switchport access vlan <span style="color:#e8a020">20</span>
+        </div>
+      </div>
+
+      <div id="s3_note" class="fs" style="border-color:#4eff9a33">
+        <div class="fd" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          End device needs <span style="color:#4eff9a">zero VLAN awareness.</span><br>
+          Switch handles all tagging invisibly.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Access port = single VLAN, tag stripped at egress.</div>
+    <div class="ih">End devices never see 802.1Q headers.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">VLAN<br>PER PORT</div></div>
+    <div class="sc"><div class="sv gn">STRIP</div><div class="sl">TAG ON<br>EGRESS</div></div>
+    <div class="sc"><div class="sv gn">END</div><div class="sl">DEVICE<br>FACING</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ S4: TRUNK PORTS ═══════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">TRUNK PORTS — CARRY ALL VLANs</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TRUNK PORT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">MULTI-VLAN</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s4_def" style="opacity:0;transition:opacity .5s;background:#081420;border:1px solid #4ec9e133;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:5px">TRUNK PORT = MULTIPLE VLANs · KEEPS TAGS</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Connects switch-to-switch or<br>
+          switch-to-router. Tags are <span style="color:#4ec9e1">preserved</span><br>
+          so the other end knows which VLAN.
+        </div>
+      </div>
+
+      <!-- Trunk diagram -->
+      <div id="s4_diagram" style="opacity:0;transition:opacity .5s;background:#060e18;border:1px solid #1a2a3a;border-radius:4px;padding:10px 12px">
+        <div style="font-size:7px;color:#666;margin-bottom:8px;letter-spacing:.5px">TRUNK LINK CARRIES TAGGED FRAMES</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <!-- Left switch -->
+          <div style="background:#0d1a2e;border:2px solid #4ec9e1;border-radius:4px;padding:6px 8px;min-width:62px">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px;text-align:center">SW-A</div>
+            <div style="font-size:6px;color:#e85050;margin-bottom:2px">● VLAN 10</div>
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:2px">● VLAN 20</div>
+            <div style="font-size:6px;color:#4ec9e1">● VLAN 30</div>
+          </div>
+          <!-- Trunk link with multiple colored frames -->
+          <div style="flex:1;position:relative;height:44px">
+            <!-- trunk wire -->
+            <div style="position:absolute;top:50%;left:0;right:0;height:3px;background:#2a3a4a;transform:translateY(-50%)"></div>
+            <!-- colored tag frames traveling -->
+            <div id="s4_pkt1" style="position:absolute;top:50%;transform:translate(-50%,-50%);width:18px;height:16px;background:#1a0808;border:1px solid #e85050;border-radius:2px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .3s,left .7s ease-in-out;left:0%">
+              <div style="font-size:5px;color:#e85050">V10</div>
+            </div>
+            <div id="s4_pkt2" style="position:absolute;top:50%;transform:translate(-50%,-50%);width:18px;height:16px;background:#0a1a0a;border:1px solid #4eff9a;border-radius:2px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .3s,left .7s ease-in-out;left:0%">
+              <div style="font-size:5px;color:#4eff9a">V20</div>
+            </div>
+            <div id="s4_pkt3" style="position:absolute;top:50%;transform:translate(-50%,-50%);width:18px;height:16px;background:#081420;border:1px solid #4ec9e1;border-radius:2px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .3s,left .7s ease-in-out;left:0%">
+              <div style="font-size:5px;color:#4ec9e1">V30</div>
+            </div>
+            <div style="position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-size:6px;color:#4ec9e1;white-space:nowrap">TRUNK LINK</div>
+          </div>
+          <!-- Right switch -->
+          <div style="background:#0d1a2e;border:2px solid #4ec9e1;border-radius:4px;padding:6px 8px;min-width:62px">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px;text-align:center">SW-B</div>
+            <div style="font-size:6px;color:#e85050;margin-bottom:2px">● VLAN 10</div>
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:2px">● VLAN 20</div>
+            <div style="font-size:6px;color:#4ec9e1">● VLAN 30</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4_config" style="opacity:0;transition:opacity .5s;background:#060e18;border:1px solid #4ec9e122;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">CISCO CONFIG EXAMPLE</div>
+        <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#040a12;padding:6px 8px;border-radius:2px">
+          interface GigabitEthernet0/24<br>
+          &nbsp;switchport mode <span style="color:#4ec9e1">trunk</span><br>
+          &nbsp;switchport trunk allowed vlan <span style="color:#e8a020">10,20,30</span>
+        </div>
+      </div>
+
+      <div id="s4_compare" style="opacity:0;transition:opacity .5s;display:flex;gap:6px">
+        <div style="flex:1;background:#0a1a0a;border:1px solid #4eff9a33;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">ACCESS</div>
+          <div style="font-size:6px;color:#888;line-height:1.9">1 VLAN<br>no tag<br>end device</div>
+        </div>
+        <div style="flex:1;background:#081420;border:1px solid #4ec9e133;border-radius:3px;padding:8px 6px;text-align:center">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">TRUNK</div>
+          <div style="font-size:6px;color:#888;line-height:1.9">N VLANs<br>keeps tags<br>infra link</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Trunk = highway for multiple VLANs. Tags preserved.</div>
+    <div class="ih cy">Switch-to-switch and switch-to-router links are trunks.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">N</div><div class="sl">VLANs PER<br>TRUNK PORT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">KEEP</div><div class="sl">TAGS<br>PRESERVED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">INFRA</div><div class="sl">SW-TO-SW<br>LINK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="next(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ S5: NATIVE VLAN ═══════════════════ -->
+<div class="scene" id="s5" style="background:#1a1000">
+  <div class="hdr" style="background:#1a1000">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">NATIVE VLAN — THE SILENT THREAT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">NATIVE VLAN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+  <div class="anim" style="background:#1a1000">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s5_def" style="opacity:0;transition:opacity .5s;background:#100a00;border:1px solid #e8a02044;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:5px">NATIVE VLAN = UNTAGGED ON TRUNK</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          One VLAN per trunk can travel<br>
+          <span style="color:#e8a020">without an 802.1Q tag.</span><br>
+          Default on Cisco: <span style="color:#e85050">VLAN 1.</span>
+        </div>
+      </div>
+
+      <!-- Frame comparison -->
+      <div id="s5_frames" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#666;margin-bottom:6px;letter-spacing:.5px">SAME TRUNK LINK — TWO KINDS OF FRAMES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <!-- Tagged VLAN 20 -->
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:46px;font-size:6px;color:#888;text-align:right">VLAN 20</div>
+            <div style="display:flex;gap:1px;flex:1;height:24px">
+              <div style="flex:1;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">HDR</div></div>
+              <div style="flex:1;background:#1a1040;border:1px solid #a06eff;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#a06eff">V20</div></div>
+              <div style="flex:3;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#4eff9a44">DATA</div></div>
+            </div>
+            <div style="font-size:6px;color:#4eff9a;width:34px;text-align:right">tagged ✓</div>
+          </div>
+          <!-- Untagged VLAN 1 (native) -->
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:46px;font-size:6px;color:#e85050;text-align:right">VLAN 1 ⚠</div>
+            <div style="display:flex;gap:1px;flex:1;height:24px">
+              <div style="flex:1;background:#1a1a2e;border:1px solid #3a3a5e;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#888">HDR</div></div>
+              <div style="flex:1;background:#1a0808;border:2px dashed #e85050;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#e85050">NO<br>TAG</div></div>
+              <div style="flex:3;background:#0a1a0a;border:1px solid #1a3a1a;border-radius:2px;display:flex;align-items:center;justify-content:center"><div style="font-size:5px;color:#4eff9a44">DATA</div></div>
+            </div>
+            <div style="font-size:6px;color:#e85050;width:34px;text-align:right">no tag!</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VLAN hopping attack -->
+      <div id="s5_attack" style="opacity:0;transition:opacity .5s;background:#1a0808;border:2px solid #e85050;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:5px">⚡ VLAN HOPPING ATTACK</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Attacker on VLAN 1 sends<br>
+          <span style="color:#e85050">double-tagged frames</span>: outer tag = 1<br>
+          (stripped at first trunk), inner tag<br>
+          reaches VLAN 10 — the medical network.
+        </div>
+      </div>
+
+      <!-- Fix -->
+      <div id="s5_fix" style="opacity:0;transition:opacity .5s;background:#0a140a;border:1px solid #4eff9a44;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">✓ FIX: CHANGE NATIVE VLAN</div>
+        <div style="font-family:monospace;font-size:7px;color:#ccc;line-height:2;background:#030a03;padding:5px 8px;border-radius:2px">
+          switchport trunk native vlan <span style="color:#4eff9a">999</span><br>
+          <span style="color:#666"># use unused VLAN, never VLAN 1</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Native VLAN travels untagged on trunks.</div>
+    <div class="ih am">Never leave it as VLAN 1 — change it to an unused ID.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">VLAN 1</div><div class="sl">DEFAULT<br>NATIVE</div></div>
+    <div class="sc"><div class="sv rd">HOP</div><div class="sl">ATTACK<br>VECTOR</div></div>
+    <div class="sc"><div class="sv gn">999</div><div class="sl">SAFE<br>NATIVE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="next(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ S6: FULL PICTURE ══════════════════ -->
+<div class="scene" id="s6" style="background:#0d0d1a">
+  <div class="hdr" style="background:#0d0d1a">
+    <div class="hdr-title">VLANs</div>
+    <div class="hdr-sub">COMPLETE HOSPITAL TOPOLOGY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">FULL PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+  <div class="anim" style="background:#0d0d1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Hospital topology -->
+      <div id="s6_topo" style="opacity:0;transition:opacity .5s;position:relative">
+        <!-- Router at top -->
+        <div style="display:flex;justify-content:center;margin-bottom:6px">
+          <div style="background:#1a1a2e;border:2px solid #a06eff;border-radius:4px;padding:6px 16px;text-align:center">
+            <div style="font-size:8px;color:#a06eff">ROUTER / L3 SW</div>
+            <div style="font-size:6px;color:#666;margin-top:2px">inter-VLAN routing</div>
+          </div>
+        </div>
+        <!-- Trunk line down -->
+        <div style="width:2px;height:14px;background:#4ec9e1;margin:0 auto;margin-bottom:6px"></div>
+        <!-- Core switch -->
+        <div style="background:#0d1a2e;border:2px solid #4ec9e1;border-radius:4px;padding:8px 10px;margin-bottom:6px">
+          <div style="font-size:8px;color:#4ec9e1;text-align:center;margin-bottom:5px">CORE SWITCH</div>
+          <div style="display:flex;gap:4px">
+            <div style="flex:1;background:#1a0808;border:1px solid #e85050;border-radius:2px;padding:4px;text-align:center">
+              <div style="font-size:6px;color:#e85050">VLAN 10</div>
+              <div style="font-size:5px;color:#666">MEDICAL</div>
+            </div>
+            <div style="flex:1;background:#0a140a;border:1px solid #4eff9a;border-radius:2px;padding:4px;text-align:center">
+              <div style="font-size:6px;color:#4eff9a">VLAN 20</div>
+              <div style="font-size:5px;color:#666">STAFF</div>
+            </div>
+            <div style="flex:1;background:#081420;border:1px solid #4ec9e1;border-radius:2px;padding:4px;text-align:center">
+              <div style="font-size:6px;color:#4ec9e1">VLAN 30</div>
+              <div style="font-size:5px;color:#666">GUEST</div>
+            </div>
+          </div>
+        </div>
+        <!-- Access port devices -->
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#0f0505;border:1px solid #e8505033;border-radius:3px;padding:6px;text-align:center">
+            <div style="font-size:14px">🏥</div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px">Patient Monitor</div>
+            <div style="font-size:5px;color:#666">access VLAN 10</div>
+          </div>
+          <div style="flex:1;background:#050f05;border:1px solid #4eff9a33;border-radius:3px;padding:6px;text-align:center">
+            <div style="font-size:14px">👩‍💼</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px">Staff Laptop</div>
+            <div style="font-size:5px;color:#666">access VLAN 20</div>
+          </div>
+          <div style="flex:1;background:#060a14;border:1px solid #4ec9e133;border-radius:3px;padding:6px;text-align:center">
+            <div style="font-size:14px">📱</div>
+            <div style="font-size:6px;color:#4ec9e1;margin-top:2px">Guest Phone</div>
+            <div style="font-size:5px;color:#666">access VLAN 30</div>
+          </div>
+        </div>
+        <!-- Can/cannot communicate -->
+        <div style="margin-top:6px;padding:6px 8px;background:#0d0d1a;border:1px solid #2a1f3d;border-radius:3px">
+          <div style="font-size:6px;color:#888;line-height:2">
+            🏥 → 👩‍💼 <span style="color:#e85050">BLOCKED</span> (different VLAN, needs router + firewall rule)<br>
+            🏥 → 📱 <span style="color:#e85050">BLOCKED</span> (different VLAN, no route configured)<br>
+            👩‍💼 → 👩‍💼 <span style="color:#4eff9a">ALLOWED</span> (same VLAN 20, direct L2)
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick ref table -->
+      <div id="s6_ref" style="opacity:0;transition:opacity .5s;background:#08080f;border:1px solid #2a1f3d;border-radius:4px;overflow:hidden">
+        <div style="background:#12121e;padding:5px 8px;font-size:7px;color:#4ec9e1;letter-spacing:.5px">QUICK REFERENCE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a1a2e">
+          <div style="flex:1.2;padding:5px 6px;font-size:6px;color:#888;border-right:1px solid #1a1a2e">ACCESS PORT</div>
+          <div style="flex:2;padding:5px 6px;font-size:6px;color:#4eff9a;line-height:1.8">1 VLAN · strips tag · end device</div>
+        </div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a1a2e">
+          <div style="flex:1.2;padding:5px 6px;font-size:6px;color:#888;border-right:1px solid #1a1a2e">TRUNK PORT</div>
+          <div style="flex:2;padding:5px 6px;font-size:6px;color:#4ec9e1;line-height:1.8">N VLANs · keeps 802.1Q tags · infra</div>
+        </div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a1a2e">
+          <div style="flex:1.2;padding:5px 6px;font-size:6px;color:#888;border-right:1px solid #1a1a2e">NATIVE VLAN</div>
+          <div style="flex:2;padding:5px 6px;font-size:6px;color:#e8a020;line-height:1.8">untagged on trunk · change from VLAN 1</div>
+        </div>
+        <div style="display:flex;gap:0">
+          <div style="flex:1.2;padding:5px 6px;font-size:6px;color:#888;border-right:1px solid #1a1a2e">802.1Q TAG</div>
+          <div style="flex:2;padding:5px 6px;font-size:6px;color:#a06eff;line-height:1.8">4 bytes · 12-bit VLAN ID · 4094 max</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Misconfig = lateral movement across VLANs.</div>
+    <div class="ih cy">Verify: native VLAN, trunk allowed list, access VLAN.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">NEVER</div><div class="sl">USE VLAN 1<br>NATIVE</div></div>
+    <div class="sc"><div class="sv gn">ISOLATE</div><div class="sl">BROADCAST<br>DOMAINS</div></div>
+    <div class="sc"><div class="sv pu">802.1Q</div><div class="sl">THE TAG<br>STANDARD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(6)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn" onclick="next(6)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+const TOTAL = 6;
+let timers = {};
+let pktIntervals = {};
+
+function clearTimers(n) {
+  if (timers[n]) { timers[n].forEach(clearTimeout); timers[n] = []; }
+  if (pktIntervals[n]) { clearInterval(pktIntervals[n]); pktIntervals[n] = null; }
+}
+function t(n, fn, d) {
+  if (!timers[n]) timers[n] = [];
+  timers[n].push(setTimeout(fn, d));
+}
+function showEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '1';
+  if (e.classList.contains('fs')) e.classList.add('show');
+}
+function hideEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '0';
+  if (e.classList.contains('fs')) e.classList.remove('show');
+}
+
+function resetScene(n) {
+  clearTimers(n);
+  if (n === 1) {
+    ['s1_hook','s1_concept','s1_why','s1_aws'].forEach(hideEl);
+  } else if (n === 2) {
+    ['s2_frame_title','s2_untagged','s2_tagged','s2_breakdown','s2_note'].forEach(hideEl);
+    const tb = document.getElementById('s2_tag_box');
+    if (tb) tb.style.boxShadow = '';
+    const vid = document.getElementById('s2_vlan_id');
+    if (vid) vid.textContent = 'VLAN?';
+  } else if (n === 3) {
+    ['s3_def','s3_anim','s3_config','s3_note'].forEach(hideEl);
+    const sl = document.getElementById('s3_strip_lbl');
+    if (sl) sl.style.opacity = '0';
+    const ts = document.getElementById('s3_tag_strip');
+    if (ts) { ts.style.background = '#2a1a40'; ts.style.borderColor = '#a06eff'; ts.style.opacity = '1'; }
+  } else if (n === 4) {
+    ['s4_def','s4_diagram','s4_config','s4_compare'].forEach(hideEl);
+    ['s4_pkt1','s4_pkt2','s4_pkt3'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.transition = 'none'; e.style.opacity = '0'; e.style.left = '0%'; setTimeout(() => { e.style.transition = 'opacity .3s,left .7s ease-in-out'; }, 20); }
+    });
+  } else if (n === 5) {
+    ['s5_def','s5_frames','s5_attack','s5_fix'].forEach(hideEl);
+  } else if (n === 6) {
+    ['s6_topo','s6_ref'].forEach(hideEl);
+  }
+}
+
+function animatePackets(n) {
+  // Animate 3 packets across trunk link staggered
+  const pkts = ['s4_pkt1','s4_pkt2','s4_pkt3'];
+  pkts.forEach((id, i) => {
+    t(4, () => {
+      const e = document.getElementById(id);
+      if (!e) return;
+      e.style.opacity = '1';
+      e.style.left = '5%';
+      setTimeout(() => { e.style.left = '95%'; }, 60);
+      setTimeout(() => { e.style.opacity = '0'; e.style.transition = 'none'; e.style.left = '5%'; setTimeout(() => { e.style.transition = 'opacity .3s,left .7s ease-in-out'; }, 20); }, 900);
+    }, 2000 + i * 350);
+  });
+  // Repeat
+  t(4, () => {
+    pkts.forEach((id, i) => {
+      t(4, () => {
+        const e = document.getElementById(id);
+        if (!e) return;
+        e.style.opacity = '1';
+        e.style.left = '5%';
+        setTimeout(() => { e.style.left = '95%'; }, 60);
+        setTimeout(() => { e.style.opacity = '0'; }, 900);
+      }, i * 300);
+    });
+  }, 3800);
+}
+
+function play(n) { resetScene(n); setTimeout(() => animate(n), 60); }
+
+function animate(n) {
+  if (n === 1) {
+    t(1, () => showEl('s1_hook'), 300);
+    t(1, () => showEl('s1_concept'), 1100);
+    t(1, () => showEl('s1_why'), 2000);
+    t(1, () => showEl('s1_aws'), 3100);
+  } else if (n === 2) {
+    t(2, () => showEl('s2_frame_title'), 300);
+    t(2, () => showEl('s2_untagged'), 700);
+    t(2, () => showEl('s2_tagged'), 1500);
+    t(2, () => {
+      const tb = document.getElementById('s2_tag_box');
+      if (tb) tb.style.boxShadow = '0 0 12px #a06effaa';
+      const vid = document.getElementById('s2_vlan_id');
+      if (vid) vid.textContent = 'ID:10';
+    }, 2200);
+    t(2, () => showEl('s2_breakdown'), 2800);
+    t(2, () => showEl('s2_note'), 4200);
+  } else if (n === 3) {
+    t(3, () => showEl('s3_def'), 300);
+    t(3, () => showEl('s3_anim'), 1000);
+    t(3, () => {
+      const ts = document.getElementById('s3_tag_strip');
+      if (ts) { ts.style.background = '#3a0808'; ts.style.borderColor = '#e85050'; }
+      const sl = document.getElementById('s3_strip_lbl');
+      if (sl) sl.style.opacity = '1';
+    }, 2200);
+    t(3, () => {
+      const ts = document.getElementById('s3_tag_strip');
+      if (ts) { ts.style.opacity = '0'; }
+    }, 2900);
+    t(3, () => showEl('s3_config'), 3400);
+    t(3, () => showEl('s3_note'), 4200);
+  } else if (n === 4) {
+    t(4, () => showEl('s4_def'), 300);
+    t(4, () => showEl('s4_diagram'), 900);
+    animatePackets(4);
+    t(4, () => showEl('s4_config'), 4400);
+    t(4, () => showEl('s4_compare'), 5200);
+  } else if (n === 5) {
+    t(5, () => showEl('s5_def'), 300);
+    t(5, () => showEl('s5_frames'), 1000);
+    t(5, () => showEl('s5_attack'), 2000);
+    t(5, () => showEl('s5_fix'), 3200);
+  } else if (n === 6) {
+    t(6, () => showEl('s6_topo'), 400);
+    t(6, () => showEl('s6_ref'), 1800);
+  }
+}
+
+function next(n) {
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  const nxt = n < TOTAL ? n + 1 : 1;
+  document.getElementById('s' + nxt).classList.add('active');
+  setTimeout(() => animate(nxt), 100);
+}
+function prev(n) {
+  if (n <= 1) return;
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  document.getElementById('s' + (n - 1)).classList.add('active');
+  setTimeout(() => animate(n - 1), 100);
+}
+
+window.addEventListener('load', () => setTimeout(() => animate(1), 400));
+</script>
+</body>
+</html>

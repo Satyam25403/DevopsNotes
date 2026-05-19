@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>VM vs Container</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Stack layer blocks */
+.stack-wrap{display:flex;gap:14px;justify-content:center;padding:8px 10px}
+.stack-col{display:flex;flex-direction:column;align-items:center;gap:0;flex:1;max-width:168px}
+.stack-title{font-size:9px;color:#aaa;margin-bottom:8px;letter-spacing:1px;text-align:center}
+.layer{width:100%;border:2px solid #333;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 4px;margin-bottom:3px;opacity:0;transition:opacity .4s,border-color .3s,background .3s;position:relative}
+.layer .lname{font-size:8px;text-align:center;line-height:1.5;letter-spacing:.5px}
+.layer .lsub{font-size:6px;color:#777;text-align:center;margin-top:3px;line-height:1.4}
+.layer.vis{opacity:1}
+
+/* VM layers */
+.l-hw{background:#1a0a2e;border-color:#4a2080;height:38px}
+.l-hw .lname{color:#9060d0}
+.l-hyp{background:#261040;border-color:#6030a0;height:38px}
+.l-hyp .lname{color:#b080e0}
+.l-gos{background:#1a1a40;border-color:#4040a0;height:48px}
+.l-gos .lname{color:#8080d0}
+.l-libs{background:#152030;border-color:#305080;height:36px}
+.l-libs .lname{color:#6090c0}
+.l-app{background:#0d2a0d;border-color:#20a020;height:38px}
+.l-app .lname{color:#40e040}
+
+/* Container layers */
+.c-hw{background:#1a0a2e;border-color:#4a2080;height:38px}
+.c-hw .lname{color:#9060d0}
+.c-host{background:#0d1a2e;border-color:#2050a0;height:48px}
+.c-host .lname{color:#4090e0}
+.c-dok{background:#00233a;border-color:#0080c0;height:38px}
+.c-dok .lname{color:#00bfff}
+.c-capp{background:#0d2a0d;border-color:#20a020;height:38px}
+.c-capp .lname{color:#40e040}
+
+/* Size bar */
+.size-bar-wrap{padding:4px 10px 0}
+.size-label{font-size:8px;color:#aaa;margin-bottom:4px;text-align:center}
+.size-bar-bg{width:100%;height:14px;background:#1a1025;border:1px solid #2a1f3d;overflow:hidden}
+.size-bar-fill{height:100%;width:0;transition:width 1.2s ease-out}
+
+/* Boot bar */
+.boot-label{font-size:8px;color:#aaa;margin-top:5px;margin-bottom:4px;text-align:center}
+
+/* Compare scene */
+.cmp-wrap{display:flex;gap:10px;padding:8px 10px}
+.cmp-col{flex:1;display:flex;flex-direction:column;gap:6px}
+.cmp-hd{font-size:8px;text-align:center;padding:5px 4px;letter-spacing:.5px}
+.cmp-row{border:1px solid #2a1f3d;padding:6px 8px;display:flex;flex-direction:column;gap:3px;opacity:0;transition:opacity .4s}
+.cmp-row.vis{opacity:1}
+.cmp-key{font-size:7px;color:#666;letter-spacing:.5px}
+.cmp-val{font-size:8px;line-height:1.5}
+
+/* Isolation scene */
+.iso-wrap{padding:8px 12px}
+.proc-box{border:2px solid #333;padding:8px 10px;margin-bottom:6px;opacity:0;transition:opacity .5s}
+.proc-box.vis{opacity:1}
+.proc-title{font-size:8px;margin-bottom:5px;letter-spacing:.5px}
+.proc-detail{font-size:7px;color:#666;line-height:1.8}
+.ns-bar{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px}
+.ns-tag{font-size:6px;padding:2px 6px;border:1px solid #333;color:#888}
+
+/* pulse animation */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.pulse{animation:pulse 1s infinite}
+
+/* arrow */
+.arrow-anim{width:100%;height:18px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s}
+.arrow-anim.vis{opacity:1}
+.arrow-line{width:0;height:2px;background:#4eff9a;transition:width .5s ease-out;margin-right:2px}
+.arrow-line.full{width:40px}
+.arrow-head{color:#4eff9a;font-size:10px}
+</style>
+</head>
+<body>
+
+<!-- SCENE 1: VM STACK -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">VM vs CONTAINER</div>
+    <div class="hdr-sub">WHY GOOGLE RUNS MILLIONS OF CONTAINERS</div>
+    <div class="dots">
+      <div class="dot active" id="d1"></div>
+      <div class="dot" id="d2"></div>
+      <div class="dot" id="d3"></div>
+      <div class="dot" id="d4"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE VIRTUAL MACHINE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">HEAVY</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:7px;color:#666;text-align:center;letter-spacing:.5px;padding:2px 0">EACH VM PACKS ITS OWN FULL OS</div>
+      <div class="stack-wrap">
+        <div class="stack-col">
+          <div class="stack-title">VM #1</div>
+          <div class="layer l-app" id="v1a"><span class="lname">🟢 YOUR APP</span><span class="lsub">node / python</span></div>
+          <div class="layer l-libs" id="v1b"><span class="lname">LIBS / RUNTIME</span><span class="lsub">~200 MB</span></div>
+          <div class="layer l-gos" id="v1c"><span class="lname">GUEST OS</span><span class="lsub">Ubuntu ~1 GB</span></div>
+          <div class="layer l-hyp" id="v1d"><span class="lname">HYPERVISOR</span><span class="lsub">VMware / KVM</span></div>
+          <div class="layer l-hw" id="v1e"><span class="lname">HARDWARE</span></div>
+        </div>
+        <div class="stack-col">
+          <div class="stack-title">VM #2</div>
+          <div class="layer l-app" id="v2a"><span class="lname">🟢 YOUR APP</span><span class="lsub">java / go</span></div>
+          <div class="layer l-libs" id="v2b"><span class="lname">LIBS / RUNTIME</span><span class="lsub">~400 MB</span></div>
+          <div class="layer l-gos" id="v2c"><span class="lname">GUEST OS</span><span class="lsub">CentOS ~1.2 GB</span></div>
+          <div class="layer l-hyp" id="v2d"><span class="lname">HYPERVISOR</span><span class="lsub">shared</span></div>
+          <div class="layer l-hw" id="v2e"><span class="lname">HARDWARE</span></div>
+        </div>
+      </div>
+      <div class="size-bar-wrap">
+        <div class="size-label">DISK SIZE PER VM</div>
+        <div class="size-bar-bg"><div class="size-bar-fill" id="vmbar" style="background:#e85050"></div></div>
+        <div style="font-size:7px;color:#e85050;text-align:right;margin-top:3px" id="vmsize">0 GB</div>
+      </div>
+      <div class="size-bar-wrap">
+        <div class="boot-label">BOOT TIME</div>
+        <div class="size-bar-bg"><div class="size-bar-fill" id="vmboot" style="background:#e8a020"></div></div>
+        <div style="font-size:7px;color:#e8a020;text-align:right;margin-top:3px" id="vmbootlabel">0 s</div>
+      </div>
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">PROBLEM: <span class="ih am">DUPLICATION</span></div>
+    <div class="il">Each VM ships its <span style="color:#e8a020">own full OS</span> (~1 GB). 100 VMs = 100 GB of OS just sitting there. Boot takes minutes while the kernel loads.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am" id="s1v1">~1.5 GB</div><div class="sl">SIZE PER VM</div></div>
+    <div class="sc"><div class="sv rd" id="s1v2">60 s</div><div class="sl">BOOT TIME</div></div>
+    <div class="sc"><div class="sv am" id="s1v3">~10</div><div class="sl">VMs PER HOST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: CONTAINER STACK -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VM vs CONTAINER</div>
+    <div class="hdr-sub">WHY GOOGLE RUNS MILLIONS OF CONTAINERS</div>
+    <div class="dots">
+      <div class="dot done" id="d1b"></div>
+      <div class="dot active" id="d2b"></div>
+      <div class="dot" id="d3b"></div>
+      <div class="dot" id="d4b"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE CONTAINER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LIGHT</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+      <div style="font-size:7px;color:#666;text-align:center;letter-spacing:.5px;padding:2px 0">CONTAINERS SHARE THE HOST OS KERNEL</div>
+      <div class="stack-wrap">
+        <div class="stack-col" style="max-width:155px">
+          <div class="stack-title">CONTAINER #1</div>
+          <div class="layer c-capp" id="c1a"><span class="lname">🟢 APP</span><span class="lsub">node / python</span></div>
+          <div class="layer c-dok" id="c1b"><span class="lname">DOCKER</span><span class="lsub">runtime</span></div>
+          <div class="layer c-host" id="c1c" style="height:54px"><span class="lname">HOST OS</span><span class="lsub">shared kernel</span></div>
+          <div class="layer c-hw" id="c1d"><span class="lname">HARDWARE</span></div>
+        </div>
+        <div class="stack-col" style="max-width:155px">
+          <div class="stack-title">CONTAINER #2</div>
+          <div class="layer c-capp" id="c2a"><span class="lname">🟢 APP</span><span class="lsub">java / go</span></div>
+          <div class="layer c-dok" id="c2b"><span class="lname">DOCKER</span><span class="lsub">runtime</span></div>
+          <div class="layer c-host" id="c2c" style="height:54px"><span class="lname">HOST OS</span><span class="lsub">no duplication</span></div>
+          <div class="layer c-hw" id="c2d"><span class="lname">HARDWARE</span></div>
+        </div>
+      </div>
+      <div class="size-bar-wrap">
+        <div class="size-label">DISK SIZE PER CONTAINER</div>
+        <div class="size-bar-bg"><div class="size-bar-fill" id="cbar" style="background:#4eff9a"></div></div>
+        <div style="font-size:7px;color:#4eff9a;text-align:right;margin-top:3px" id="csize">0 MB</div>
+      </div>
+      <div class="size-bar-wrap">
+        <div class="boot-label">STARTUP TIME</div>
+        <div class="size-bar-bg"><div class="size-bar-fill" id="cboot" style="background:#4ec9e1"></div></div>
+        <div style="font-size:7px;color:#4ec9e1;text-align:right;margin-top:3px" id="cbootlabel">0 ms</div>
+      </div>
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">FIX: <span class="ih">SHARED KERNEL</span></div>
+    <div class="il">Containers use the host OS kernel directly. No guest OS = <span style="color:#4eff9a">10x smaller</span>, starts in <span style="color:#4eff9a">milliseconds</span>. Same isolation, fraction of the cost.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~150 MB</div><div class="sl">SIZE / CONTAINER</div></div>
+    <div class="sc"><div class="sv gn">50 ms</div><div class="sl">STARTUP TIME</div></div>
+    <div class="sc"><div class="sv gn">~100s</div><div class="sl">PER HOST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: ISOLATION -->
+<div class="scene" id="s3" style="background:#0a0f1a">
+  <div class="hdr" style="background:#0a0f1a">
+    <div class="hdr-title">VM vs CONTAINER</div>
+    <div class="hdr-sub">HOW ISOLATION ACTUALLY WORKS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">NAMESPACES</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LINUX MAGIC</span>
+  </div>
+  <div class="anim" style="background:#0a0f1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+      <div style="font-size:7px;color:#666;text-align:center;letter-spacing:.5px">LINUX NAMESPACES = THE SECRET SAUCE</div>
+
+      <div class="proc-box" id="iso1" style="border-color:#4ec9e1;background:#041428">
+        <div class="proc-title" style="color:#4ec9e1">PID NAMESPACE</div>
+        <div class="proc-detail">Container thinks PID 1 is its init process. Host OS sees real PID 4782. Each container has its own process tree.</div>
+        <div class="ns-bar"><span class="ns-tag" style="color:#4ec9e1;border-color:#4ec9e1">container: PID 1</span><span class="ns-tag">host: PID 4782</span></div>
+      </div>
+
+      <div class="proc-box" id="iso2" style="border-color:#9060d0;background:#160a28">
+        <div class="proc-title" style="color:#9060d0">NET NAMESPACE</div>
+        <div class="proc-detail">Own IP, own ports, own routing table. Container on port 3000 doesn't conflict with another on port 3000.</div>
+        <div class="ns-bar"><span class="ns-tag" style="color:#9060d0;border-color:#9060d0">eth0: 172.17.0.2</span><span class="ns-tag" style="color:#9060d0;border-color:#9060d0">eth0: 172.17.0.3</span></div>
+      </div>
+
+      <div class="proc-box" id="iso3" style="border-color:#e8a020;background:#1a0e00">
+        <div class="proc-title" style="color:#e8a020">MNT NAMESPACE</div>
+        <div class="proc-detail">Container sees its own filesystem root (/). Can't touch host files or other containers' data.</div>
+        <div class="ns-bar"><span class="ns-tag" style="color:#e8a020;border-color:#e8a020">/app → isolated</span><span class="ns-tag">host: /var/lib/docker</span></div>
+      </div>
+
+      <div class="proc-box" id="iso4" style="border-color:#4eff9a;background:#041a04">
+        <div class="proc-title" style="color:#4eff9a">CGROUPS: RESOURCE LIMITS</div>
+        <div class="proc-detail">CPU, RAM, I/O capped per container. One greedy app can't starve others on the same host.</div>
+        <div class="ns-bar"><span class="ns-tag" style="color:#4eff9a;border-color:#4eff9a">cpu: 0.5 cores</span><span class="ns-tag" style="color:#4eff9a;border-color:#4eff9a">mem: 512 MB</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="info" style="border-color:#9060d0">
+    <div class="il">KEY INSIGHT: <span style="color:#9060d0">NOT A VM</span></div>
+    <div class="il">Containers are just <span style="color:#4eff9a">processes with extra rules</span>. The kernel isn't fooled — it sees every container process directly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:10px">namespaces</div><div class="sl">ISOLATION</div></div>
+    <div class="sc"><div class="sv gn">cgroups</div><div class="sl">RESOURCES</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:10px">overlayFS</div><div class="sl">FILESYSTEM</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: COMPARISON -->
+<div class="scene" id="s4" style="background:#001a10">
+  <div class="hdr" style="background:#001a10">
+    <div class="hdr-title">VM vs CONTAINER</div>
+    <div class="hdr-sub">THE NUMBERS THAT MATTER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SIDE BY SIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+  <div class="anim" style="background:#001a10">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+      <div class="cmp-wrap">
+        <div class="cmp-col">
+          <div class="cmp-hd" style="background:#200a0a;border:1px solid #e85050;color:#e85050">VIRTUAL MACHINE</div>
+          <div class="cmp-row" id="cm1" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">SIZE</span>
+            <span class="cmp-val" style="color:#e85050">1 – 20 GB</span>
+          </div>
+          <div class="cmp-row" id="cm2" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">BOOT TIME</span>
+            <span class="cmp-val" style="color:#e85050">30 s – 2 min</span>
+          </div>
+          <div class="cmp-row" id="cm3" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">ISOLATION</span>
+            <span class="cmp-val" style="color:#e8a020">FULL OS BOUNDARY</span>
+          </div>
+          <div class="cmp-row" id="cm4" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">DENSITY</span>
+            <span class="cmp-val" style="color:#e85050">~10 per host</span>
+          </div>
+          <div class="cmp-row" id="cm5" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">OVERHEAD</span>
+            <span class="cmp-val" style="color:#e85050">FULL KERNEL</span>
+          </div>
+          <div class="cmp-row" id="cm6" style="background:#1a0505;border-color:#e85050">
+            <span class="cmp-key">USE WHEN</span>
+            <span class="cmp-val" style="color:#e8a020;font-size:7px;line-height:1.6">STRONG ISOLATION NEEDED</span>
+          </div>
+        </div>
+        <div class="cmp-col">
+          <div class="cmp-hd" style="background:#002010;border:1px solid #4eff9a;color:#4eff9a">CONTAINER</div>
+          <div class="cmp-row" id="cn1" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">SIZE</span>
+            <span class="cmp-val" style="color:#4eff9a">50 – 500 MB</span>
+          </div>
+          <div class="cmp-row" id="cn2" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">BOOT TIME</span>
+            <span class="cmp-val" style="color:#4eff9a">50 ms – 2 s</span>
+          </div>
+          <div class="cmp-row" id="cn3" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">ISOLATION</span>
+            <span class="cmp-val" style="color:#4ec9e1">NAMESPACE + CGROUP</span>
+          </div>
+          <div class="cmp-row" id="cn4" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">DENSITY</span>
+            <span class="cmp-val" style="color:#4eff9a">100s per host</span>
+          </div>
+          <div class="cmp-row" id="cn5" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">OVERHEAD</span>
+            <span class="cmp-val" style="color:#4eff9a">NEAR ZERO</span>
+          </div>
+          <div class="cmp-row" id="cn6" style="background:#001a10;border-color:#4eff9a">
+            <span class="cmp-key">USE WHEN</span>
+            <span class="cmp-val" style="color:#4eff9a;font-size:7px;line-height:1.6">SCALE + SPEED MATTERS</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:7px;color:#555;text-align:center;padding:4px 0;line-height:1.8">Google runs <span style="color:#4eff9a">billions</span> of containers per week via Borg/Kubernetes. Same hardware, way more apps.</div>
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">BOTTOM LINE: <span class="ih">CONTAINERS WIN AT SCALE</span></div>
+    <div class="il">Shared kernel = <span style="color:#4eff9a">no wasted RAM on OS copies</span>. Millisecond startup = instant scaling. That's why Kubernetes exists.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">10x</div><div class="sl">MORE DENSITY</div></div>
+    <div class="sc"><div class="sv gn">100x</div><div class="sl">FASTER START</div></div>
+    <div class="sc"><div class="sv gn">10x</div><div class="sl">LESS DISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let curScene = 1;
+const totalScenes = 4;
+let timers = [];
+
+function clearTimers(){timers.forEach(clearTimeout);timers=[];}
+
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function show(id){document.getElementById(id).classList.add('vis');}
+
+function goScene(n){
+  clearTimers();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  curScene=n;
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+
+function next(n){if(n<totalScenes)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+function resetLayer(id){
+  let el=document.getElementById(id);
+  if(el){el.classList.remove('vis');}
+}
+
+function animBar(id,pct,duration,labelId,labelFn){
+  let el=document.getElementById(id);
+  if(!el)return;
+  el.style.transition='none';
+  el.style.width='0%';
+  setTimeout(()=>{
+    el.style.transition='width '+duration+'s ease-out';
+    el.style.width=pct+'%';
+  },50);
+  if(labelId){
+    let start=Date.now();
+    let endVal=typeof labelFn==='function'?null:labelFn;
+    let step=()=>{
+      let prog=Math.min(1,(Date.now()-start)/(duration*1000));
+      if(typeof labelFn==='function'){
+        document.getElementById(labelId).textContent=labelFn(prog);
+      }
+      if(prog<1)requestAnimationFrame(step);
+    };
+    step();
+  }
+}
+
+// SCENE 1 - VM Stack
+function playS1(){
+  clearTimers();
+  ['v1e','v1d','v1c','v1b','v1a','v2e','v2d','v2c','v2b','v2a'].forEach(resetLayer);
+  let vmbar=document.getElementById('vmbar');
+  let vmboot=document.getElementById('vmboot');
+  if(vmbar){vmbar.style.transition='none';vmbar.style.width='0%';}
+  if(vmboot){vmboot.style.transition='none';vmboot.style.width='0%';}
+
+  t(()=>show('v1e'),200);
+  t(()=>show('v2e'),200);
+  t(()=>show('v1d'),600);
+  t(()=>show('v2d'),600);
+  t(()=>show('v1c'),1000);
+  t(()=>show('v2c'),1000);
+  t(()=>show('v1b'),1500);
+  t(()=>show('v2b'),1500);
+  t(()=>show('v1a'),2000);
+  t(()=>show('v2a'),2000);
+
+  t(()=>{
+    animBar('vmbar',90,1.2,'vmsize',(p)=>{
+      let v=(p*1.5).toFixed(1);
+      return v+' GB';
+    });
+  },2400);
+  t(()=>{
+    animBar('vmboot',75,1.0,'vmbootlabel',(p)=>{
+      return Math.round(p*60)+' s';
+    });
+  },2800);
+}
+
+// SCENE 2 - Container Stack
+function playS2(){
+  clearTimers();
+  ['c1d','c1c','c1b','c1a','c2d','c2c','c2b','c2a'].forEach(resetLayer);
+  let cbar=document.getElementById('cbar');
+  let cboot=document.getElementById('cboot');
+  if(cbar){cbar.style.transition='none';cbar.style.width='0%';}
+  if(cboot){cboot.style.transition='none';cboot.style.width='0%';}
+
+  t(()=>show('c1d'),200);
+  t(()=>show('c2d'),200);
+  t(()=>show('c1c'),600);
+  t(()=>show('c2c'),600);
+  t(()=>show('c1b'),1100);
+  t(()=>show('c2b'),1100);
+  t(()=>show('c1a'),1600);
+  t(()=>show('c2a'),1600);
+
+  t(()=>{
+    animBar('cbar',12,1.2,'csize',(p)=>{
+      return Math.round(p*150)+' MB';
+    });
+  },2000);
+  t(()=>{
+    animBar('cboot',5,0.8,'cbootlabel',(p)=>{
+      return Math.round(p*50)+' ms';
+    });
+  },2500);
+}
+
+// SCENE 3 - Isolation
+function playS3(){
+  clearTimers();
+  ['iso1','iso2','iso3','iso4'].forEach(id=>{
+    let el=document.getElementById(id);
+    if(el)el.classList.remove('vis');
+  });
+  t(()=>show('iso1'),300);
+  t(()=>show('iso2'),900);
+  t(()=>show('iso3'),1500);
+  t(()=>show('iso4'),2100);
+}
+
+// SCENE 4 - Comparison
+function playS4(){
+  clearTimers();
+  let rows=['cm1','cm2','cm3','cm4','cm5','cm6','cn1','cn2','cn3','cn4','cn5','cn6'];
+  rows.forEach(id=>{
+    let el=document.getElementById(id);
+    if(el)el.classList.remove('vis');
+  });
+  let delays=[100,400,700,1000,1300,1600];
+  ['cm1','cm2','cm3','cm4','cm5','cm6'].forEach((id,i)=>t(()=>show(id),delays[i]));
+  ['cn1','cn2','cn3','cn4','cn5','cn6'].forEach((id,i)=>t(()=>show(id),delays[i]+200));
+}
+
+// Auto-play scene 1
+playS1();
+</script>
+</body>
+</html>

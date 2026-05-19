@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>TLS/SSL: Layer 6 Encryption</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#c97ef8}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.pu{color:#c97ef8}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#c97ef8}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+/* scene-specific */
+.fade{opacity:0;transition:opacity .5s}
+.slide-in{opacity:0;transform:translateX(-20px);transition:opacity .5s,transform .5s}
+.slide-in-r{opacity:0;transform:translateX(20px);transition:opacity .5s,transform .5s}
+.grow{width:0;transition:width 1.1s ease-out}
+.msg-beam{height:3px;width:0;transition:width .6s ease-out}
+.pulse{animation:none}
+@keyframes pulseGlow{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes lockSpin{0%{transform:rotate(-15deg)}100%{transform:rotate(0deg)}}
+@keyframes packetFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 1: Presentation Layer Overview
+═══════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TLS / SSL EXPLAINED</div>
+    <div class="hdr-sub">THE PADLOCK IN YOUR BROWSER</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div><div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div><div class="dot" id="d1-4"></div>
+      <div class="dot" id="d1-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c97ef8">OSI LAYER 6</span>
+    <span class="sbadge" style="color:#c97ef8;border-color:#c97ef8">PRESENTATION</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Layer stack visual -->
+      <div style="font-size:8px;color:#888;text-align:center;letter-spacing:1px;margin-bottom:2px" class="fade" id="s1-title">OSI STACK — LAYER 6 LIVES HERE</div>
+
+      <div style="display:flex;flex-direction:column;gap:3px">
+        <div class="fade" id="s1-l7" style="background:#1e1035;border:1px solid #3a2055;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:8px;color:#888">7 — APPLICATION</span>
+          <span style="font-size:7px;color:#555">HTTP, DNS, SMTP</span>
+        </div>
+        <div class="fade" id="s1-l6" style="background:#2a1050;border:2px solid #c97ef8;padding:10px 12px;display:flex;justify-content:space-between;align-items:center;position:relative">
+          <span style="font-size:9px;color:#c97ef8;font-weight:bold">6 — PRESENTATION</span>
+          <span style="font-size:7px;color:#c97ef8">TLS · SSL · ENCRYPT</span>
+          <div style="position:absolute;right:-2px;top:-2px;background:#c97ef8;font-size:6px;color:#0a0a0f;padding:2px 5px">YOU ARE HERE</div>
+        </div>
+        <div class="fade" id="s1-l5" style="background:#1e1035;border:1px solid #3a2055;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:8px;color:#888">5 — SESSION</span>
+          <span style="font-size:7px;color:#555">TLS sessions</span>
+        </div>
+        <div class="fade" id="s1-l4" style="background:#1e1035;border:1px solid #3a2055;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:8px;color:#888">4 — TRANSPORT</span>
+          <span style="font-size:7px;color:#555">TCP port 443</span>
+        </div>
+        <div class="fade" id="s1-l3" style="background:#1e1035;border:1px solid #3a2055;padding:7px 12px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:8px;color:#888">3 — NETWORK</span>
+          <span style="font-size:7px;color:#555">IP routing</span>
+        </div>
+      </div>
+
+      <!-- Three functions -->
+      <div style="font-size:8px;color:#888;text-align:center;letter-spacing:1px;margin-top:4px" class="fade" id="s1-fn-title">LAYER 6 DOES THREE THINGS</div>
+      <div style="display:flex;gap:6px">
+        <div class="fade" id="s1-fn1" style="flex:1;background:#120d20;border:1px solid #c97ef850;padding:10px 8px;text-align:center">
+          <div style="font-size:18px;margin-bottom:6px">🔐</div>
+          <div style="font-size:7px;color:#c97ef8;line-height:1.8">ENCRYPT</div>
+          <div style="font-size:6px;color:#666;line-height:1.8;margin-top:3px">AES-256<br>ChaCha20</div>
+        </div>
+        <div class="fade" id="s1-fn2" style="flex:1;background:#120d20;border:1px solid #4ec9e150;padding:10px 8px;text-align:center">
+          <div style="font-size:18px;margin-bottom:6px">📦</div>
+          <div style="font-size:7px;color:#4ec9e1;line-height:1.8">COMPRESS</div>
+          <div style="font-size:6px;color:#666;line-height:1.8;margin-top:3px">zlib<br>deflate</div>
+        </div>
+        <div class="fade" id="s1-fn3" style="flex:1;background:#120d20;border:1px solid #4eff9a50;padding:10px 8px;text-align:center">
+          <div style="font-size:18px;margin-bottom:6px">🔄</div>
+          <div style="font-size:7px;color:#4eff9a;line-height:1.8">TRANSLATE</div>
+          <div style="font-size:6px;color:#666;line-height:1.8;margin-top:3px">UTF-8<br>Base64</div>
+        </div>
+      </div>
+
+      <!-- Data transform visual -->
+      <div class="fade" id="s1-xform" style="background:#0d0918;border:1px solid #2a1f3d;padding:10px 12px">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">DATA TRANSFORMATION</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div style="background:#1e1035;padding:6px 8px;font-size:7px;color:#e8a020;border:1px solid #e8a02040;flex:1;text-align:center">
+            GET /api/users<br>Host: bank.com
+          </div>
+          <div style="font-size:10px;color:#c97ef8">→</div>
+          <div style="background:#1e1035;padding:6px 8px;font-size:7px;color:#4eff9a;border:1px solid #4eff9a40;flex:1;text-align:center">
+            x9Kp2mQr<br>7fBzLwN4
+          </div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span style="font-size:6px;color:#e8a020">PLAINTEXT</span>
+          <span style="font-size:6px;color:#c97ef8">LAYER 6 ENCRYPTS</span>
+          <span style="font-size:6px;color:#4eff9a">CIPHERTEXT</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Layer 6 sits between app data and the wire</div>
+    <div class="ih pu">TLS encrypts, compresses &amp; translates data before TCP sends it</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">443</div><div class="sl">HTTPS PORT</div></div>
+    <div class="sc"><div class="sv gn">256-bit</div><div class="sl">AES KEY SIZE</div></div>
+    <div class="sc"><div class="sv am">L6</div><div class="sl">OSI LAYER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 2: TLS Handshake Animation
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0d1220">
+  <div class="hdr" style="background:#0d1220">
+    <div class="hdr-title">TLS HANDSHAKE</div>
+    <div class="hdr-sub">7 MESSAGES · ~1 ROUND TRIP (TLS 1.3)</div>
+    <div class="dots">
+      <div class="dot done" id="d2-1"></div><div class="dot active" id="d2-2"></div>
+      <div class="dot" id="d2-3"></div><div class="dot" id="d2-4"></div>
+      <div class="dot" id="d2-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TLS HANDSHAKE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">STEP BY STEP</span>
+  </div>
+  <div class="anim" style="background:#0d1220">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:0">
+
+      <!-- Client / Server labels -->
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+        <div style="text-align:center;width:80px">
+          <div style="font-size:22px" id="s2-client-icon">💻</div>
+          <div style="font-size:8px;color:#4ec9e1;margin-top:3px">CLIENT</div>
+          <div style="font-size:6px;color:#555">browser</div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="text-align:center;width:80px">
+          <div style="font-size:22px" id="s2-server-icon">🖥️</div>
+          <div style="font-size:8px;color:#e8a020;margin-top:3px">SERVER</div>
+          <div style="font-size:6px;color:#555">bank.com</div>
+        </div>
+      </div>
+
+      <!-- Handshake messages container -->
+      <div id="s2-msgs" style="display:flex;flex-direction:column;gap:5px;padding:0 4px">
+
+        <!-- msg 1: Client Hello -->
+        <div id="s2-m1" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;text-align:right;font-size:6px;color:#4ec9e1;padding-right:8px">1</div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b1" style="height:3px;background:linear-gradient(90deg,#4ec9e1,#4ec9e180);width:0;transition:width .6s ease-out;margin-top:9px"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#4ec9e1;white-space:nowrap">CLIENT HELLO →</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">TLS version · cipher suites · random</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#555;padding-left:8px"></div>
+          </div>
+        </div>
+
+        <!-- msg 2: Server Hello -->
+        <div id="s2-m2" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;font-size:6px;color:#555;text-align:right;padding-right:8px"></div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b2" style="height:3px;background:linear-gradient(270deg,#e8a020,#e8a02080);width:0;transition:width .6s ease-out;margin-top:9px;margin-left:auto"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#e8a020;white-space:nowrap">← SERVER HELLO</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">chosen cipher · server random</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#e8a020;padding-left:8px">2</div>
+          </div>
+        </div>
+
+        <!-- msg 3: Certificate -->
+        <div id="s2-m3" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;font-size:6px;color:#555;text-align:right;padding-right:8px"></div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b3" style="height:3px;background:linear-gradient(270deg,#c97ef8,#c97ef880);width:0;transition:width .6s ease-out;margin-top:9px;margin-left:auto"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#c97ef8;white-space:nowrap">← CERTIFICATE</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">public key · signed by CA</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#c97ef8;padding-left:8px">3</div>
+          </div>
+        </div>
+
+        <!-- msg 4: Key Exchange -->
+        <div id="s2-m4" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;text-align:right;font-size:6px;color:#4eff9a;padding-right:8px">4</div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b4" style="height:3px;background:linear-gradient(90deg,#4eff9a,#4eff9a80);width:0;transition:width .6s ease-out;margin-top:9px"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#4eff9a;white-space:nowrap">KEY EXCHANGE →</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">ECDHE premaster secret</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#555;padding-left:8px"></div>
+          </div>
+        </div>
+
+        <!-- msg 5: Server Finished -->
+        <div id="s2-m5" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;font-size:6px;color:#555;text-align:right;padding-right:8px"></div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b5" style="height:3px;background:linear-gradient(270deg,#e8a020,#e8a02080);width:0;transition:width .6s ease-out;margin-top:9px;margin-left:auto"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#e8a020;white-space:nowrap">← CHANGE CIPHER + FINISHED</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">server now uses session key</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#e8a020;padding-left:8px">5</div>
+          </div>
+        </div>
+
+        <!-- msg 6: Client Finished -->
+        <div id="s2-m6" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;text-align:right;font-size:6px;color:#4ec9e1;padding-right:8px">6</div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b6" style="height:3px;background:linear-gradient(90deg,#4ec9e1,#4ec9e180);width:0;transition:width .6s ease-out;margin-top:9px"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#4ec9e1;white-space:nowrap">CHANGE CIPHER + FINISHED →</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">client now uses session key</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#555;padding-left:8px"></div>
+          </div>
+        </div>
+
+        <!-- msg 7: Secure Data -->
+        <div id="s2-m7" style="opacity:0;transition:opacity .4s">
+          <div style="display:flex;align-items:center;gap:0">
+            <div style="width:80px;text-align:right;font-size:6px;color:#4eff9a;padding-right:8px">7</div>
+            <div style="position:relative;flex:1;height:22px">
+              <div id="s2-b7" style="height:4px;background:linear-gradient(90deg,#4eff9a,#4eff9a);width:0;transition:width .6s ease-out;margin-top:9px"></div>
+              <div style="position:absolute;top:0;left:0;right:0;text-align:center;font-size:6px;color:#4eff9a;white-space:nowrap">🔒 ENCRYPTED DATA FLOWS →</div>
+              <div style="position:absolute;bottom:0;left:0;right:0;text-align:center;font-size:6px;color:#555">AES-256-GCM session</div>
+            </div>
+            <div style="width:80px;font-size:6px;color:#555;padding-left:8px"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Padlock result -->
+      <div id="s2-lock" style="opacity:0;transition:opacity .6s;margin-top:12px;text-align:center;background:#0a1a0f;border:2px solid #4eff9a;padding:14px 12px">
+        <div style="font-size:32px;display:block;animation:lockSpin .5s ease-out forwards" id="s2-lockicon">🔒</div>
+        <div style="font-size:9px;color:#4eff9a;margin-top:8px">HANDSHAKE COMPLETE</div>
+        <div style="font-size:7px;color:#4eff9a80;margin-top:4px">SESSION KEY ESTABLISHED · BOTH SIDES VERIFIED</div>
+      </div>
+
+      <!-- Wireshark hint -->
+      <div id="s2-wire" style="opacity:0;transition:opacity .5s;margin-top:8px;background:#0d0a1a;border:1px solid #2a1f3d;padding:10px 12px">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">🦈 WIRESHARK SEES:</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="font-size:6px;color:#4ec9e1">→ TLSv1.3 Client Hello [len=512]</div>
+          <div style="font-size:6px;color:#e8a020">← TLSv1.3 Server Hello [len=122]</div>
+          <div style="font-size:6px;color:#c97ef8">← Certificate [len=1843]</div>
+          <div style="font-size:6px;color:#4eff9a">→ Application Data [ENCRYPTED]</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Handshake negotiates: version, cipher suite, keys</div>
+    <div class="ih cy">TLS 1.3 cuts this to 1 round trip vs 2 in TLS 1.2</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">7</div><div class="sl">MESSAGES</div></div>
+    <div class="sc"><div class="sv gn">1 RTT</div><div class="sl">TLS 1.3</div></div>
+    <div class="sc"><div class="sv am">2 RTT</div><div class="sl">TLS 1.2</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 3: Asymmetric vs Symmetric Crypto
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">TWO TYPES OF CRYPTO</div>
+    <div class="hdr-sub">ASYMMETRIC HANDSHAKE · SYMMETRIC DATA</div>
+    <div class="dots">
+      <div class="dot done" id="d3-1"></div><div class="dot done" id="d3-2"></div>
+      <div class="dot active" id="d3-3"></div><div class="dot" id="d3-4"></div>
+      <div class="dot" id="d3-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CRYPTO TYPES</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HYBRID MODEL</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Asymmetric section -->
+      <div class="fade" id="s3-asym-title" style="font-size:8px;color:#e8a020;letter-spacing:1px">PHASE 1 — ASYMMETRIC (KEY EXCHANGE)</div>
+
+      <div class="fade" id="s3-asym-box" style="background:#100d20;border:2px solid #e8a020;padding:12px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1;background:#1e1035;border:1px solid #e8a02050;padding:8px;text-align:center">
+            <div style="font-size:14px">🔑</div>
+            <div style="font-size:7px;color:#e8a020;margin-top:4px">PUBLIC KEY</div>
+            <div style="font-size:6px;color:#666;margin-top:2px">anyone can<br>encrypt with it</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:14px;color:#e8a020">⇌</div>
+          <div style="flex:1;background:#1e1035;border:1px solid #e8a02050;padding:8px;text-align:center">
+            <div style="font-size:14px">🗝️</div>
+            <div style="font-size:7px;color:#c97ef8;margin-top:4px">PRIVATE KEY</div>
+            <div style="font-size:6px;color:#666;margin-top:2px">only server<br>can decrypt</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#888;text-align:center">RSA-2048 or ECDHE (Elliptic Curve)</div>
+        <div style="font-size:6px;color:#e85050;text-align:center;margin-top:4px">⚠ SLOW — used only during handshake</div>
+      </div>
+
+      <!-- Arrow down -->
+      <div class="fade" id="s3-arrow" style="text-align:center;font-size:11px;color:#4ec9e1">↓ DERIVES SESSION KEY ↓</div>
+
+      <!-- Symmetric section -->
+      <div class="fade" id="s3-sym-title" style="font-size:8px;color:#4eff9a;letter-spacing:1px">PHASE 2 — SYMMETRIC (DATA ENCRYPTION)</div>
+
+      <div class="fade" id="s3-sym-box" style="background:#0a1a0f;border:2px solid #4eff9a;padding:12px">
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <div style="flex:1;background:#0d2015;border:1px solid #4eff9a50;padding:8px;text-align:center">
+            <div style="font-size:14px">💻</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:4px">CLIENT</div>
+            <div style="font-size:12px;margin-top:4px">🔑</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px">SAME KEY</div>
+          </div>
+          <div style="display:flex;align-items:center;flex-direction:column;gap:4px">
+            <div style="font-size:9px;color:#4eff9a">⟺</div>
+            <div style="font-size:6px;color:#555">AES-256</div>
+          </div>
+          <div style="flex:1;background:#0d2015;border:1px solid #4eff9a50;padding:8px;text-align:center">
+            <div style="font-size:14px">🖥️</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:4px">SERVER</div>
+            <div style="font-size:12px;margin-top:4px">🔑</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px">SAME KEY</div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#888;text-align:center">AES-256-GCM or ChaCha20-Poly1305</div>
+        <div style="font-size:6px;color:#4eff9a;text-align:center;margin-top:4px">✓ FAST — used for all actual data transfer</div>
+      </div>
+
+      <!-- Why hybrid -->
+      <div class="fade" id="s3-why" style="background:#0d1220;border:1px solid #2a3a4d;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px;letter-spacing:1px">WHY HYBRID?</div>
+        <div style="font-size:7px;color:#aaa;line-height:2">
+          Asymmetric is safe but 100–1000× slower<br>
+          Symmetric is fast but can't exchange keys safely<br>
+          TLS uses asymmetric to agree on a symmetric key
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Asymmetric = safe key exchange · Symmetric = fast data</div>
+    <div class="ih am">TLS uses ECDHE to derive a shared AES session key</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">RSA</div><div class="sl">ASYMMETRIC</div></div>
+    <div class="sc"><div class="sv gn">AES</div><div class="sl">SYMMETRIC</div></div>
+    <div class="sc"><div class="sv">1000×</div><div class="sl">SPEED DIFF</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 4: TLS 1.2 vs TLS 1.3
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a1a">
+  <div class="hdr" style="background:#0d1a1a">
+    <div class="hdr-title">TLS 1.2 vs TLS 1.3</div>
+    <div class="hdr-sub">FEWER ROUND TRIPS · NO LEGACY CIPHERS</div>
+    <div class="dots">
+      <div class="dot done" id="d4-1"></div><div class="dot done" id="d4-2"></div>
+      <div class="dot done" id="d4-3"></div><div class="dot active" id="d4-4"></div>
+      <div class="dot" id="d4-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">VERSION COMPARE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">TLS 1.3 WINS</span>
+  </div>
+  <div class="anim" style="background:#0d1a1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Round trip comparison -->
+      <div style="font-size:8px;color:#888;letter-spacing:1px" class="fade" id="s4-rtt-title">ROUND TRIPS TO HANDSHAKE</div>
+
+      <div class="fade" id="s4-v12" style="background:#1a0d0d;border:2px solid #e85050;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:9px;color:#e85050">TLS 1.2</span>
+          <span style="font-size:8px;color:#e85050">2 RTT</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#888;width:60px">RTT 1</div>
+            <div style="flex:1;height:8px;background:#e8505030;position:relative">
+              <div id="s4-b12a" style="height:100%;background:#e85050;width:0;transition:width 1s ease-out"></div>
+            </div>
+            <div style="font-size:6px;color:#888;width:80px">Hello + cipher</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#888;width:60px">RTT 2</div>
+            <div style="flex:1;height:8px;background:#e8505030;position:relative">
+              <div id="s4-b12b" style="height:100%;background:#e85050;width:0;transition:width 1s ease-out 0.4s"></div>
+            </div>
+            <div style="font-size:6px;color:#888;width:80px">Key + Finished</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#e85050;margin-top:6px">⚠ Legacy: RC4, 3DES, SHA-1 still possible</div>
+      </div>
+
+      <div class="fade" id="s4-v13" style="background:#0a1a0f;border:2px solid #4eff9a;padding:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-size:9px;color:#4eff9a">TLS 1.3</span>
+          <span style="font-size:8px;color:#4eff9a">1 RTT</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#888;width:60px">RTT 1</div>
+            <div style="flex:1;height:8px;background:#4eff9a30;position:relative">
+              <div id="s4-b13a" style="height:100%;background:#4eff9a;width:0;transition:width 1s ease-out 0.8s"></div>
+            </div>
+            <div style="font-size:6px;color:#888;width:80px">Hello + keys</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="font-size:6px;color:#888;width:60px">0-RTT</div>
+            <div style="flex:1;height:8px;background:#4eff9a30;position:relative">
+              <div id="s4-b13b" style="height:100%;background:#4ec9e1;width:0;transition:width 0.7s ease-out 1.2s"></div>
+            </div>
+            <div style="font-size:6px;color:#888;width:80px">Resumption!</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#4eff9a;margin-top:6px">✓ Only: AES-GCM, ChaCha20, SHA-256/384</div>
+      </div>
+
+      <!-- Feature comparison table -->
+      <div style="font-size:8px;color:#888;letter-spacing:1px" class="fade" id="s4-feat-title">FEATURE DIFF</div>
+
+      <div class="fade" id="s4-table" style="background:#0d1220;border:1px solid #2a3a4d;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;background:#161e2e">
+          <div style="padding:6px 8px;font-size:6px;color:#888;border-right:1px solid #2a3a4d">FEATURE</div>
+          <div style="padding:6px 8px;font-size:6px;color:#e85050;border-right:1px solid #2a3a4d;text-align:center">1.2</div>
+          <div style="padding:6px 8px;font-size:6px;color:#4eff9a;text-align:center">1.3</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid #2a3a4d">
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a3a4d">Round trips</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;border-right:1px solid #2a3a4d;text-align:center">2</div>
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;text-align:center">1</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid #2a3a4d;background:#0f1820">
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a3a4d">RSA key xchg</div>
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;border-right:1px solid #2a3a4d;text-align:center">✓</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;text-align:center">✗ removed</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid #2a3a4d">
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a3a4d">Fwd secrecy</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e8a020;border-right:1px solid #2a3a4d;text-align:center">optional</div>
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;text-align:center">always</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid #2a3a4d;background:#0f1820">
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a3a4d">0-RTT resume</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;border-right:1px solid #2a3a4d;text-align:center">✗</div>
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;text-align:center">✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">TLS 1.3 dropped all weak cipher suites</div>
+    <div class="ih gn">0-RTT session resumption = zero latency on reconnect</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" style="font-size:9px">2 RTT</div><div class="sl">TLS 1.2</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:9px">1 RTT</div><div class="sl">TLS 1.3</div></div>
+    <div class="sc"><div class="sv cy" style="font-size:9px">0 RTT</div><div class="sl">RESUMED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 5: Certificates & Chain of Trust
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0a1a0f">
+  <div class="hdr" style="background:#0a1a0f">
+    <div class="hdr-title">CHAIN OF TRUST</div>
+    <div class="hdr-sub">HOW YOUR BROWSER TRUSTS THE CERT</div>
+    <div class="dots">
+      <div class="dot done" id="d5-1"></div><div class="dot done" id="d5-2"></div>
+      <div class="dot done" id="d5-3"></div><div class="dot done" id="d5-4"></div>
+      <div class="dot active" id="d5-5"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">PKI TRUST CHAIN</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FINAL STEP</span>
+  </div>
+  <div class="anim" style="background:#0a1a0f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Trust chain -->
+      <div style="font-size:8px;color:#888;letter-spacing:1px" class="fade" id="s5-chain-title">CERTIFICATE CHAIN</div>
+
+      <div class="fade" id="s5-root" style="background:#0d2015;border:2px solid #4eff9a;padding:12px;position:relative">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">🏛️</div>
+          <div>
+            <div style="font-size:8px;color:#4eff9a">ROOT CA</div>
+            <div style="font-size:6px;color:#888;margin-top:3px">DigiCert Global Root · Let's Encrypt ISRG</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:3px">✓ Built into your OS / browser</div>
+          </div>
+        </div>
+        <div style="position:absolute;right:10px;top:10px;font-size:7px;color:#4eff9a;background:#0a2810;padding:3px 6px;border:1px solid #4eff9a40">TRUSTED</div>
+      </div>
+
+      <div class="fade" id="s5-chain-arrow1" style="text-align:center;font-size:10px;color:#4ec9e1">↓ signs</div>
+
+      <div class="fade" id="s5-inter" style="background:#0d1a2e;border:2px solid #4ec9e1;padding:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">🏢</div>
+          <div>
+            <div style="font-size:8px;color:#4ec9e1">INTERMEDIATE CA</div>
+            <div style="font-size:6px;color:#888;margin-top:3px">DigiCert TLS RSA SHA256 2020 CA1</div>
+            <div style="font-size:6px;color:#4ec9e1;margin-top:3px">✓ Signed by root — trusted by chain</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fade" id="s5-chain-arrow2" style="text-align:center;font-size:10px;color:#c97ef8">↓ signs</div>
+
+      <div class="fade" id="s5-leaf" style="background:#1a1030;border:2px solid #c97ef8;padding:12px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="font-size:24px">🌐</div>
+          <div>
+            <div style="font-size:8px;color:#c97ef8">LEAF CERT</div>
+            <div style="font-size:6px;color:#888;margin-top:3px">CN=*.bank.com · Valid until 2026-03</div>
+            <div style="font-size:6px;color:#c97ef8;margin-top:3px">This is what the server sends in TLS msg 3</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- What browser checks -->
+      <div style="font-size:8px;color:#888;letter-spacing:1px;margin-top:4px" class="fade" id="s5-check-title">BROWSER VALIDATES</div>
+
+      <div class="fade" id="s5-checks" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="background:#0d1220;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:14px">✅</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Signature valid?<br>(CA signed this)</div>
+        </div>
+        <div style="background:#0d1220;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:14px">✅</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Not expired?<br>(date check)</div>
+        </div>
+        <div style="background:#0d1220;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:14px">✅</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Domain matches?<br>(CN / SAN)</div>
+        </div>
+        <div style="background:#0d1220;border:1px solid #4eff9a40;padding:8px;text-align:center">
+          <div style="font-size:14px">✅</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">Not revoked?<br>(OCSP / CRL)</div>
+        </div>
+      </div>
+
+      <!-- Final padlock -->
+      <div class="fade" id="s5-final" style="background:#0d2015;border:2px solid #4eff9a;padding:14px;text-align:center;margin-top:4px">
+        <div style="font-size:28px">🔒</div>
+        <div style="font-size:9px;color:#4eff9a;margin-top:8px">ALL CHECKS PASS</div>
+        <div style="font-size:7px;color:#4eff9a80;margin-top:4px">PADLOCK SHOWN · CONNECTION SECURED</div>
+        <div style="font-size:6px;color:#555;margin-top:6px">This is the padlock in your browser address bar</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Browser walks the chain: leaf → intermediate → root</div>
+    <div class="ih gn">Root CA already trusted → entire chain trusted → 🔒</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3</div><div class="sl">CHAIN DEPTH</div></div>
+    <div class="sc"><div class="sv">X.509</div><div class="sl">CERT FORMAT</div></div>
+    <div class="sc"><div class="sv cy">OCSP</div><div class="sl">REVOCATION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playS5()">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene = 1;
+const totalScenes = 5;
+
+function goScene(n) {
+  document.getElementById('s' + currentScene).classList.remove('active');
+  currentScene = n;
+  document.getElementById('s' + currentScene).classList.add('active');
+  resetAll(n);
+  setTimeout(() => autoPlay(n), 300);
+}
+
+function resetAll(n) {
+  if (n === 1) resetS1();
+  if (n === 2) resetS2();
+  if (n === 3) resetS3();
+  if (n === 4) resetS4();
+  if (n === 5) resetS5();
+}
+
+function autoPlay(n) {
+  if (n === 1) playS1();
+  if (n === 2) playS2();
+  if (n === 3) playS3();
+  if (n === 4) playS4();
+  if (n === 5) playS5();
+}
+
+// ── SCENE 1 ──────────────────────────────────────
+function resetS1() {
+  ['s1-title','s1-l7','s1-l6','s1-l5','s1-l4','s1-l3','s1-fn-title','s1-fn1','s1-fn2','s1-fn3','s1-xform'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.opacity = '0'; }
+  });
+}
+function playS1() {
+  resetS1();
+  const seq = ['s1-title','s1-l7','s1-l6','s1-l5','s1-l4','s1-l3','s1-fn-title','s1-fn1','s1-fn2','s1-fn3','s1-xform'];
+  seq.forEach((id, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = '1';
+    }, 200 + i * 300);
+  });
+}
+
+// ── SCENE 2 ──────────────────────────────────────
+function resetS2() {
+  for (let i = 1; i <= 7; i++) {
+    const m = document.getElementById('s2-m' + i);
+    if (m) m.style.opacity = '0';
+    const b = document.getElementById('s2-b' + i);
+    if (b) { b.style.width = '0'; b.style.transition = 'none'; }
+  }
+  const lock = document.getElementById('s2-lock');
+  if (lock) lock.style.opacity = '0';
+  const wire = document.getElementById('s2-wire');
+  if (wire) wire.style.opacity = '0';
+}
+function playS2() {
+  resetS2();
+  setTimeout(() => {
+    for (let i = 1; i <= 7; i++) {
+      (function(idx) {
+        setTimeout(() => {
+          const m = document.getElementById('s2-m' + idx);
+          if (m) m.style.opacity = '1';
+          setTimeout(() => {
+            const b = document.getElementById('s2-b' + idx);
+            if (b) { b.style.transition = 'width .6s ease-out'; b.style.width = '100%'; }
+          }, 100);
+        }, idx * 700);
+      })(i);
+    }
+    setTimeout(() => {
+      const lock = document.getElementById('s2-lock');
+      if (lock) lock.style.opacity = '1';
+    }, 7 * 700 + 400);
+    setTimeout(() => {
+      const wire = document.getElementById('s2-wire');
+      if (wire) wire.style.opacity = '1';
+    }, 7 * 700 + 900);
+  }, 200);
+}
+
+// ── SCENE 3 ──────────────────────────────────────
+function resetS3() {
+  ['s3-asym-title','s3-asym-box','s3-arrow','s3-sym-title','s3-sym-box','s3-why'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.opacity = '0';
+  });
+}
+function playS3() {
+  resetS3();
+  const seq = ['s3-asym-title','s3-asym-box','s3-arrow','s3-sym-title','s3-sym-box','s3-why'];
+  seq.forEach((id, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = '1';
+    }, 200 + i * 400);
+  });
+}
+
+// ── SCENE 4 ──────────────────────────────────────
+function resetS4() {
+  ['s4-rtt-title','s4-v12','s4-v13','s4-feat-title','s4-table'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.opacity = '0';
+  });
+  ['s4-b12a','s4-b12b','s4-b13a','s4-b13b'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.style.transition = 'none'; el.style.width = '0'; }
+  });
+}
+function playS4() {
+  resetS4();
+  setTimeout(() => {
+    const t = document.getElementById('s4-rtt-title');
+    if (t) t.style.opacity = '1';
+  }, 200);
+  setTimeout(() => {
+    const v = document.getElementById('s4-v12');
+    if (v) v.style.opacity = '1';
+    setTimeout(() => {
+      ['s4-b12a','s4-b12b'].forEach((id, i) => {
+        const b = document.getElementById(id);
+        if (b) { b.style.transition = `width 1s ease-out ${i*0.4}s`; b.style.width = '100%'; }
+      });
+    }, 100);
+  }, 600);
+  setTimeout(() => {
+    const v = document.getElementById('s4-v13');
+    if (v) v.style.opacity = '1';
+    setTimeout(() => {
+      const b13a = document.getElementById('s4-b13a');
+      if (b13a) { b13a.style.transition = 'width 1s ease-out 0s'; b13a.style.width = '100%'; }
+      setTimeout(() => {
+        const b13b = document.getElementById('s4-b13b');
+        if (b13b) { b13b.style.transition = 'width 0.7s ease-out 0s'; b13b.style.width = '60%'; }
+      }, 800);
+    }, 100);
+  }, 1600);
+  setTimeout(() => {
+    const ft = document.getElementById('s4-feat-title');
+    if (ft) ft.style.opacity = '1';
+  }, 2800);
+  setTimeout(() => {
+    const tbl = document.getElementById('s4-table');
+    if (tbl) tbl.style.opacity = '1';
+  }, 3200);
+}
+
+// ── SCENE 5 ──────────────────────────────────────
+function resetS5() {
+  ['s5-chain-title','s5-root','s5-chain-arrow1','s5-inter','s5-chain-arrow2','s5-leaf','s5-check-title','s5-checks','s5-final'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.opacity = '0';
+  });
+}
+function playS5() {
+  resetS5();
+  const seq = ['s5-chain-title','s5-root','s5-chain-arrow1','s5-inter','s5-chain-arrow2','s5-leaf','s5-check-title','s5-checks','s5-final'];
+  seq.forEach((id, i) => {
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (el) el.style.opacity = '1';
+    }, 200 + i * 380);
+  });
+}
+
+// Init
+window.addEventListener('load', () => {
+  playS1();
+});
+</script>
+</body>
+</html>

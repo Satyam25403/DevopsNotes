@@ -1,0 +1,730 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How Switches Learn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center;line-height:1.3}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+/* cam row */
+.cam-row{display:flex;gap:0;opacity:0;transition:opacity .35s}
+.cam-row.show{opacity:1}
+.cam-cell{flex:1;padding:5px 6px;font-size:7px;line-height:1.7;border-bottom:1px solid #1a2a1a}
+/* flow step */
+.fs{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid #2a1f3d;border-radius:2px;opacity:0;transition:opacity .4s}
+.fs.show{opacity:1}
+.fd{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:2px}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════ S1: HOOK ═══════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">HOW SWITCHES LEARN</div>
+    <div class="hdr-sub">CAM TABLES, FLOODING &amp; AGING</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE QUESTION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HOOK</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s1_hook" style="opacity:0;transition:opacity .5s;border:2px solid #4ec9e1;border-radius:4px;padding:14px 12px;background:#0d1a2e">
+        <div style="font-size:8px;color:#4ec9e1;line-height:2.2">
+          "Your switch learned your MAC<br>
+          address in the <span style="color:#fff">first millisecond</span><br>
+          you plugged in —<br>
+          <span style="color:#4eff9a">here's exactly how."</span>
+        </div>
+      </div>
+
+      <div id="s1_steps" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="padding:8px 10px;background:#0a1a0a;border:1px solid #4eff9a33;border-radius:3px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:14px">📥</div>
+          <div style="font-size:7px;color:#ccc;line-height:1.9">Frame arrives → switch reads <span style="color:#4eff9a">source MAC</span><br>and records it in the CAM table</div>
+        </div>
+        <div style="padding:8px 10px;background:#0d1a2e;border:1px solid #4ec9e133;border-radius:3px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:14px">🔍</div>
+          <div style="font-size:7px;color:#ccc;line-height:1.9">Looks up <span style="color:#4ec9e1">destination MAC</span> —<br>known: forward / unknown: flood</div>
+        </div>
+        <div style="padding:8px 10px;background:#1a1000;border:1px solid #e8a02033;border-radius:3px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:14px">⏱</div>
+          <div style="font-size:7px;color:#ccc;line-height:1.9">Every entry has a <span style="color:#e8a020">300s timer</span> —<br>unused entries expire automatically</div>
+        </div>
+        <div style="padding:8px 10px;background:#1a0808;border:1px solid #e8505033;border-radius:3px;display:flex;align-items:center;gap:8px">
+          <div style="font-size:14px">⚠</div>
+          <div style="font-size:7px;color:#ccc;line-height:1.9">Overflow CAM → <span style="color:#e85050">switch floods everything</span><br>= MAC flood attack vector</div>
+        </div>
+      </div>
+
+      <div id="s1_cam_preview" style="opacity:0;transition:opacity .5s;background:#050f05;border:1px solid #4eff9a44;border-radius:4px;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:.5px">CAM TABLE (Content Addressable Memory)</div>
+        <div style="font-size:7px;color:#888;line-height:2">
+          MAC address → Port → VLAN → TTL<br>
+          <span style="color:#666">hardware-speed lookup · per-frame · always-on</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Every frame teaches the switch something.</div>
+    <div class="ih cy">Source MAC → port. Learned in hardware, instantly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">LEARN</div><div class="sl">SRC MAC</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">LOOKUP</div><div class="sl">DST MAC</div></div>
+    <div class="sc"><div class="sv am">300s</div><div class="sl">AGING TTL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ S2: LEARNING ═════════════════════════ -->
+<div class="scene" id="s2" style="background:#051205">
+  <div class="hdr" style="background:#051205">
+    <div class="hdr-title">HOW SWITCHES LEARN</div>
+    <div class="hdr-sub">STEP 1: BUILDING THE CAM TABLE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">LEARNING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SRC MAC</span>
+  </div>
+  <div class="anim" style="background:#051205">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Switch + 4 ports diagram -->
+      <div style="position:relative;height:180px;background:#030a03;border:1px solid #0f2a0f;border-radius:4px">
+        <!-- Center switch -->
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:76px;height:48px;border-radius:4px;border:2px solid #4eff9a;background:#051205;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px">
+          <div style="font-size:8px;color:#4eff9a">SWITCH</div>
+          <div style="font-size:6px;color:#666">CAM learning</div>
+        </div>
+        <!-- SVG wires -->
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 180">
+          <line id="s2_w0" x1="183" y1="90" x2="55"  y2="35"  stroke="#1a3a1a" stroke-width="2"/>
+          <line id="s2_w1" x1="183" y1="90" x2="311" y2="35"  stroke="#1a3a1a" stroke-width="2"/>
+          <line id="s2_w2" x1="183" y1="90" x2="55"  y2="148" stroke="#1a3a1a" stroke-width="2"/>
+          <line id="s2_w3" x1="183" y1="90" x2="311" y2="148" stroke="#1a3a1a" stroke-width="2"/>
+        </svg>
+        <!-- Devices -->
+        <div id="s2_d0" style="position:absolute;left:12px;top:8px;text-align:center;opacity:.5;transition:all .3s">
+          <div style="font-size:18px">💻</div><div style="font-size:6px;color:#888">P1 · AA:AA</div>
+        </div>
+        <div id="s2_d1" style="position:absolute;right:12px;top:8px;text-align:center;opacity:.5;transition:all .3s">
+          <div style="font-size:18px">💻</div><div id="s2_d1l" style="font-size:6px;color:#888">P2 · BB:BB</div>
+        </div>
+        <div id="s2_d2" style="position:absolute;left:12px;bottom:8px;text-align:center;opacity:.5;transition:all .3s">
+          <div style="font-size:18px">🖨️</div><div style="font-size:6px;color:#888">P3 · CC:CC</div>
+        </div>
+        <div id="s2_d3" style="position:absolute;right:12px;bottom:8px;text-align:center;opacity:.5;transition:all .3s">
+          <div style="font-size:18px">📱</div><div style="font-size:6px;color:#888">P4 · DD:DD</div>
+        </div>
+        <!-- Frame label -->
+        <div id="s2_framelbl" style="position:absolute;left:50%;top:3px;transform:translateX(-50%);font-size:7px;color:#4eff9a;opacity:0;transition:opacity .3s;white-space:nowrap"></div>
+      </div>
+
+      <!-- CAM table building live -->
+      <div style="background:#030a03;border:1px solid #0f2a0f;border-radius:4px;overflow:hidden">
+        <div style="display:flex;background:#082008;padding:5px 6px;gap:0">
+          <div style="flex:1.5;font-size:6px;color:#4eff9a;letter-spacing:.5px">MAC ADDRESS</div>
+          <div style="flex:.6;font-size:6px;color:#4eff9a;letter-spacing:.5px">PORT</div>
+          <div style="flex:.5;font-size:6px;color:#4eff9a;letter-spacing:.5px">VLAN</div>
+          <div style="flex:.7;font-size:6px;color:#4eff9a;letter-spacing:.5px">TTL</div>
+        </div>
+        <div id="s2_cam_empty" style="padding:8px 6px;font-size:7px;color:#333;text-align:center;transition:opacity .3s">— empty —</div>
+        <div id="s2_r0" class="cam-row">
+          <div class="cam-cell" style="flex:1.5;color:#4ec9e1;background:#030a03">AA:AA:AA:AA:AA:AA</div>
+          <div class="cam-cell" style="flex:.6;color:#4eff9a;background:#030a03">Gi0/1</div>
+          <div class="cam-cell" style="flex:.5;color:#888;background:#030a03">1</div>
+          <div class="cam-cell" id="s2_ttl0" style="flex:.7;color:#e8a020;background:#030a03">300</div>
+        </div>
+        <div id="s2_r1" class="cam-row">
+          <div class="cam-cell" style="flex:1.5;color:#4ec9e1;background:#020802">BB:BB:BB:BB:BB:BB</div>
+          <div class="cam-cell" style="flex:.6;color:#4eff9a;background:#020802">Gi0/2</div>
+          <div class="cam-cell" style="flex:.5;color:#888;background:#020802">1</div>
+          <div class="cam-cell" id="s2_ttl1" style="flex:.7;color:#e8a020;background:#020802">300</div>
+        </div>
+        <div id="s2_r2" class="cam-row">
+          <div class="cam-cell" style="flex:1.5;color:#4ec9e1;background:#030a03">CC:CC:CC:CC:CC:CC</div>
+          <div class="cam-cell" style="flex:.6;color:#4eff9a;background:#030a03">Gi0/3</div>
+          <div class="cam-cell" style="flex:.5;color:#888;background:#030a03">1</div>
+          <div class="cam-cell" id="s2_ttl2" style="flex:.7;color:#e8a020;background:#030a03">300</div>
+        </div>
+        <div id="s2_r3" class="cam-row">
+          <div class="cam-cell" style="flex:1.5;color:#4ec9e1;background:#020802">DD:DD:DD:DD:DD:DD</div>
+          <div class="cam-cell" style="flex:.6;color:#4eff9a;background:#020802">Gi0/4</div>
+          <div class="cam-cell" style="flex:.5;color:#888;background:#020802">1</div>
+          <div class="cam-cell" id="s2_ttl3" style="flex:.7;color:#e8a020;background:#020802">300</div>
+        </div>
+      </div>
+
+      <div id="s2_note" class="fs" style="border-color:#4eff9a33">
+        <div class="fd" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          Switch learns <span style="color:#4eff9a">source MAC only</span>.<br>
+          Destination lookup is separate.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Source MAC + arrival port = one CAM entry.</div>
+    <div class="ih">Switch never needs to be configured. It just watches.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">ENTRIES<br>LEARNED</div></div>
+    <div class="sc"><div class="sv gn">&lt;1ms</div><div class="sl">LEARN<br>TIME</div></div>
+    <div class="sc"><div class="sv am">300s</div><div class="sl">DEFAULT<br>AGING</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ S3: LOOKUP & FLOODING ════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">HOW SWITCHES LEARN</div>
+    <div class="hdr-sub">STEP 2: LOOKUP, FORWARD &amp; FLOOD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">FORWARDING</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LOOKUP</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Three scenarios -->
+      <div id="s3_title" style="opacity:0;transition:opacity .4s;font-size:8px;color:#4ec9e1;letter-spacing:.5px">WHAT HAPPENS TO EACH FRAME TYPE?</div>
+
+      <!-- Known unicast -->
+      <div id="s3_known" style="opacity:0;transition:opacity .5s;border:1px solid #4eff9a44;border-radius:4px;overflow:hidden">
+        <div style="background:#0a200a;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#4eff9a">KNOWN UNICAST</div>
+          <div style="font-size:7px;padding:2px 8px;border:1px solid #4eff9a;border-radius:2px;color:#4eff9a">→ 1 PORT</div>
+        </div>
+        <div style="padding:8px 10px;background:#051205">
+          <div style="font-size:7px;color:#888;line-height:2">
+            Dst MAC found in CAM table.<br>
+            Frame forwarded to <span style="color:#4eff9a">exact port only.</span><br>
+            All other ports: silence.
+          </div>
+          <!-- Mini diagram -->
+          <div style="display:flex;align-items:center;gap:4px;margin-top:6px">
+            <div style="font-size:11px">💻</div>
+            <div style="flex:1;height:1px;background:#4eff9a"></div>
+            <div style="font-size:9px;padding:3px 6px;border:1px solid #4eff9a;border-radius:2px;color:#4eff9a">SW</div>
+            <div style="flex:1;height:1px;background:#4eff9a"></div>
+            <div style="font-size:11px">💻</div>
+            <div style="flex:1;height:1px;background:#222"></div>
+            <div style="font-size:11px;opacity:.3">💻</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Unknown unicast -->
+      <div id="s3_unknown" style="opacity:0;transition:opacity .5s;border:1px solid #e8a02044;border-radius:4px;overflow:hidden">
+        <div style="background:#200d00;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#e8a020">UNKNOWN UNICAST</div>
+          <div style="font-size:7px;padding:2px 8px;border:1px solid #e8a020;border-radius:2px;color:#e8a020">FLOOD VLAN</div>
+        </div>
+        <div style="padding:8px 10px;background:#0f0800">
+          <div style="font-size:7px;color:#888;line-height:2">
+            Dst MAC <span style="color:#e8a020">not in CAM table.</span><br>
+            Frame sent to <span style="color:#e8a020">every port in VLAN.</span><br>
+            Happens when host is new or aged out.
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:6px">
+            <div style="font-size:11px">💻</div>
+            <div style="flex:1;height:1px;background:#e8a020"></div>
+            <div style="font-size:9px;padding:3px 6px;border:1px solid #e8a020;border-radius:2px;color:#e8a020">SW</div>
+            <div style="flex:1;height:1px;background:#e8a020"></div>
+            <div style="font-size:11px">💻</div>
+            <div style="flex:1;height:1px;background:#e8a020"></div>
+            <div style="font-size:11px">💻</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Broadcast -->
+      <div id="s3_bcast" style="opacity:0;transition:opacity .5s;border:1px solid #e8505044;border-radius:4px;overflow:hidden">
+        <div style="background:#1a0808;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#e85050">BROADCAST  FF:FF:FF:FF:FF:FF</div>
+          <div style="font-size:7px;padding:2px 8px;border:1px solid #e85050;border-radius:2px;color:#e85050">ALWAYS FLOOD</div>
+        </div>
+        <div style="padding:8px 10px;background:#0f0505">
+          <div style="font-size:7px;color:#888;line-height:2">
+            ARP requests, DHCP discover.<br>
+            <span style="color:#e85050">Always flooded — no CAM lookup.</span><br>
+            Reason: destination is literally everyone.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Known dst → forward. Unknown → flood.</div>
+    <div class="ih cy">Flooding is normal — not a bug. ARP causes it constantly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1 PORT</div><div class="sl">KNOWN<br>UNICAST</div></div>
+    <div class="sc"><div class="sv am">ALL</div><div class="sl">UNKNOWN<br>UNICAST</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">BROADCAST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ S4: AGING ═══════════════════════════ -->
+<div class="scene" id="s4" style="background:#12100a">
+  <div class="hdr" style="background:#12100a">
+    <div class="hdr-title">HOW SWITCHES LEARN</div>
+    <div class="hdr-sub">STEP 3: AGING — ENTRIES EXPIRE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">AGING TIMER</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">300s TTL</span>
+  </div>
+  <div class="anim" style="background:#12100a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Aging explanation -->
+      <div id="s4_intro" style="opacity:0;transition:opacity .5s;background:#0f0c00;border:1px solid #e8a02033;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:6px">WHY AGING EXISTS</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Hosts move. Laptops unplug and replug<br>
+          on different ports. Without aging, the<br>
+          switch would forward to the <span style="color:#e85050">wrong port.</span>
+        </div>
+      </div>
+
+      <!-- Live aging table with bars -->
+      <div id="s4_table" style="opacity:0;transition:opacity .5s;background:#0a0800;border:1px solid #2a2000;border-radius:4px;overflow:hidden">
+        <div style="display:flex;background:#1a1200;padding:5px 8px;gap:0">
+          <div style="flex:1.4;font-size:6px;color:#e8a020;letter-spacing:.5px">MAC</div>
+          <div style="flex:.5;font-size:6px;color:#e8a020;letter-spacing:.5px">PORT</div>
+          <div style="flex:1.4;font-size:6px;color:#e8a020;letter-spacing:.5px">TTL REMAINING</div>
+        </div>
+        <!-- Row A: fresh -->
+        <div style="display:flex;align-items:center;padding:5px 8px;gap:0;border-bottom:1px solid #1a1200">
+          <div style="flex:1.4;font-size:7px;color:#4ec9e1">AA:AA</div>
+          <div style="flex:.5;font-size:7px;color:#4eff9a">Gi0/1</div>
+          <div style="flex:1.4">
+            <div style="background:#1a1000;height:8px;border-radius:2px;overflow:hidden">
+              <div id="s4_bar0" style="height:100%;background:#4eff9a;width:0;transition:width 1s ease-out;border-radius:2px"></div>
+            </div>
+            <div id="s4_ttl0" style="font-size:6px;color:#4eff9a;margin-top:2px;opacity:0;transition:opacity .3s">298s — just refreshed</div>
+          </div>
+        </div>
+        <!-- Row B: mid -->
+        <div style="display:flex;align-items:center;padding:5px 8px;gap:0;border-bottom:1px solid #1a1200">
+          <div style="flex:1.4;font-size:7px;color:#4ec9e1">BB:BB</div>
+          <div style="flex:.5;font-size:7px;color:#4eff9a">Gi0/2</div>
+          <div style="flex:1.4">
+            <div style="background:#1a1000;height:8px;border-radius:2px;overflow:hidden">
+              <div id="s4_bar1" style="height:100%;background:#e8a020;width:0;transition:width 1s ease-out;border-radius:2px"></div>
+            </div>
+            <div id="s4_ttl1" style="font-size:6px;color:#e8a020;margin-top:2px;opacity:0;transition:opacity .3s">148s — half-life</div>
+          </div>
+        </div>
+        <!-- Row C: expiring -->
+        <div style="display:flex;align-items:center;padding:5px 8px;gap:0;border-bottom:1px solid #1a1200">
+          <div style="flex:1.4;font-size:7px;color:#4ec9e1">CC:CC</div>
+          <div style="flex:.5;font-size:7px;color:#4eff9a">Gi0/3</div>
+          <div style="flex:1.4">
+            <div style="background:#1a1000;height:8px;border-radius:2px;overflow:hidden">
+              <div id="s4_bar2" style="height:100%;background:#e85050;width:0;transition:width 1s ease-out;border-radius:2px"></div>
+            </div>
+            <div id="s4_ttl2" style="font-size:6px;color:#e85050;margin-top:2px;opacity:0;transition:opacity .3s">12s — about to expire!</div>
+          </div>
+        </div>
+        <!-- Row D: expired -->
+        <div style="display:flex;align-items:center;padding:5px 8px;gap:0">
+          <div id="s4_dd_mac" style="flex:1.4;font-size:7px;color:#444">DD:DD</div>
+          <div id="s4_dd_port" style="flex:.5;font-size:7px;color:#444">Gi0/4</div>
+          <div style="flex:1.4">
+            <div style="background:#1a1000;height:8px;border-radius:2px;overflow:hidden">
+              <div id="s4_bar3" style="height:100%;background:#333;width:0;transition:width 1s ease-out;border-radius:2px"></div>
+            </div>
+            <div id="s4_ttl3" style="font-size:6px;color:#e85050;margin-top:2px;opacity:0;transition:opacity .3s">0s — EXPIRED → REMOVED</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4_step1" class="fs" style="border-color:#4eff9a33">
+        <div class="fd" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          Any frame seen from a MAC<br>
+          <span style="color:#4eff9a">resets the timer to 300s.</span>
+        </div>
+      </div>
+      <div id="s4_step2" class="fs" style="border-color:#e8505033">
+        <div class="fd" style="background:#e85050"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          On expiry: entry deleted.<br>
+          Next frame for that MAC → <span style="color:#e8a020">flood until re-learned.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">TTL refreshes on activity. Expires on silence.</div>
+    <div class="ih am">Aging lets switches handle topology changes automatically.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">300s</div><div class="sl">DEFAULT<br>AGING</div></div>
+    <div class="sc"><div class="sv gn">RESET</div><div class="sl">ON ANY<br>FRAME</div></div>
+    <div class="sc"><div class="sv rd">FLOOD</div><div class="sl">ON EXPIRY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="next(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ S5: MAC FLOOD ATTACK ════════════════ -->
+<div class="scene" id="s5" style="background:#1a0808">
+  <div class="hdr" style="background:#1a0808">
+    <div class="hdr-title">HOW SWITCHES LEARN</div>
+    <div class="hdr-sub">ATTACK: MAC TABLE OVERFLOW</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">MAC FLOOD</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+  <div class="anim" style="background:#1a0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Attack explanation -->
+      <div id="s5_atk" style="opacity:0;transition:opacity .5s;background:#0f0505;border:2px solid #e85050;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">HOW IT WORKS</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Attacker sends frames with<br>
+          <span style="color:#e85050">thousands of fake source MACs.</span><br>
+          CAM table fills up completely.
+        </div>
+      </div>
+
+      <!-- CAM fill bar -->
+      <div id="s5_fillbox" style="opacity:0;transition:opacity .5s;background:#0a0505;border:1px solid #3a1010;border-radius:4px;padding:8px 10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:7px;color:#888">CAM TABLE CAPACITY</div>
+          <div id="s5_pct" style="font-size:7px;color:#e85050">0%</div>
+        </div>
+        <div style="background:#1a0505;height:16px;border-radius:2px;overflow:hidden">
+          <div id="s5_fillbar" style="height:100%;width:0;border-radius:2px;transition:width .1s linear;background:#e85050"></div>
+        </div>
+        <div id="s5_full_lbl" style="font-size:7px;color:#e85050;margin-top:5px;opacity:0;transition:opacity .3s">⚠ TABLE FULL — overflow begins</div>
+      </div>
+
+      <!-- Fake MACs scrolling -->
+      <div id="s5_fakemacs" style="opacity:0;transition:opacity .5s;background:#0a0505;border:1px solid #2a1010;border-radius:3px;padding:6px 8px;overflow:hidden;height:64px;position:relative">
+        <div style="font-size:6px;color:#666;margin-bottom:4px">FAKE FRAMES INJECTED</div>
+        <div id="s5_maclist" style="font-size:7px;color:#e85050;line-height:1.9;font-family:monospace"></div>
+      </div>
+
+      <!-- Consequence -->
+      <div id="s5_consequence" style="opacity:0;transition:opacity .5s;background:#1a0808;border:2px solid #e8a020;border-radius:4px;padding:10px 12px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:5px">⚡ CONSEQUENCE</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          Legit MACs can't be learned.<br>
+          Switch <span style="color:#e8a020">floods all frames</span> to all ports.<br>
+          Attacker's NIC sees everyone's traffic.
+        </div>
+      </div>
+
+      <!-- Defence -->
+      <div id="s5_defence" style="opacity:0;transition:opacity .5s;background:#0a140a;border:1px solid #4eff9a44;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">✓ DEFENCE: PORT SECURITY</div>
+        <div style="font-size:7px;color:#888;line-height:2">
+          Limit max MACs per port (e.g. 3).<br>
+          Violation → port shutdown or restrict mode.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Full CAM = switch reverts to hub behaviour.</div>
+    <div class="ih rd">Port security limits MACs per port. Default: off.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">FLOOD</div><div class="sl">RESULT</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">TRAFFIC<br>EXPOSED</div></div>
+    <div class="sc"><div class="sv gn">PORT<br>SEC</div><div class="sl">DEFENCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="prev(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="next(5)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+const TOTAL = 5;
+let timers = {};
+let fillInterval = null;
+
+function clearTimers(n) {
+  if (timers[n]) { timers[n].forEach(clearTimeout); timers[n] = []; }
+}
+function t(n, fn, d) {
+  if (!timers[n]) timers[n] = [];
+  timers[n].push(setTimeout(fn, d));
+}
+function showEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '1';
+  if (e.classList.contains('fs')) e.classList.add('show');
+  if (e.classList.contains('cam-row')) e.classList.add('show');
+}
+function hideEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '0';
+  if (e.classList.contains('fs')) e.classList.remove('show');
+  if (e.classList.contains('cam-row')) e.classList.remove('show');
+}
+function setWire(id, col) { const e = document.getElementById(id); if (e) e.setAttribute('stroke', col); }
+
+function resetScene(n) {
+  clearTimers(n);
+  if (fillInterval) { clearInterval(fillInterval); fillInterval = null; }
+
+  if (n === 1) {
+    ['s1_hook','s1_steps','s1_cam_preview'].forEach(hideEl);
+  } else if (n === 2) {
+    ['s2_r0','s2_r1','s2_r2','s2_r3','s2_note'].forEach(hideEl);
+    ['s2_w0','s2_w1','s2_w2','s2_w3'].forEach(id => setWire(id, '#1a3a1a'));
+    ['s2_d0','s2_d1','s2_d2','s2_d3'].forEach(id => {
+      const e = document.getElementById(id); if (e) e.style.opacity = '.5';
+    });
+    const el = document.getElementById('s2_cam_empty');
+    if (el) el.style.opacity = '1';
+    const fl = document.getElementById('s2_framelbl');
+    if (fl) { fl.style.opacity = '0'; fl.textContent = ''; }
+  } else if (n === 3) {
+    ['s3_title','s3_known','s3_unknown','s3_bcast'].forEach(hideEl);
+  } else if (n === 4) {
+    ['s4_intro','s4_table','s4_step1','s4_step2'].forEach(hideEl);
+    ['s4_bar0','s4_bar1','s4_bar2','s4_bar3'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.transition = 'none'; e.style.width = '0'; setTimeout(() => { e.style.transition = 'width 1s ease-out'; }, 20); }
+    });
+    ['s4_ttl0','s4_ttl1','s4_ttl2','s4_ttl3'].forEach(hideEl);
+    const dm = document.getElementById('s4_dd_mac');
+    const dp = document.getElementById('s4_dd_port');
+    if (dm) dm.style.color = '#444'; if (dp) dp.style.color = '#444';
+  } else if (n === 5) {
+    ['s5_atk','s5_fillbox','s5_fakemacs','s5_consequence','s5_defence'].forEach(hideEl);
+    const fb = document.getElementById('s5_fillbar');
+    if (fb) { fb.style.transition = 'none'; fb.style.width = '0'; setTimeout(() => { fb.style.transition = 'width .1s linear'; }, 20); }
+    const pct = document.getElementById('s5_pct');
+    if (pct) pct.textContent = '0%';
+    const fl = document.getElementById('s5_full_lbl');
+    if (fl) fl.style.opacity = '0';
+    const ml = document.getElementById('s5_maclist');
+    if (ml) ml.textContent = '';
+  }
+}
+
+function animate(n) {
+  if (n === 1) {
+    t(1, () => showEl('s1_hook'), 300);
+    t(1, () => showEl('s1_steps'), 1100);
+    t(1, () => showEl('s1_cam_preview'), 2500);
+
+  } else if (n === 2) {
+    const fl = document.getElementById('s2_framelbl');
+    const ce = document.getElementById('s2_cam_empty');
+
+    // Frame from P1
+    t(2, () => {
+      setWire('s2_w0', '#4eff9a');
+      const d = document.getElementById('s2_d0'); if (d) d.style.opacity = '1';
+      if (fl) { fl.textContent = 'LEARNING: AA:AA → Port 1'; fl.style.opacity = '1'; }
+    }, 300);
+    t(2, () => { if (ce) ce.style.opacity = '0'; showEl('s2_r0'); }, 800);
+
+    // Frame from P2
+    t(2, () => {
+      setWire('s2_w0', '#1a3a1a'); setWire('s2_w1', '#4eff9a');
+      const d = document.getElementById('s2_d1'); if (d) d.style.opacity = '1';
+      if (fl) fl.textContent = 'LEARNING: BB:BB → Port 2';
+    }, 1300);
+    t(2, () => showEl('s2_r1'), 1800);
+
+    // Frame from P3
+    t(2, () => {
+      setWire('s2_w1', '#1a3a1a'); setWire('s2_w2', '#4eff9a');
+      const d = document.getElementById('s2_d2'); if (d) d.style.opacity = '1';
+      if (fl) fl.textContent = 'LEARNING: CC:CC → Port 3';
+    }, 2300);
+    t(2, () => showEl('s2_r2'), 2800);
+
+    // Frame from P4
+    t(2, () => {
+      setWire('s2_w2', '#1a3a1a'); setWire('s2_w3', '#4eff9a');
+      const d = document.getElementById('s2_d3'); if (d) d.style.opacity = '1';
+      if (fl) fl.textContent = 'LEARNING: DD:DD → Port 4';
+    }, 3300);
+    t(2, () => showEl('s2_r3'), 3800);
+
+    t(2, () => { setWire('s2_w3', '#1a3a1a'); if (fl) fl.style.opacity = '0'; }, 4300);
+    t(2, () => showEl('s2_note'), 4600);
+
+  } else if (n === 3) {
+    t(3, () => showEl('s3_title'), 300);
+    t(3, () => showEl('s3_known'), 700);
+    t(3, () => showEl('s3_unknown'), 1600);
+    t(3, () => showEl('s3_bcast'), 2600);
+
+  } else if (n === 4) {
+    t(4, () => showEl('s4_intro'), 300);
+    t(4, () => showEl('s4_table'), 900);
+    t(4, () => {
+      document.getElementById('s4_bar0').style.width = '98%';
+      document.getElementById('s4_bar1').style.width = '49%';
+      document.getElementById('s4_bar2').style.width = '4%';
+      document.getElementById('s4_bar3').style.width = '0%';
+    }, 1200);
+    t(4, () => {
+      ['s4_ttl0','s4_ttl1','s4_ttl2','s4_ttl3'].forEach(showEl);
+    }, 1800);
+    t(4, () => {
+      const dm = document.getElementById('s4_dd_mac');
+      const dp = document.getElementById('s4_dd_port');
+      if (dm) dm.style.color = '#e85050'; if (dp) dp.style.color = '#e85050';
+    }, 2600);
+    t(4, () => showEl('s4_step1'), 3000);
+    t(4, () => showEl('s4_step2'), 3800);
+
+  } else if (n === 5) {
+    const fakeMacs = ['DE:AD:BE:EF:00:01','DE:AD:BE:EF:00:02','DE:AD:BE:EF:00:03','DE:AD:BE:EF:00:04','CA:FE:BA:BE:00:01','CA:FE:BA:BE:00:02'];
+    let macIdx = 0;
+
+    t(5, () => showEl('s5_atk'), 300);
+    t(5, () => { showEl('s5_fillbox'); showEl('s5_fakemacs'); }, 1000);
+    t(5, () => {
+      let pctVal = 0;
+      const fb = document.getElementById('s5_fillbar');
+      const pct = document.getElementById('s5_pct');
+      const ml = document.getElementById('s5_maclist');
+      const fl = document.getElementById('s5_full_lbl');
+
+      fillInterval = setInterval(() => {
+        pctVal = Math.min(100, pctVal + 2);
+        if (fb) fb.style.width = pctVal + '%';
+        if (pct) pct.textContent = pctVal + '%';
+        // Change color as it fills
+        if (fb) {
+          if (pctVal < 50) fb.style.background = '#e8a020';
+          else if (pctVal < 80) fb.style.background = '#e87020';
+          else fb.style.background = '#e85050';
+        }
+        if (pct) {
+          if (pctVal < 50) pct.style.color = '#e8a020';
+          else if (pctVal < 80) pct.style.color = '#e87020';
+          else pct.style.color = '#e85050';
+        }
+        // Inject fake mac
+        if (ml && macIdx < fakeMacs.length) {
+          const line = document.createElement('div');
+          line.textContent = fakeMacs[macIdx++];
+          ml.appendChild(line);
+          ml.scrollTop = ml.scrollHeight;
+        }
+        if (pctVal >= 100) {
+          clearInterval(fillInterval); fillInterval = null;
+          if (fl) fl.style.opacity = '1';
+        }
+      }, 80);
+    }, 1400);
+
+    t(5, () => showEl('s5_consequence'), 4000);
+    t(5, () => showEl('s5_defence'), 5200);
+  }
+}
+
+function play(n) { resetScene(n); setTimeout(() => animate(n), 60); }
+
+function next(n) {
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  const nxt = n < TOTAL ? n + 1 : 1;
+  document.getElementById('s' + nxt).classList.add('active');
+  setTimeout(() => animate(nxt), 100);
+}
+function prev(n) {
+  if (n <= 1) return;
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  const prv = n - 1;
+  document.getElementById('s' + prv).classList.add('active');
+  setTimeout(() => animate(prv), 100);
+}
+
+window.addEventListener('load', () => setTimeout(() => animate(1), 400));
+</script>
+</body>
+</html>

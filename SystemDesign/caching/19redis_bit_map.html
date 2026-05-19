@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Redis Bitmaps</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2e}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#888}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060c14;border:1px solid #0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#030810;border:2px solid #0d1a2e;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#4ec9e1}
+.cmd-key{color:#4eff9a}
+.cmd-arg{color:#e8a020}
+.cmd-str{color:#fff}
+/* FIX: comments were #1a3a4a — too dark. bumped to #3a6a7a so they're readable */
+.cmd-comment{color:#3a6a7a;font-size:7px}
+.cmd-result{color:#4eff9a;font-size:7px}
+
+/* bit grid — shared styles for BOTH scene 1 and scene 2 */
+#bit-grid,
+#bit-grid2{
+  display:grid;
+  grid-template-columns:repeat(50,1fr);
+  gap:1px;
+  background:#030810;
+  border:2px solid #0d1a2e;
+  padding:6px;
+  border-radius:2px;
+}
+.bit{
+  aspect-ratio:1;
+  /* FIX: was #0d1a2e (near-invisible). Raised to #1e3a50 so off-bits are subtly visible */
+  background:#1e3a50;
+  border-radius:1px;
+  transition:background 0.15s, box-shadow 0.15s;
+}
+.bit.on{background:#4ec9e1;box-shadow:0 0 2px #4ec9e180}
+.bit.on.new{background:#4eff9a;box-shadow:0 0 4px #4eff9a}
+.bit.on.flash{animation:bitFlash 0.3s ease}
+@keyframes bitFlash{0%{background:#fff;box-shadow:0 0 6px #fff}50%{background:#4eff9a}100%{background:#4ec9e1}}
+
+/* byte strip */
+.byte-strip{display:flex;gap:2px;align-items:center}
+.byte-cell{width:28px;height:28px;border:1px solid #0d1a2e;display:flex;align-items:center;justify-content:center;font-size:8px;border-radius:1px;transition:all 0.3s;flex-shrink:0}
+.byte-cell.bit1{background:#0d2a3a;border-color:#4ec9e1;color:#4ec9e1}
+/* FIX: bit0 cells were color:#1a3a4a (invisible). Raised to #3a6a7a */
+.byte-cell.bit0{background:#030810;color:#3a6a7a;border-color:#1e3a50}
+.byte-cell.highlight{border-color:#4eff9a;background:#0d2a1a;color:#4eff9a;animation:cellPop 0.3s ease}
+@keyframes cellPop{0%{transform:scale(1.2)}100%{transform:scale(1)}}
+
+/* memory bar */
+.mem-bar-wrap{background:#030810;border:1px solid #0d1a2e;height:18px;border-radius:2px;overflow:hidden;position:relative}
+.mem-bar-fill{height:100%;width:0;transition:width 1.2s ease-out;border-radius:2px}
+.mem-bar-label{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:6px}
+
+/* comparison */
+.cmp-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:2px;border:1px solid #0d1a2e;font-size:7px;opacity:0;transition:all 0.5s}
+.cmp-row.show{opacity:1}
+
+/* bitop */
+.bitop-col{flex:1;background:#030810;border:1px solid #0d1a2e;padding:7px;border-radius:2px}
+.bitop-title{font-size:7px;margin-bottom:5px;text-align:center}
+.bitop-strip{display:flex;gap:2px;justify-content:center;flex-wrap:wrap}
+.bop{width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:7px;border-radius:1px;border:1px solid #0d1a2e;transition:all 0.3s}
+.bop.on{background:#4ec9e1;color:#000;border-color:#4ec9e1}
+.bop.on2{background:#e8a020;color:#000;border-color:#e8a020}
+.bop.result{background:#4eff9a;color:#000;border-color:#4eff9a}
+/* FIX: off bops were near-invisible. Give them a subtle dim teal so you can read the 0 */
+.bop.off{background:#0a1e2e;color:#3a6a7a;border-color:#1e3a50}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — WHAT IS A BITMAP + SETBIT
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060c14">
+  <div class="hdr" style="background:#060c14">
+    <div class="hdr-title">REDIS BITMAPS</div>
+    <div class="hdr-sub">100M USERS · 12 MEGABYTES</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SETBIT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">O(1)</span>
+  </div>
+
+  <div class="anim" style="background:#060c14">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s1-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s1-cmd-text" class="cmd-str">_</span>
+        <div id="s1-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- byte anatomy -->
+      <!-- FIX: section labels raised from #1a3a4a to #3a6a7a -->
+      <div style="font-size:7px;color:#3a6a7a;margin-bottom:-3px">▸ BITMAP KEY "dau:2024-01-15" — each bit = one user ID</div>
+      <div id="s1-bytes" style="background:#030810;border:2px solid #0d1a2e;padding:8px;border-radius:2px">
+        <div style="font-size:6px;color:#3a6a7a;margin-bottom:5px">BYTE 0 (users 0–7)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BYTE 1 (users 8–15)</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="byte-strip" id="s1-byte0">
+            <div class="byte-cell bit0" id="s1-b0">0</div><div class="byte-cell bit0" id="s1-b1">0</div>
+            <div class="byte-cell bit0" id="s1-b2">0</div><div class="byte-cell bit0" id="s1-b3">0</div>
+            <div class="byte-cell bit0" id="s1-b4">0</div><div class="byte-cell bit0" id="s1-b5">0</div>
+            <div class="byte-cell bit0" id="s1-b6">0</div><div class="byte-cell bit0" id="s1-b7">0</div>
+          </div>
+          <div style="font-size:8px;color:#3a6a7a">···</div>
+          <div class="byte-strip" id="s1-byte1">
+            <div class="byte-cell bit0" id="s1-b8">0</div><div class="byte-cell bit0" id="s1-b9">0</div>
+            <div class="byte-cell bit0" id="s1-b10">0</div><div class="byte-cell bit0" id="s1-b11">0</div>
+          </div>
+          <div style="font-size:7px;color:#3a6a7a">···12.5MB more</div>
+        </div>
+        <div id="s1-byte-labels" style="display:flex;gap:2px;margin-top:4px">
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:0</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:1</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:2</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:3</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:4</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:5</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:6</div>
+          <div style="font-size:5px;color:#3a6a7a;width:28px;text-align:center">ID:7</div>
+        </div>
+      </div>
+
+      <!-- bit grid — 50×30 = 1500 bits shown -->
+      <div style="font-size:7px;color:#3a6a7a;margin-bottom:-3px">▸ ZOOMED OUT — 1,500 user slots visualised (of 100M)</div>
+      <div id="bit-grid"></div>
+
+      <div class="cmd-box" id="s1-result" style="opacity:0;transition:opacity 0.3s">
+        <span class="cmd-result" id="s1-result-text"></span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">SETBIT key offset 1</div>
+    <div class="ih">bit at position = userID is set to 1.<br>one bit per user. always O(1).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" id="s1-active">0</div><div class="sl">USERS<br>ACTIVE</div></div>
+    <div class="sc"><div class="sv am">1 bit</div><div class="sl">PER<br>USER</div></div>
+    <div class="sc"><div class="sv">O(1)</div><div class="sl">SETBIT<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — BITCOUNT: COUNT ACTIVE USERS
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060c14">
+  <div class="hdr" style="background:#060c14">
+    <div class="hdr-title">REDIS BITMAPS</div>
+    <div class="hdr-sub">COUNT 100M USERS IN MILLISECONDS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">BITCOUNT</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">O(N)</span>
+  </div>
+
+  <div class="anim" style="background:#060c14">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-str">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- FIX: use same small-square grid as scene 1, with proper CSS via shared #bit-grid2 rule -->
+      <div style="font-size:7px;color:#3a6a7a;margin-bottom:-3px">▸ scanning all bits — counting set bits (1s)</div>
+      <div id="bit-grid2"></div>
+
+      <!-- scan progress -->
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:7px;color:#555;margin-bottom:4px">
+          <span id="s2-scan-label">BITCOUNT scan progress</span>
+          <span id="s2-scan-pct">0%</span>
+        </div>
+        <div class="mem-bar-wrap">
+          <div class="mem-bar-fill" id="s2-scan-bar" style="background:linear-gradient(90deg,#4ec9e1,#4eff9a)"></div>
+        </div>
+      </div>
+
+      <!-- result box -->
+      <div id="s2-result-big" style="opacity:0;transition:opacity 0.5s;background:#030810;border:2px solid #4eff9a;padding:12px;text-align:center;border-radius:2px">
+        <div style="font-size:7px;color:#555;margin-bottom:4px">BITCOUNT "dau:2024-01-15"</div>
+        <div style="font-size:26px;color:#4eff9a" id="s2-big-count">0</div>
+        <div style="font-size:7px;color:#555;margin-top:4px">daily active users · counted in <span style="color:#4ec9e1" id="s2-ms">—</span></div>
+      </div>
+
+      <!-- getbit demo -->
+      <div id="s2-getbit-box" style="opacity:0;transition:opacity 0.5s">
+        <div class="cmd-box">
+          <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+          <span class="cmd-key">GETBIT</span> <span class="cmd-str">dau:2024-01-15</span> <span class="cmd-arg">42000000</span>
+          <div class="cmd-comment"># is user 42 million active today?</div>
+          <div class="cmd-result" style="margin-top:3px">(integer) 1 &nbsp;← yes, logged in · O(1)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">BITCOUNT key [start end]</div>
+    <div class="ih gn">counts all set bits in O(N). uses<br>POPCNT hardware instruction — blazing fast.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" id="s2-dau">—</div><div class="sl">DAU<br>COUNT</div></div>
+    <div class="sc"><div class="sv am">O(N)</div><div class="sl">BITCOUNT<br>SPEED</div></div>
+    <div class="sc"><div class="sv">O(1)</div><div class="sl">GETBIT<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — MEMORY: 12MB vs 6.4GB
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0a0610">
+  <div class="hdr" style="background:#0a0610">
+    <div class="hdr-title">REDIS BITMAPS</div>
+    <div class="hdr-sub">500× SMALLER THAN A SET</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">MEMORY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">500× LESS</span>
+  </div>
+
+  <div class="anim" style="background:#0a0610">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#4a2a5a;margin-bottom:-2px">▸ storing 100M daily active users — 2 approaches</div>
+
+      <!-- Bitmap row -->
+      <div class="cmp-row" id="cmp1" style="border-color:#4ec9e1;background:#060c14;flex-direction:column;align-items:flex-start;gap:6px">
+        <div style="display:flex;width:100%;align-items:center;gap:8px">
+          <div style="font-size:8px;color:#4ec9e1;min-width:80px">BITMAP</div>
+          <div style="flex:1">
+            <div class="mem-bar-wrap" style="height:20px">
+              <div class="mem-bar-fill" id="bar-bitmap" style="background:#4ec9e1;width:0"></div>
+              <span class="mem-bar-label" style="color:#4ec9e1" id="bitmap-label">0 MB</span>
+            </div>
+          </div>
+          <div style="font-size:9px;color:#4eff9a;min-width:40px;text-align:right" id="bitmap-final"></div>
+        </div>
+        <div style="font-size:6px;color:#3a6a7a;line-height:1.8">100M bits ÷ 8 = 12.5 MB · 1 bit per user · fixed size</div>
+      </div>
+
+      <!-- SET row -->
+      <div class="cmp-row" id="cmp2" style="border-color:#e85050;background:#14060a;flex-direction:column;align-items:flex-start;gap:6px">
+        <div style="display:flex;width:100%;align-items:center;gap:8px">
+          <div style="font-size:8px;color:#e85050;min-width:80px">REDIS SET</div>
+          <div style="flex:1">
+            <div class="mem-bar-wrap" style="height:20px">
+              <div class="mem-bar-fill" id="bar-set" style="background:#e85050;width:0"></div>
+              <span class="mem-bar-label" style="color:#e85050" id="set-label">0 MB</span>
+            </div>
+          </div>
+          <div style="font-size:9px;color:#e85050;min-width:40px;text-align:right" id="set-final"></div>
+        </div>
+        <div style="font-size:6px;color:#6a3a3a;line-height:1.8">100M integers × ~64 bytes = 6,400 MB · overhead per member</div>
+      </div>
+
+      <!-- vs label -->
+      <div id="cmp-vs" style="opacity:0;transition:opacity 0.5s;text-align:center;padding:8px 0">
+        <div style="font-size:9px;color:#e8a020">12 MB &nbsp;vs&nbsp; 6,400 MB</div>
+        <div style="font-size:22px;color:#4eff9a;margin-top:4px">533×</div>
+        <div style="font-size:7px;color:#555;margin-top:4px">smaller · same 100M user count</div>
+      </div>
+
+      <!-- math breakdown -->
+      <div id="math-box" style="opacity:0;transition:opacity 0.5s;background:#030810;border:1px solid #0d1a2e;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">THE MATH</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div style="display:flex;justify-content:space-between;color:#888">
+            <span>100,000,000 users</span><span>× 1 bit</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;color:#888">
+            <span>= 100,000,000 bits</span><span>÷ 8 = bytes</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;color:#4ec9e1;border-top:1px solid #0d1a2e;padding-top:5px">
+            <span>= 12,500,000 bytes</span><span style="color:#4eff9a">≈ 12 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- use case chips -->
+      <div id="use-chips" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#4a2a5a;margin-bottom:5px">▸ ONE BITMAP KEY PER DAY = full user analytics</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap">
+          <div style="background:#060c14;border:1px solid #0d1a2e;padding:5px 7px;font-size:6px;color:#4ec9e1;border-radius:2px">dau:2024-01-15</div>
+          <div style="background:#060c14;border:1px solid #0d1a2e;padding:5px 7px;font-size:6px;color:#4ec9e1;border-radius:2px">dau:2024-01-16</div>
+          <div style="background:#060c14;border:1px solid #0d1a2e;padding:5px 7px;font-size:6px;color:#4ec9e1;border-radius:2px">dau:2024-01-17</div>
+          <div style="background:#0a0610;border:1px solid #2a1a3a;padding:5px 7px;font-size:6px;color:#555;border-radius:2px">30 days = 375 MB</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">100M users · 1 bit each · 12 MB total</div>
+    <div class="ih am">a Redis SET needs 64 bytes per member.<br>bitmap uses 1 bit. that's 512× fewer bits.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">12 MB</div><div class="sl">BITMAP<br>SIZE</div></div>
+    <div class="sc"><div class="sv rd">6.4 GB</div><div class="sl">SET<br>SIZE</div></div>
+    <div class="sc"><div class="sv gn">533×</div><div class="sl">SMALLER<br>FACTOR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play am" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — BITOP: COMBINE BITMAPS
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#060c14">
+  <div class="hdr" style="background:#060c14">
+    <div class="hdr-title">REDIS BITMAPS</div>
+    <div class="hdr-sub">COMBINE DAYS · BITWISE OPS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">BITOP</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">AND · OR · XOR</span>
+  </div>
+
+  <div class="anim" style="background:#060c14">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s4-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s4-cmd-text" class="cmd-str">_</span>
+        <div id="s4-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- two source bitmaps -->
+      <div style="display:flex;gap:6px">
+        <div class="bitop-col" id="s4-col1" style="opacity:0;transition:opacity 0.5s">
+          <div class="bitop-title" style="color:#4ec9e1">dau:JAN-15</div>
+          <div class="bitop-strip" id="s4-bits1"></div>
+        </div>
+        <div class="bitop-col" id="s4-col2" style="opacity:0;transition:opacity 0.5s">
+          <div class="bitop-title" style="color:#e8a020">dau:JAN-16</div>
+          <div class="bitop-strip" id="s4-bits2"></div>
+        </div>
+      </div>
+
+      <!-- op selector -->
+      <div id="s4-ops" style="opacity:0;transition:opacity 0.5s;display:flex;flex-direction:column;gap:5px">
+
+        <div id="op-and" style="background:#030810;border:1px solid #0d1a2e;padding:8px 10px;border-radius:2px;opacity:0;transition:opacity 0.4s">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">BITOP AND → retained:7-day → users active BOTH days</div>
+          <div style="font-size:6px;color:#2a5a3a;margin-bottom:6px"># BITOP AND result dau:JAN-15 dau:JAN-16</div>
+          <div class="bitop-strip" id="s4-and-result" style="justify-content:flex-start;gap:2px"></div>
+          <div style="font-size:6px;color:#555;margin-top:4px">1 AND 1 = 1 · retained users only</div>
+        </div>
+
+        <div id="op-or" style="background:#030810;border:1px solid #0d1a2e;padding:8px 10px;border-radius:2px;opacity:0;transition:opacity 0.4s">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">BITOP OR → wau:week1 → active on ANY day</div>
+          <div style="font-size:6px;color:#5a4a1a;margin-bottom:6px"># BITOP OR result dau:JAN-15 dau:JAN-16</div>
+          <div class="bitop-strip" id="s4-or-result" style="justify-content:flex-start;gap:2px"></div>
+          <div style="font-size:6px;color:#555;margin-top:4px">1 OR 1 = 1 · union of active users</div>
+        </div>
+
+        <div id="op-xor" style="background:#030810;border:1px solid #0d1a2e;padding:8px 10px;border-radius:2px;opacity:0;transition:opacity 0.4s">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">BITOP XOR → churned → active day1 but NOT day2</div>
+          <div style="font-size:6px;color:#1a3a5a;margin-bottom:6px"># BITOP XOR result dau:JAN-15 dau:JAN-16</div>
+          <div class="bitop-strip" id="s4-xor-result" style="justify-content:flex-start;gap:2px"></div>
+          <div style="font-size:6px;color:#555;margin-top:4px">1 XOR 0 = 1 · users who only appeared once</div>
+        </div>
+
+      </div>
+
+      <!-- summary -->
+      <div id="s4-summary" style="opacity:0;transition:opacity 0.5s;background:#030810;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">ONE BITOP = instant analytics on 100M users</div>
+        <div style="display:flex;justify-content:space-around;gap:6px">
+          <div style="text-align:center">
+            <div style="font-size:16px;color:#4eff9a" id="s4-and-n">—</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">retained</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:16px;color:#e8a020" id="s4-or-n">—</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">weekly active</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:16px;color:#4ec9e1" id="s4-xor-n">—</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">churned / new</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">BITOP AND/OR/XOR dest src1 src2</div>
+    <div class="ih">combine daily bitmaps to compute retention,<br>WAU, churn — all in O(N). no SQL needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">AND</div><div class="sl">RETENTION<br>COHORT</div></div>
+    <div class="sc"><div class="sv am">OR</div><div class="sl">WEEKLY<br>ACTIVE</div></div>
+    <div class="sc"><div class="sv">XOR</div><div class="sl">CHURN<br>DETECT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+
+// ── SCENE 1 helpers ───────────────────────────
+const GRID_COLS=50, GRID_ROWS=30, TOTAL_BITS=GRID_COLS*GRID_ROWS;
+let grid1=[], grid1El=null;
+
+function buildGrid(id){
+  const g=document.getElementById(id);
+  g.innerHTML='';
+  const cells=[];
+  for(let i=0;i<TOTAL_BITS;i++){
+    const d=document.createElement('div');
+    d.className='bit';
+    g.appendChild(d);
+    cells.push(d);
+  }
+  return cells;
+}
+
+function playS1(){
+  clearT();
+  // reset bytes
+  for(let i=0;i<12;i++){
+    const el=document.getElementById('s1-b'+i);
+    if(el){el.className='byte-cell bit0';el.textContent='0';}
+  }
+  document.getElementById('s1-cmd-text').textContent='_';
+  document.getElementById('s1-cmd-comment').textContent='';
+  document.getElementById('s1-result').style.opacity='0';
+  document.getElementById('s1-active').textContent='0';
+
+  grid1=buildGrid('bit-grid');
+  let litCount=0;
+
+  // Step 1: show the command
+  T(()=>{
+    document.getElementById('s1-cmd-text').innerHTML=
+      '<span class="cmd-key">SETBIT</span> <span class="cmd-str">dau:2024-01-15</span> <span class="cmd-arg">3</span> <span style="color:#4eff9a">1</span>';
+    document.getElementById('s1-cmd-comment').textContent='# user ID 3 just logged in';
+  },400);
+
+  // light up byte cell 3
+  T(()=>{
+    const b=document.getElementById('s1-b3');
+    b.className='byte-cell highlight';b.textContent='1';
+    grid1[3].className='bit on flash';
+    litCount++;
+    document.getElementById('s1-active').textContent=litCount;
+    document.getElementById('s1-result').style.opacity='1';
+    document.getElementById('s1-result-text').textContent='(integer) 0   ← previous bit value';
+  },1000);
+
+  T(()=>{
+    document.getElementById('s1-cmd-text').innerHTML=
+      '<span class="cmd-key">SETBIT</span> <span class="cmd-str">dau:2024-01-15</span> <span class="cmd-arg">7</span> <span style="color:#4eff9a">1</span>';
+    document.getElementById('s1-cmd-comment').textContent='# user ID 7 logs in';
+    const b=document.getElementById('s1-b7');
+    b.className='byte-cell highlight';b.textContent='1';
+    grid1[7].className='bit on flash';
+    litCount++;
+    document.getElementById('s1-active').textContent=litCount;
+  },1800);
+
+  T(()=>{
+    document.getElementById('s1-cmd-text').innerHTML=
+      '<span class="cmd-key">SETBIT</span> <span class="cmd-str">dau:2024-01-15</span> <span class="cmd-arg">9</span> <span style="color:#4eff9a">1</span>';
+    document.getElementById('s1-cmd-comment').textContent='# user ID 9 logs in (byte 1, bit 1)';
+    const b=document.getElementById('s1-b9');
+    b.className='byte-cell highlight';b.textContent='1';
+    grid1[9].className='bit on flash';
+    litCount++;
+    document.getElementById('s1-active').textContent=litCount;
+  },2600);
+
+  // Now flood the grid with random logins
+  T(()=>{
+    document.getElementById('s1-cmd-text').innerHTML=
+      '<span class="cmd-key">SETBIT</span> <span class="cmd-str">dau:2024-01-15</span> <span class="cmd-arg">[userID]</span> <span style="color:#4eff9a">1</span>';
+    document.getElementById('s1-cmd-comment').textContent='# millions of users logging in...';
+  },3300);
+
+  // batch light bits in waves
+  const batchTargets=[200,450,700];
+  batchTargets.forEach((target,wave)=>{
+    T(()=>{
+      while(litCount<target){
+        const idx=Math.floor(Math.random()*TOTAL_BITS);
+        if(grid1[idx]&&grid1[idx].className==='bit'){
+          grid1[idx].className='bit on';
+          litCount++;
+        }
+      }
+      document.getElementById('s1-active').textContent=litCount+'...';
+    },3600+wave*500);
+  });
+
+  T(()=>{
+    document.getElementById('s1-active').textContent='~67M';
+  },5200);
+}
+
+// ── SCENE 2 ───────────────────────────────────
+let grid2=[];
+function playS2(){
+  clearT();
+  // FIX: buildGrid now works for bit-grid2 because CSS #bit-grid2 matches
+  grid2=buildGrid('bit-grid2');
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+  document.getElementById('s2-result-big').style.opacity='0';
+  document.getElementById('s2-getbit-box').style.opacity='0';
+  document.getElementById('s2-scan-bar').style.width='0';
+  document.getElementById('s2-scan-pct').textContent='0%';
+  document.getElementById('s2-dau').textContent='—';
+
+  // pre-populate grid randomly ~65%
+  let prelit=0;
+  for(let i=0;i<TOTAL_BITS;i++){
+    if(Math.random()<0.65){grid2[i].className='bit on';prelit++;}
+  }
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">BITCOUNT</span> <span class="cmd-str">dau:2024-01-15</span>';
+    document.getElementById('s2-cmd-comment').textContent='# count all set bits across 12.5MB';
+  },400);
+
+  // animate scan bar + highlight sweeping
+  T(()=>{
+    document.getElementById('s2-scan-bar').style.width='100%';
+    // sweep highlight across grid rows
+    for(let row=0;row<GRID_ROWS;row++){
+      setTimeout(()=>{
+        const pct=Math.round((row+1)/GRID_ROWS*100);
+        document.getElementById('s2-scan-pct').textContent=pct+'%';
+        for(let col=0;col<GRID_COLS;col++){
+          const idx=row*GRID_COLS+col;
+          if(grid2[idx]&&grid2[idx].className==='bit on'){
+            grid2[idx].style.background='#4eff9a';
+            setTimeout(()=>{if(grid2[idx])grid2[idx].style.background='';},200);
+          }
+        }
+      },row*40);
+    }
+  },900);
+
+  T(()=>{
+    document.getElementById('s2-result-big').style.opacity='1';
+    document.getElementById('s2-big-count').textContent='67,341,209';
+    document.getElementById('s2-ms').textContent='42ms';
+    document.getElementById('s2-dau').textContent='67.3M';
+    document.getElementById('s2-scan-label').textContent='scan complete ✓';
+  },2600);
+
+  T(()=>{
+    document.getElementById('s2-getbit-box').style.opacity='1';
+  },3400);
+}
+
+// ── SCENE 3 ───────────────────────────────────
+function playS3(){
+  clearT();
+  document.getElementById('cmp1').classList.remove('show');
+  document.getElementById('cmp2').classList.remove('show');
+  document.getElementById('cmp-vs').style.opacity='0';
+  document.getElementById('math-box').style.opacity='0';
+  document.getElementById('use-chips').style.opacity='0';
+  document.getElementById('bar-bitmap').style.width='0';
+  document.getElementById('bar-set').style.width='0';
+  document.getElementById('bitmap-label').textContent='0 MB';
+  document.getElementById('set-label').textContent='0 MB';
+  document.getElementById('bitmap-final').textContent='';
+  document.getElementById('set-final').textContent='';
+
+  T(()=>{
+    document.getElementById('cmp1').classList.add('show');
+    document.getElementById('bar-bitmap').style.width='2%';
+    let v=0;
+    const t=setInterval(()=>{
+      v+=0.5;
+      document.getElementById('bitmap-label').textContent=v.toFixed(1)+' MB';
+      document.getElementById('bar-bitmap').style.width=(v/6400*100)+'%';
+      if(v>=12.5){clearInterval(t);document.getElementById('bitmap-final').textContent='12 MB';document.getElementById('bitmap-label').textContent='12.5 MB';}
+    },60);
+  },400);
+
+  T(()=>{
+    document.getElementById('cmp2').classList.add('show');
+    let v=0;
+    const t=setInterval(()=>{
+      v+=80;
+      document.getElementById('set-label').textContent=(v/1000).toFixed(1)+' GB';
+      document.getElementById('bar-set').style.width=Math.min(100,v/6400*100)+'%';
+      if(v>=6400){clearInterval(t);document.getElementById('set-final').textContent='6.4 GB';document.getElementById('set-label').textContent='6,400 MB';}
+    },30);
+  },1400);
+
+  T(()=>{ document.getElementById('cmp-vs').style.opacity='1'; },2800);
+  T(()=>{ document.getElementById('math-box').style.opacity='1'; },3500);
+  T(()=>{ document.getElementById('use-chips').style.opacity='1'; },4200);
+}
+
+// ── SCENE 4 ───────────────────────────────────
+const day1=[1,0,1,1,0,1,0,1,1,0,1,1];
+const day2=[1,1,0,1,0,0,1,1,1,1,0,1];
+const andR=day1.map((b,i)=>b&day2[i]);
+const orR =day1.map((b,i)=>b|day2[i]);
+const xorR=day1.map((b,i)=>b^day2[i]);
+
+function renderBitop(id, bits, cls){
+  const el=document.getElementById(id);
+  el.innerHTML=bits.map(b=>`<div class="bop ${b?cls:'off'}">${b}</div>`).join('');
+}
+
+function playS4(){
+  clearT();
+  document.getElementById('s4-cmd-text').textContent='_';
+  document.getElementById('s4-cmd-comment').textContent='';
+  document.getElementById('s4-col1').style.opacity='0';
+  document.getElementById('s4-col2').style.opacity='0';
+  document.getElementById('s4-ops').style.opacity='0';
+  document.getElementById('op-and').style.opacity='0';
+  document.getElementById('op-or').style.opacity='0';
+  document.getElementById('op-xor').style.opacity='0';
+  document.getElementById('s4-summary').style.opacity='0';
+
+  T(()=>{
+    document.getElementById('s4-cmd-text').innerHTML=
+      '<span class="cmd-key">BITOP</span> <span class="cmd-arg">AND</span> <span class="cmd-str">retained:7day</span> <span style="color:#4ec9e1">dau:JAN-15</span> <span style="color:#e8a020">dau:JAN-16</span>';
+    document.getElementById('s4-cmd-comment').textContent='# who was active on BOTH days?';
+  },400);
+
+  T(()=>{
+    renderBitop('s4-bits1',day1,'on');
+    renderBitop('s4-bits2',day2,'on2');
+    document.getElementById('s4-col1').style.opacity='1';
+    document.getElementById('s4-col2').style.opacity='1';
+  },900);
+
+  T(()=>{
+    document.getElementById('s4-ops').style.opacity='1';
+    document.getElementById('op-and').style.opacity='1';
+    renderBitop('s4-and-result',andR,'result');
+    document.getElementById('s4-and-n').textContent=andR.reduce((a,b)=>a+b,0)+'M';
+  },1700);
+
+  T(()=>{
+    document.getElementById('s4-cmd-text').innerHTML=
+      '<span class="cmd-key">BITOP</span> <span class="cmd-arg">OR</span> <span class="cmd-str">wau:week1</span> <span style="color:#4ec9e1">dau:JAN-15</span> <span style="color:#e8a020">dau:JAN-16</span>';
+    document.getElementById('s4-cmd-comment').textContent='# active on ANY of these days?';
+    document.getElementById('op-or').style.opacity='1';
+    renderBitop('s4-or-result',orR,'result');
+    document.getElementById('s4-or-n').textContent=orR.reduce((a,b)=>a+b,0)+'M';
+  },2700);
+
+  T(()=>{
+    document.getElementById('s4-cmd-text').innerHTML=
+      '<span class="cmd-key">BITOP</span> <span class="cmd-arg">XOR</span> <span class="cmd-str">churned</span> <span style="color:#4ec9e1">dau:JAN-15</span> <span style="color:#e8a020">dau:JAN-16</span>';
+    document.getElementById('s4-cmd-comment').textContent='# active day1 but not day2 = churned';
+    document.getElementById('op-xor').style.opacity='1';
+    renderBitop('s4-xor-result',xorR,'result');
+    document.getElementById('s4-xor-n').textContent=xorR.reduce((a,b)=>a+b,0)+'M';
+  },3700);
+
+  T(()=>{ document.getElementById('s4-summary').style.opacity='1'; },4600);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

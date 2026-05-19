@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>HyperLogLog</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a0a2e}
+.hdr-title{font-size:13px;color:#c084fc;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a0a2e;transition:background .2s}
+.dot.active{background:#c084fc}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #c084fc;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.am{border-color:#e8a020}
+.il{color:#888}.ih{color:#c084fc}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a0614;border:1px solid #1a0a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#c084fc;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #c084fc;background:transparent;color:#c084fc;cursor:pointer;transition:all .15s}
+.btn:hover{background:#c084fc20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#08040f;border:2px solid #1a0a2e;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#c084fc}
+.cmd-key{color:#4eff9a}
+.cmd-arg{color:#e8a020}
+.cmd-str{color:#fff}
+.cmd-comment{color:#2a1a4a;font-size:7px}
+.cmd-result{color:#4eff9a;font-size:7px}
+
+/* memory bar */
+.mem-bar-wrap{background:#08040f;border:1px solid #1a0a2e;height:18px;border-radius:2px;overflow:hidden;position:relative}
+.mem-bar-fill{height:100%;width:0;transition:width 1.4s ease-out;border-radius:2px}
+.mem-bar-label{position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:6px}
+
+/* id tokens flooding */
+.token-pool{display:flex;flex-wrap:wrap;gap:2px;min-height:60px;background:#08040f;border:1px solid #1a0a2e;padding:6px;border-radius:2px;overflow:hidden}
+.token{font-size:5px;padding:2px 4px;border-radius:1px;border:1px solid;animation:tokenPop 0.25s ease;flex-shrink:0}
+@keyframes tokenPop{0%{transform:scale(0);opacity:0}60%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+.token.set-tok{background:#0a0420;border-color:#e85050;color:#e85050}
+.token.hll-tok{display:none}
+
+/* hash bits display */
+.hash-row{display:flex;align-items:center;gap:3px;font-size:7px;padding:3px 0}
+.hash-bits{display:flex;gap:1px}
+.hbit{width:10px;height:14px;display:flex;align-items:center;justify-content:center;font-size:6px;border-radius:1px;border:1px solid #1a0a2e;background:#08040f;color:#444;transition:all 0.2s}
+.hbit.one{background:#c084fc30;border-color:#c084fc;color:#c084fc}
+.hbit.leading{background:#4eff9a40;border-color:#4eff9a;color:#4eff9a}
+.hbit.reg{background:#e8a02040;border-color:#e8a020;color:#e8a020;font-size:5px}
+
+/* register grid */
+.reg-grid{display:grid;grid-template-columns:repeat(16,1fr);gap:1px}
+.reg-cell{aspect-ratio:1;border-radius:1px;border:1px solid #1a0a2e;background:#08040f;display:flex;align-items:center;justify-content:center;font-size:5px;color:#2a1a4a;transition:all 0.3s}
+.reg-cell.active{background:#c084fc30;border-color:#c084fc;color:#c084fc}
+.reg-cell.high{background:#4eff9a30;border-color:#4eff9a;color:#4eff9a}
+
+/* comparison containers */
+.cmp-box{flex:1;display:flex;flex-direction:column;gap:5px;padding:8px;border:2px solid;border-radius:2px}
+.cmp-box.bad{border-color:#e85050;background:#0f0408}
+.cmp-box.good{border-color:#4eff9a;background:#04100a}
+.cmp-title{font-size:8px;text-align:center;margin-bottom:2px}
+.cmp-pill{display:flex;align-items:center;justify-content:center;border-radius:2px;border:1px solid;font-size:7px;padding:5px 6px;font-family:'Press Start 2P',monospace;transition:all 0.4s}
+
+/* probability dice */
+.dice{width:36px;height:36px;border:2px solid #c084fc;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;background:#0a0614;transition:all 0.2s;flex-shrink:0}
+.dice.roll{animation:diceRoll 0.15s ease 3}
+@keyframes diceRoll{0%,100%{transform:rotate(0deg)}50%{transform:rotate(15deg) scale(1.1)}}
+
+/* use-case cards */
+.uc-card{opacity:0;transition:opacity 0.5s;background:#08040f;border:1px solid #1a0a2e;padding:8px 10px;border-radius:2px}
+.uc-card.show{opacity:1}
+.uc-title{font-size:7px;color:#c084fc;margin-bottom:4px}
+.uc-desc{font-size:6px;color:#666;line-height:1.8}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — THE PROBLEM: SETS GROW FOREVER
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0a0614">
+  <div class="hdr" style="background:#0a0614">
+    <div class="hdr-title">HYPERLOGLOG</div>
+    <div class="hdr-sub">COUNT A BILLION UNIQUES — NO STORAGE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">EXPENSIVE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0614">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#3a1a4a;margin-bottom:-2px">▸ naive approach: store every unique visitor ID</div>
+
+      <!-- two side-by-side growing containers -->
+      <div style="display:flex;gap:8px">
+        <!-- SET -->
+        <div class="cmp-box bad" style="flex:1.2">
+          <div class="cmp-title" style="color:#e85050">REDIS SET</div>
+          <div id="s1-set-pool" class="token-pool" style="min-height:80px"></div>
+          <div style="margin-top:2px">
+            <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-bottom:3px">
+              <span>MEMORY</span><span id="s1-set-mb">0 MB</span>
+            </div>
+            <div class="mem-bar-wrap">
+              <div class="mem-bar-fill" id="s1-set-bar" style="background:#e85050"></div>
+            </div>
+          </div>
+        </div>
+        <!-- HLL teaser -->
+        <div class="cmp-box good" style="flex:0.9">
+          <div class="cmp-title" style="color:#4eff9a">HyperLogLog</div>
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:8px;min-height:80px">
+            <div style="font-size:22px">🎲</div>
+            <div style="font-size:6px;color:#2a5a3a;text-align:center;line-height:1.8">not storing<br>IDs — using<br>probability</div>
+          </div>
+          <div style="margin-top:2px">
+            <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-bottom:3px">
+              <span>MEMORY</span><span style="color:#4eff9a">12 KB</span>
+            </div>
+            <div class="mem-bar-wrap">
+              <div class="mem-bar-fill" style="background:#4eff9a;width:1%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- milestone labels -->
+      <div id="s1-milestone" style="opacity:0;transition:opacity 0.4s;text-align:center;font-size:8px;color:#e85050"></div>
+
+      <!-- the problem statement -->
+      <div id="s1-problem-box" style="opacity:0;transition:opacity 0.5s;background:#0f0408;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">THE PROBLEM</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          SADD unique:visitors &lt;userID&gt;<br>
+          → every unique ID stored in memory<br>
+          → 1B visitors = ~64 GB of RAM<br>
+          → count is exact, but cost is brutal
+        </div>
+      </div>
+
+      <!-- HLL promise -->
+      <div id="s1-hll-promise" style="opacity:0;transition:opacity 0.5s;background:#04100a;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">HyperLogLog PROMISE</div>
+        <div style="display:flex;justify-content:space-around">
+          <div style="text-align:center">
+            <div style="font-size:14px;color:#4eff9a">12 KB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">always · forever</div>
+          </div>
+          <div style="text-align:center;font-size:16px;color:#2a5a3a">vs</div>
+          <div style="text-align:center">
+            <div style="font-size:14px;color:#e85050">64 GB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">for 1B uniques</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">storing every ID = memory grows forever</div>
+    <div class="ih rd">100M uniques × 64 bytes = 6.4 GB.<br>1B uniques = 64 GB. doesn't scale.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s1-set-size">0 MB</div><div class="sl">SET<br>MEMORY</div></div>
+    <div class="sc"><div class="sv gn">12 KB</div><div class="sl">HLL<br>MEMORY</div></div>
+    <div class="sc"><div class="sv am" id="s1-ratio">—</div><div class="sl">SIZE<br>RATIO</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — HOW IT WORKS: HASH + LEADING ZEROS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0a0614">
+  <div class="hdr" style="background:#0a0614">
+    <div class="hdr-title">HYPERLOGLOG</div>
+    <div class="hdr-sub">THE TRICK: LEADING ZEROS IN HASHES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c084fc">INTERNALS</span>
+    <span class="sbadge" style="color:#c084fc;border-color:#c084fc">PROBABILITY</span>
+  </div>
+
+  <div class="anim" style="background:#0a0614">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-str">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- hash anatomy -->
+      <div style="font-size:7px;color:#2a1a4a;margin-bottom:-2px">▸ each element is hashed → binary analyzed</div>
+      <div id="s2-hashes" style="background:#08040f;border:1px solid #1a0a2e;padding:8px;border-radius:2px;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:6px;color:#2a1a4a">ELEMENT → HASH → LEADING ZEROS → REGISTER</div>
+        <div id="s2-hash-rows" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <!-- intuition -->
+      <div id="s2-intuition" style="opacity:0;transition:opacity 0.5s;background:#08040f;border:1px solid #1a0a2e;padding:9px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#c084fc;margin-bottom:5px">THE INTUITION</div>
+        <div style="font-size:6px;color:#777;line-height:1.9">
+          if you flip a coin and get 10 heads in a row,<br>
+          you probably flipped ~1024 coins total.<br><br>
+          HLL does this with leading zeros in hashes.<br>
+          more leading zeros seen = larger cardinality.
+        </div>
+      </div>
+
+      <!-- dice animation -->
+      <div id="s2-dice-row" style="opacity:0;transition:opacity 0.5s;display:flex;align-items:center;gap:10px;padding:8px;background:#08040f;border:1px solid #1a0a2e;border-radius:2px">
+        <div class="dice" id="s2-dice">🎲</div>
+        <div style="flex:1">
+          <div style="font-size:7px;color:#c084fc;margin-bottom:4px">MAX LEADING ZEROS SEEN: <span id="s2-max-zeros" style="color:#4eff9a">0</span></div>
+          <div style="font-size:6px;color:#555;line-height:1.8">probability of k leading zeros<br>= 1 / 2^k → estimate = 2^k</div>
+        </div>
+      </div>
+
+      <!-- 16 registers -->
+      <div style="font-size:7px;color:#2a1a4a;margin-bottom:-2px">▸ 16,384 registers track max leading zeros per bucket</div>
+      <div id="s2-regs" style="background:#08040f;border:1px solid #1a0a2e;padding:6px;border-radius:2px">
+        <div class="reg-grid" id="s2-reg-grid"></div>
+        <div style="font-size:6px;color:#2a1a4a;margin-top:5px;text-align:center">16,384 registers × 6 bits = 12 KB total</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">hash → count leading zeros → update register</div>
+    <div class="ih">max leading zeros seen estimates cardinality.<br>16K registers averaged → 0.8% error rate.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">16,384</div><div class="sl">REGISTERS<br>TOTAL</div></div>
+    <div class="sc"><div class="sv am">6 bits</div><div class="sl">PER<br>REGISTER</div></div>
+    <div class="sc"><div class="sv gn">±0.8%</div><div class="sl">ERROR<br>RATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — PFADD + PFCOUNT COMMANDS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0a0614">
+  <div class="hdr" style="background:#0a0614">
+    <div class="hdr-title">HYPERLOGLOG</div>
+    <div class="hdr-sub">PFADD · PFCOUNT · PFMERGE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">COMMANDS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">O(1)</span>
+  </div>
+
+  <div class="anim" style="background:#0a0614">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="cmd-box" id="s3-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s3-cmd-text" class="cmd-str">_</span>
+        <div id="s3-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- PFADD demo -->
+      <div id="s3-pfadd-box" style="opacity:0;transition:opacity 0.5s;background:#08040f;border:1px solid #1a0a2e;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#c084fc;margin-bottom:5px">PFADD — add elements</div>
+        <div style="font-size:6px;color:#2a1a4a;margin-bottom:6px"># memory stays flat at 12KB regardless of input</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap" id="s3-pfadd-tokens"></div>
+        <div style="margin-top:7px;display:flex;justify-content:space-between;font-size:6px;color:#555">
+          <span>HLL memory</span><span style="color:#4eff9a">12 KB (constant)</span>
+        </div>
+        <div class="mem-bar-wrap" style="margin-top:3px">
+          <div class="mem-bar-fill" style="background:#4eff9a;width:2%"></div>
+        </div>
+      </div>
+
+      <!-- PFCOUNT result -->
+      <div id="s3-pfcount-box" style="opacity:0;transition:opacity 0.5s;background:#08040f;border:2px solid #4eff9a;padding:10px;border-radius:2px;text-align:center">
+        <div style="font-size:7px;color:#555;margin-bottom:4px">PFCOUNT hll:visitors</div>
+        <div style="font-size:26px;color:#4eff9a" id="s3-count-num">—</div>
+        <div style="font-size:6px;color:#555;margin-top:4px">estimated unique visitors · ±0.8% error</div>
+        <div style="font-size:6px;color:#2a5a3a;margin-top:3px">actual: <span id="s3-actual">—</span> · error: <span id="s3-error" style="color:#4eff9a">—</span></div>
+      </div>
+
+      <!-- PFMERGE -->
+      <div id="s3-pfmerge-box" style="opacity:0;transition:opacity 0.5s;background:#08040f;border:1px solid #1a0a2e;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#c084fc;margin-bottom:5px">PFMERGE — combine HLLs</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+          <div style="font-size:7px;color:#4ec9e1;background:#060c14;border:1px solid #0d1a2e;padding:4px 6px;border-radius:2px">hll:page/home</div>
+          <div style="font-size:8px;color:#c084fc">+</div>
+          <div style="font-size:7px;color:#e8a020;background:#14100a;border:1px solid #2a1a0a;padding:4px 6px;border-radius:2px">hll:page/shop</div>
+          <div style="font-size:8px;color:#c084fc">→</div>
+          <div style="font-size:7px;color:#4eff9a;background:#04100a;border:1px solid #0a2a14;padding:4px 6px;border-radius:2px">hll:site-wide</div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:6px;line-height:1.8">union of uniques across keys · still O(N) · still 12KB</div>
+      </div>
+
+      <!-- complexity table -->
+      <div id="s3-complexity" style="opacity:0;transition:opacity 0.5s;display:flex;flex-direction:column;gap:3px">
+        <div style="font-size:7px;color:#2a1a4a;margin-bottom:1px">▸ command complexity</div>
+        <div style="display:flex;gap:6px;padding:6px 8px;background:#08040f;border:1px solid #1a0a2e;border-radius:2px;font-size:7px">
+          <span style="color:#4eff9a;min-width:80px">PFADD</span>
+          <span style="color:#e8a020;min-width:60px">O(1)</span>
+          <span style="color:#555;font-size:6px">hash + update one register</span>
+        </div>
+        <div style="display:flex;gap:6px;padding:6px 8px;background:#08040f;border:1px solid #1a0a2e;border-radius:2px;font-size:7px">
+          <span style="color:#4eff9a;min-width:80px">PFCOUNT</span>
+          <span style="color:#e8a020;min-width:60px">O(1)*</span>
+          <span style="color:#555;font-size:6px">read + aggregate 16K regs</span>
+        </div>
+        <div style="display:flex;gap:6px;padding:6px 8px;background:#08040f;border:1px solid #1a0a2e;border-radius:2px;font-size:7px">
+          <span style="color:#4eff9a;min-width:80px">PFMERGE</span>
+          <span style="color:#e8a020;min-width:60px">O(N)</span>
+          <span style="color:#555;font-size:6px">N = number of HLLs merged</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">PFADD key el [el …] / PFCOUNT key</div>
+    <div class="ih gn">O(1) add · O(1) count · 12 KB flat.<br>PF = Philippe Flajolet, inventor.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">O(1)</div><div class="sl">PFADD<br>SPEED</div></div>
+    <div class="sc"><div class="sv gn">12 KB</div><div class="sl">MEMORY<br>ALWAYS</div></div>
+    <div class="sc"><div class="sv am">±0.8%</div><div class="sl">MAX<br>ERROR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — USE CASES + WHEN NOT TO USE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0614">
+  <div class="hdr" style="background:#0a0614">
+    <div class="hdr-title">HYPERLOGLOG</div>
+    <div class="hdr-sub">WHEN TO USE · WHEN NOT TO</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c084fc">USE CASES</span>
+    <span class="sbadge" style="color:#c084fc;border-color:#c084fc">REAL WORLD</span>
+  </div>
+
+  <div class="anim" style="background:#0a0614">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#2a1a4a;margin-bottom:-2px">▸ USE HyperLogLog when approximate is fine</div>
+
+      <div class="uc-card" id="uc1">
+        <div class="uc-title">📊 UNIQUE PAGE VIEWS</div>
+        <div class="uc-desc">PFADD hll:page:{id} {visitorID}<br>PFCOUNT hll:page:{id} → ~uniques today<br>one 12KB key per page per day · exact enough</div>
+      </div>
+
+      <div class="uc-card" id="uc2">
+        <div class="uc-title">🔍 UNIQUE SEARCH QUERIES</div>
+        <div class="uc-desc">track distinct queries seen per hour.<br>detects query volume spikes, trend shifts.<br>0.8% error irrelevant at analytics scale.</div>
+      </div>
+
+      <div class="uc-card" id="uc3">
+        <div class="uc-title">🧪 FUNNEL ANALYSIS</div>
+        <div class="uc-desc">PFMERGE hll:funnel:checkout hll:step1 hll:step2<br>union of users who hit each step.<br>drop-off = PFCOUNT(step1) - PFCOUNT(step2)</div>
+      </div>
+
+      <!-- when NOT to use -->
+      <div id="uc-no" style="opacity:0;transition:opacity 0.5s;background:#0f0408;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">✗ WHEN NOT TO USE</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:6px;color:#888;line-height:1.8">
+          <div>• need EXACT count → use a SET or counter</div>
+          <div>• need to list who is in the set → HLL can't do that</div>
+          <div>• deduplicating payments / transactions → too risky at 0.8% error</div>
+          <div>• small cardinality (&lt;1000) → plain SET is fine</div>
+        </div>
+      </div>
+
+      <!-- final comparison -->
+      <div id="uc-final" style="opacity:0;transition:opacity 0.5s;background:#08040f;border:2px solid #c084fc;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#c084fc;margin-bottom:7px">THE TRADEOFF</div>
+        <div style="display:flex;gap:8px;justify-content:space-around;text-align:center">
+          <div>
+            <div style="font-size:10px;color:#4eff9a">12 KB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">memory · fixed</div>
+          </div>
+          <div style="font-size:8px;color:#2a1a4a;display:flex;align-items:center">for</div>
+          <div>
+            <div style="font-size:10px;color:#e8a020">±0.8%</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">error · always</div>
+          </div>
+          <div style="font-size:8px;color:#2a1a4a;display:flex;align-items:center">on</div>
+          <div>
+            <div style="font-size:10px;color:#c084fc">∞</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">cardinality</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">approximate unique counting · fixed memory</div>
+    <div class="ih">12 KB regardless of 1K or 1B elements.<br>the cost: you lose exact counts + membership.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">DAU</div><div class="sl">UNIQUE<br>VISITORS</div></div>
+    <div class="sc"><div class="sv am">SEARCH</div><div class="sl">DISTINCT<br>QUERIES</div></div>
+    <div class="sc"><div class="sv">FUNNEL</div><div class="sl">STEP<br>OVERLAP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();if(n===2)playS2();if(n===3)playS3();if(n===4)playS4();
+}
+
+// ── SCENE 1 ───────────────────────────────────
+function playS1(){
+  clearT();
+  const pool=document.getElementById('s1-set-pool');
+  const bar=document.getElementById('s1-set-bar');
+  pool.innerHTML='';
+  bar.style.width='0';
+  document.getElementById('s1-set-mb').textContent='0 MB';
+  document.getElementById('s1-set-size').textContent='0 MB';
+  document.getElementById('s1-ratio').textContent='—';
+  document.getElementById('s1-milestone').style.opacity='0';
+  document.getElementById('s1-problem-box').style.opacity='0';
+  document.getElementById('s1-hll-promise').style.opacity='0';
+
+  const milestones=[
+    {count:10, mb:0.001, label:'10 visitors — negligible'},
+    {count:30, mb:0.01,  label:'1,000 visitors — still fine'},
+    {count:60, mb:1,     label:'1M visitors — 64 MB RAM'},
+    {count:100,mb:64,    label:'1B visitors — 64 GB RAM 😱'},
+  ];
+  let tokenCount=0;
+  const colors=['#e85050','#e8a020','#c084fc','#4ec9e1'];
+
+  function addTokens(target, mbTarget, label, delay){
+    T(()=>{
+      while(tokenCount<target){
+        const d=document.createElement('div');
+        d.className='token set-tok';
+        d.style.borderColor=colors[tokenCount%4];
+        d.style.color=colors[tokenCount%4];
+        d.style.background=colors[tokenCount%4]+'15';
+        d.textContent='ID:'+Math.floor(Math.random()*99999);
+        pool.appendChild(d);
+        tokenCount++;
+      }
+      const pct=Math.min(100,(mbTarget/64)*100);
+      bar.style.width=pct+'%';
+      document.getElementById('s1-set-mb').textContent=mbTarget>=1?mbTarget+' GB':mbTarget+' MB';
+      document.getElementById('s1-set-size').textContent=mbTarget>=1?mbTarget+' GB':mbTarget+' MB';
+      const ratio=mbTarget>=1?Math.round(mbTarget*1024/0.012)+'×':'—';
+      document.getElementById('s1-ratio').textContent=ratio;
+      const ms=document.getElementById('s1-milestone');
+      ms.textContent=label;ms.style.opacity='1';
+    },delay);
+  }
+
+  addTokens(10,  0.001, '10 visitors — negligible',  400);
+  addTokens(30,  0.01,  '1K visitors — still fine',  1300);
+  addTokens(60,  1,     '1M visitors — 64 MB RAM',   2200);
+  addTokens(100, 64,    '1B visitors — 64 GB RAM 😱',3200);
+  T(()=>{ document.getElementById('s1-problem-box').style.opacity='1'; },4200);
+  T(()=>{ document.getElementById('s1-hll-promise').style.opacity='1'; },5000);
+}
+
+// ── SCENE 2 ───────────────────────────────────
+const hashExamples=[
+  {el:'"user:48291"',  bits:'00010110110101',  bucket:'01',  lz:3,  reg:2},
+  {el:'"user:77103"',  bits:'00000101011001',  bucket:'00',  lz:5,  reg:0},
+  {el:'"user:12847"',  bits:'01101001110100',  bucket:'01',  lz:1,  reg:1},
+  {el:'"user:99512"',  bits:'00001110010011',  bucket:'00',  lz:4,  reg:4},
+];
+
+function buildHashRow(h, idx){
+  const lzBits=Array(h.lz).fill('<div class="hbit leading">0</div>').join('');
+  const restBits=h.bits.slice(h.lz).split('').map(b=>`<div class="hbit ${b==='1'?'one':''}">${b}</div>`).join('');
+  return `<div class="hash-row fadeUp" style="animation-delay:${idx*0.1}s">
+    <div style="font-size:6px;color:#555;min-width:72px">${h.el}</div>
+    <div class="hash-bits">${lzBits}${restBits}<div style="font-size:7px;color:#2a1a4a;margin-left:2px">…</div></div>
+    <div style="font-size:6px;color:#4eff9a;min-width:30px;text-align:right">lz=${h.lz}</div>
+    <div class="hbit reg" style="margin-left:3px">r${h.reg}</div>
+  </div>`;
+}
+
+function buildRegGrid(){
+  const g=document.getElementById('s2-reg-grid');
+  g.innerHTML='';
+  for(let i=0;i<64;i++){
+    const d=document.createElement('div');
+    d.className='reg-cell';
+    d.textContent='0';
+    d.id='reg-'+i;
+    g.appendChild(d);
+  }
+}
+
+let maxZeros=0;
+function playS2(){
+  clearT();
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+  document.getElementById('s2-hash-rows').innerHTML='';
+  document.getElementById('s2-intuition').style.opacity='0';
+  document.getElementById('s2-dice-row').style.opacity='0';
+  document.getElementById('s2-max-zeros').textContent='0';
+  maxZeros=0;
+  buildRegGrid();
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">PFADD</span> <span class="cmd-str">hll:visitors</span> <span class="cmd-arg">"user:48291"</span>';
+    document.getElementById('s2-cmd-comment').textContent='# hash → analyze leading zeros → update register';
+  },400);
+
+  hashExamples.forEach((h,i)=>{
+    T(()=>{
+      document.getElementById('s2-cmd-text').innerHTML=
+        `<span class="cmd-key">PFADD</span> <span class="cmd-str">hll:visitors</span> <span class="cmd-arg">"${h.el.replace(/"/g,'')}"</span>`;
+      const rows=document.getElementById('s2-hash-rows');
+      rows.innerHTML+=buildHashRow(h,i);
+      // update register
+      const reg=document.getElementById('reg-'+h.reg);
+      if(reg){
+        const cur=parseInt(reg.textContent)||0;
+        if(h.lz>cur){
+          reg.textContent=h.lz;
+          reg.className='reg-cell '+(h.lz>=4?'high':'active');
+        }
+      }
+      if(h.lz>maxZeros){
+        maxZeros=h.lz;
+        document.getElementById('s2-max-zeros').textContent=maxZeros;
+      }
+    },700+i*900);
+  });
+
+  T(()=>{
+    document.getElementById('s2-intuition').style.opacity='1';
+    document.getElementById('s2-dice-row').style.opacity='1';
+    // animate dice rolling
+    const dice=document.getElementById('s2-dice');
+    const faces=['🎲','⚀','⚁','⚂','⚃','⚄','⚅'];
+    let t=0;
+    const roll=setInterval(()=>{
+      dice.classList.add('roll');
+      dice.textContent=faces[Math.floor(Math.random()*faces.length)];
+      setTimeout(()=>dice.classList.remove('roll'),150);
+      t++;
+      if(t>8)clearInterval(roll);
+    },250);
+  },4700);
+
+  // fill more registers randomly
+  T(()=>{
+    for(let i=0;i<64;i++){
+      if(Math.random()<0.6){
+        const v=Math.floor(Math.random()*6)+1;
+        const r=document.getElementById('reg-'+i);
+        if(r&&parseInt(r.textContent)<v){
+          r.textContent=v;
+          r.className='reg-cell '+(v>=4?'high':'active');
+        }
+      }
+    }
+  },6000);
+}
+
+// ── SCENE 3 ───────────────────────────────────
+const pfaddElems=['user:48291','user:77103','user:12847','user:99512','user:34108',
+                   'user:21956','user:67342','user:88001','user:10293','user:55678'];
+
+function playS3(){
+  clearT();
+  document.getElementById('s3-cmd-text').textContent='_';
+  document.getElementById('s3-cmd-comment').textContent='';
+  document.getElementById('s3-pfadd-box').style.opacity='0';
+  document.getElementById('s3-pfcount-box').style.opacity='0';
+  document.getElementById('s3-pfmerge-box').style.opacity='0';
+  document.getElementById('s3-complexity').style.opacity='0';
+  document.getElementById('s3-count-num').textContent='—';
+  document.getElementById('s3-actual').textContent='—';
+  document.getElementById('s3-error').textContent='—';
+  document.getElementById('s3-pfadd-tokens').innerHTML='';
+
+  T(()=>{
+    document.getElementById('s3-pfadd-box').style.opacity='1';
+    document.getElementById('s3-cmd-text').innerHTML=
+      '<span class="cmd-key">PFADD</span> <span class="cmd-str">hll:visitors</span> <span class="cmd-arg">"user:48291"</span> …';
+    document.getElementById('s3-cmd-comment').textContent='# adding visitors · HLL stays 12KB';
+  },400);
+
+  pfaddElems.forEach((el,i)=>{
+    T(()=>{
+      const d=document.createElement('div');
+      d.style.cssText='font-size:6px;padding:3px 5px;border:1px solid #c084fc;color:#c084fc;background:#0a0614;border-radius:2px;animation:tokenPop 0.2s ease;font-family:inherit';
+      d.textContent=el;
+      document.getElementById('s3-pfadd-tokens').appendChild(d);
+    },700+i*200);
+  });
+
+  T(()=>{
+    document.getElementById('s3-cmd-text').innerHTML=
+      '<span class="cmd-key">PFCOUNT</span> <span class="cmd-str">hll:visitors</span>';
+    document.getElementById('s3-cmd-comment').textContent='# estimate unique count — O(1)';
+    document.getElementById('s3-pfcount-box').style.opacity='1';
+    // animate count ticking up
+    let v=0;
+    const target=9920;
+    const t=setInterval(()=>{
+      v=Math.min(target, v+Math.floor(Math.random()*400)+100);
+      document.getElementById('s3-count-num').textContent=v.toLocaleString();
+      if(v>=target){
+        clearInterval(t);
+        document.getElementById('s3-count-num').textContent='9,920';
+        document.getElementById('s3-actual').textContent='10,000';
+        document.getElementById('s3-error').textContent='-0.8%';
+      }
+    },80);
+  },3000);
+
+  T(()=>{
+    document.getElementById('s3-cmd-text').innerHTML=
+      '<span class="cmd-key">PFMERGE</span> <span class="cmd-str">hll:site</span> <span class="cmd-arg">hll:home</span> <span class="cmd-arg">hll:shop</span>';
+    document.getElementById('s3-cmd-comment').textContent='# union of multiple HLLs';
+    document.getElementById('s3-pfmerge-box').style.opacity='1';
+  },4800);
+
+  T(()=>{ document.getElementById('s3-complexity').style.opacity='1'; },5800);
+}
+
+// ── SCENE 4 ───────────────────────────────────
+function playS4(){
+  clearT();
+  ['uc1','uc2','uc3'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+  document.getElementById('uc-no').style.opacity='0';
+  document.getElementById('uc-final').style.opacity='0';
+
+  T(()=>{ document.getElementById('uc1').classList.add('show'); },400);
+  T(()=>{ document.getElementById('uc2').classList.add('show'); },1200);
+  T(()=>{ document.getElementById('uc3').classList.add('show'); },2000);
+  T(()=>{ document.getElementById('uc-no').style.opacity='1'; },3000);
+  T(()=>{ document.getElementById('uc-final').style.opacity='1'; },4000);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

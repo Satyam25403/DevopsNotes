@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Cache Pollution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* Cache blocks */
+.cache-grid{display:flex;flex-wrap:wrap;gap:4px;padding:6px}
+.cblock{width:40px;height:40px;border:2px solid transparent;display:flex;align-items:center;justify-content:center;font-size:6px;text-align:center;transition:all 0.4s;border-radius:2px;position:relative;overflow:hidden}
+.cblock.hot{background:#1a3a1a;border-color:#4eff9a;color:#4eff9a}
+.cblock.junk{background:#2a1a0a;border-color:#e8a020;color:#e8a020}
+.cblock.evicted{background:#1a0a0a;border-color:#e85050;color:#e85050;opacity:0.5}
+.cblock.empty{background:#130d1e;border-color:#2a1f3d;color:#333}
+.cblock.miss{background:#2a0a0a;border-color:#e85050;color:#e85050;animation:flash-red 0.5s ease 3}
+
+@keyframes flash-red{0%,100%{background:#2a0a0a}50%{background:#4a1010}}
+@keyframes pulse-green{0%,100%{box-shadow:0 0 0 0 #4eff9a40}50%{box-shadow:0 0 8px 3px #4eff9a40}}
+@keyframes slide-in{from{transform:translateX(-20px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.fadeIn{animation:fadeIn 0.5s ease forwards}
+.hot-pulse{animation:pulse-green 1.5s ease infinite}
+
+/* Scene 2 specific */
+.request-row{display:flex;align-items:center;gap:6px;padding:5px 8px;background:#130d1e;border:1px solid #2a1f3d;border-radius:2px;font-size:8px;transition:all 0.3s}
+.req-label{flex:1;color:#aaa}
+.req-tag{font-size:6px;padding:2px 5px;border-radius:2px}
+.tag-hot{background:#0d2a0d;color:#4eff9a;border:1px solid #4eff9a}
+.tag-junk{background:#2a1a0a;color:#e8a020;border:1px solid #e8a020}
+.req-status{font-size:7px;min-width:40px;text-align:right}
+
+/* Scene 3 - fix */
+.fix-card{background:#0d1a10;border:2px solid #4eff9a;padding:10px 12px;border-radius:2px;margin-bottom:6px;opacity:0;transition:all 0.5s}
+.fix-card.show{opacity:1}
+.fix-title{font-size:8px;color:#4eff9a;margin-bottom:6px}
+.fix-desc{font-size:7px;color:#aaa;line-height:1.8}
+.namespace-row{display:flex;gap:6px;margin-top:8px}
+.ns-box{flex:1;padding:7px 6px;text-align:center;border-radius:2px;font-size:7px;border:1px solid}
+.ns-hot{background:#0a1a0a;border-color:#4eff9a;color:#4eff9a}
+.ns-bulk{background:#1a1a0a;border-color:#e8a020;color:#e8a020}
+.ns-bg{background:#0a0a1a;border-color:#4ec9e1;color:#4ec9e1}
+
+/* Progress bar */
+.pbar-wrap{background:#1a0a2a;border:1px solid #2a1f3d;height:16px;border-radius:2px;overflow:hidden;margin-top:4px}
+.pbar-fill{height:100%;width:0;transition:width 1.2s ease-out;border-radius:2px}
+
+/* Arrow animation */
+.arrow-anim{display:flex;align-items:center;gap:4px;font-size:8px}
+.arrow-line{width:0;height:2px;background:currentColor;transition:width 0.5s ease-out}
+</style>
+</head>
+<body>
+
+<!-- ===== SCENE 1: WHAT IS CACHE POLLUTION ===== -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">CACHE POLLUTION</div>
+    <div class="hdr-sub">ADDING CACHE MADE US SLOWER?</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">POLLUTED</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Cache bucket header -->
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:9px;color:#e8a020">CACHE SLOTS (8 total)</div>
+        <div style="font-size:7px;color:#666" id="s1-fill-label">0 / 8 used</div>
+      </div>
+
+      <!-- Cache grid -->
+      <div style="background:#0d0a1a;border:2px solid #2a1f3d;border-radius:3px;padding:8px">
+        <div class="cache-grid" id="s1-cache">
+          <!-- 8 blocks filled by JS -->
+          <div class="cblock empty" id="b0"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b1"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b2"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b3"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b4"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b5"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b6"><span>EMPTY</span></div>
+          <div class="cblock empty" id="b7"><span>EMPTY</span></div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;font-size:7px;color:#4eff9a">
+          <div style="width:12px;height:12px;background:#1a3a1a;border:1px solid #4eff9a"></div>
+          HOT DATA
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:7px;color:#e8a020">
+          <div style="width:12px;height:12px;background:#2a1a0a;border:1px solid #e8a020"></div>
+          ONE-TIME READ
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:7px;color:#e85050">
+          <div style="width:12px;height:12px;background:#1a0a0a;border:1px solid #e85050;opacity:0.6"></div>
+          EVICTED
+        </div>
+      </div>
+
+      <!-- Event log -->
+      <div style="background:#0d0a1a;border:1px solid #2a1f3d;padding:8px;border-radius:2px">
+        <div style="font-size:8px;color:#666;margin-bottom:6px">▶ WHAT HAPPENED</div>
+        <div id="s1-log" style="display:flex;flex-direction:column;gap:5px;min-height:60px">
+          <div style="font-size:7px;color:#444">Waiting for animation...</div>
+        </div>
+      </div>
+
+      <!-- Miss indicator -->
+      <div id="s1-miss-box" style="opacity:0;background:#1a0a0a;border:2px solid #e85050;padding:10px;text-align:center;transition:opacity 0.5s">
+        <div style="font-size:9px;color:#e85050">❌ CACHE MISS!</div>
+        <div style="font-size:7px;color:#aaa;margin-top:5px;line-height:1.8">user:42 was evicted to make room<br>for one-time bulk reads. Back to DB!</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">CACHE POLLUTION =</div>
+    <div class="ih am" id="s1-info">cache fills with rarely re-accessed data,<br>evicting your actual hot data</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am" id="s1-hit">0%</div><div class="sl">HIT RATE</div></div>
+    <div class="sc"><div class="sv rd" id="s1-evict">0</div><div class="sl">HOT EVICTED</div></div>
+    <div class="sc"><div class="sv rd" id="s1-miss">0</div><div class="sl">MISSES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled id="s1-prev">◀ PREV</button>
+    <button class="btn play" id="s1-play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" id="s1-next" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ===== SCENE 2: THE CAUSES ===== -->
+<div class="scene" id="s2" style="background:#0f0d1a">
+  <div class="hdr" style="background:#0f0d1a">
+    <div class="hdr-title">CACHE POLLUTION</div>
+    <div class="hdr-sub">WHY DOES THIS HAPPEN?</div>
+    <div class="dots">
+      <div class="dot done" id="d2-1"></div>
+      <div class="dot active" id="d2-2"></div>
+      <div class="dot" id="d2-3"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CAUSES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CULPRITS</span>
+  </div>
+
+  <div class="anim" style="background:#0f0d1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- Request stream visualization -->
+      <div style="font-size:8px;color:#aaa;margin-bottom:2px">REQUEST STREAM → CACHE</div>
+
+      <div id="s2-requests" style="display:flex;flex-direction:column;gap:5px">
+        <!-- filled by JS -->
+      </div>
+
+      <!-- Cache fill progress -->
+      <div style="margin-top:4px">
+        <div style="display:flex;justify-content:space-between;font-size:7px;color:#666;margin-bottom:4px">
+          <span>CACHE CAPACITY</span>
+          <span id="s2-pct">0%</span>
+        </div>
+        <div class="pbar-wrap">
+          <div class="pbar-fill" id="s2-bar" style="background:linear-gradient(90deg,#4eff9a,#e8a020,#e85050)"></div>
+        </div>
+      </div>
+
+      <!-- The three culprits -->
+      <div style="font-size:8px;color:#aaa;margin-top:4px">THE 3 CULPRITS</div>
+
+      <div id="s2-culprit-1" style="opacity:0;background:#1a0d0a;border:1px solid #e8a020;padding:8px 10px;border-radius:2px;transition:opacity 0.5s">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:4px">① BULK READS</div>
+        <div style="font-size:7px;color:#888;line-height:1.8">SELECT * dumps millions of rows into cache.<br>Each row used once, then never again.</div>
+      </div>
+
+      <div id="s2-culprit-2" style="opacity:0;background:#1a0d0a;border:1px solid #e8a020;padding:8px 10px;border-radius:2px;transition:opacity 0.5s">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:4px">② BACKGROUND JOBS</div>
+        <div style="font-size:7px;color:#888;line-height:1.8">Nightly batch jobs read every record,<br>flooding cache with stale report data.</div>
+      </div>
+
+      <div id="s2-culprit-3" style="opacity:0;background:#1a0d0a;border:1px solid #e8a020;padding:8px 10px;border-radius:2px;transition:opacity 0.5s">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:4px">③ WRITE-THROUGH NO FILTER</div>
+        <div style="font-size:7px;color:#888;line-height:1.8">Every write cached indiscriminately.<br>Rare-access records crowd out hot data.</div>
+      </div>
+
+      <!-- Key insight -->
+      <div id="s2-insight" style="opacity:0;background:#0d0a1a;border:2px solid #e85050;padding:10px;text-align:center;border-radius:2px;transition:opacity 0.5s;margin-top:4px">
+        <div style="font-size:8px;color:#e85050">RESULT</div>
+        <div style="font-size:7px;color:#ccc;margin-top:5px;line-height:1.8">LRU evicts your HOT data because<br>junk filled all the slots first.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">THE SILENT CULPRIT:</div>
+    <div class="ih rd">LRU can't tell hot vs one-time reads.<br>junk looks "recent" — so hot data dies.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s2-junk">0%</div><div class="sl">JUNK IN<br>CACHE</div></div>
+    <div class="sc"><div class="sv am" id="s2-hot">100%</div><div class="sl">HOT DATA<br>LEFT</div></div>
+    <div class="sc"><div class="sv rd" id="s2-perf">-</div><div class="sl">HIT RATE<br>IMPACT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" id="s2-prev" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" id="s2-play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" id="s2-next" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ===== SCENE 3: THE FIX ===== -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">CACHE POLLUTION</div>
+    <div class="hdr-sub">HOW TO FIX IT</div>
+    <div class="dots">
+      <div class="dot done" id="d3-1"></div>
+      <div class="dot done" id="d3-2"></div>
+      <div class="dot active" id="d3-3"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIXED</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Separated namespaces visual -->
+      <div style="font-size:8px;color:#4eff9a;margin-bottom:2px">SEPARATE CACHE NAMESPACES</div>
+
+      <div id="s3-ns" style="opacity:0;transition:opacity 0.5s">
+        <div class="namespace-row">
+          <div class="ns-box ns-hot">
+            <div style="font-size:8px;margin-bottom:4px">🔥 HOT</div>
+            <div style="font-size:6px;line-height:1.8">user sessions<br>product pages<br>auth tokens</div>
+            <div style="font-size:6px;color:#2a6a2a;margin-top:4px">TTL: 1hr | LRU</div>
+          </div>
+          <div class="ns-box ns-bulk">
+            <div style="font-size:8px;margin-bottom:4px">📦 BULK</div>
+            <div style="font-size:6px;line-height:1.8">report queries<br>exports<br>batch reads</div>
+            <div style="font-size:6px;color:#5a4a0a;margin-top:4px">TTL: 5min | NO LRU</div>
+          </div>
+          <div class="ns-box ns-bg">
+            <div style="font-size:8px;margin-bottom:4px">⚙️ BG</div>
+            <div style="font-size:6px;line-height:1.8">analytics<br>cron jobs<br>indexing</div>
+            <div style="font-size:6px;color:#0a3a4a;margin-top:4px">BYPASS CACHE</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fix cards -->
+      <div class="fix-card" id="s3-fix1">
+        <div class="fix-title">① BE SELECTIVE</div>
+        <div class="fix-desc">Don't cache everything. Cache data that will be read again soon. Ask: "will this be re-accessed in the next N minutes?"</div>
+      </div>
+
+      <div class="fix-card" id="s3-fix2">
+        <div class="fix-title">② SHORT TTL FOR BULK READS</div>
+        <div class="fix-desc">If you must cache bulk results, give them a very short TTL (30s–5min) so they expire before evicting hot data.</div>
+      </div>
+
+      <div class="fix-card" id="s3-fix3">
+        <div class="fix-title">③ BYPASS FOR BATCH JOBS</div>
+        <div class="fix-desc">Background jobs should query the DB directly with cache.SKIP flag, or use a read replica — never pollute prod cache.</div>
+      </div>
+
+      <!-- Before vs After -->
+      <div id="s3-compare" style="opacity:0;transition:opacity 0.5s;background:#0a1a0a;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:8px">RESULT</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;text-align:center">
+            <div style="font-size:8px;color:#e85050">BEFORE</div>
+            <div style="font-size:18px;color:#e85050;margin:4px 0">34%</div>
+            <div style="font-size:7px;color:#666">hit rate</div>
+          </div>
+          <div style="flex:0;display:flex;align-items:center;font-size:12px;color:#4eff9a">→</div>
+          <div style="flex:1;text-align:center">
+            <div style="font-size:8px;color:#4eff9a">AFTER</div>
+            <div style="font-size:18px;color:#4eff9a;margin:4px 0">91%</div>
+            <div style="font-size:7px;color:#666">hit rate</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">KEY INSIGHT:</div>
+    <div class="ih">cache is scarce. Protect it like RAM.<br>isolate, filter, and set short TTLs.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" id="s3-hr">91%</div><div class="sl">HIT RATE<br>AFTER FIX</div></div>
+    <div class="sc"><div class="sv gn" id="s3-ev">0</div><div class="sl">HOT DATA<br>EVICTED</div></div>
+    <div class="sc"><div class="sv gn" id="s3-ns2">3</div><div class="sl">NAMESPACES<br>SEPARATED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" id="s3-prev" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" id="s3-play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" id="s3-next" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── SCENE MANAGEMENT ──────────────────────────────────────────────
+let currentScene = 1;
+let s1Timer = null, s2Timer = null, s3Timer = null;
+
+function goScene(n) {
+  clearAllTimers();
+  document.querySelectorAll('.scene').forEach(s => s.classList.remove('active'));
+  document.getElementById('s' + n).classList.add('active');
+  currentScene = n;
+  resetAll();
+  if (n === 1) playS1();
+  if (n === 2) playS2();
+  if (n === 3) playS3();
+}
+
+function clearAllTimers() {
+  if (s1Timer) { s1Timer.forEach(clearTimeout); s1Timer = []; }
+  if (s2Timer) { s2Timer.forEach(clearTimeout); s2Timer = []; }
+  if (s3Timer) { s3Timer.forEach(clearTimeout); s3Timer = []; }
+}
+
+function resetAll() {
+  resetS1(); resetS2(); resetS3();
+}
+
+// ── SCENE 1 ───────────────────────────────────────────────────────
+const blockData = [
+  { type: 'hot', label: 'USER\n:42', delay: 200 },
+  { type: 'hot', label: 'PROD\n:101', delay: 400 },
+  { type: 'hot', label: 'SESS\n:A9', delay: 600 },
+  { type: 'junk', label: 'BULK\nROW1', delay: 1200 },
+  { type: 'junk', label: 'BULK\nROW2', delay: 1500 },
+  { type: 'junk', label: 'BULK\nROW3', delay: 1800 },
+  { type: 'junk', label: 'BULK\nROW4', delay: 2100 },
+  { type: 'junk', label: 'BULK\nROW5', delay: 2400 },
+];
+
+function resetS1() {
+  for (let i = 0; i < 8; i++) {
+    const b = document.getElementById('b' + i);
+    b.className = 'cblock empty';
+    b.innerHTML = '<span>EMPTY</span>';
+  }
+  document.getElementById('s1-fill-label').textContent = '0 / 8 used';
+  document.getElementById('s1-hit').textContent = '0%';
+  document.getElementById('s1-evict').textContent = '0';
+  document.getElementById('s1-miss').textContent = '0';
+  document.getElementById('s1-miss-box').style.opacity = '0';
+  document.getElementById('s1-log').innerHTML = '<div style="font-size:7px;color:#444">Waiting for animation...</div>';
+}
+
+function addLog(msg, color) {
+  const log = document.getElementById('s1-log');
+  if (log.querySelector('[data-wait]')) log.innerHTML = '';
+  const el = document.createElement('div');
+  el.style.cssText = 'font-size:7px;color:' + color + ';line-height:1.6;animation:fadeIn 0.3s ease';
+  el.textContent = '▸ ' + msg;
+  log.appendChild(el);
+}
+
+function playS1() {
+  clearAllTimers();
+  resetS1();
+  const timers = [];
+
+  // Fill hot blocks
+  timers.push(setTimeout(() => {
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        const b = document.getElementById('b' + i);
+        b.className = 'cblock hot';
+        b.innerHTML = '<span>' + blockData[i].label + '</span>';
+        document.getElementById('s1-fill-label').textContent = (i + 1) + ' / 8 used';
+      }, blockData[i].delay - 200);
+    }
+    addLog('Hot user/product data cached.', '#4eff9a');
+    setTimeout(() => { document.getElementById('s1-hit').textContent = '100%'; }, 700);
+  }, 200));
+
+  // Bulk reads flood in
+  timers.push(setTimeout(() => {
+    addLog('Bulk SELECT * triggered (report job)...', '#e8a020');
+  }, 1000));
+
+  for (let i = 3; i < 8; i++) {
+    timers.push(setTimeout(() => {
+      const b = document.getElementById('b' + i);
+      b.className = 'cblock junk';
+      b.innerHTML = '<span>' + blockData[i].label + '</span>';
+      document.getElementById('s1-fill-label').textContent = (i + 1) + ' / 8 used';
+      const pct = Math.round(((i + 1) / 8) * 100);
+      document.getElementById('s1-hit').textContent = Math.max(0, 100 - (i - 2) * 20) + '%';
+    }, blockData[i].delay));
+  }
+
+  // Cache is full — now hot data gets evicted
+  timers.push(setTimeout(() => {
+    addLog('Cache full! LRU evicts older entries...', '#e85050');
+    // Evict hot block 0
+    setTimeout(() => {
+      const b = document.getElementById('b0');
+      b.className = 'cblock evicted';
+      b.innerHTML = '<span>GONE!</span>';
+      document.getElementById('s1-evict').textContent = '1';
+    }, 300);
+    // Evict hot block 1
+    setTimeout(() => {
+      const b = document.getElementById('b1');
+      b.className = 'cblock evicted';
+      b.innerHTML = '<span>GONE!</span>';
+      document.getElementById('s1-evict').textContent = '2';
+    }, 700);
+    setTimeout(() => {
+      addLog('user:42 evicted! Now it\'s requested...', '#e85050');
+    }, 1200);
+  }, 2800));
+
+  // Show miss
+  timers.push(setTimeout(() => {
+    document.getElementById('b0').className = 'cblock miss';
+    document.getElementById('b0').innerHTML = '<span>MISS!</span>';
+    document.getElementById('s1-miss').textContent = '1';
+    document.getElementById('s1-hit').textContent = '34%';
+    document.getElementById('s1-miss-box').style.opacity = '1';
+    addLog('Cache miss → expensive DB roundtrip!', '#e85050');
+  }, 4400));
+
+  s1Timer = timers;
+}
+
+// ── SCENE 2 ───────────────────────────────────────────────────────
+const s2Requests = [
+  { label: 'GET /user/42/profile', tag: 'hot', tagText: 'HOT', color: '#4eff9a', cached: true },
+  { label: 'GET /product/101', tag: 'hot', tagText: 'HOT', color: '#4eff9a', cached: true },
+  { label: 'SELECT * FROM orders (report)', tag: 'junk', tagText: 'BULK', color: '#e8a020', cached: false },
+  { label: 'GET /user/session/A9', tag: 'hot', tagText: 'HOT', color: '#4eff9a', cached: true },
+  { label: 'Nightly job: all products', tag: 'junk', tagText: 'BG JOB', color: '#e8a020', cached: false },
+  { label: 'Export CSV: 1M rows', tag: 'junk', tagText: 'EXPORT', color: '#e8a020', cached: false },
+];
+
+function resetS2() {
+  document.getElementById('s2-requests').innerHTML = '';
+  document.getElementById('s2-bar').style.width = '0';
+  document.getElementById('s2-pct').textContent = '0%';
+  document.getElementById('s2-junk').textContent = '0%';
+  document.getElementById('s2-hot').textContent = '100%';
+  document.getElementById('s2-perf').textContent = '-';
+  ['s2-culprit-1','s2-culprit-2','s2-culprit-3','s2-insight'].forEach(id => {
+    document.getElementById(id).style.opacity = '0';
+  });
+}
+
+function playS2() {
+  clearAllTimers();
+  resetS2();
+  const timers = [];
+  const container = document.getElementById('s2-requests');
+
+  s2Requests.forEach((req, i) => {
+    timers.push(setTimeout(() => {
+      const row = document.createElement('div');
+      row.className = 'request-row';
+      row.style.borderColor = req.color + '44';
+      const status = req.tag === 'hot' ? '<span style="color:#4eff9a;font-size:7px">✓ CACHED</span>' : '<span style="color:#e8a020;font-size:7px">→ CACHE</span>';
+      row.innerHTML = `<span class="req-label" style="color:${req.color === '#4eff9a' ? '#ccc' : '#888'}">${req.label}</span><span class="req-tag tag-${req.tag}">${req.tagText}</span><span class="req-status">${status}</span>`;
+      container.appendChild(row);
+
+      // Update progress
+      const pct = Math.min(100, Math.round((i + 1) / s2Requests.length * 100));
+      const junkPct = Math.round([0,0,1,1,2,3][i] / Math.max(1, i + 1) * 100);
+      document.getElementById('s2-bar').style.width = pct + '%';
+      document.getElementById('s2-pct').textContent = pct + '%';
+      document.getElementById('s2-junk').textContent = junkPct + '%';
+      document.getElementById('s2-hot').textContent = Math.max(0, 100 - junkPct) + '%';
+    }, i * 400));
+  });
+
+  // After stream, show culprits
+  timers.push(setTimeout(() => { document.getElementById('s2-culprit-1').style.opacity = '1'; }, 2600));
+  timers.push(setTimeout(() => { document.getElementById('s2-culprit-2').style.opacity = '1'; }, 3100));
+  timers.push(setTimeout(() => { document.getElementById('s2-culprit-3').style.opacity = '1'; }, 3600));
+  timers.push(setTimeout(() => {
+    document.getElementById('s2-insight').style.opacity = '1';
+    document.getElementById('s2-perf').textContent = '-57%';
+    document.getElementById('s2-perf').className = 'sv rd';
+  }, 4200));
+
+  s2Timer = timers;
+}
+
+// ── SCENE 3 ───────────────────────────────────────────────────────
+function resetS3() {
+  document.getElementById('s3-ns').style.opacity = '0';
+  document.getElementById('s3-fix1').classList.remove('show');
+  document.getElementById('s3-fix2').classList.remove('show');
+  document.getElementById('s3-fix3').classList.remove('show');
+  document.getElementById('s3-compare').style.opacity = '0';
+}
+
+function playS3() {
+  clearAllTimers();
+  resetS3();
+  const timers = [];
+
+  timers.push(setTimeout(() => { document.getElementById('s3-ns').style.opacity = '1'; }, 300));
+  timers.push(setTimeout(() => { document.getElementById('s3-fix1').classList.add('show'); }, 900));
+  timers.push(setTimeout(() => { document.getElementById('s3-fix2').classList.add('show'); }, 1500));
+  timers.push(setTimeout(() => { document.getElementById('s3-fix3').classList.add('show'); }, 2100));
+  timers.push(setTimeout(() => { document.getElementById('s3-compare').style.opacity = '1'; }, 3000));
+
+  s3Timer = timers;
+}
+
+// Auto-play scene 1 on load
+window.addEventListener('load', () => playS1());
+</script>
+</body>
+</html>

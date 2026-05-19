@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>SSL Stripping & Weak Cipher Attacks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f1f}
+.hdr-title{font-size:11px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f1f;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#c97ef8}
+.il{color:#ccc}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.pu{color:#c97ef8}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130a0a;border:1px solid #2a1f1f;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#c97ef8}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.nav{border-color:#4ec9e1;color:#4ec9e1}.btn.nav:hover{background:#4ec9e120}
+.btn.restart{border-color:#e8a020;color:#e8a020}.btn.restart:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes scanline{0%{top:0}100%{top:100%}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 1 — SSL Stripping: The Attack
+═══════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a0a0a">
+  <div class="hdr" style="background:#1a0a0a">
+    <div class="hdr-title">SSL STRIPPING ATTACK</div>
+    <div class="hdr-sub">"YOUR PADLOCK IS AN ILLUSION"</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">MITM ATTACK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ACTIVE</span>
+  </div>
+  <div class="anim" style="background:#1a0a0a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- MITM diagram -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px" class="fade" id="s1-label">NETWORK TOPOLOGY — ATTACKER IN THE MIDDLE</div>
+
+      <!-- Three actors row -->
+      <div class="fade" id="s1-actors" style="display:flex;align-items:flex-end;justify-content:space-between;padding:0 4px;gap:4px">
+        <div style="text-align:center;width:80px">
+          <div style="font-size:26px" id="s1-victim-icon">😐</div>
+          <div style="font-size:7px;color:#e8a020;margin-top:4px">VICTIM</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">sees HTTP 😱</div>
+          <div id="s1-victim-lock" style="font-size:11px;margin-top:3px;opacity:0;transition:opacity .5s">🔓</div>
+        </div>
+        <div style="text-align:center;flex:1">
+          <div style="font-size:22px">😈</div>
+          <div style="font-size:7px;color:#e85050;margin-top:4px">ATTACKER</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">proxies both</div>
+        </div>
+        <div style="text-align:center;width:80px">
+          <div style="font-size:26px">🖥️</div>
+          <div style="font-size:7px;color:#4eff9a;margin-top:4px">SERVER</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">sees HTTPS ✓</div>
+          <div style="font-size:11px;margin-top:3px">🔒</div>
+        </div>
+      </div>
+
+      <!-- Connection lines with labels -->
+      <div class="fade" id="s1-conn" style="display:flex;align-items:center;gap:0;padding:0 8px;height:40px;position:relative">
+        <!-- HTTP segment -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div style="font-size:6px;color:#e85050">HTTP</div>
+          <div id="s1-http-beam" style="height:3px;background:#e85050;width:0;transition:width .7s ease-out;border-radius:2px"></div>
+          <div style="font-size:6px;color:#e85050">⚠ PLAINTEXT</div>
+        </div>
+        <div style="font-size:14px;color:#e85050;padding:0 4px">😈</div>
+        <!-- HTTPS segment -->
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+          <div style="font-size:6px;color:#4eff9a">HTTPS</div>
+          <div id="s1-https-beam" style="height:3px;background:#4eff9a;width:0;transition:width .7s ease-out;border-radius:2px"></div>
+          <div style="font-size:6px;color:#4eff9a">✓ ENCRYPTED</div>
+        </div>
+      </div>
+
+      <!-- Step-by-step flow -->
+      <div style="font-size:7px;color:#888;letter-spacing:1px" class="fade" id="s1-flow-title">HOW IT UNFOLDS</div>
+
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="fade" id="s1-step1" style="background:#1e0808;border-left:3px solid #e8a020;padding:8px 10px">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:3px">① VICTIM TYPES http://bank.com</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">No HTTPS in URL — browser makes plain HTTP request</div>
+        </div>
+        <div class="fade" id="s1-step2" style="background:#1e0808;border-left:3px solid #e85050;padding:8px 10px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">② ATTACKER INTERCEPTS THE 301 REDIRECT</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Server replies: 301 → https://bank.com. Attacker catches it before victim sees it.</div>
+        </div>
+        <div class="fade" id="s1-step3" style="background:#1e0808;border-left:3px solid #e85050;padding:8px 10px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">③ ATTACKER OPENS HTTPS TO SERVER</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Full TLS handshake with server. Attacker sees all plaintext data.</div>
+        </div>
+        <div class="fade" id="s1-step4" style="background:#200808;border-left:3px solid #e85050;padding:8px 10px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">④ VICTIM GETS HTTP BACK — NO PADLOCK 🔓</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Victim never sees HTTPS. Credentials sent in plaintext. Game over.</div>
+        </div>
+      </div>
+
+      <!-- Packet intercept -->
+      <div class="fade" id="s1-packet" style="background:#0d0808;border:1px solid #e8505060;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px;letter-spacing:1px">ATTACKER READS YOUR POST:</div>
+        <div style="font-size:7px;color:#e8a020;line-height:2">
+          POST /login HTTP/1.1<br>
+          Host: bank.com<br>
+          <span style="color:#e85050">username=alice&amp;password=hunter2</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e85050">
+    <div class="il">Attacker sits between victim and server as a proxy</div>
+    <div class="ih">Server has HTTPS · victim has HTTP · attacker reads all</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:9px">HTTP</div><div class="sl">VICTIM SEES</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:9px">HTTPS</div><div class="sl">SERVER SEES</div></div>
+    <div class="sc"><div class="sv am">MITM</div><div class="sl">ATTACK TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 2 — POODLE Attack (SSL 3.0)
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a0f00">
+  <div class="hdr" style="background:#1a0f00">
+    <div class="hdr-title">POODLE ATTACK</div>
+    <div class="hdr-sub">PADDING ORACLE ON DOWNGRADED LEGACY ENCRYPTION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CVE-2014-3566</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SSL 3.0 BUG</span>
+  </div>
+  <div class="anim" style="background:#1a0f00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="fade" id="s2-title" style="font-size:7px;color:#888;letter-spacing:1px">THE DOWNGRADE DANCE</div>
+
+      <!-- Version negotiation attack -->
+      <div class="fade" id="s2-downgrade" style="background:#1a0d00;border:1px solid #e8a02060;padding:12px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:8px;letter-spacing:1px">STEP 1 — FORCE DOWNGRADE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:90px;font-size:6px;color:#4ec9e1">Try TLS 1.3</div>
+            <div id="s2-beam1" style="flex:1;height:3px;background:#e85050;width:0;transition:width .5s"></div>
+            <div style="font-size:6px;color:#e85050">✗ BLOCKED</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:90px;font-size:6px;color:#4ec9e1">Try TLS 1.2</div>
+            <div id="s2-beam2" style="flex:1;height:3px;background:#e85050;width:0;transition:width .5s"></div>
+            <div style="font-size:6px;color:#e85050">✗ BLOCKED</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:90px;font-size:6px;color:#4ec9e1">Try TLS 1.0</div>
+            <div id="s2-beam3" style="flex:1;height:3px;background:#e85050;width:0;transition:width .5s"></div>
+            <div style="font-size:6px;color:#e85050">✗ BLOCKED</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="width:90px;font-size:6px;color:#e8a020;font-weight:bold">Try SSL 3.0</div>
+            <div id="s2-beam4" style="flex:1;height:3px;background:#4eff9a;width:0;transition:width .5s"></div>
+            <div style="font-size:6px;color:#4eff9a" id="s2-accept">✓ ACCEPTED 😱</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;margin-top:8px">Attacker injects TCP RST to abort each connection</div>
+      </div>
+
+      <!-- CBC padding oracle -->
+      <div class="fade" id="s2-oracle" style="background:#150a00;border:1px solid #e85050;padding:12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px;letter-spacing:1px">STEP 2 — PADDING ORACLE</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <div style="flex:1;background:#1e0808;border:1px solid #e8505040;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#e8a020">BLOCK 1</div>
+            <div style="font-size:6px;color:#aaa;margin-top:4px;line-height:1.8">secret data<br>+ padding</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:12px;color:#e85050">⊕</div>
+          <div style="flex:1;background:#1e0808;border:1px solid #e8505040;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#e8a020">IV / PREV</div>
+            <div style="font-size:6px;color:#aaa;margin-top:4px;line-height:1.8">attacker<br>controls!</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:12px;color:#e85050">→</div>
+          <div style="flex:1;background:#200808;border:1px solid #e85050;padding:8px;text-align:center">
+            <div style="font-size:8px;color:#e85050">LEAK</div>
+            <div style="font-size:6px;color:#aaa;margin-top:4px;line-height:1.8">1 byte per<br>256 tries</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.9">SSL 3.0 CBC padding is undefined — server leaks via error response whether padding is valid. Attacker recovers 1 byte per ~256 requests.</div>
+      </div>
+
+      <!-- Impact -->
+      <div class="fade" id="s2-impact" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="background:#150a00;border:1px solid #e85050;padding:8px;text-align:center">
+          <div style="font-size:16px">🍪</div>
+          <div style="font-size:6px;color:#e85050;margin-top:4px;line-height:1.8">SESSION COOKIE<br>EXTRACTED</div>
+        </div>
+        <div style="background:#150a00;border:1px solid #e85050;padding:8px;text-align:center">
+          <div style="font-size:16px">🔑</div>
+          <div style="font-size:6px;color:#e85050;margin-top:4px;line-height:1.8">AUTH TOKENS<br>EXPOSED</div>
+        </div>
+      </div>
+
+      <!-- Fix -->
+      <div class="fade" id="s2-fix" style="background:#0a1a0f;border:2px solid #4eff9a;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:1px">✓ FIX</div>
+        <div style="font-size:7px;color:#aaa;line-height:2">Disable SSL 3.0 entirely on server and client<br>
+          <span style="color:#4eff9a">SSLProtocol All -SSLv3 -TLSv1 -TLSv1.1</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">POODLE forces downgrade to SSL 3.0's broken CBC mode</div>
+    <div class="ih am">256 requests → 1 byte leaked → full cookie stolen</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:9px">SSL3</div><div class="sl">TARGET</div></div>
+    <div class="sc"><div class="sv am">256</div><div class="sl">REQS/BYTE</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:9px">DISABLE</div><div class="sl">THE FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 3 — Heartbleed
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#1a0008">
+  <div class="hdr" style="background:#1a0008">
+    <div class="hdr-title">HEARTBLEED</div>
+    <div class="hdr-sub">CVE-2014-0160 — OPENSSL MEMORY LEAK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">CVE-2014-0160</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CRITICAL</span>
+  </div>
+  <div class="anim" style="background:#1a0008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="fade" id="s3-title" style="font-size:7px;color:#888;letter-spacing:1px">TLS HEARTBEAT EXTENSION — RFC 6520</div>
+
+      <!-- Normal heartbeat -->
+      <div class="fade" id="s3-normal" style="background:#0a1a0f;border:2px solid #4eff9a;padding:12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">✓ NORMAL HEARTBEAT</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="background:#0d2015;border:1px solid #4eff9a40;padding:8px;font-size:6px;color:#4eff9a;flex:1;text-align:center">
+            CLIENT SENDS:<br>
+            <span style="color:#aaa">"hello" len=5</span>
+          </div>
+          <div style="font-size:12px;color:#4eff9a">→</div>
+          <div style="background:#0d2015;border:1px solid #4eff9a40;padding:8px;font-size:6px;color:#4eff9a;flex:1;text-align:center">
+            SERVER ECHOES:<br>
+            <span style="color:#aaa">"hello" (5 bytes)</span>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;margin-top:6px">Heartbeat keeps connection alive — reads exactly len bytes</div>
+      </div>
+
+      <!-- Heartbleed -->
+      <div class="fade" id="s3-bleed" style="background:#200008;border:2px solid #e85050;padding:12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px;letter-spacing:1px">✗ HEARTBLEED — LIE ABOUT LENGTH</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="background:#1a0008;border:1px solid #e8505060;padding:8px;font-size:6px;color:#e8a020;flex:1;text-align:center">
+            ATTACKER SENDS:<br>
+            <span style="color:#e85050">"hi" len=65535</span>
+          </div>
+          <div style="font-size:12px;color:#e85050">→</div>
+          <div style="background:#1a0008;border:1px solid #e85050;padding:8px;font-size:6px;color:#e85050;flex:1;text-align:center">
+            SERVER READS:<br>
+            <span style="color:#e8a020">65535 bytes 😱</span>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#e85050;margin-top:6px">No bounds check! Server reads beyond the buffer into heap memory</div>
+      </div>
+
+      <!-- Memory dump visual -->
+      <div class="fade" id="s3-mem" style="background:#0d0010;border:1px solid #c97ef860;padding:12px">
+        <div style="font-size:7px;color:#c97ef8;margin-bottom:8px;letter-spacing:1px">SERVER HEAP MEMORY LEAKED:</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px">
+          <div style="background:#1a0020;padding:5px;text-align:center;font-size:5px;color:#888;border:1px solid #2a1040">heap data</div>
+          <div style="background:#2a0030;padding:5px;text-align:center;font-size:5px;color:#e85050;border:1px solid #e85050" id="s3-priv">PRIV KEY</div>
+          <div style="background:#1a0020;padding:5px;text-align:center;font-size:5px;color:#888;border:1px solid #2a1040">stack</div>
+          <div style="background:#2a0030;padding:5px;text-align:center;font-size:5px;color:#e85050;border:1px solid #e85050" id="s3-cookie">COOKIES</div>
+          <div style="background:#1a0020;padding:5px;text-align:center;font-size:5px;color:#888;border:1px solid #2a1040">malloc</div>
+          <div style="background:#1a0020;padding:5px;text-align:center;font-size:5px;color:#888;border:1px solid #2a1040">ssl ctx</div>
+          <div style="background:#2a0030;padding:5px;text-align:center;font-size:5px;color:#e85050;border:1px solid #e85050" id="s3-pass">PASSWORDS</div>
+          <div style="background:#1a0020;padding:5px;text-align:center;font-size:5px;color:#888;border:1px solid #2a1040">free list</div>
+        </div>
+        <div style="font-size:6px;color:#888;margin-top:6px">Up to 64KB per request · repeatable · no authentication needed</div>
+      </div>
+
+      <!-- Scale -->
+      <div class="fade" id="s3-scale" style="background:#100008;border:1px solid #e8505040;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px;letter-spacing:1px">IMPACT SCALE</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:6px">
+            <span style="color:#aaa">Affected servers (2014)</span>
+            <span style="color:#e85050">~500,000</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px">
+            <span style="color:#aaa">OpenSSL versions affected</span>
+            <span style="color:#e85050">1.0.1 – 1.0.1f</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px">
+            <span style="color:#aaa">Authentication required</span>
+            <span style="color:#e85050">NONE</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:6px">
+            <span style="color:#aaa">Fix</span>
+            <span style="color:#4eff9a">OpenSSL 1.0.1g</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e85050">
+    <div class="il">No auth needed — send crafted heartbeat, get 64KB of heap</div>
+    <div class="ih">Private keys, passwords, session tokens — all leaked</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:8px">64KB</div><div class="sl">LEAK/REQ</div></div>
+    <div class="sc"><div class="sv am" style="font-size:8px">500K</div><div class="sl">SERVERS HIT</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:7px">PATCH!</div><div class="sl">THE FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 4 — Weak Cipher Enumeration
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0a00">
+  <div class="hdr" style="background:#0a0a00">
+    <div class="hdr-title">CIPHER ENUMERATION</div>
+    <div class="hdr-sub">FINDING WEAK CIPHERS WITH TESTSSL.SH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">RECON</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">testssl.sh</span>
+  </div>
+  <div class="anim" style="background:#0a0a00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Terminal simulation -->
+      <div class="fade" id="s4-term" style="background:#0a0a00;border:2px solid #e8a020;padding:12px;font-size:6px;line-height:2">
+        <div style="color:#e8a020;margin-bottom:6px">$ testssl.sh https://target.bank.com</div>
+        <div id="s4-t1" style="opacity:0;color:#888;transition:opacity .3s">Testing protocols...</div>
+        <div id="s4-t2" style="opacity:0;color:#4eff9a;transition:opacity .3s"> SSLv3   NOT offered</div>
+        <div id="s4-t3" style="opacity:0;color:#e8a020;transition:opacity .3s"> TLSv1.0 offered (WEAK) ⚠</div>
+        <div id="s4-t4" style="opacity:0;color:#e8a020;transition:opacity .3s"> TLSv1.1 offered (WEAK) ⚠</div>
+        <div id="s4-t5" style="opacity:0;color:#4eff9a;transition:opacity .3s"> TLSv1.2 offered</div>
+        <div id="s4-t6" style="opacity:0;color:#4eff9a;transition:opacity .3s"> TLSv1.3 offered</div>
+        <div id="s4-t7" style="opacity:0;color:#888;margin-top:4px;transition:opacity .3s">Checking cipher suites...</div>
+        <div id="s4-t8" style="opacity:0;color:#e85050;transition:opacity .3s"> RC4-MD5          VULNERABLE ✗</div>
+        <div id="s4-t9" style="opacity:0;color:#e85050;transition:opacity .3s"> DES-CBC3-SHA     VULNERABLE ✗</div>
+        <div id="s4-t10" style="opacity:0;color:#e85050;transition:opacity .3s"> NULL-SHA          NO ENCRYPT ✗</div>
+        <div id="s4-t11" style="opacity:0;color:#e8a020;transition:opacity .3s"> EXPORT-RC4-MD5   EXPORT WEAK ⚠</div>
+        <div id="s4-t12" style="opacity:0;color:#4eff9a;transition:opacity .3s"> AES256-GCM-SHA384 STRONG ✓</div>
+        <div id="s4-t13" style="opacity:0;color:#4eff9a;transition:opacity .3s"> CHACHA20-POLY1305 STRONG ✓</div>
+      </div>
+
+      <!-- Risk legend -->
+      <div class="fade" id="s4-legend" style="font-size:7px;color:#888;letter-spacing:1px">CIPHER RISK MATRIX</div>
+
+      <div class="fade" id="s4-matrix" style="display:flex;flex-direction:column;gap:3px">
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;gap:0;background:#161200;border:1px solid #2a2000">
+          <div style="padding:5px 8px;font-size:6px;color:#888;border-right:1px solid #2a2000">CIPHER</div>
+          <div style="padding:5px 8px;font-size:6px;color:#888;border-right:1px solid #2a2000">ISSUE</div>
+          <div style="padding:5px 8px;font-size:6px;color:#888;text-align:center">RISK</div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;background:#1a0808;border:1px solid #2a1010;border-top:none">
+          <div style="padding:5px 8px;font-size:6px;color:#e8a020;border-right:1px solid #2a1010">RC4</div>
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a1010">Biased keystream</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;text-align:center">CRIT</div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;background:#1a0e00;border:1px solid #2a1a00;border-top:none">
+          <div style="padding:5px 8px;font-size:6px;color:#e8a020;border-right:1px solid #2a1a00">3DES</div>
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a1a00">SWEET32 birthday</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;text-align:center">HIGH</div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;background:#1a0e00;border:1px solid #2a1a00;border-top:none">
+          <div style="padding:5px 8px;font-size:6px;color:#e8a020;border-right:1px solid #2a1a00">NULL cipher</div>
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a1a00">No encryption at all</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;text-align:center">CRIT</div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;background:#1a0e00;border:1px solid #2a1a00;border-top:none">
+          <div style="padding:5px 8px;font-size:6px;color:#e8a020;border-right:1px solid #2a1a00">EXPORT ciphers</div>
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #2a1a00">40/56-bit keys</div>
+          <div style="padding:5px 8px;font-size:6px;color:#e85050;text-align:center">CRIT</div>
+        </div>
+        <div style="display:grid;grid-template-columns:110px 1fr 60px;background:#0a1a0f;border:1px solid #0a2a15;border-top:none">
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;border-right:1px solid #0a2a15">AES-GCM</div>
+          <div style="padding:5px 8px;font-size:6px;color:#aaa;border-right:1px solid #0a2a15">Auth encryption</div>
+          <div style="padding:5px 8px;font-size:6px;color:#4eff9a;text-align:center">SAFE</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">testssl.sh probes every cipher suite the server accepts</div>
+    <div class="ih am">RC4, 3DES, NULL, EXPORT — all must be disabled</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="font-size:8px">NULL</div><div class="sl">WORST CIPHER</div></div>
+    <div class="sc"><div class="sv am">RC4</div><div class="sl">MOST COMMON</div></div>
+    <div class="sc"><div class="sv gn">AES</div><div class="sl">USE THIS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn nav" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SCENE 5 — Fixes: HSTS + TLS 1.3 + Hardening
+═══════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0a1a0f">
+  <div class="hdr" style="background:#0a1a0f">
+    <div class="hdr-title">HOW TO DEFEND</div>
+    <div class="hdr-sub">HSTS · TLS 1.3 · CIPHER HARDENING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN IT</span>
+  </div>
+  <div class="anim" style="background:#0a1a0f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- HSTS -->
+      <div class="fade" id="s5-hsts-title" style="font-size:7px;color:#4eff9a;letter-spacing:1px">① HSTS — KILL SSL STRIPPING</div>
+
+      <div class="fade" id="s5-hsts" style="background:#0d2015;border:2px solid #4eff9a;padding:12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">HTTP RESPONSE HEADER:</div>
+        <div style="background:#061208;padding:8px;font-size:6px;color:#4eff9a;line-height:2;border:1px solid #4eff9a40">
+          Strict-Transport-Security:<br>
+          &nbsp;&nbsp;max-age=31536000;<br>
+          &nbsp;&nbsp;includeSubDomains;<br>
+          &nbsp;&nbsp;preload
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;margin-top:8px">
+          <div style="font-size:6px;color:#aaa;line-height:1.8">✓ Browser refuses all HTTP — no redirect to intercept</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.8">✓ max-age=31536000 = remembered for 1 year</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.8">✓ preload = baked into browser binary</div>
+        </div>
+      </div>
+
+      <!-- HSTS before/after -->
+      <div class="fade" id="s5-comparison" style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="background:#200808;border:1px solid #e85050;padding:8px;text-align:center">
+          <div style="font-size:8px;color:#e85050;margin-bottom:4px">NO HSTS</div>
+          <div style="font-size:22px">😈→😐</div>
+          <div style="font-size:6px;color:#e85050;margin-top:4px;line-height:1.8">redirect intercepted<br>victim gets HTTP</div>
+        </div>
+        <div style="background:#0d2015;border:1px solid #4eff9a;padding:8px;text-align:center">
+          <div style="font-size:8px;color:#4eff9a;margin-bottom:4px">WITH HSTS</div>
+          <div style="font-size:22px">🔒💥😈</div>
+          <div style="font-size:6px;color:#4eff9a;margin-top:4px;line-height:1.8">browser blocks HTTP<br>attack fails</div>
+        </div>
+      </div>
+
+      <!-- TLS config -->
+      <div class="fade" id="s5-tls-title" style="font-size:7px;color:#4ec9e1;letter-spacing:1px">② TLS CONFIG — NGINX / APACHE</div>
+
+      <div class="fade" id="s5-config" style="background:#061218;border:1px solid #4ec9e160;padding:12px;font-size:6px;line-height:2.2">
+        <div style="color:#888"># nginx.conf</div>
+        <div style="color:#4eff9a">ssl_protocols TLSv1.2 TLSv1.3;</div>
+        <div style="color:#e85050">ssl_protocols TLSv1 TLSv1.1;</div>
+        <div style="color:#888"># ↑ remove these two lines</div>
+        <div style="color:#4eff9a;margin-top:4px">ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:</div>
+        <div style="color:#4eff9a">&nbsp;&nbsp;ECDHE-RSA-AES256-GCM-SHA384:</div>
+        <div style="color:#4eff9a">&nbsp;&nbsp;CHACHA20-POLY1305;</div>
+        <div style="color:#4eff9a">ssl_prefer_server_ciphers on;</div>
+      </div>
+
+      <!-- Checklist -->
+      <div class="fade" id="s5-check-title" style="font-size:7px;color:#c97ef8;letter-spacing:1px">③ HARDENING CHECKLIST</div>
+
+      <div class="fade" id="s5-checklist" style="background:#100018;border:1px solid #c97ef840;padding:10px 12px">
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">HSTS with preload + includeSubDomains</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">TLS 1.3 only (or 1.2 minimum)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">Disable RC4, 3DES, NULL, EXPORT ciphers</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">ECDHE key exchange (forward secrecy)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">Patch OpenSSL regularly (Heartbleed!)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">Run testssl.sh / SSL Labs A+ grade</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:6px">
+            <span style="color:#4eff9a">✓</span><span style="color:#aaa">OCSP stapling enabled</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Final grade -->
+      <div class="fade" id="s5-grade" style="background:#0d2015;border:2px solid #4eff9a;padding:12px;display:flex;align-items:center;gap:12px">
+        <div style="font-size:36px;color:#4eff9a;font-weight:bold">A+</div>
+        <div>
+          <div style="font-size:8px;color:#4eff9a">SSL LABS RATING</div>
+          <div style="font-size:6px;color:#888;margin-top:4px;line-height:1.9">ssllabs.com/ssltest — free scanner<br>Aim for A+ · anything below B is danger</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">HSTS stops SSL stripping · TLS 1.3 kills weak ciphers</div>
+    <div class="ih gn">Test with testssl.sh — aim for SSL Labs A+ grade</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" style="font-size:7px">HSTS</div><div class="sl">KILL STRIP</div></div>
+    <div class="sc"><div class="sv cy" style="font-size:8px">TLS1.3</div><div class="sl">MIN VERSION</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:8px">A+</div><div class="sl">TARGET GRADE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn nav" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playS5()">▶ PLAY</button>
+    <button class="btn restart" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene = 1;
+
+function goScene(n) {
+  document.getElementById('s' + currentScene).classList.remove('active');
+  currentScene = n;
+  document.getElementById('s' + currentScene).classList.add('active');
+  resetAll(n);
+  setTimeout(() => autoPlay(n), 300);
+}
+
+function resetAll(n) {
+  if (n===1) resetS1(); if (n===2) resetS2();
+  if (n===3) resetS3(); if (n===4) resetS4(); if (n===5) resetS5();
+}
+function autoPlay(n) {
+  if (n===1) playS1(); if (n===2) playS2();
+  if (n===3) playS3(); if (n===4) playS4(); if (n===5) playS5();
+}
+
+// SCENE 1
+function resetS1() {
+  ['s1-label','s1-actors','s1-conn','s1-flow-title','s1-step1','s1-step2','s1-step3','s1-step4','s1-packet'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.opacity='0';
+  });
+  const vl = document.getElementById('s1-victim-lock'); if (vl) vl.style.opacity='0';
+  const hb = document.getElementById('s1-http-beam'); if (hb) { hb.style.transition='none'; hb.style.width='0'; }
+  const sb = document.getElementById('s1-https-beam'); if (sb) { sb.style.transition='none'; sb.style.width='0'; }
+}
+function playS1() {
+  resetS1();
+  const seq = ['s1-label','s1-actors'];
+  seq.forEach((id,i) => setTimeout(() => { const el=document.getElementById(id); if(el) el.style.opacity='1'; }, 200+i*350));
+  setTimeout(() => {
+    const c = document.getElementById('s1-conn'); if(c) c.style.opacity='1';
+    setTimeout(() => {
+      const hb=document.getElementById('s1-http-beam'); if(hb){hb.style.transition='width .7s ease-out';hb.style.width='100%';}
+    },100);
+    setTimeout(() => {
+      const sb=document.getElementById('s1-https-beam'); if(sb){sb.style.transition='width .7s ease-out';sb.style.width='100%';}
+    },500);
+    setTimeout(() => {
+      const vl=document.getElementById('s1-victim-lock'); if(vl) vl.style.opacity='1';
+    }, 900);
+  }, 900);
+  ['s1-flow-title','s1-step1','s1-step2','s1-step3','s1-step4','s1-packet'].forEach((id,i) => {
+    setTimeout(() => { const el=document.getElementById(id); if(el) el.style.opacity='1'; }, 1800+i*450);
+  });
+}
+
+// SCENE 2
+function resetS2() {
+  ['s2-title','s2-downgrade','s2-oracle','s2-impact','s2-fix'].forEach(id => {
+    const el=document.getElementById(id); if(el) el.style.opacity='0';
+  });
+  for(let i=1;i<=4;i++){
+    const b=document.getElementById('s2-beam'+i);
+    if(b){b.style.transition='none';b.style.width='0';}
+  }
+  const acc=document.getElementById('s2-accept'); if(acc) acc.style.opacity='0';
+}
+function playS2() {
+  resetS2();
+  setTimeout(()=>{ const t=document.getElementById('s2-title'); if(t) t.style.opacity='1'; },200);
+  setTimeout(()=>{ const d=document.getElementById('s2-downgrade'); if(d) d.style.opacity='1';
+    [1,2,3,4].forEach((n,i)=>{
+      setTimeout(()=>{
+        const b=document.getElementById('s2-beam'+n);
+        if(b){b.style.transition='width .5s ease-out';b.style.width='100%';}
+        if(n===4){setTimeout(()=>{const acc=document.getElementById('s2-accept');if(acc)acc.style.opacity='1';},600);}
+      },200+i*400);
+    });
+  },600);
+  setTimeout(()=>{ const o=document.getElementById('s2-oracle'); if(o) o.style.opacity='1'; },2600);
+  setTimeout(()=>{ const im=document.getElementById('s2-impact'); if(im) im.style.opacity='1'; },3400);
+  setTimeout(()=>{ const f=document.getElementById('s2-fix'); if(f) f.style.opacity='1'; },4000);
+}
+
+// SCENE 3
+function resetS3() {
+  ['s3-title','s3-normal','s3-bleed','s3-mem','s3-scale'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.opacity='0';
+  });
+  ['s3-priv','s3-cookie','s3-pass'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){el.style.animation='none';}
+  });
+}
+function playS3() {
+  resetS3();
+  const seq=['s3-title','s3-normal','s3-bleed','s3-mem','s3-scale'];
+  seq.forEach((id,i)=>setTimeout(()=>{ const el=document.getElementById(id); if(el) el.style.opacity='1'; },200+i*550));
+  setTimeout(()=>{
+    ['s3-priv','s3-cookie','s3-pass'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.style.animation='pulse 1s ease-in-out infinite';
+    });
+  },2600);
+}
+
+// SCENE 4
+function resetS4() {
+  const t=document.getElementById('s4-term'); if(t) t.style.opacity='0';
+  const l=document.getElementById('s4-legend'); if(l) l.style.opacity='0';
+  const m=document.getElementById('s4-matrix'); if(m) m.style.opacity='0';
+  for(let i=1;i<=13;i++){
+    const el=document.getElementById('s4-t'+i); if(el) el.style.opacity='0';
+  }
+}
+function playS4() {
+  resetS4();
+  setTimeout(()=>{ const t=document.getElementById('s4-term'); if(t) t.style.opacity='1'; },200);
+  for(let i=1;i<=13;i++){
+    (function(n){
+      setTimeout(()=>{ const el=document.getElementById('s4-t'+n); if(el) el.style.opacity='1'; },400+n*220);
+    })(i);
+  }
+  setTimeout(()=>{ const l=document.getElementById('s4-legend'); if(l) l.style.opacity='1'; },400+14*220);
+  setTimeout(()=>{ const m=document.getElementById('s4-matrix'); if(m) m.style.opacity='1'; },400+15*220);
+}
+
+// SCENE 5
+function resetS5() {
+  ['s5-hsts-title','s5-hsts','s5-comparison','s5-tls-title','s5-config','s5-check-title','s5-checklist','s5-grade'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.opacity='0';
+  });
+}
+function playS5() {
+  resetS5();
+  const seq=['s5-hsts-title','s5-hsts','s5-comparison','s5-tls-title','s5-config','s5-check-title','s5-checklist','s5-grade'];
+  seq.forEach((id,i)=>setTimeout(()=>{ const el=document.getElementById(id); if(el) el.style.opacity='1'; },200+i*420));
+}
+
+window.addEventListener('load',()=>{ playS1(); });
+</script>
+</body>
+</html>

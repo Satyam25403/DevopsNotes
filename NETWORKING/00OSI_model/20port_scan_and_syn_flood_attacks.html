@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Port Scanning & SYN Flood Attacks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a0808}
+.hdr-title{font-size:9px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#200808;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#aaa}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0f0606;border:1px solid #200808;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #2a0808;border-radius:2px;border-left:3px solid #e85050;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-num{font-size:9px;color:#e85050;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.gn{color:#4eff9a}.step-num.cy{color:#4ec9e1}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.rd{color:#e85050}.am{color:#e8a020}.gn{color:#4eff9a}.cy{color:#4ec9e1}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+/* port chip */
+.port-chip{
+  opacity:0;transform:translateX(-6px);
+  transition:opacity .25s ease,transform .25s ease;
+}
+.port-chip.visible{opacity:1;transform:translateX(0)}
+
+/* connection table cell */
+.conn-cell{transition:fill .3s,stroke .3s;}
+
+/* nmap terminal line */
+.term-line{opacity:0;transition:opacity .3s;}
+.term-line.visible{opacity:1}
+
+/* blink */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* github incident row */
+.inc-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.inc-row.visible{opacity:1;transform:translateX(0)}
+
+/* defense card */
+.def-card{
+  opacity:0;transform:translateY(8px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.def-card.visible{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ═════════════════ SCENE 1: HOOK ═════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">PORT SCANNING & SYN FLOOD</div>
+    <div class="hdr-sub">PENTEST RECON · DDOS · LAYER 4 ATTACKS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ REAL ATTACK</span>
+  </div>
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">FEBRUARY 28, 2018</div>
+        <div style="font-size:9px;color:#ffcccc;line-height:1.9;margin-bottom:8px">GITHUB HIT WITH<br>1.35 Tbps ATTACK<br>USING MEMCACHED<br>AMPLIFICATION</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Largest DDoS ever recorded at the time.<br>Root cause: same half-open TCP technique.<br>10 minutes of partial outage.</div>
+      </div>
+      <div id="s1-chain" style="opacity:0;transition:opacity .5s;border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0d0404">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px">TYPICAL ATTACK CHAIN</div>
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;overflow:hidden">
+          <div style="text-align:center;flex-shrink:0"><div style="border:1px solid #e85050;border-radius:2px;padding:5px 4px;font-size:6px;color:#e85050">RECON<br>port scan</div></div>
+          <div style="font-size:8px;color:#333;flex-shrink:0">→</div>
+          <div style="text-align:center;flex-shrink:0"><div style="border:1px solid #e8a020;border-radius:2px;padding:5px 4px;font-size:6px;color:#e8a020">IDENTIFY<br>services</div></div>
+          <div style="font-size:8px;color:#333;flex-shrink:0">→</div>
+          <div style="text-align:center;flex-shrink:0"><div style="border:1px solid #e85050;border-radius:2px;padding:5px 4px;font-size:6px;color:#e85050">EXPLOIT<br>vulns</div></div>
+          <div style="font-size:8px;color:#333;flex-shrink:0">→</div>
+          <div style="text-align:center;flex-shrink:0"><div style="border:1px solid #e85050;border-radius:2px;padding:5px 4px;font-size:6px;color:#e85050">DDoS<br>SYN flood</div></div>
+        </div>
+      </div>
+      <div id="s1-stats" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">1.35Tbps</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">GitHub DDoS<br>peak traffic</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">65535</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">ports scanned<br>per target</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">nmap</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">#1 port scanning<br>tool worldwide</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">SYN</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">half-open scan<br>= stealth mode</div>
+        </div>
+      </div>
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">TAP NEXT ▶ TO SEE HOW PORT SCANNING WORKS</div>
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">TWO TECHNIQUES. ONE WORKFLOW.</div>
+    <div class="ih">Scan first. Attack what you find.</div>
+    <div class="il" style="font-size:7px">Port scanning maps the attack surface. SYN flood exploits the TCP handshake itself. Both are in every penetration tester's toolkit.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">nmap</div><div class="sl">port scan<br>tool</div></div>
+    <div class="sc"><div class="sv am">SYN</div><div class="sl">half-open<br>stealth scan</div></div>
+    <div class="sc"><div class="sv gn">DDoS</div><div class="sl">SYN flood<br>exhausts table</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═════════════════ SCENE 2: PORT SCANNING ═════════════════ -->
+<div class="scene" id="s2" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title" style="color:#e85050">PORT SCANNING</div>
+    <div class="hdr-sub">ENUMERATE OPEN SERVICES · OPEN vs CLOSED vs FILTERED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">RECON</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PORT SCAN</span>
+  </div>
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- PORT STATE DIAGRAM — bigger, readable SVG -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#e85050;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">THREE POSSIBLE PORT STATES</div>
+        <!-- FIX: wider viewBox, bigger font sizes throughout -->
+        <svg width="358" height="180" viewBox="0 0 358 180" style="display:block;margin:0 auto">
+          <!-- scanner box -->
+          <rect x="2" y="64" width="72" height="52" rx="4" fill="#0d0404" stroke="#e85050" stroke-width="1.5"/>
+          <text x="38" y="82" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">SCANNER</text>
+          <text x="38" y="96" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">nmap</text>
+          <text x="38" y="110" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5">sends SYN</text>
+
+          <!-- OPEN port box -->
+          <rect x="148" y="6" width="96" height="40" rx="3" fill="#060f06" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="196" y="22" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6">:443  OPEN</text>
+          <text x="196" y="36" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">replies SYN-ACK</text>
+
+          <!-- CLOSED port box -->
+          <rect x="148" y="70" width="96" height="40" rx="3" fill="#0d0404" stroke="#e85050" stroke-width="1.5"/>
+          <text x="196" y="86" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">:8080 CLOSED</text>
+          <text x="196" y="100" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">replies RST</text>
+
+          <!-- FILTERED port box -->
+          <rect x="148" y="134" width="96" height="40" rx="3" fill="#0a0808" stroke="#555" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="196" y="150" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="6">:22 FILTERED</text>
+          <text x="196" y="164" text-anchor="middle" fill="#444" font-family="'Press Start 2P'" font-size="5">no reply (FW)</text>
+
+          <!-- SYN beams from scanner to ports -->
+          <path id="s2-syn1" d="M74,78 L148,26" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-syn2" d="M74,90 L148,90" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-syn3" d="M74,102 L148,154" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- responses -->
+          <path id="s2-resp1" d="M244,26 L316,78" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-resp2" d="M244,90 L316,90" stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-resp3" d="M244,154 L316,102" stroke="#333" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0"/>
+
+          <!-- Result panel -->
+          <rect x="316" y="2" width="40" height="176" rx="3" fill="#0a0808" stroke="#1a1010" stroke-width="1"/>
+          <text x="336" y="14" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">RESULT</text>
+
+          <text id="s2-res1" x="336" y="30" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">OPEN</text>
+          <text id="s2-res2" x="336" y="43" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">service</text>
+          <text id="s2-res3" x="336" y="54" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">found!</text>
+
+          <text id="s2-res4" x="336" y="86" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">CLOSED</text>
+          <text id="s2-res5" x="336" y="99" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">no svc</text>
+
+          <text id="s2-res7" x="336" y="148" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5" opacity="0">FILTER</text>
+          <text id="s2-res8" x="336" y="161" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">firewall</text>
+
+          <!-- response labels on lines -->
+          <text id="s2-r1t" x="280" y="46" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">SYN-ACK</text>
+          <text id="s2-r2t" x="280" y="84" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">RST</text>
+          <text id="s2-r3t" x="280" y="136" text-anchor="middle" fill="#444" font-family="'Press Start 2P'" font-size="5" opacity="0">...timeout</text>
+        </svg>
+      </div>
+
+      <!-- port list result -->
+      <div id="s2-results" style="border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:7px">SCAN RESULT: 192.168.1.1</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #1a0808;padding-bottom:4px;margin-bottom:4px">
+          <div style="font-size:6px;color:#e85050;width:54px">PORT</div>
+          <div style="font-size:6px;color:#e85050;width:70px">STATE</div>
+          <div style="font-size:6px;color:#e85050;flex:1">SERVICE</div>
+        </div>
+        <div class="port-chip" id="pr1" style="display:flex;padding:3px 0">
+          <div style="font-size:7px;color:#aaa;width:54px">22/tcp</div>
+          <div style="font-size:7px;color:#4eff9a;width:70px">open</div>
+          <div style="font-size:7px;color:#ccc;flex:1">ssh</div>
+        </div>
+        <div class="port-chip" id="pr2" style="display:flex;padding:3px 0">
+          <div style="font-size:7px;color:#aaa;width:54px">80/tcp</div>
+          <div style="font-size:7px;color:#4eff9a;width:70px">open</div>
+          <div style="font-size:7px;color:#ccc;flex:1">http</div>
+        </div>
+        <div class="port-chip" id="pr3" style="display:flex;padding:3px 0">
+          <div style="font-size:7px;color:#aaa;width:54px">443/tcp</div>
+          <div style="font-size:7px;color:#4eff9a;width:70px">open</div>
+          <div style="font-size:7px;color:#ccc;flex:1">https</div>
+        </div>
+        <div class="port-chip" id="pr4" style="display:flex;padding:3px 0">
+          <div style="font-size:7px;color:#aaa;width:54px">8080/tcp</div>
+          <div style="font-size:7px;color:#e85050;width:70px">closed</div>
+          <div style="font-size:7px;color:#555;flex:1">http-alt</div>
+        </div>
+        <div class="port-chip" id="pr5" style="display:flex;padding:3px 0">
+          <div style="font-size:7px;color:#aaa;width:54px">3306/tcp</div>
+          <div style="font-size:7px;color:#555;width:70px">filtered</div>
+          <div style="font-size:7px;color:#444;flex:1">mysql (fw)</div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text"><span class="rd">Port scan</span> sends probes and analyzes the response. SYN-ACK = open. RST = closed. Timeout = firewall. Three states, three different threat levels.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">Open ports = attack surface. Every open port is an opportunity: <span class="rd">outdated software, misconfiguration, known CVE</span>. Port scanning is step 1 of every pentest.</div>
+      </div>
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">PORT STATES</div>
+    <div class="ih">Open = SYN-ACK. Closed = RST. Filtered = silence.</div>
+    <div class="il" style="font-size:7px">Filtered is better than closed — leaks less info. But even filtered ports can be enumerated with timing analysis.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">OPEN</div><div class="sl">SYN-ACK<br>service found</div></div>
+    <div class="sc"><div class="sv rd">CLOSED</div><div class="sl">RST reply<br>no service</div></div>
+    <div class="sc"><div class="sv am">FILTER</div><div class="sl">no reply<br>firewall</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═════════════════ SCENE 3: SYN SCAN (STEALTH) + NMAP ═════════════════ -->
+<div class="scene" id="s3" style="background:#0a0810">
+  <div class="hdr" style="background:#0a0810">
+    <div class="hdr-title" style="color:#e85050">SYN SCAN — STEALTH MODE</div>
+    <div class="hdr-sub">HALF-OPEN · NMAP FLAGS · NO FULL CONNECT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STEALTH</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HALF-OPEN</span>
+  </div>
+  <div class="anim" style="background:#0a0810">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SYN scan vs full connect — FIXED: much bigger text, taller SVG -->
+      <div class="detail-hero" id="s3-hero" style="border-color:#e8a020;background:#080610">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">FULL CONNECT vs HALF-OPEN (SYN SCAN)</div>
+        <svg width="358" height="220" viewBox="0 0 358 220" style="display:block;margin:0 auto">
+
+          <!-- ── SECTION LABELS ── -->
+          <text x="10" y="14" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6">FULL CONNECT</text>
+          <text x="220" y="14" fill="#e85050" font-family="'Press Start 2P'" font-size="5">(gets LOGGED!)</text>
+
+          <!-- timelines for full connect -->
+          <line x1="18" y1="24" x2="18" y2="96" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line x1="200" y1="24" x2="200" y2="96" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="18" y="22" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">YOU</text>
+          <text x="200" y="22" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="5">SERVER</text>
+
+          <!-- full connect arrows -->
+          <path id="s3-fc1" d="M18,34 L200,44" stroke="#4ec9e1" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-fc1t" x="109" y="33" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6" opacity="0">SYN ──────▶</text>
+          <path id="s3-fc2" d="M200,50 L18,60" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-fc2t" x="109" y="50" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6" opacity="0">◀── SYN-ACK</text>
+          <path id="s3-fc3" d="M18,66 L200,76" stroke="#4ec9e1" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-fc3t" x="109" y="65" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6" opacity="0">ACK ──────▶</text>
+          <text id="s3-fc4" x="109" y="86" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6" opacity="0">⚠ SERVER LOGS CONNECTION</text>
+
+          <!-- divider -->
+          <line x1="0" y1="104" x2="358" y2="104" stroke="#1a1020" stroke-width="1" stroke-dasharray="4,4"/>
+
+          <!-- ── HALF-OPEN SECTION ── -->
+          <text x="10" y="118" fill="#e8a020" font-family="'Press Start 2P'" font-size="6">HALF-OPEN (SYN SCAN)</text>
+          <text x="240" y="118" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">(STEALTHY)</text>
+
+          <!-- timelines for half-open -->
+          <line x1="18" y1="128" x2="18" y2="210" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line x1="200" y1="128" x2="200" y2="210" stroke="#1a1a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <text x="18" y="126" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">YOU</text>
+          <text x="200" y="126" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">SERVER</text>
+
+          <path id="s3-ho1" d="M18,138 L200,148" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-ho1t" x="109" y="137" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6" opacity="0">SYN ──────▶</text>
+          <path id="s3-ho2" d="M200,154 L18,164" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-ho2t" x="109" y="154" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6" opacity="0">◀── SYN-ACK (OPEN!)</text>
+          <path id="s3-ho3" d="M18,170 L200,180" stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="300" stroke-dashoffset="300"/>
+          <text id="s3-ho3t" x="109" y="169" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6" opacity="0">RST ──────▶ (ABORT)</text>
+          <text id="s3-ho4" x="109" y="198" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="6" opacity="0">✓ NO LOG ENTRY CREATED</text>
+        </svg>
+      </div>
+
+      <!-- nmap terminal -->
+      <div id="s3-nmap" style="border:2px solid #e8a020;border-radius:3px;background:#060408;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #1a1000;display:flex;align-items:center;gap:5px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050;opacity:.7"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020;opacity:.5"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a;opacity:.3"></div>
+          <span style="font-size:6px;color:#666;margin-left:4px">kali@attacker:~$</span>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.2">
+          <div class="term-line" id="t1" style="color:#555"># stealth SYN scan (half-open, requires root)</div>
+          <div class="term-line" id="t2" style="color:#e8a020">$ nmap -sS 192.168.1.1</div>
+          <div style="margin-bottom:2px"></div>
+          <div class="term-line" id="t3" style="color:#555"># detect service versions</div>
+          <div class="term-line" id="t4" style="color:#e8a020">$ nmap -sV 192.168.1.1</div>
+          <div style="margin-bottom:2px"></div>
+          <div class="term-line" id="t5" style="color:#555"># scan UDP ports (DNS, SNMP, NTP)</div>
+          <div class="term-line" id="t6" style="color:#e8a020">$ nmap -sU 192.168.1.1</div>
+          <div style="margin-bottom:2px"></div>
+          <div class="term-line" id="t7" style="color:#555"># aggressive: OS detect + scripts</div>
+          <div class="term-line" id="t8" style="color:#e8a020">$ nmap -A 192.168.1.1</div>
+          <div class="term-line" id="t9" style="color:#4eff9a">Nmap done: 1 IP (1 host up) scanned in 2.34s <span class="blink">█</span></div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s3-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text"><span class="am">SYN scan (-sS)</span> sends SYN, reads SYN-ACK (open) or RST (closed), then immediately sends RST to abort. Server never logs a completed connection. Requires root privileges.</div>
+      </div>
+      <div class="step-block am" id="s3-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text"><span class="am">-sV</span> grabs the service banner — what version of nginx/OpenSSH? Cross-reference with CVE database → instant vulnerability list.</div>
+      </div>
+      <div class="step-block am" id="s3-s3">
+        <div class="step-num am">03</div>
+        <div class="step-text"><span class="am">-sU</span> (UDP scan) is slower but crucial: <span class="rd">DNS (53), SNMP (161), NTP (123)</span> run UDP and are often misconfigured amplification vectors.</div>
+      </div>
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">SYN SCAN</div>
+    <div class="ih am">Half-open = sees everything, leaves no log</div>
+    <div class="il" style="font-size:7px">The RST prevents the 3-way handshake completing. Modern systems detect SYN scan patterns by volume — not individual packets.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">-sS</div><div class="sl">stealth SYN<br>scan</div></div>
+    <div class="sc"><div class="sv am">-sV</div><div class="sl">version<br>detect</div></div>
+    <div class="sc"><div class="sv am">-sU</div><div class="sl">UDP<br>scan</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═════════════════ SCENE 4: SYN FLOOD ═════════════════ -->
+<div class="scene" id="s4" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">SYN FLOOD ATTACK</div>
+    <div class="hdr-sub">EXHAUST THE CONNECTION TABLE · DDOS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SYN FLOOD</span>
+  </div>
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SYN FLOOD DIAGRAM — FIXED: bigger readable labels, no overflow text -->
+      <div class="detail-hero" id="s4-hero" style="border-color:#e85050;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">SYN FLOOD — CONNECTION TABLE FILLS UP</div>
+        <svg width="358" height="210" viewBox="0 0 358 210" style="display:block;margin:0 auto">
+
+          <!-- ATTACKER box -->
+          <rect x="2" y="70" width="80" height="70" rx="4" fill="#200808" stroke="#e85050" stroke-width="1.5"/>
+          <text x="42" y="90" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">ATTACKER</text>
+          <text x="42" y="105" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">spoofed</text>
+          <text x="42" y="118" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5">source IPs</text>
+          <text x="42" y="131" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">millions of SYNs</text>
+
+          <!-- SYN flood arrows — 5 lines fanning into server -->
+          <path id="s4-flood1" d="M82,80 L170,42" stroke="#e85050" stroke-width="1.2" fill="none" stroke-dasharray="300" stroke-dashoffset="300" opacity=".95"/>
+          <path id="s4-flood2" d="M82,90 L170,70" stroke="#e85050" stroke-width="1.4" fill="none" stroke-dasharray="300" stroke-dashoffset="300" opacity=".95"/>
+          <path id="s4-flood3" d="M82,105 L170,100" stroke="#e85050" stroke-width="1.6" fill="none" stroke-dasharray="300" stroke-dashoffset="300" opacity=".95"/>
+          <path id="s4-flood4" d="M82,118 L170,130" stroke="#e85050" stroke-width="1.4" fill="none" stroke-dasharray="300" stroke-dashoffset="300" opacity=".95"/>
+          <path id="s4-flood5" d="M82,128 L170,158" stroke="#e85050" stroke-width="1.2" fill="none" stroke-dasharray="300" stroke-dashoffset="300" opacity=".95"/>
+
+          <!-- SERVER box -->
+          <rect x="170" y="10" width="110" height="180" rx="4" fill="#0d0404" stroke="#e85050" stroke-width="2"/>
+          <text x="225" y="26" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6">SERVER</text>
+          <text x="225" y="38" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5">connection table</text>
+
+          <!-- 5x5 grid of connection table cells -->
+          <!-- row 1 -->
+          <rect class="conn-cell" id="cc1"  x="176" y="44" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc2"  x="196" y="44" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc3"  x="216" y="44" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc4"  x="236" y="44" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc5"  x="256" y="44" width="20" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <!-- row 2 -->
+          <rect class="conn-cell" id="cc6"  x="176" y="62" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc7"  x="196" y="62" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc8"  x="216" y="62" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc9"  x="236" y="62" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc10" x="256" y="62" width="20" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <!-- row 3 -->
+          <rect class="conn-cell" id="cc11" x="176" y="80" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc12" x="196" y="80" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc13" x="216" y="80" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc14" x="236" y="80" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc15" x="256" y="80" width="20" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <!-- row 4 -->
+          <rect class="conn-cell" id="cc16" x="176" y="98" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc17" x="196" y="98" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc18" x="216" y="98" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc19" x="236" y="98" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc20" x="256" y="98" width="20" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <!-- row 5 -->
+          <rect class="conn-cell" id="cc21" x="176" y="116" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc22" x="196" y="116" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc23" x="216" y="116" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc24" x="236" y="116" width="17" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+          <rect class="conn-cell" id="cc25" x="256" y="116" width="20" height="14" rx="1" fill="#0d0404" stroke="#2a0808"/>
+
+          <!-- TABLE FULL label — INSIDE the server box, not outside -->
+          <rect id="s4-full-box" x="172" y="135" width="106" height="52" rx="3" fill="#3a0808" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s4-full-t1" x="225" y="154" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="9" opacity="0">TABLE</text>
+          <text id="s4-full-t2" x="225" y="170" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="9" opacity="0">FULL!</text>
+          <text id="s4-full-t3" x="225" y="182" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4.5" opacity="0">legit connections dropped</text>
+
+          <!-- SYN-ACK going to void — INSIDE SVG, not as floating HTML -->
+          <path id="s4-sack1" d="M170,90 Q120,50 82,80" stroke="#4eff9a" stroke-width="1" fill="none" stroke-dasharray="4,4" opacity="0"/>
+          <!-- void label — now inside SVG properly positioned -->
+          <text id="s4-void-l1" x="42" y="52" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5" opacity="0">SYN-ACK</text>
+          <text id="s4-void-l2" x="42" y="64" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5" opacity="0">→ void IP</text>
+          <text id="s4-void-l3" x="42" y="76" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5" opacity="0">(spoofed)</text>
+        </svg>
+      </div>
+
+      <div class="step-block" id="s4-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">Each SYN allocates an entry in the server's <span class="rd">half-open connection table</span>. Server sends SYN-ACK and waits for ACK. With spoofed IPs, the ACK never arrives. Table fills.</div>
+      </div>
+      <div class="step-block" id="s4-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">Once the table is full, <span class="rd">legitimate connections are rejected</span>. Server is still running — just can't accept new connections. Classic DDoS without hacking anything.</div>
+      </div>
+      <div class="step-block" id="s4-s3">
+        <div class="step-num">03</div>
+        <div class="step-text"><span class="gn">SYN cookies</span>: server doesn't allocate a table entry until ACK arrives. Encodes state in the SYN-ACK sequence number. Stateless — immune to SYN flood. Default on Linux since kernel 2.6.</div>
+      </div>
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">SYN FLOOD</div>
+    <div class="ih">Half-open connections fill the table. Legit traffic dies.</div>
+    <div class="il" style="font-size:7px">Default Linux SYN backlog: 128–1024 entries. A 1Gbps attacker exhausts it in milliseconds. SYN cookies + BCP38 rate limiting = combined fix.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">128</div><div class="sl">default SYN<br>backlog size</div></div>
+    <div class="sc"><div class="sv am">&lt;1ms</div><div class="sl">to exhaust<br>at 1Gbps</div></div>
+    <div class="sc"><div class="sv gn">SYN<br>cookie</div><div class="sl">stateless<br>defense</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═════════════════ SCENE 5: GITHUB 2018 + DEFENSES ═════════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">GITHUB 2018 + DEFENSES</div>
+    <div class="hdr-sub">1.35 Tbps INCIDENT · SYN COOKIES · RATE LIMITING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">+ DEFENSES</span>
+  </div>
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+      <div id="s5-incident" style="border:2px solid #e8a020;border-radius:3px;padding:11px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:9px">GITHUB DDoS — FEB 28, 2018</div>
+        <div class="inc-row" id="ir1" style="display:flex;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#e8a020;width:48px;flex-shrink:0">17:21 UTC</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.7">Traffic spikes to <span style="color:#e85050">1.35 Tbps</span>. Source: 50,000+ memcached servers on UDP 11211. Amplification factor: <span style="color:#e85050">51,200×</span>.</div>
+        </div>
+        <div class="inc-row" id="ir2" style="display:flex;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#e85050;width:48px;flex-shrink:0">17:21</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.7">GitHub absorbs 1.35 Tbps for <span style="color:#e85050">~10 minutes</span>. git push/pull fails globally.</div>
+        </div>
+        <div class="inc-row" id="ir3" style="display:flex;gap:8px;margin-bottom:7px;padding-bottom:7px;border-bottom:1px solid #1a1000">
+          <div style="font-size:6px;color:#4eff9a;width:48px;flex-shrink:0">17:30</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.7">GitHub activates <span style="color:#4eff9a">Akamai Prolexic</span> scrubbing. Attack traffic dropped upstream. Normal in minutes.</div>
+        </div>
+        <div class="inc-row" id="ir4" style="display:flex;gap:8px">
+          <div style="font-size:6px;color:#4ec9e1;width:48px;flex-shrink:0">Root cause</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.7">Memcached servers publicly exposed on UDP 11211 with no auth. <span style="color:#e8a020">1 byte request → 100KB response</span>.</div>
+        </div>
+      </div>
+      <div id="s5-d1" class="def-card" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#040c04">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🍪</span>
+          <div style="font-size:8px;color:#4eff9a">SYN COOKIES</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Server encodes connection state into SYN-ACK sequence number. No table entry allocated until ACK arrives. <span style="color:#4eff9a">net.ipv4.tcp_syncookies=1</span> — enable in Linux.</div>
+      </div>
+      <div id="s5-d2" class="def-card" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🚦</span>
+          <div style="font-size:8px;color:#4ec9e1">RATE LIMITING + BCP38</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">ISPs drop packets with spoofed source IPs (BCP38). Firewalls rate-limit SYN per source IP. <span style="color:#4ec9e1">iptables --syn -m limit --limit 1/s -j ACCEPT</span></div>
+      </div>
+      <div id="s5-d3" class="def-card" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0c0800">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">☁</span>
+          <div style="font-size:8px;color:#e8a020">ANYCAST SCRUBBING (Cloudflare/Akamai)</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Traffic routed to scrubbing centers globally. Legitimate traffic forwarded; attack dropped. <span style="color:#e8a020">What saved GitHub in 9 minutes.</span></div>
+      </div>
+      <div id="s5-d4" class="def-card" style="border:2px solid #a060c0;border-radius:3px;padding:10px;background:#0d0818">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🔒</span>
+          <div style="font-size:8px;color:#a060c0">CLOSE THE SCAN SURFACE</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Firewall all unused ports. Default-deny inbound. <span style="color:#a060c0">nmap yourself before attackers do.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">KEY INSIGHT</div>
+    <div class="ih gn">SYN cookies cost nothing. Enable them everywhere.</div>
+    <div class="il" style="font-size:7px">Check now: <span style="color:#4eff9a">sysctl net.ipv4.tcp_syncookies</span>. Should return 1. If 0, your server is vulnerable.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">SYN<br>cookie</div><div class="sl">free<br>protection</div></div>
+    <div class="sc"><div class="sv cy">scrub</div><div class="sl">Cloudflare<br>Akamai</div></div>
+    <div class="sc"><div class="sv am">nmap</div><div class="sl">scan yourself<br>first</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn cy" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function goLine(id,dur){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${dur}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetLine(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='300';}
+}
+function fillCell(id){
+  const el=document.getElementById(id);
+  if(el){el.style.fill='#3a0808';el.style.stroke='#e85050';}
+}
+function resetCell(id){
+  const el=document.getElementById(id);
+  if(el){el.style.fill='#0d0404';el.style.stroke='#2a0808';}
+}
+
+function resetScene(n){
+  if(n===1){['s1-hero','s1-chain','s1-stats','s1-cta'].forEach(id=>setOp(id,'0'));}
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-results','0');
+    ['s2-s1','s2-s2'].forEach(id=>rmV(id));
+    ['pr1','pr2','pr3','pr4','pr5'].forEach(id=>rmV(id));
+    ['s2-syn1','s2-syn2','s2-syn3','s2-resp1','s2-resp2'].forEach(id=>resetLine(id));
+    ['s2-r1t','s2-r2t','s2-r3t','s2-res1','s2-res2','s2-res3','s2-res4','s2-res5','s2-res7','s2-res8'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-nmap','0');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>rmV(id));
+    ['s3-fc1','s3-fc2','s3-fc3','s3-ho1','s3-ho2','s3-ho3'].forEach(id=>resetLine(id));
+    ['s3-fc1t','s3-fc2t','s3-fc3t','s3-fc4','s3-ho1t','s3-ho2t','s3-ho3t','s3-ho4'].forEach(id=>svgOp(id,'0'));
+    ['t1','t2','t3','t4','t5','t6','t7','t8','t9'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    document.getElementById('s4-hero').classList.remove('visible');
+    ['s4-s1','s4-s2','s4-s3'].forEach(id=>rmV(id));
+    ['s4-flood1','s4-flood2','s4-flood3','s4-flood4','s4-flood5','s4-sack1'].forEach(id=>resetLine(id));
+    for(let i=1;i<=25;i++) resetCell('cc'+i);
+    ['s4-full-box','s4-full-t1','s4-full-t2','s4-full-t3','s4-void-l1','s4-void-l2','s4-void-l3'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===5){
+    setOp('s5-incident','0');
+    ['ir1','ir2','ir3','ir4'].forEach(id=>rmV(id));
+    ['s5-d1','s5-d2','s5-d3','s5-d4'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-chain','1'),900);
+    delay(()=>setOp('s1-stats','1'),1600);
+    delay(()=>setOp('s1-cta','1'),2300);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    delay(()=>{ goLine('s2-syn1',400); goLine('s2-syn2',400); goLine('s2-syn3',400); },600);
+    delay(()=>{ goLine('s2-resp1',400); svgOp('s2-r1t','1'); svgOp('s2-res1','1'); svgOp('s2-res2','1'); svgOp('s2-res3','1'); },1100);
+    delay(()=>{ goLine('s2-resp2',400); svgOp('s2-r2t','1'); svgOp('s2-res4','1'); svgOp('s2-res5','1'); },1500);
+    delay(()=>{ svgOp('s2-resp3','1'); svgOp('s2-r3t','1'); svgOp('s2-res7','1'); svgOp('s2-res8','1'); },1900);
+    delay(()=>{
+      setOp('s2-results','1');
+      ['pr1','pr2','pr3','pr4','pr5'].forEach((id,i)=>delay(()=>addV(id),i*220));
+    },2300);
+    delay(()=>addV('s2-s1'),800);
+    delay(()=>addV('s2-s2'),1800);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // full connect sequence
+    delay(()=>{ goLine('s3-fc1',500); svgOp('s3-fc1t','1'); },500);
+    delay(()=>{ goLine('s3-fc2',500); svgOp('s3-fc2t','1'); },1100);
+    delay(()=>{ goLine('s3-fc3',500); svgOp('s3-fc3t','1'); },1700);
+    delay(()=>svgOp('s3-fc4','1'),2200);
+    // half-open sequence
+    delay(()=>{ goLine('s3-ho1',500); svgOp('s3-ho1t','1'); },2700);
+    delay(()=>{ goLine('s3-ho2',500); svgOp('s3-ho2t','1'); },3300);
+    delay(()=>{ goLine('s3-ho3',500); svgOp('s3-ho3t','1'); },3900);
+    delay(()=>svgOp('s3-ho4','1'),4400);
+    // nmap terminal — show after full connect plays
+    delay(()=>{
+      setOp('s3-nmap','1');
+      ['t1','t2','t3','t4','t5','t6','t7','t8','t9'].forEach((id,i)=>delay(()=>addV(id),i*250));
+    },2600);
+    delay(()=>addV('s3-s1'),600);
+    delay(()=>addV('s3-s2'),1700);
+    delay(()=>addV('s3-s3'),3000);
+  }
+
+  if(n===4){
+    delay(()=>document.getElementById('s4-hero').classList.add('visible'),200);
+    // flood arrows
+    delay(()=>{
+      ['s4-flood1','s4-flood2','s4-flood3','s4-flood4','s4-flood5'].forEach((id,i)=>{
+        delay(()=>goLine(id,400),i*130);
+      });
+    },600);
+    // fill cells wave
+    const cells=['cc1','cc2','cc3','cc4','cc5','cc6','cc7','cc8','cc9','cc10',
+                 'cc11','cc12','cc13','cc14','cc15','cc16','cc17','cc18','cc19','cc20',
+                 'cc21','cc22','cc23','cc24','cc25'];
+    cells.forEach((id,i)=>delay(()=>fillCell(id),1000+i*100));
+    // SYN-ACK to void
+    delay(()=>{ goLine('s4-sack1',600); svgOp('s4-void-l1','1'); svgOp('s4-void-l2','1'); svgOp('s4-void-l3','1'); },1400);
+    // TABLE FULL
+    delay(()=>{ ['s4-full-box','s4-full-t1','s4-full-t2','s4-full-t3'].forEach(id=>svgOp(id,'1')); },3700);
+    delay(()=>addV('s4-s1'),700);
+    delay(()=>addV('s4-s2'),2000);
+    delay(()=>addV('s4-s3'),3200);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-incident','1'),200);
+    ['ir1','ir2','ir3','ir4'].forEach((id,i)=>delay(()=>addV(id),500+i*400));
+    delay(()=>addV('s5-d1'),2100);
+    delay(()=>addV('s5-d2'),2600);
+    delay(()=>addV('s5-d3'),3100);
+    delay(()=>addV('s5-d4'),3600);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>
