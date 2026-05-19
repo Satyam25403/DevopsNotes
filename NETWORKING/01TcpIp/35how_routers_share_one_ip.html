@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>HSRP & VRRP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #14100a}
+.hdr-title{font-size:11px;color:#f59e0b;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#14100a;transition:background .2s}
+.dot.active{background:#f59e0b}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #f59e0b;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#22d3ee}.info.pu{border-color:#a78bfa}
+.il{color:#888}.ih{color:#f59e0b}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.cy{color:#22d3ee}.ih.pu{color:#a78bfa}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0c0900;border:1px solid #14100a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#f59e0b;text-align:center;line-height:1.3}
+.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.cy{color:#22d3ee}
+.sl{font-size:6px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;transition:all .15s}
+.btn:hover{background:#f59e0b20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── router box ── */
+.rtr{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:8px 6px;border:2px solid;border-radius:3px;
+  transition:all 0.35s;min-width:80px;
+}
+.rtr.active-rtr{border-color:#4eff9a;background:#041208}
+.rtr.standby-rtr{border-color:#555;background:#0c0900}
+.rtr.master-rtr{border-color:#f59e0b;background:#0c0800}
+.rtr.backup-rtr{border-color:#333;background:#0c0900}
+.rtr.dead-rtr{border-color:#e85050;background:#150508;animation:deadPulse 0.5s ease 2}
+.rtr.new-active{border-color:#4eff9a;background:#041208;animation:takeover 0.6s ease}
+@keyframes deadPulse{0%,100%{opacity:1}50%{opacity:0.3}}
+@keyframes takeover{0%{transform:scale(0.95);box-shadow:0 0 0 #4eff9a}50%{transform:scale(1.05);box-shadow:0 0 12px #4eff9a40}100%{transform:scale(1)}}
+
+.rtr-icon{font-size:22px;line-height:1}
+.rtr-label{font-size:7px}
+.rtr-ip{font-size:6px;margin-top:1px}
+.rtr-badge{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid;margin-top:2px;transition:all 0.3s}
+
+/* ── VIP bubble ── */
+.vip-bubble{
+  border:2px solid #f59e0b;background:#0c0800;border-radius:3px;
+  padding:5px 10px;text-align:center;font-size:7px;color:#f59e0b;
+  transition:all 0.4s;
+}
+.vip-bubble.transferred{border-color:#4eff9a;color:#4eff9a;background:#041208;animation:vipPop 0.5s ease}
+@keyframes vipPop{0%{transform:scale(0.9)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
+
+/* ── packet animation ── */
+.pkt{
+  position:absolute;width:14px;height:10px;border-radius:1px;
+  display:flex;align-items:center;justify-content:center;font-size:5px;
+  border:1px solid;pointer-events:none;z-index:10;
+  transition:all 0.6s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ── hello timer bar ── */
+.hello-bar-wrap{background:#0c0900;height:7px;border-radius:3px;overflow:hidden}
+.hello-bar{height:100%;border-radius:3px;width:100%;transition:width linear}
+
+/* ── timeline event ── */
+.tl-event{display:flex;align-items:flex-start;gap:7px;padding:5px 0;border-bottom:1px solid #14100a;opacity:0;transition:opacity 0.4s}
+.tl-event.show{opacity:1}
+.tl-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:2px}
+.tl-time{font-size:6px;color:#555;min-width:34px;flex-shrink:0}
+.tl-msg{font-size:6px;color:#aaa;line-height:1.7;flex:1}
+
+/* ── priority table ── */
+.pri-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:2px;font-size:7px;opacity:0;transition:opacity 0.4s;margin-bottom:3px}
+.pri-row.show{opacity:1}
+
+/* ── arp broadcast ── */
+.garp-ring{
+  position:absolute;border-radius:50%;border:2px solid #4eff9a;
+  animation:garpRing 0.8s ease-out forwards;pointer-events:none;
+}
+@keyframes garpRing{0%{transform:scale(0.1);opacity:0.8}100%{transform:scale(1);opacity:0}}
+
+/* ── attack ── */
+.attack-pkt{font-size:6px;padding:3px 6px;border:1px solid #e85050;color:#e85050;background:#150508;border-radius:2px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+.card{opacity:0;transition:opacity 0.5s;background:#080500;border:1px solid #14100a;padding:8px 10px;border-radius:2px}
+.card.show{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — THE PROBLEM: SINGLE GW = SPOF
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">HSRP &amp; VRRP</div>
+    <div class="hdr-sub">GATEWAY DIES → EVERYONE LOSES INTERNET</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SINGLE POINT OF FAILURE</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- topology: clients → gateway → internet -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-3px">▸ typical network without redundancy</div>
+
+      <div style="position:relative;background:#080500;border:1px solid #14100a;border-radius:2px;padding:10px 8px" id="s1-topo">
+        <!-- clients row -->
+        <div style="display:flex;justify-content:space-around;margin-bottom:10px">
+          <div style="text-align:center;font-size:8px" id="s1-c1">💻<div style="font-size:6px;color:#555;margin-top:2px">.101</div></div>
+          <div style="text-align:center;font-size:8px" id="s1-c2">💻<div style="font-size:6px;color:#555;margin-top:2px">.102</div></div>
+          <div style="text-align:center;font-size:8px" id="s1-c3">📱<div style="font-size:6px;color:#555;margin-top:2px">.103</div></div>
+          <div style="text-align:center;font-size:8px" id="s1-c4">🖥<div style="font-size:6px;color:#555;margin-top:2px">.104</div></div>
+        </div>
+        <!-- lines down -->
+        <div style="display:flex;justify-content:space-around;margin-bottom:0px;gap:4px">
+          <div style="flex:1;height:18px;border-left:1px solid #1a2a1a;margin-left:calc(50% - 0.5px)"></div>
+          <div style="flex:1;height:18px;border-left:1px solid #1a2a1a;margin-left:calc(50% - 0.5px)"></div>
+          <div style="flex:1;height:18px;border-left:1px solid #1a2a1a;margin-left:calc(50% - 0.5px)"></div>
+          <div style="flex:1;height:18px;border-left:1px solid #1a2a1a;margin-left:calc(50% - 0.5px)"></div>
+        </div>
+        <!-- gateway -->
+        <div style="display:flex;justify-content:center;margin-bottom:4px">
+          <div class="rtr active-rtr" id="s1-gw" style="padding:6px 12px">
+            <div class="rtr-icon">🌐</div>
+            <div class="rtr-label" style="color:#4eff9a">GATEWAY</div>
+            <div class="rtr-ip" style="color:#4eff9a">192.168.1.1</div>
+            <div class="rtr-badge" style="border-color:#4eff9a;color:#4eff9a">ONLINE</div>
+          </div>
+        </div>
+        <!-- line to internet -->
+        <div style="display:flex;justify-content:center">
+          <div style="height:14px;border-left:1px solid #1a2a1a"></div>
+        </div>
+        <div style="text-align:center;font-size:7px;color:#555">🌍 INTERNET</div>
+        <!-- packet fly layer -->
+        <div id="s1-fly" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden"></div>
+      </div>
+
+      <!-- failure event -->
+      <div id="s1-fail-box" style="opacity:0;transition:opacity 0.5s;background:#150508;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">💀 GATEWAY FAILS</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          Power cut. NIC failure. OS crash. Anything.<br>
+          All 4 clients have GW = 192.168.1.1 hardcoded.<br>
+          Every device loses internet <span style="color:#e85050">instantly.</span>
+        </div>
+      </div>
+
+      <div id="s1-solution" style="opacity:0;transition:opacity 0.5s;background:#041208;border:2px solid #4eff9a;padding:9px;border-radius:2px;text-align:center">
+        <div style="font-size:8px;color:#4eff9a">SOLUTION: VIRTUAL IP</div>
+        <div style="font-size:6px;color:#888;margin-top:5px;line-height:1.8">two routers share one virtual IP.<br>clients never need to know which router is active.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">one gateway = one point of failure</div>
+    <div class="ih rd">all clients lose internet the moment it dies.<br>HSRP/VRRP solve this with a virtual IP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">SPOF</div><div class="sl">SINGLE<br>GATEWAY</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">DOWNTIME<br>ON FAILURE</div></div>
+    <div class="sc"><div class="sv gn">VIP</div><div class="sl">THE<br>FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — HSRP: ACTIVE / STANDBY + FAILOVER
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">HSRP &amp; VRRP</div>
+    <div class="hdr-sub">ACTIVE FAILS → STANDBY TAKES OVER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f59e0b">HSRP</span>
+    <span class="sbadge" style="color:#f59e0b;border-color:#f59e0b">CISCO PROPRIETARY</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-status" style="background:#080500;border:2px solid #14100a;padding:8px 10px;border-radius:2px;font-size:7px;min-height:36px">
+        <span style="color:#555" id="s2-status-text">Initialising HSRP group 1…</span>
+      </div>
+
+      <!-- two routers + VIP -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-3px">▸ HSRP group 1 — virtual IP 10.0.0.1</div>
+      <div style="position:relative;background:#080500;border:1px solid #14100a;border-radius:2px;padding:10px 8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <!-- Router A -->
+          <div class="rtr standby-rtr" id="s2-ra" style="flex:1">
+            <div class="rtr-icon">🌐</div>
+            <div class="rtr-label" id="s2-ra-lbl">R1</div>
+            <div class="rtr-ip" style="color:#555">10.0.0.2</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">priority 100</div>
+            <div class="rtr-badge" id="s2-ra-badge" style="border-color:#555;color:#555">STANDBY</div>
+          </div>
+          <!-- VIP in middle -->
+          <div style="flex:1;text-align:center">
+            <div class="vip-bubble" id="s2-vip">
+              <div style="font-size:6px;color:#555;margin-bottom:2px">VIRTUAL IP</div>
+              <div style="font-size:9px">10.0.0.1</div>
+              <div style="font-size:6px;margin-top:2px" id="s2-vip-owner">owner: R2</div>
+            </div>
+            <!-- hello timer -->
+            <div style="margin-top:6px">
+              <div style="font-size:5px;color:#2a1e00;margin-bottom:2px">HELLO 3s / DEAD 10s</div>
+              <div class="hello-bar-wrap">
+                <div class="hello-bar" id="s2-hbar" style="background:#f59e0b"></div>
+              </div>
+            </div>
+          </div>
+          <!-- Router B -->
+          <div class="rtr active-rtr" id="s2-rb" style="flex:1">
+            <div class="rtr-icon">🌐</div>
+            <div class="rtr-label" id="s2-rb-lbl">R2</div>
+            <div class="rtr-ip" style="color:#4eff9a">10.0.0.3</div>
+            <div style="font-size:6px;color:#f59e0b;margin-top:2px">priority 110</div>
+            <div class="rtr-badge" id="s2-rb-badge" style="border-color:#4eff9a;color:#4eff9a">ACTIVE</div>
+          </div>
+        </div>
+        <!-- GARP blast layer -->
+        <div id="s2-garp-layer" style="position:absolute;top:50%;left:50%;pointer-events:none"></div>
+      </div>
+
+      <!-- event timeline -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-3px">▸ failover timeline</div>
+      <div id="s2-timeline" style="background:#080500;border:1px solid #14100a;border-radius:2px;padding:7px;display:flex;flex-direction:column;gap:0">
+        <div class="tl-event" id="tl1">
+          <div class="tl-dot" style="background:#4eff9a"></div>
+          <div class="tl-time">t=0s</div>
+          <div class="tl-msg">R2 Active · sending Hello every 3s · R1 standby listening</div>
+        </div>
+        <div class="tl-event" id="tl2">
+          <div class="tl-dot" style="background:#e85050"></div>
+          <div class="tl-time">t=4s</div>
+          <div class="tl-msg">R2 <span style="color:#e85050">CRASHES</span> · no hello received · R1 starts dead timer (10s)</div>
+        </div>
+        <div class="tl-event" id="tl3">
+          <div class="tl-dot" style="background:#e8a020"></div>
+          <div class="tl-time">t=14s</div>
+          <div class="tl-msg">Dead timer expires · R1 declares itself ACTIVE</div>
+        </div>
+        <div class="tl-event" id="tl4">
+          <div class="tl-dot" style="background:#4eff9a"></div>
+          <div class="tl-time">t=14s</div>
+          <div class="tl-msg">R1 sends <span style="color:#4eff9a">Gratuitous ARP</span> · broadcasts new MAC for VIP 10.0.0.1</div>
+        </div>
+        <div class="tl-event" id="tl5">
+          <div class="tl-dot" style="background:#4eff9a"></div>
+          <div class="tl-time">t=14s</div>
+          <div class="tl-msg">All clients update ARP table · traffic resumes → R1 seamlessly</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">HSRP: Active/Standby · Hello 3s · Dead 10s</div>
+    <div class="ih">higher priority wins Active role. on failover,<br>gratuitous ARP updates all client ARP tables.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3s</div><div class="sl">HELLO<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv am">10s</div><div class="sl">DEAD<br>TIMER</div></div>
+    <div class="sc"><div class="sv gn">~14s</div><div class="sl">FAILOVER<br>TIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — PREEMPT + VRRP COMPARISON
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">HSRP &amp; VRRP</div>
+    <div class="hdr-sub">PREEMPT · VRRP · PRIORITY MECHANICS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#22d3ee">VRRP</span>
+    <span class="sbadge" style="color:#22d3ee;border-color:#22d3ee">OPEN STANDARD</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- Priority table -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ HSRP priority election</div>
+      <div id="s3-pri" style="background:#080500;border:1px solid #14100a;padding:8px;border-radius:2px">
+        <div style="display:flex;gap:6px;margin-bottom:5px;font-size:6px;color:#2a1e00">
+          <div style="flex:1">ROUTER</div><div style="min-width:70px">PRIORITY</div>
+          <div style="min-width:60px">PREEMPT</div><div style="min-width:50px">ROLE</div>
+        </div>
+        <div class="pri-row" id="pr1">
+          <div style="flex:1;font-size:7px;color:#aaa">R1</div>
+          <div style="min-width:70px;font-size:9px;color:#555">100</div>
+          <div style="min-width:60px;font-size:7px;color:#555">OFF</div>
+          <div style="min-width:50px;font-size:7px;color:#555">STANDBY</div>
+        </div>
+        <div class="pri-row" id="pr2">
+          <div style="flex:1;font-size:7px;color:#f59e0b">R2 ★</div>
+          <div style="min-width:70px;font-size:9px;color:#4eff9a">110</div>
+          <div style="min-width:60px;font-size:7px;color:#4eff9a">ON</div>
+          <div style="min-width:50px;font-size:7px;color:#4eff9a">ACTIVE</div>
+        </div>
+      </div>
+
+      <!-- preempt explanation -->
+      <div class="card" id="s3-preempt">
+        <div style="font-size:7px;color:#f59e0b;margin-bottom:5px">PREEMPT = RECLAIM ACTIVE ROLE</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">
+          R2 crashes → R1 becomes Active (priority 100)<br>
+          R2 comes back up · without preempt: R1 stays Active<br>
+          <span style="color:#4eff9a">with preempt: R2 reclaims Active (priority 110 wins)</span>
+        </div>
+      </div>
+
+      <!-- HSRP vs VRRP -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ HSRP vs VRRP</div>
+      <div style="display:flex;gap:6px">
+        <div class="card show" style="flex:1;border-color:#f59e0b">
+          <div style="font-size:7px;color:#f59e0b;margin-bottom:5px">HSRP (Cisco)</div>
+          <div style="font-size:6px;color:#666;line-height:1.8">
+            Active / Standby<br>
+            priority 0–255<br>
+            Hello: 3s · Dead: 10s<br>
+            Cisco-only devices<br>
+            Group 0–255<br>
+            MD5 auth ✓
+          </div>
+        </div>
+        <div class="card show" id="s3-vrrp-card" style="flex:1;border-color:#22d3ee">
+          <div style="font-size:7px;color:#22d3ee;margin-bottom:5px">VRRP (RFC 5798)</div>
+          <div style="font-size:6px;color:#666;line-height:1.8">
+            Master / Backup<br>
+            priority 0–255<br>
+            Advert: 1s · Dead: 3s<br>
+            Multi-vendor ✓<br>
+            Group 1–255<br>
+            MD5 auth ✓
+          </div>
+        </div>
+      </div>
+
+      <!-- key diff callout -->
+      <div class="card" id="s3-diff">
+        <div style="font-size:7px;color:#22d3ee;margin-bottom:4px">KEY DIFFERENCE: VRRP IS FASTER</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">
+          VRRP advertises every 1s vs HSRP's 3s hello.<br>
+          VRRP dead time ≈ 3× advert = ~3s failover.<br>
+          HSRP dead time = 10s → ~14s to failover.<br>
+          <span style="color:#4eff9a">VRRP ≈ 3× faster failover than HSRP.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">VRRP = open standard. HSRP = Cisco-only.</div>
+    <div class="ih cy">both use priority to elect master/active.<br>VRRP: 3s failover. HSRP: ~14s failover.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">~3s</div><div class="sl">VRRP<br>FAILOVER</div></div>
+    <div class="sc"><div class="sv am">~14s</div><div class="sl">HSRP<br>FAILOVER</div></div>
+    <div class="sc"><div class="sv gn">255</div><div class="sl">MAX<br>PRIORITY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — GRATUITOUS ARP DEEP DIVE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">HSRP &amp; VRRP</div>
+    <div class="hdr-sub">GRATUITOUS ARP — UPDATING THE NETWORK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">GARP</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAILOVER MAGIC</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-3px">▸ why gratuitous ARP is needed</div>
+
+      <div class="card show" style="border-color:#1a3a1a">
+        <div style="font-size:7px;color:#aaa;margin-bottom:5px">BEFORE FAILOVER — ARP TABLE (clients)</div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:7px">
+          <div style="display:flex;gap:8px"><span style="color:#555;min-width:80px">10.0.0.1 (VIP)</span><span style="color:#e85050">→ AA:BB:CC:11:22:33 (R2 MAC)</span></div>
+          <div style="display:flex;gap:8px"><span style="color:#555;min-width:80px">10.0.0.2 (R1)</span><span style="color:#555">→ AA:BB:CC:44:55:66</span></div>
+        </div>
+      </div>
+
+      <!-- GARP animation area -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-3px">▸ R2 fails · R1 becomes Active · sends GARP</div>
+      <div style="position:relative;background:#080500;border:1px solid #14100a;border-radius:2px;padding:12px 8px;height:110px" id="s4-garp-scene">
+        <!-- clients -->
+        <div style="position:absolute;top:8px;left:10px;font-size:8px">💻<div style="font-size:5px;color:#555">.101</div></div>
+        <div style="position:absolute;top:8px;left:60px;font-size:8px">💻<div style="font-size:5px;color:#555">.102</div></div>
+        <div style="position:absolute;top:8px;left:110px;font-size:8px">🖥<div style="font-size:5px;color:#555">.103</div></div>
+        <div style="position:absolute;top:8px;left:160px;font-size:8px">📱<div style="font-size:5px;color:#555">.104</div></div>
+        <!-- dead R2 -->
+        <div style="position:absolute;top:8px;right:8px;text-align:center">
+          <div style="font-size:14px">❌</div>
+          <div style="font-size:5px;color:#e85050">R2 DEAD</div>
+        </div>
+        <!-- R1 router (centre-bottom) -->
+        <div id="s4-r1-box" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);text-align:center;border:2px solid #555;border-radius:2px;padding:4px 8px;background:#0c0900;transition:all 0.4s">
+          <div style="font-size:14px">🌐</div>
+          <div style="font-size:6px;color:#555" id="s4-r1-label">R1 STANDBY</div>
+        </div>
+        <!-- GARP rings and broadcast -->
+        <div id="s4-garp-rings" style="position:absolute;bottom:42px;left:50%;pointer-events:none"></div>
+        <div id="s4-broadcast-line" style="position:absolute;bottom:42px;left:0;right:0;font-size:6px;color:#4eff9a;text-align:center;opacity:0;transition:opacity 0.4s">
+          ← GARP: "10.0.0.1 is now at DD:EE:FF:44:55:66" →
+        </div>
+      </div>
+
+      <!-- ARP table after -->
+      <div class="card" id="s4-arp-after">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">AFTER GARP — ARP TABLE UPDATED (all clients)</div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:7px">
+          <div style="display:flex;gap:8px"><span style="color:#555;min-width:80px">10.0.0.1 (VIP)</span><span id="s4-arp-vip" style="color:#555">→ AA:BB:CC:11:22:33 (R2)</span></div>
+          <div style="display:flex;gap:8px"><span style="color:#555;min-width:80px">10.0.0.2 (R1)</span><span style="color:#555">→ AA:BB:CC:44:55:66</span></div>
+        </div>
+      </div>
+
+      <!-- GARP packet format -->
+      <div class="card" id="s4-pkt-fmt">
+        <div style="font-size:7px;color:#f59e0b;margin-bottom:5px">GARP PACKET FIELDS</div>
+        <div style="display:flex;flex-direction:column;gap:3px;font-size:6px;color:#666;line-height:1.8">
+          <div><span style="color:#f59e0b">opcode:</span> 1 (ARP Request · unsolicited)</div>
+          <div><span style="color:#f59e0b">sender IP:</span> 10.0.0.1 (the VIP)</div>
+          <div><span style="color:#f59e0b">sender MAC:</span> DD:EE:FF:44:55:66 (R1's MAC)</div>
+          <div><span style="color:#f59e0b">target IP:</span> 10.0.0.1 (same — self-addressed)</div>
+          <div><span style="color:#f59e0b">dst MAC:</span> FF:FF:FF:FF:FF:FF (broadcast)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">GARP: broadcast new MAC for VIP to all hosts</div>
+    <div class="ih gn">sender IP = target IP = VIP. forces all ARP caches<br>to update. switches update CAM table too.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">BCAST</div><div class="sl">GARP<br>DEST MAC</div></div>
+    <div class="sc"><div class="sv gn">~0s</div><div class="sl">ARP UPDATE<br>TIME</div></div>
+    <div class="sc"><div class="sv am">2–3x</div><div class="sl">GARP SENT<br>ON FAILOVER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 5 — HSRP HIJACK + MD5 DEFENCE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">HSRP &amp; VRRP</div>
+    <div class="hdr-sub">HSRP HIJACK ATTACK + MD5 DEFENCE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DEFENCE: MD5</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ attacker sends HSRP Hello with priority 255</div>
+
+      <!-- attack diagram -->
+      <div style="position:relative;background:#080500;border:2px solid #e85050;border-radius:2px;padding:10px 8px;min-height:80px" id="s5-attack">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:14px">🌐</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:2px">R2 ACTIVE</div>
+            <div style="font-size:5px;color:#555">pri=110</div>
+          </div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:14px">🌐</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">R1 STANDBY</div>
+            <div style="font-size:5px;color:#555">pri=100</div>
+          </div>
+          <div style="text-align:center;flex:1" id="s5-attacker">
+            <div style="font-size:14px">💀</div>
+            <div style="font-size:6px;color:#e85050;margin-top:2px">ATTACKER</div>
+            <div class="attack-pkt" id="s5-apkt" style="margin-top:4px;opacity:0;transition:opacity 0.4s">HSRP pri=255</div>
+          </div>
+        </div>
+        <div id="s5-takeover-msg" style="opacity:0;transition:opacity 0.5s;margin-top:8px;text-align:center;font-size:7px;color:#e85050">
+          ⚠ ATTACKER BECOMES ACTIVE — MITM ON ALL TRAFFIC
+        </div>
+      </div>
+
+      <!-- what happens -->
+      <div class="card" id="s5-what">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">WHAT THE ATTACKER CAN DO</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">
+          • becomes Active router for the HSRP group<br>
+          • all client traffic flows through attacker<br>
+          • can MITM, inspect, modify, or drop packets<br>
+          • completely transparent to end users
+        </div>
+      </div>
+
+      <!-- defence -->
+      <div class="card" id="s5-defence">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">DEFENCE: MD5 AUTHENTICATION</div>
+        <div style="background:#040a04;border:1px solid #1a2a1a;padding:7px;border-radius:2px;font-size:7px;margin-bottom:5px">
+          <div style="color:#555;margin-bottom:3px"># Cisco IOS config</div>
+          <div><span style="color:#4eff9a">standby</span> <span style="color:#f59e0b">1</span> <span style="color:#4eff9a">authentication md5</span></div>
+          <div><span style="color:#4eff9a">key-string</span> <span style="color:#fff">S3cr3tK3y!</span></div>
+          <div style="margin-top:3px;color:#555"># VRRP equivalent:</div>
+          <div><span style="color:#22d3ee">vrrp</span> <span style="color:#f59e0b">1</span> <span style="color:#22d3ee">authentication md5</span></div>
+          <div><span style="color:#22d3ee">key-string</span> <span style="color:#fff">S3cr3tK3y!</span></div>
+        </div>
+        <div style="font-size:6px;color:#666;line-height:1.8">Hellos without valid HMAC-MD5 are silently dropped.<br>Attacker's priority=255 packet → rejected → attack fails.</div>
+      </div>
+
+      <!-- other hardening -->
+      <div class="card" id="s5-harden">
+        <div style="font-size:7px;color:#f59e0b;margin-bottom:5px">OTHER HARDENING</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">
+          • port security: limit MACs on access ports<br>
+          • DHCP snooping: block rogue DHCP servers<br>
+          • dynamic ARP inspection: validate ARP packets<br>
+          • HSRP on mgmt VLAN only, not user VLANs
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">HSRP hijack: send priority 255 → become Active</div>
+    <div class="ih rd">fix: standby 1 authentication md5 key-string.<br>unauthenticated hellos silently dropped.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">MITM</div><div class="sl">ATTACK<br>IMPACT</div></div>
+    <div class="sc"><div class="sv gn">MD5</div><div class="sl">AUTH<br>FIX</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">PACKETS<br>PASS W/ MD5</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playS5()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  [playS1,playS2,playS3,playS4,playS5][n-1]();
+}
+
+// ── SCENE 1 ───────────────────────────────────
+function playS1(){
+  clearT();
+  const gw=document.getElementById('s1-gw');
+  gw.className='rtr active-rtr';
+  gw.querySelector('.rtr-badge').textContent='ONLINE';
+  gw.querySelector('.rtr-badge').style.borderColor='#4eff9a';
+  gw.querySelector('.rtr-badge').style.color='#4eff9a';
+  document.getElementById('s1-fail-box').style.opacity='0';
+  document.getElementById('s1-solution').style.opacity='0';
+
+  // animate some packets flowing up
+  const fly=document.getElementById('s1-fly');
+  fly.innerHTML='';
+  for(let i=0;i<4;i++){
+    T(()=>{
+      const p=document.createElement('div');
+      p.className='pkt';
+      p.style.cssText=`left:${20+i*22}%;bottom:40px;background:#4eff9a20;border-color:#4eff9a;color:#4eff9a`;
+      p.textContent='▲';
+      fly.appendChild(p);
+      setTimeout(()=>{p.style.bottom='85%';p.style.opacity='0';},600);
+      setTimeout(()=>p.remove(),1200);
+    },i*300+400);
+  }
+
+  // gateway fails
+  T(()=>{
+    gw.className='rtr dead-rtr';
+    gw.querySelector('.rtr-badge').textContent='DEAD ✗';
+    gw.querySelector('.rtr-badge').style.borderColor='#e85050';
+    gw.querySelector('.rtr-badge').style.color='#e85050';
+    document.getElementById('s1-fail-box').style.opacity='1';
+  },2800);
+
+  T(()=>{ document.getElementById('s1-solution').style.opacity='1'; },4200);
+}
+
+// ── SCENE 2 ───────────────────────────────────
+function playS2(){
+  clearT();
+  // reset routers
+  const ra=document.getElementById('s2-ra');
+  const rb=document.getElementById('s2-rb');
+  ra.className='rtr standby-rtr';
+  rb.className='rtr active-rtr';
+  document.getElementById('s2-ra-badge').textContent='STANDBY';
+  document.getElementById('s2-ra-badge').style.borderColor='#555';
+  document.getElementById('s2-ra-badge').style.color='#555';
+  document.getElementById('s2-rb-badge').textContent='ACTIVE';
+  document.getElementById('s2-rb-badge').style.borderColor='#4eff9a';
+  document.getElementById('s2-rb-badge').style.color='#4eff9a';
+  document.getElementById('s2-vip').className='vip-bubble';
+  document.getElementById('s2-vip-owner').textContent='owner: R2';
+  document.getElementById('s2-status-text').textContent='HSRP Group 1 · R2 Active (pri=110) · R1 Standby (pri=100)';
+  ['tl1','tl2','tl3','tl4','tl5'].forEach(id=>document.getElementById(id).classList.remove('show'));
+
+  // hello bar animation (loop)
+  function runHello(){
+    const bar=document.getElementById('s2-hbar');
+    bar.style.transition='none';
+    bar.style.width='100%';
+    setTimeout(()=>{
+      bar.style.transition='width 3s linear';
+      bar.style.width='0%';
+    },50);
+  }
+  runHello();
+  T(runHello, 3100);
+
+  // show timeline events
+  T(()=>{ document.getElementById('tl1').classList.add('show'); },500);
+
+  // t=4s: R2 crashes
+  T(()=>{
+    document.getElementById('tl2').classList.add('show');
+    rb.className='rtr dead-rtr';
+    document.getElementById('s2-rb-badge').textContent='DEAD ✗';
+    document.getElementById('s2-rb-badge').style.borderColor='#e85050';
+    document.getElementById('s2-rb-badge').style.color='#e85050';
+    document.getElementById('s2-status-text').textContent='R2 DEAD · R1 starting dead timer (10s)…';
+    document.getElementById('s2-hbar').style.transition='none';
+    document.getElementById('s2-hbar').style.width='0%';
+  },1800);
+
+  // dead timer countdown
+  T(()=>{
+    const bar=document.getElementById('s2-hbar');
+    bar.style.background='#e85050';
+    bar.style.transition='none';
+    bar.style.width='100%';
+    setTimeout(()=>{
+      bar.style.transition='width 2.5s linear';
+      bar.style.width='0%';
+    },50);
+  },2000);
+
+  // t=14s: R1 takes over
+  T(()=>{
+    document.getElementById('tl3').classList.add('show');
+    ra.className='rtr new-active';
+    document.getElementById('s2-ra-badge').textContent='ACTIVE ✓';
+    document.getElementById('s2-ra-badge').style.borderColor='#4eff9a';
+    document.getElementById('s2-ra-badge').style.color='#4eff9a';
+    document.getElementById('s2-status-text').textContent='R1 now ACTIVE · sending Gratuitous ARP for 10.0.0.1…';
+    document.getElementById('s2-vip-owner').textContent='owner: R1';
+    document.getElementById('s2-vip').className='vip-bubble transferred';
+  },4800);
+
+  // GARP rings
+  T(()=>{
+    document.getElementById('tl4').classList.add('show');
+    const layer=document.getElementById('s2-garp-layer');
+    for(let i=0;i<3;i++){
+      setTimeout(()=>{
+        const ring=document.createElement('div');
+        ring.className='garp-ring';
+        const size=40+i*30;
+        ring.style.cssText=`width:${size}px;height:${size}px;margin-left:${-size/2}px;margin-top:${-size/2}px`;
+        layer.appendChild(ring);
+        setTimeout(()=>ring.remove(),900);
+      },i*250);
+    }
+  },5100);
+
+  T(()=>{ document.getElementById('tl5').classList.add('show'); },5700);
+}
+
+// ── SCENE 3 ───────────────────────────────────
+function playS3(){
+  clearT();
+  ['pr1','pr2'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+  document.getElementById('s3-preempt').classList.remove('show');
+  document.getElementById('s3-diff').classList.remove('show');
+
+  T(()=>{ document.getElementById('pr1').classList.add('show'); },400);
+  T(()=>{ document.getElementById('pr2').classList.add('show'); },900);
+  T(()=>{ document.getElementById('s3-preempt').classList.add('show'); },1600);
+  T(()=>{ document.getElementById('s3-diff').classList.add('show'); },2600);
+}
+
+// ── SCENE 4 ───────────────────────────────────
+function playS4(){
+  clearT();
+  const r1box=document.getElementById('s4-r1-box');
+  r1box.style.borderColor='#555';
+  r1box.querySelector('div:last-child').textContent='R1 STANDBY';
+  r1box.querySelector('div:last-child').style.color='#555';
+  document.getElementById('s4-broadcast-line').style.opacity='0';
+  document.getElementById('s4-garp-rings').innerHTML='';
+  document.getElementById('s4-arp-vip').textContent='→ AA:BB:CC:11:22:33 (R2)';
+  document.getElementById('s4-arp-vip').style.color='#e85050';
+  document.getElementById('s4-arp-after').classList.remove('show');
+  document.getElementById('s4-pkt-fmt').classList.remove('show');
+
+  T(()=>{
+    // R1 becomes active
+    r1box.style.borderColor='#4eff9a';
+    r1box.querySelector('div:last-child').textContent='R1 ACTIVE ✓';
+    r1box.querySelector('div:last-child').style.color='#4eff9a';
+  },1000);
+
+  // GARP rings
+  T(()=>{
+    const layer=document.getElementById('s4-garp-rings');
+    for(let i=0;i<4;i++){
+      setTimeout(()=>{
+        const ring=document.createElement('div');
+        ring.className='garp-ring';
+        const s=30+i*35;
+        ring.style.cssText=`width:${s}px;height:${s}px;margin-left:${-s/2}px;margin-top:${-s/2}px`;
+        layer.appendChild(ring);
+        setTimeout(()=>ring.remove(),900);
+      },i*200);
+    }
+    document.getElementById('s4-broadcast-line').style.opacity='1';
+  },1600);
+
+  // ARP table updates
+  T(()=>{
+    const vip=document.getElementById('s4-arp-vip');
+    vip.textContent='→ DD:EE:FF:44:55:66 (R1) ← UPDATED';
+    vip.style.color='#4eff9a';
+    document.getElementById('s4-arp-after').classList.add('show');
+  },2800);
+
+  T(()=>{ document.getElementById('s4-pkt-fmt').classList.add('show'); },3600);
+}
+
+// ── SCENE 5 ───────────────────────────────────
+function playS5(){
+  clearT();
+  document.getElementById('s5-apkt').style.opacity='0';
+  document.getElementById('s5-takeover-msg').style.opacity='0';
+  document.getElementById('s5-what').classList.remove('show');
+  document.getElementById('s5-defence').classList.remove('show');
+  document.getElementById('s5-harden').classList.remove('show');
+
+  T(()=>{ document.getElementById('s5-apkt').style.opacity='1'; },600);
+  T(()=>{ document.getElementById('s5-takeover-msg').style.opacity='1'; },1400);
+  T(()=>{ document.getElementById('s5-what').classList.add('show'); },2200);
+  T(()=>{ document.getElementById('s5-defence').classList.add('show'); },3200);
+  T(()=>{ document.getElementById('s5-harden').classList.add('show'); },4200);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

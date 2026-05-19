@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Multi-stage Docker Builds — Shrink Your Image by 90%</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2e}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060810;border:1px solid #0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}
+
+/* Layer content blocks */
+.content-row{
+  display:flex;align-items:center;gap:5px;padding:3px 6px;border-radius:2px;
+  opacity:0;transform:translateX(-6px);
+  transition:opacity .25s ease,transform .25s ease;
+}
+.content-row.visible{opacity:1;transform:translateX(0)}
+
+/* artifact arrow */
+.art-beam{stroke-dasharray:200;stroke-dashoffset:200;transition:stroke-dashoffset .8s ease-out}
+.art-beam.go{stroke-dashoffset:0}
+
+/* size shrink animation */
+@keyframes shrinkBar{from{width:100%}}
+@keyframes growBar{from{width:0%}}
+
+/* terminal line */
+.tl{opacity:0;transition:opacity .25s}
+.tl.visible{opacity:1}
+
+/* comparison row */
+.cmp-row{
+  opacity:0;transform:translateY(6px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.cmp-row.visible{opacity:1;transform:translateY(0)}
+
+/* benefit card */
+.ben-card{
+  opacity:0;transform:translateY(8px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.ben-card.visible{opacity:1;transform:translateY(0)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* image shrink visual */
+@keyframes imageSquish{
+  0%{width:200px;background:#200808}
+  100%{width:28px;background:#0a1a0d}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SCENE 1: HOOK ═══════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">MULTI-STAGE BUILDS</div>
+    <div class="hdr-sub">SHRINK IMAGE 90% · FASTER DEPLOYS · LESS ATTACK SURFACE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">900MB IMAGE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero -->
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">THE RULE</div>
+        <div style="font-size:9px;color:#ffcccc;line-height:1.9;margin-bottom:8px">YOUR PRODUCTION IMAGE<br>SHOULD NOT CONTAIN<br>YOUR COMPILER</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Shipping npm, gcc, and source code<br>to production is like delivering<br>a pizza in the delivery truck.</div>
+      </div>
+
+      <!-- size visual -->
+      <div id="s1-sizes" style="opacity:0;transition:opacity .5s;border:1px solid #1a1a2e;border-radius:3px;padding:12px;background:#04060c">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:10px;text-align:center">IMAGE SIZE COMPARISON</div>
+
+        <div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:7px;color:#e85050">WITHOUT multi-stage</span>
+            <span style="font-size:8px;color:#e85050">900 MB</span>
+          </div>
+          <div style="height:24px;background:#1a0808;border:1px solid #2a0808;border-radius:2px;overflow:hidden">
+            <div id="s1-big-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#e85050,#c03030);transition:width 1.2s ease-out;display:flex;align-items:center;padding:0 6px">
+              <span id="s1-big-lbl" style="font-size:6px;color:#fff;opacity:0;transition:opacity .3s .8s;white-space:nowrap">node:18 + npm + src + dev deps + compilers</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:7px;color:#4eff9a">WITH multi-stage</span>
+            <span style="font-size:8px;color:#4eff9a">50 MB</span>
+          </div>
+          <div style="height:24px;background:#0a1a0d;border:1px solid #0d3010;border-radius:2px;overflow:hidden">
+            <div id="s1-small-bar" style="height:100%;width:0%;background:linear-gradient(90deg,#4eff9a,#20c060);transition:width 1.2s .2s ease-out;display:flex;align-items:center;padding:0 6px">
+              <span id="s1-small-lbl" style="font-size:6px;color:#000;opacity:0;transition:opacity .3s 1s;white-space:nowrap">node:alpine + dist/ + prod deps only</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:center;margin-top:8px">
+          <span style="font-size:8px;color:#4eff9a">18× smaller · 18× faster to pull · 18× less to scan</span>
+        </div>
+      </div>
+
+      <!-- what you're shipping -->
+      <div id="s1-whats-in" style="opacity:0;transition:opacity .5s;border:1px solid #1a1a2e;border-radius:3px;padding:10px;background:#04060c">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px">WHAT'S IN A NAIVE IMAGE</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #2a0808;border-radius:2px;padding:7px;background:#0d0404">
+            <div style="font-size:7px;color:#e85050;margin-bottom:5px">NEEDED IN PROD</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">dist/ compiled files<br>prod node_modules<br>node runtime</div>
+            <div style="font-size:7px;color:#4eff9a;margin-top:5px">~50 MB</div>
+          </div>
+          <div style="flex:1;border:1px solid #2a0808;border-radius:2px;padding:7px;background:#0d0404">
+            <div style="font-size:7px;color:#e85050;margin-bottom:5px">NOT NEEDED ✕</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">TypeScript compiler<br>dev dependencies<br>source .ts files<br>test files · .git</div>
+            <div style="font-size:7px;color:#e85050;margin-top:5px">~850 MB wasted</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE THE SOLUTION
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">THE PROBLEM</div>
+    <div class="ih rd">Build tools don't belong in production images</div>
+    <div class="il" style="font-size:7px">Every extra MB is slower pulls, larger attack surface, more CVEs to scan, bigger storage costs. Multi-stage eliminates all of it with a single Dockerfile pattern.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">900MB</div><div class="sl">naive image<br>size</div></div>
+    <div class="sc"><div class="sv gn">50MB</div><div class="sl">multi-stage<br>image size</div></div>
+    <div class="sc"><div class="sv am">18×</div><div class="sl">smaller<br>after fix</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 2: THE TWO-STAGE DIAGRAM ═══════════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">TWO STAGES — ONE DOCKERFILE</div>
+    <div class="hdr-sub">BUILDER STAGE → RUNTIME STAGE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DIAGRAM</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">THE PATTERN</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Two-stage SVG diagram -->
+      <div id="s2-diagram" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px;text-align:center">MULTI-STAGE BUILD FLOW</div>
+        <svg width="330" height="178" viewBox="0 0 330 178">
+          <!-- BUILDER STAGE -->
+          <rect x="4" y="4" width="138" height="170" rx="5" fill="#0d0a18" stroke="#e8a020" stroke-width="2"/>
+          <text x="73" y="18" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5">BUILDER</text>
+          <text x="73" y="28" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">AS builder</text>
+
+          <!-- builder contents - stacked bars representing size -->
+          <rect id="s2-node" x="10" y="34" width="126" height="20" rx="2" fill="#1a0d00" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s2-node-t" x="73" y="47" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">node:18 · 350MB</text>
+
+          <rect id="s2-devdep" x="10" y="57" width="126" height="20" rx="2" fill="#1a0808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s2-devdep-t" x="73" y="70" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">dev deps · 280MB</text>
+
+          <rect id="s2-src" x="10" y="80" width="126" height="20" rx="2" fill="#1a0808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s2-src-t" x="73" y="93" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">src/ .ts files · 5MB</text>
+
+          <rect id="s2-tsc" x="10" y="103" width="126" height="20" rx="2" fill="#1a0808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s2-tsc-t" x="73" y="116" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="4" opacity="0">TypeScript · 50MB</text>
+
+          <!-- compiled output -->
+          <rect id="s2-dist" x="10" y="126" width="126" height="20" rx="2" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s2-dist-t" x="73" y="139" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">dist/ compiled · 2MB ← KEEP</text>
+
+          <!-- total size -->
+          <text id="s2-btotal" x="73" y="162" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">Total: ~900MB</text>
+          <text id="s2-btotal2" x="73" y="172" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3" opacity="0">discarded after build</text>
+
+          <!-- ARROW: only dist/ copies over -->
+          <path id="s2-arrow" d="M140,136 L188,100" stroke="#4eff9a" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200" marker-end="url(#arrGn)"/>
+          <text id="s2-copy-lbl" x="164" y="110" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">COPY</text>
+          <text id="s2-copy-lbl2" x="164" y="120" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">--from=</text>
+          <text id="s2-copy-lbl3" x="164" y="130" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">builder</text>
+
+          <!-- X marks for what doesn't copy -->
+          <text id="s2-x1" x="156" y="55" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="8" opacity="0">✕</text>
+          <text id="s2-x2" x="156" y="78" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="8" opacity="0">✕</text>
+          <text id="s2-x3" x="156" y="101" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="8" opacity="0">✕</text>
+
+          <!-- RUNTIME STAGE -->
+          <rect x="192" y="64" width="134" height="110" rx="5" fill="#040c04" stroke="#4eff9a" stroke-width="2"/>
+          <text x="259" y="78" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5">RUNTIME</text>
+          <text x="259" y="88" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">final image</text>
+
+          <!-- runtime contents -->
+          <rect id="s2-rnode" x="198" y="94" width="122" height="18" rx="2" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2-rnode-t" x="259" y="106" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">node:18-alpine · 42MB</text>
+
+          <rect id="s2-rdist" x="198" y="115" width="122" height="18" rx="2" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s2-rdist-t" x="259" y="127" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">dist/ (from builder) · 2MB</text>
+
+          <rect id="s2-rprod" x="198" y="136" width="122" height="18" rx="2" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2-rprod-t" x="259" y="148" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">prod deps · 6MB</text>
+
+          <!-- total runtime size -->
+          <text id="s2-rtotal" x="259" y="166" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">Total: ~50MB ✓</text>
+
+          <defs>
+            <marker id="arrGn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">The <span class="am">builder stage</span> has everything needed to compile: full node, TypeScript, devDependencies, source. It produces dist/. Then it's <span class="rd">thrown away entirely.</span></div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text"><span class="gn">COPY --from=builder</span> copies only the compiled artifacts from the builder stage. The runtime stage starts fresh from a tiny alpine base and receives just what production needs.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">The builder image <span class="cy">never gets pushed to your registry</span>. Docker handles it internally. You write one Dockerfile, run one <span class="cy">docker build</span>, get one tiny image. No scripts needed.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">THE KEY INSTRUCTION</div>
+    <div class="ih">COPY --from=builder /app/dist ./dist</div>
+    <div class="il" style="font-size:7px">That one flag -- from=builder -- is the entire magic. It copies files across stage boundaries. Everything else in the builder stage evaporates. No traces in the final image.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">BUILDER</div><div class="sl">full toolchain<br>900MB</div></div>
+    <div class="sc"><div class="sv">→</div><div class="sl">COPY only<br>artifacts</div></div>
+    <div class="sc"><div class="sv gn">RUNTIME</div><div class="sl">alpine slim<br>50MB</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 3: THE DOCKERFILE ═══════════════ -->
+<div class="scene" id="s3" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4eff9a">THE DOCKERFILE</div>
+    <div class="hdr-sub">NODE + TYPESCRIPT — COPY-PASTE READY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">CODE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COPY-PASTE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Full Dockerfile -->
+      <div id="s3-file" style="border:2px solid #4eff9a;border-radius:3px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0d2010;font-size:6px;color:#4eff9a">Dockerfile — multi-stage Node/TypeScript</div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div class="tl" id="l1" style="color:#555"># ═══════════════ STAGE 1: BUILD ═══════════════</div>
+          <div class="tl" id="l2" style="color:#4ec9e1">FROM node:18 <span style="color:#e8a020">AS builder</span></div>
+          <div class="tl" id="l3" style="color:#4ec9e1">WORKDIR /app</div>
+          <div style="margin:2px 0"></div>
+          <div class="tl" id="l4" style="color:#555"># cache layer: deps change rarely</div>
+          <div class="tl" id="l5" style="color:#4eff9a">COPY package*.json ./</div>
+          <div class="tl" id="l6" style="color:#4eff9a">RUN npm ci</div>
+          <div style="margin:2px 0"></div>
+          <div class="tl" id="l7" style="color:#555"># source code changes often — last</div>
+          <div class="tl" id="l8" style="color:#4eff9a">COPY . .</div>
+          <div class="tl" id="l9" style="color:#4eff9a">RUN npm run build</div>
+          <div style="margin:6px 0;border-top:1px dashed #0d2010"></div>
+          <div class="tl" id="l10" style="color:#555"># ═══════════════ STAGE 2: RUNTIME ═══════════════</div>
+          <div class="tl" id="l11" style="color:#4ec9e1">FROM node:18-alpine</div>
+          <div class="tl" id="l12" style="color:#4ec9e1">WORKDIR /app</div>
+          <div class="tl" id="l13" style="color:#4ec9e1">ENV NODE_ENV=production</div>
+          <div style="margin:2px 0"></div>
+          <div class="tl" id="l14" style="color:#555"># prod deps only</div>
+          <div class="tl" id="l15" style="color:#4eff9a">COPY package*.json ./</div>
+          <div class="tl" id="l16" style="color:#4eff9a">RUN npm ci --omit=dev</div>
+          <div style="margin:2px 0"></div>
+          <div class="tl" id="l17" style="color:#555"># ← THE MAGIC: copy only built artifacts</div>
+          <div class="tl" id="l18" style="color:#4eff9a">COPY <span style="color:#e8a020">--from=builder</span> /app/dist ./dist</div>
+          <div style="margin:2px 0"></div>
+          <div class="tl" id="l19" style="color:#555"># non-root for security</div>
+          <div class="tl" id="l20" style="color:#4ec9e1">USER node</div>
+          <div class="tl" id="l21" style="color:#4ec9e1">EXPOSE 3000</div>
+          <div class="tl" id="l22" style="color:#4ec9e1">CMD ["node","dist/index.js"]</div>
+        </div>
+      </div>
+
+      <!-- quick annotations -->
+      <div id="s3-ann" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">KEY LINES EXPLAINED</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:6px">
+          <div class="tl" id="a1" style="color:#888;line-height:1.8"><span style="color:#e8a020">AS builder</span> → names the stage so we can reference it later</div>
+          <div class="tl" id="a2" style="color:#888;line-height:1.8"><span style="color:#4ec9e1">node:18-alpine</span> → 42MB vs 350MB for node:18. Alpine Linux is minimal.</div>
+          <div class="tl" id="a3" style="color:#888;line-height:1.8"><span style="color:#4eff9a">--omit=dev</span> → installs only dependencies, not devDependencies. ~10× smaller.</div>
+          <div class="tl" id="a4" style="color:#888;line-height:1.8"><span style="color:#e8a020">--from=builder</span> → cross-stage file copy. This is the entire multi-stage mechanism.</div>
+          <div class="tl" id="a5" style="color:#888;line-height:1.8"><span style="color:#4ec9e1">USER node</span> → run as non-root. Security best practice. node user exists in alpine.</div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">💡</div>
+        <div class="step-text">You can have <span class="gn">more than 2 stages</span> — e.g. a test stage between builder and runtime. Docker skips intermediate stages not referenced by the final stage unless you explicitly target them.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">BONUS: npm ci --omit=dev</div>
+    <div class="ih gn">Installs only production dependencies</div>
+    <div class="il" style="font-size:7px">devDependencies (TypeScript, ESLint, Jest, etc.) can be 10× larger than prod deps. --omit=dev (formerly --production) strips them. Combine with --from=builder and you save hundreds of MB.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">AS name</div><div class="sl">name stages<br>to reference</div></div>
+    <div class="sc"><div class="sv gn">--from=</div><div class="sl">copy across<br>stages</div></div>
+    <div class="sc"><div class="sv cy">alpine</div><div class="sl">42MB vs<br>350MB</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 4: BENEFITS + PATTERNS ═══════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">BENEFITS & PATTERNS</div>
+    <div class="hdr-sub">SPEED · SECURITY · LANGUAGE EXAMPLES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WIN EVERYWHERE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s4-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">THREE REASONS TO USE MULTI-STAGE</div>
+
+      <!-- benefit cards -->
+      <div class="ben-card" id="b1" style="border:2px solid #4eff9a;border-radius:3px;padding:11px;background:#040c04">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">🚀</span>
+          <div style="font-size:8px;color:#4eff9a">FASTER DEPLOYS</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">50MB pulls 18× faster than 900MB. On a 100Mbps connection: <span style="color:#4eff9a">4 seconds vs 72 seconds</span>. In Kubernetes with 50 pods scaling up simultaneously: 3.3 minutes saved per rollout.</div>
+      </div>
+
+      <div class="ben-card" id="b2" style="border:2px solid #4ec9e1;border-radius:3px;padding:11px;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">🔒</span>
+          <div style="font-size:8px;color:#4ec9e1">SMALLER ATTACK SURFACE</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">Fewer packages = fewer CVEs. A TypeScript compiler in production is dead code that attackers can exploit. No compiler = no RCE via compiler bugs. <span style="color:#4ec9e1">No source code = no IP theft via container escape.</span></div>
+      </div>
+
+      <div class="ben-card" id="b3" style="border:2px solid #e8a020;border-radius:3px;padding:11px;background:#0c0800">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">💰</span>
+          <div style="font-size:8px;color:#e8a020">LOWER STORAGE COSTS</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.9">ECR/GCR/ACR charge per GB stored. 10 image versions × 50MB vs 900MB = <span style="color:#e8a020">$0.50 vs $9 per month</span>. Multiply by 50 services. Savings compound fast with many microservices.</div>
+      </div>
+
+      <!-- language pattern table -->
+      <div id="s4-langs" style="border:1px solid #0d1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">WHAT TO COPY → FOR EACH LANGUAGE</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #0a1a2e;padding-bottom:4px;margin-bottom:5px">
+          <div style="font-size:6px;color:#4ec9e1;width:70px">LANGUAGE</div>
+          <div style="font-size:6px;color:#4ec9e1;width:90px">BUILD OUTPUT</div>
+          <div style="font-size:6px;color:#4ec9e1;flex:1">COPY --from= line</div>
+        </div>
+        <div class="cmp-row" id="cr1" style="display:flex;padding:3px 0;border-bottom:1px solid #060c10">
+          <div style="font-size:6px;color:#4ec9e1;width:70px">Node/TS</div>
+          <div style="font-size:6px;color:#888;width:90px">dist/</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">COPY --from=b /app/dist ./dist</div>
+        </div>
+        <div class="cmp-row" id="cr2" style="display:flex;padding:3px 0;border-bottom:1px solid #060c10">
+          <div style="font-size:6px;color:#e8a020;width:70px">Go</div>
+          <div style="font-size:6px;color:#888;width:90px">./server (binary)</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">COPY --from=b /app/server .</div>
+        </div>
+        <div class="cmp-row" id="cr3" style="display:flex;padding:3px 0;border-bottom:1px solid #060c10">
+          <div style="font-size:6px;color:#a060c0;width:70px">Rust</div>
+          <div style="font-size:6px;color:#888;width:90px">target/release/app</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">COPY --from=b /target/release/app .</div>
+        </div>
+        <div class="cmp-row" id="cr4" style="display:flex;padding:3px 0;border-bottom:1px solid #060c10">
+          <div style="font-size:6px;color:#4ec9e1;width:70px">Java</div>
+          <div style="font-size:6px;color:#888;width:90px">app.jar</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">COPY --from=b /app/target/*.jar app.jar</div>
+        </div>
+        <div class="cmp-row" id="cr5" style="display:flex;padding:3px 0">
+          <div style="font-size:6px;color:#e85050;width:70px">React</div>
+          <div style="font-size:6px;color:#888;width:90px">build/ (nginx)</div>
+          <div style="font-size:6px;color:#4eff9a;flex:1">COPY --from=b /app/build /usr/share/nginx/html</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">GO FURTHER</div>
+    <div class="ih gn">Go and Rust binaries are ~0 dependencies</div>
+    <div class="il" style="font-size:7px">Go/Rust produce static binaries. Copy them into FROM scratch (empty image) or FROM gcr.io/distroless/static. Final image: ~5MB. No shell, no package manager, no attack surface at all.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">5MB</div><div class="sl">Go/Rust into<br>scratch image</div></div>
+    <div class="sc"><div class="sv cy">18×</div><div class="sl">fewer CVEs<br>to scan</div></div>
+    <div class="sc"><div class="sv am">$$$</div><div class="sl">registry storage<br>savings</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+const tl=id=>{const el=document.getElementById(id);if(el)el.classList.add('visible');}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-sizes','s1-whats-in','s1-cta'].forEach(id=>setOp(id,'0'));
+    const b=document.getElementById('s1-big-bar');if(b){b.style.transition='none';b.style.width='0%';}
+    const g=document.getElementById('s1-small-bar');if(g){g.style.transition='none';g.style.width='0%';}
+    const bl=document.getElementById('s1-big-lbl');if(bl)bl.style.opacity='0';
+    const sl=document.getElementById('s1-small-lbl');if(sl)sl.style.opacity='0';
+  }
+  if(n===2){
+    setOp('s2-diagram','0');
+    ['s2-s1','s2-s2','s2-s3'].forEach(id=>rmV(id));
+    const svgIds=['s2-node','s2-node-t','s2-devdep','s2-devdep-t','s2-src','s2-src-t',
+     's2-tsc','s2-tsc-t','s2-dist','s2-dist-t','s2-btotal','s2-btotal2',
+     's2-copy-lbl','s2-copy-lbl2','s2-copy-lbl3','s2-x1','s2-x2','s2-x3',
+     's2-rnode','s2-rnode-t','s2-rdist','s2-rdist-t','s2-rprod','s2-rprod-t','s2-rtotal'];
+    svgIds.forEach(id=>svgOp(id,'0'));
+    resetBeam('s2-arrow');
+  }
+  if(n===3){
+    setOp('s3-file','0'); setOp('s3-ann','0');
+    rmV('s3-s1');
+    for(let i=1;i<=22;i++){const el=document.getElementById('l'+i);if(el)el.classList.remove('visible');}
+    ['a1','a2','a3','a4','a5'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    setOp('s4-title','0'); setOp('s4-langs','0');
+    ['b1','b2','b3'].forEach(id=>rmV(id));
+    ['cr1','cr2','cr3','cr4','cr5'].forEach(id=>rmV(id));
+  }
+}
+
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>{
+      setOp('s1-sizes','1');
+      delay(()=>{
+        const b=document.getElementById('s1-big-bar');
+        const g=document.getElementById('s1-small-bar');
+        const bl=document.getElementById('s1-big-lbl');
+        const sl=document.getElementById('s1-small-lbl');
+        if(b){b.style.transition='width 1.2s ease-out';b.style.width='100%';}
+        if(g){g.style.transition='width 1.2s .2s ease-out';g.style.width='5.5%';}
+        if(bl) bl.style.opacity='1';
+        if(sl) sl.style.opacity='1';
+      },100);
+    },900);
+    delay(()=>setOp('s1-whats-in','1'),1900);
+    delay(()=>setOp('s1-cta','1'),2700);
+  }
+
+  if(n===2){
+    delay(()=>setOp('s2-diagram','1'),200);
+    // builder contents appear
+    delay(()=>{ svgOp('s2-node','1'); svgOp('s2-node-t','1'); },600);
+    delay(()=>{ svgOp('s2-devdep','1'); svgOp('s2-devdep-t','1'); },900);
+    delay(()=>{ svgOp('s2-src','1'); svgOp('s2-src-t','1'); },1100);
+    delay(()=>{ svgOp('s2-tsc','1'); svgOp('s2-tsc-t','1'); },1300);
+    delay(()=>{ svgOp('s2-dist','1'); svgOp('s2-dist-t','1'); },1600);
+    delay(()=>{ svgOp('s2-btotal','1'); svgOp('s2-btotal2','1'); },1900);
+    // arrow + x marks
+    delay(()=>{
+      goBeam('s2-arrow',600);
+      svgOp('s2-copy-lbl','1'); svgOp('s2-copy-lbl2','1'); svgOp('s2-copy-lbl3','1');
+    },2200);
+    delay(()=>{ svgOp('s2-x1','1'); svgOp('s2-x2','1'); svgOp('s2-x3','1'); },2500);
+    // runtime stage appears
+    delay(()=>{ svgOp('s2-rnode','1'); svgOp('s2-rnode-t','1'); },2800);
+    delay(()=>{ svgOp('s2-rdist','1'); svgOp('s2-rdist-t','1'); },3000);
+    delay(()=>{ svgOp('s2-rprod','1'); svgOp('s2-rprod-t','1'); },3200);
+    delay(()=>svgOp('s2-rtotal','1'),3500);
+    delay(()=>addV('s2-s1'),700);
+    delay(()=>addV('s2-s2'),1700);
+    delay(()=>addV('s2-s3'),2800);
+  }
+
+  if(n===3){
+    delay(()=>setOp('s3-file','1'),200);
+    for(let i=1;i<=22;i++) delay(()=>tl('l'+i),400+i*150);
+    delay(()=>{
+      setOp('s3-ann','1');
+      ['a1','a2','a3','a4','a5'].forEach((id,i)=>delay(()=>tl(id),i*200));
+    },3800);
+    delay(()=>addV('s3-s1'),3600);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-title','1'),200);
+    delay(()=>addV('b1'),500);
+    delay(()=>addV('b2'),1000);
+    delay(()=>addV('b3'),1500);
+    delay(()=>{
+      setOp('s4-langs','1');
+      ['cr1','cr2','cr3','cr4','cr5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },2100);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

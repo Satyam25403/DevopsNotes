@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Keepalived & Virtual IPs</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.rd{border-color:#e85050}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── server node ── */
+.srv{
+  border:2px solid #2a1f3d;border-radius:4px;
+  padding:9px 8px;display:flex;flex-direction:column;align-items:center;gap:4px;
+  transition:border-color .4s,background .4s,opacity .4s;
+  position:relative;
+}
+.srv-icon{font-size:20px;line-height:1}
+.srv-name{font-size:8px;text-align:center}
+.srv-ip{font-size:6px;color:#555;text-align:center;line-height:1.7}
+.srv-role-badge{font-size:6px;padding:2px 6px;border-radius:2px;text-align:center;margin-top:2px}
+.srv-priority{font-size:7px;text-align:center;margin-top:1px}
+.srv.master-srv{border-color:#4eff9a;background:#4eff9a0d}
+.srv.backup-srv{border-color:#4ec9e1;background:#4ec9e10d}
+.srv.dead-srv{border-color:#e85050;background:#e8505018;opacity:.6}
+.srv.new-master{border-color:#4eff9a;background:#4eff9a15;animation:mglow 1s ease-in-out 3}
+@keyframes mglow{0%,100%{box-shadow:0 0 0 0 #4eff9a30}50%{box-shadow:0 0 14px 4px #4eff9a40}}
+
+/* ── VIP badge ── */
+.vip-tag{
+  font-size:7px;padding:3px 8px;border-radius:2px;
+  background:#e8a02022;border:2px solid #e8a020;color:#e8a020;
+  text-align:center;transition:all .5s;white-space:nowrap;
+}
+.vip-tag.on-b{background:#4eff9a20;border-color:#4eff9a;color:#4eff9a}
+
+/* ── VRRP heartbeat beam ── */
+.hb-wrap{display:flex;align-items:center;justify-content:center;gap:4px;height:22px}
+.hb-dot{width:8px;height:8px;border-radius:50%;background:#4ec9e1;opacity:0;transition:opacity .2s}
+
+/* ── step rows ── */
+.step-row{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:7px 9px;border-radius:3px;background:#130d1e;
+  opacity:0;transition:opacity .4s;border-left:3px solid #2a1f3d;
+}
+.step-row.ok{border-color:#4eff9a}
+.step-row.warn{border-color:#e85050}
+.step-row.info{border-color:#4ec9e1}
+.step-row.am{border-color:#e8a020}
+.step-num{font-size:8px;color:#555;flex-shrink:0;min-width:14px}
+.step-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── cfg lines ── */
+.cfg{
+  font-size:7px;padding:5px 8px;background:#050c0f;
+  border-left:3px solid #4ec9e1;margin-bottom:4px;
+  opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;
+  border-radius:0 2px 2px 0;word-break:break-all;
+}
+.ck{color:#4ec9e1}
+.cv{color:#4eff9a}
+.cr{color:#e8a020}
+.ce{color:#e85050}
+
+/* ── ARP ripple ── */
+.arp-ring{
+  position:absolute;border-radius:50%;border:2px solid #e8a020;
+  opacity:0;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);
+  pointer-events:none;
+}
+
+/* ── comparison table ── */
+.cmp-row{display:flex;gap:5px;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.cmp-kw{font-size:7px;min-width:72px;flex-shrink:0;padding:5px 6px;border-radius:2px;text-align:center}
+.cmp-cell{flex:1;font-size:6px;color:#ccc;line-height:2;padding:5px 7px;background:#130d1e;border:1px solid #1a1a2a;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: Normal State — VIP on Server A ══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">KEEPALIVED & VIRTUAL IPs</div>
+    <div class="hdr-sub">SOFTWARE HA FOR ANY LINUX SERVICE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">NORMAL STATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">VIP ON SERVER A</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">The VIP floats — it doesn't belong to any physical NIC.</div>
+
+      <!-- VIP floating label -->
+      <div style="display:flex;justify-content:center">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div class="vip-tag" id="s1_vip">VIP: 10.0.0.100</div>
+          <div style="font-size:6px;color:#555" id="s1_vip_sub">↓ currently bound to</div>
+        </div>
+      </div>
+
+      <!-- Two servers -->
+      <div style="display:flex;gap:10px;align-items:flex-start">
+
+        <!-- Server A -->
+        <div class="srv master-srv" style="flex:1" id="srv_a">
+          <div class="srv-icon">🖥</div>
+          <div class="srv-name" style="color:#4eff9a">SERVER A</div>
+          <div class="srv-ip">eth0: 10.0.0.10<br>eth0:1: 10.0.0.100 ← VIP</div>
+          <div class="srv-role-badge" style="background:#4eff9a20;border:1px solid #4eff9a;color:#4eff9a">MASTER</div>
+          <div class="srv-priority" style="color:#e8a020">priority 110</div>
+        </div>
+
+        <!-- VRRP heartbeat channel -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding-top:20px">
+          <div style="font-size:6px;color:#4ec9e1;text-align:center;line-height:1.6">VRRP<br>224.0.0.18</div>
+          <div class="hb-wrap">
+            <div class="hb-dot" id="hb0"></div>
+            <div class="hb-dot" id="hb1"></div>
+            <div class="hb-dot" id="hb2"></div>
+          </div>
+          <div style="font-size:6px;color:#555;text-align:center;line-height:1.6">1s<br>advert</div>
+        </div>
+
+        <!-- Server B -->
+        <div class="srv backup-srv" style="flex:1" id="srv_b">
+          <div class="srv-icon">🖥</div>
+          <div class="srv-name" style="color:#4ec9e1">SERVER B</div>
+          <div class="srv-ip">eth0: 10.0.0.11<br>no VIP (backup)</div>
+          <div class="srv-role-badge" style="background:#4ec9e120;border:1px solid #4ec9e1;color:#4ec9e1">BACKUP</div>
+          <div class="srv-priority" style="color:#888">priority 100</div>
+        </div>
+
+      </div>
+
+      <!-- Clients pointing to VIP -->
+      <div style="display:flex;gap:6px" id="s1_clients">
+        <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:7px 6px;text-align:center;opacity:0;transition:opacity .3s" id="cl0">
+          <div style="font-size:10px">💻</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">app-1</div>
+          <div style="font-size:5px;color:#4eff9a;margin-top:2px">→ VIP:5432</div>
+        </div>
+        <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:7px 6px;text-align:center;opacity:0;transition:opacity .3s" id="cl1">
+          <div style="font-size:10px">💻</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">app-2</div>
+          <div style="font-size:5px;color:#4eff9a;margin-top:2px">→ VIP:5432</div>
+        </div>
+        <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:7px 6px;text-align:center;opacity:0;transition:opacity .3s" id="cl2">
+          <div style="font-size:10px">💻</div>
+          <div style="font-size:6px;color:#888;margin-top:3px">app-3</div>
+          <div style="font-size:5px;color:#4eff9a;margin-top:2px">→ VIP:5432</div>
+        </div>
+      </div>
+
+      <!-- Key concept -->
+      <div style="background:#e8a02015;border:2px solid #e8a020;border-radius:3px;padding:9px 11px;opacity:0;transition:opacity .4s" id="s1_concept">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">THE KEY INSIGHT</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Clients connect to <span style="color:#e8a020">10.0.0.100</span> (the VIP).<br>
+          VIP is just an alias on Server A's NIC right now.<br>
+          When A dies, the VIP <span style="color:#4eff9a">migrates</span> to B's NIC.<br>
+          Clients never know. Same IP. Same port.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Clients connect to the VIP. The VIP alias floats between physical servers.</div>
+    <div class="ih am">VRRP master (priority 110) owns the VIP. Backup (100) waits silently.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">VIP</div><div class="sl">FLOATS<br>FREELY</div></div>
+    <div class="sc"><div class="sv gn">110</div><div class="sl">MASTER<br>PRIORITY</div></div>
+    <div class="sc"><div class="sv">1s</div><div class="sl">VRRP<br>INTERVAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: Failover — A Dies, B Claims VIP ══════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">KEEPALIVED & VIRTUAL IPs</div>
+    <div class="hdr-sub">FAILOVER — GRATUITOUS ARP TAKEOVER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">SERVER A DIES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">AUTO FAILOVER</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Server A crashes. Keepalived on B detects → claims VIP in &lt;1s.</div>
+
+      <!-- Two servers with VIP tag -->
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div class="srv" id="s2_srv_a" style="width:100%">
+            <div class="srv-icon">🖥</div>
+            <div class="srv-name" id="s2_a_name" style="color:#4eff9a">SERVER A</div>
+            <div class="srv-ip" id="s2_a_ip">eth0: 10.0.0.10<br>VIP: 10.0.0.100</div>
+            <div class="srv-role-badge" id="s2_a_role" style="background:#4eff9a20;border:1px solid #4eff9a;color:#4eff9a">MASTER</div>
+          </div>
+          <div class="vip-tag" id="s2_vip_a">VIP HERE</div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding-top:18px">
+          <div style="font-size:6px;color:#4ec9e1;text-align:center">VRRP</div>
+          <div style="font-size:12px" id="s2_vrrp_icon">💓</div>
+          <div style="font-size:6px;color:#555;text-align:center" id="s2_vrrp_txt">alive</div>
+        </div>
+
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div class="srv backup-srv" id="s2_srv_b" style="width:100%">
+            <div class="srv-icon">🖥</div>
+            <div class="srv-name" id="s2_b_name" style="color:#4ec9e1">SERVER B</div>
+            <div class="srv-ip" id="s2_b_ip">eth0: 10.0.0.11<br>no VIP</div>
+            <div class="srv-role-badge" id="s2_b_role" style="background:#4ec9e120;border:1px solid #4ec9e1;color:#4ec9e1">BACKUP</div>
+          </div>
+          <div class="vip-tag" id="s2_vip_b" style="opacity:0;transition:opacity .5s">VIP HERE</div>
+        </div>
+      </div>
+
+      <!-- Step timeline -->
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <div class="step-row warn" id="st0">
+          <div class="step-num">1</div>
+          <div class="step-txt">💥 Server A crashes. VRRP advertisements stop.</div>
+        </div>
+        <div class="step-row info" id="st1">
+          <div class="step-num">2</div>
+          <div class="step-txt">⏱ Server B: no VRRP for 3s (dead_interval). Declares A down.</div>
+        </div>
+        <div class="step-row am" id="st2">
+          <div class="step-num">3</div>
+          <div class="step-txt">📡 B claims VIP. Adds <span style="color:#e8a020">10.0.0.100</span> to eth0:1.</div>
+        </div>
+        <div class="step-row ok" id="st3">
+          <div class="step-num">4</div>
+          <div class="step-txt">📢 Gratuitous ARP broadcast: <span style="color:#4eff9a">"10.0.0.100 is at MAC:B"</span>. Switches + clients flush old entry.</div>
+        </div>
+        <div class="step-row ok" id="st4">
+          <div class="step-num">5</div>
+          <div class="step-txt">✅ Clients reconnect to same IP. Failover complete in &lt;1s.</div>
+        </div>
+      </div>
+
+      <!-- ARP explainer -->
+      <div style="background:#e8a02015;border:2px solid #e8a020;border-radius:3px;padding:9px 11px;opacity:0;transition:opacity .4s" id="s2_arp">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">GRATUITOUS ARP — WHY IT MATTERS</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Normally ARP is a question: "who has 10.0.0.100?"<br>
+          Gratuitous ARP is an unsolicited announcement.<br>
+          <span style="color:#4eff9a">Every device on the LAN updates its ARP cache.</span><br>
+          New packets go to Server B's MAC instantly.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Keepalived detects failure via missed VRRP advertisements (dead_interval).</div>
+    <div class="ih">Gratuitous ARP flushes every switch and client ARP table. Sub-second takeover.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">&lt;1s</div><div class="sl">FAILOVER<br>TIME</div></div>
+    <div class="sc"><div class="sv am">GARP</div><div class="sl">MAC<br>FLUSH</div></div>
+    <div class="sc"><div class="sv">3s</div><div class="sl">DEAD<br>INTERVAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Config + VIP vs DNS Comparison ══════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">KEEPALIVED & VIRTUAL IPs</div>
+    <div class="hdr-sub">CONFIG + VIP vs DNS FAILOVER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">KEEPALIVED CONFIG</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Minimal keepalived.conf — master side:</div>
+
+      <div class="cfg" id="cf0" style="border-color:#4eff9a">
+        <span class="cr">vrrp_instance</span> VI_1 {<br>
+        &nbsp;&nbsp;state <span class="cv">MASTER</span><br>
+        &nbsp;&nbsp;interface <span class="cv">eth0</span><br>
+        &nbsp;&nbsp;virtual_router_id <span class="cv">51</span><br>
+        &nbsp;&nbsp;priority <span class="cv">110</span><br>
+        }
+      </div>
+
+      <div class="cfg" id="cf1" style="border-color:#e8a020">
+        &nbsp;&nbsp;virtual_ipaddress {<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="cv">10.0.0.100/24</span> dev eth0<br>
+        &nbsp;&nbsp;}<br>
+        &nbsp;&nbsp;track_script { <span class="cr">chk_nginx</span> }
+      </div>
+
+      <div class="cfg" id="cf2" style="border-color:#4ec9e1">
+        <span class="cr">vrrp_script</span> chk_nginx {<br>
+        &nbsp;&nbsp;script <span class="cv">"/usr/bin/pgrep nginx"</span><br>
+        &nbsp;&nbsp;interval <span class="cv">2</span> &nbsp;<span class="ce"># check every 2s</span><br>
+        &nbsp;&nbsp;weight <span class="ce">-20</span> &nbsp;<span class="ce"># drop priority if fails</span><br>
+        }
+      </div>
+
+      <!-- VIP vs DNS comparison -->
+      <div id="s3_compare" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">VIP FAILOVER vs DNS FAILOVER</div>
+
+        <div class="cmp-row" id="cr0">
+          <div class="cmp-kw" style="background:#e8a02018;border:1px solid #e8a02040;color:#e8a020">METHOD</div>
+          <div class="cmp-cell" style="text-align:center;color:#4ec9e1;font-size:7px">VIP + GARP</div>
+          <div class="cmp-cell" style="text-align:center;color:#888;font-size:7px">DNS failover</div>
+        </div>
+        <div class="cmp-row" id="cr1">
+          <div class="cmp-kw" style="background:#4eff9a18;border:1px solid #4eff9a40;color:#4eff9a">SPEED</div>
+          <div class="cmp-cell" style="color:#4eff9a">&lt;1 second<br>GARP flushes instantly</div>
+          <div class="cmp-cell" style="color:#e85050">TTL minutes<br>Clients cache old IP</div>
+        </div>
+        <div class="cmp-row" id="cr2">
+          <div class="cmp-kw" style="background:#4ec9e118;border:1px solid #4ec9e140;color:#4ec9e1">CLIENT</div>
+          <div class="cmp-cell">No reconnect<br>Same IP, same port</div>
+          <div class="cmp-cell" style="color:#e8a020">Full reconnect<br>New DNS lookup needed</div>
+        </div>
+        <div class="cmp-row" id="cr3">
+          <div class="cmp-kw" style="background:#88888818;border:1px solid #88888840;color:#888">SCOPE</div>
+          <div class="cmp-cell">Layer 2 only<br>Same broadcast domain</div>
+          <div class="cmp-cell">Global<br>Works across datacentres</div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .4s" id="s3_answer">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">INTERVIEW ANSWER</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            "Keepalived VIP gives sub-second, transparent failover within a LAN. DNS failover is TTL-bound and forces client reconnection. Use VIP for database HA, DNS for cross-region DR."
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">track_script drops priority when nginx dies — backup wins election automatically.</div>
+    <div class="ih">VIP &lt;1s failover beats DNS by orders of magnitude for same-LAN HA.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">-20</div><div class="sl">WEIGHT<br>DROP</div></div>
+    <div class="sc"><div class="sv am">2s</div><div class="sl">HEALTH<br>CHECK</div></div>
+    <div class="sc"><div class="sv">VRRP</div><div class="sl">ELECTION<br>PROTOCOL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  hide('cl0');hide('cl1');hide('cl2');hide('s1_concept');
+
+  // heartbeat animation
+  var hbIdx=0;
+  var hbIds=['hb0','hb1','hb2'];
+  function pulse(){
+    hbIds.forEach(function(id){document.getElementById(id).style.opacity='0';});
+    var el=document.getElementById(hbIds[hbIdx%3]);
+    if(el)el.style.opacity='1';
+    hbIdx++;
+  }
+  var hbIv=setInterval(pulse,350);
+  timers.push(hbIv);
+
+  delay(function(){show('cl0');},600);
+  delay(function(){show('cl1');},900);
+  delay(function(){show('cl2');},1200);
+  delay(function(){show('s1_concept');},1800);
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+
+  // reset
+  var srvA=document.getElementById('s2_srv_a');
+  var srvB=document.getElementById('s2_srv_b');
+  srvA.className='srv master-srv';
+  srvB.className='srv backup-srv';
+  document.getElementById('s2_a_name').style.color='#4eff9a';
+  document.getElementById('s2_a_role').textContent='MASTER';
+  document.getElementById('s2_a_role').style.color='#4eff9a';
+  document.getElementById('s2_a_role').style.borderColor='#4eff9a';
+  document.getElementById('s2_a_role').style.background='#4eff9a20';
+  document.getElementById('s2_a_ip').textContent='eth0: 10.0.0.10\nVIP: 10.0.0.100';
+  document.getElementById('s2_b_ip').textContent='eth0: 10.0.0.11\nno VIP';
+  document.getElementById('s2_b_role').textContent='BACKUP';
+  document.getElementById('s2_b_role').style.color='#4ec9e1';
+  document.getElementById('s2_b_role').style.borderColor='#4ec9e1';
+  document.getElementById('s2_b_role').style.background='#4ec9e120';
+  document.getElementById('s2_b_name').style.color='#4ec9e1';
+  document.getElementById('s2_vip_a').className='vip-tag';
+  document.getElementById('s2_vip_a').style.opacity='1';
+  document.getElementById('s2_vip_b').style.opacity='0';
+  document.getElementById('s2_vrrp_icon').textContent='💓';
+  document.getElementById('s2_vrrp_txt').textContent='alive';
+  document.getElementById('s2_vrrp_txt').style.color='#4eff9a';
+  document.getElementById('s2_arp').style.opacity='0';
+  ['st0','st1','st2','st3','st4'].forEach(hide);
+
+  // step 1: A crashes
+  delay(function(){
+    show('st0');
+    srvA.className='srv dead-srv';
+    document.getElementById('s2_a_name').style.color='#e85050';
+    document.getElementById('s2_a_role').textContent='DEAD';
+    document.getElementById('s2_a_role').style.color='#e85050';
+    document.getElementById('s2_a_role').style.borderColor='#e85050';
+    document.getElementById('s2_a_role').style.background='#e8505020';
+    document.getElementById('s2_vrrp_icon').textContent='💔';
+    document.getElementById('s2_vrrp_txt').textContent='silent';
+    document.getElementById('s2_vrrp_txt').style.color='#e85050';
+  },800);
+
+  // step 2: B detects
+  delay(function(){show('st1');},1800);
+
+  // step 3: B claims VIP
+  delay(function(){
+    show('st2');
+    document.getElementById('s2_vip_a').style.opacity='0';
+  },2800);
+
+  delay(function(){
+    document.getElementById('s2_vip_b').style.opacity='1';
+    document.getElementById('s2_vip_b').className='vip-tag on-b';
+    document.getElementById('s2_b_ip').textContent='eth0: 10.0.0.11\nVIP: 10.0.0.100';
+    srvB.className='srv new-master';
+    document.getElementById('s2_b_name').style.color='#4eff9a';
+    document.getElementById('s2_b_role').textContent='NEW MASTER';
+    document.getElementById('s2_b_role').style.color='#4eff9a';
+    document.getElementById('s2_b_role').style.borderColor='#4eff9a';
+    document.getElementById('s2_b_role').style.background='#4eff9a20';
+  },3400);
+
+  // step 4: GARP
+  delay(function(){show('st3');},3900);
+
+  // step 5: clients back
+  delay(function(){
+    show('st4');
+    show('s2_arp');
+  },4800);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['cf0','cf1','cf2'].forEach(hide);
+  hide('s3_compare');
+  hide('s3_answer');
+  ['cr0','cr1','cr2','cr3'].forEach(hide);
+
+  delay(function(){show('cf0');},400);
+  delay(function(){show('cf1');},1200);
+  delay(function(){show('cf2');},2000);
+  delay(function(){show('s3_compare');},2800);
+  ['cr0','cr1','cr2','cr3'].forEach(function(id,i){
+    delay(function(){show(id);},2900+i*350);
+  });
+  delay(function(){show('s3_answer');},4300);
+}
+
+playS1();
+</script>
+</body>
+</html>

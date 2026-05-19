@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SMB Signing & NTLM Relay</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#c080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+.pkt{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;transition:opacity .2s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+@keyframes shellblink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.cursor{animation:shellblink .7s step-end infinite}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.shake{animation:shake .4s ease}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1: HOOK — WHY THIS MATTERS ═══ -->
+<div class="scene active" id="s1" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505;border-bottom:1px solid #3a1010">
+    <div class="hdr-title">SMB SIGNING & NTLM RELAY</div>
+    <div class="hdr-sub">DEFAULT WINDOWS CONFIG = DOMAIN COMPROMISE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DEFAULT = VULN</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- HOOK STAT CARD -->
+      <div class="panel" id="s1_hook" style="background:#0f0000;border:2px solid #e85050;padding:12px 14px;text-align:center">
+        <div style="font-size:8px;color:#e85050;margin-bottom:8px">DEFAULT WINDOWS WORKSTATION:</div>
+        <div style="display:flex;flex-direction:column;gap:5px;text-align:left;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border-left:2px solid #e85050">
+            <span style="font-size:12px">🪟</span>
+            <div style="font-size:7px;color:#ff8080">SMB signing = <span style="color:#e85050">DISABLED</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border-left:2px solid #e85050">
+            <span style="font-size:12px">📡</span>
+            <div style="font-size:7px;color:#ff8080">LLMNR broadcasts = <span style="color:#e85050">ENABLED</span></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border-left:2px solid #e8a020">
+            <span style="font-size:12px">🔑</span>
+            <div style="font-size:7px;color:#e8a020">Result: domain user hash relayable = <span style="color:#e85050">SHELL</span></div>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#666">no password cracking required</div>
+      </div>
+
+      <!-- ATTACK CHAIN PREVIEW -->
+      <div class="panel" id="s1_chain" style="background:#0f0000;border:1px solid #2a1010">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:8px">THE 4-STEP ATTACK CHAIN:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #e85050">
+            <div style="font-size:8px;color:#e85050;flex-shrink:0;width:14px;font-family:'Press Start 2P',monospace">1</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">Victim types <span style="color:#e85050">\\fileserver</span> — typo or fake share — triggers LLMNR broadcast</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #e8a020">
+            <div style="font-size:8px;color:#e8a020;flex-shrink:0;width:14px;font-family:'Press Start 2P',monospace">2</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7"><span style="color:#e8a020">Responder</span> answers "That's me!" — captures NTLMv2 hash challenge response</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #c080ff">
+            <div style="font-size:8px;color:#c080ff;flex-shrink:0;width:14px;font-family:'Press Start 2P',monospace">3</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7"><span style="color:#c080ff">ntlmrelayx</span> forwards hash live to target workstation with signing disabled</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #4eff9a">
+            <div style="font-size:8px;color:#4eff9a;flex-shrink:0;width:14px;font-family:'Press Start 2P',monospace">4</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">Target authenticates the relay → <span style="color:#4eff9a">SYSTEM shell</span> — no hash cracking, no bruteforce</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SIGNING vs UNSIGNED -->
+      <div class="panel" id="s1_diff" style="background:#0f0000;border:1px solid #2a1010;padding:8px 10px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div style="padding:7px;background:#0a0000;border:1px solid #3a1010;text-align:center">
+            <div style="font-size:7px;color:#e85050;margin-bottom:4px">SIGNING OFF</div>
+            <div style="font-size:16px;margin-bottom:4px">🔓</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">Packet relayable<br>No MAC check<br>Attacker wins</div>
+          </div>
+          <div style="padding:7px;background:#001508;border:1px solid #0d3018;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">SIGNING ON</div>
+            <div style="font-size:16px;margin-bottom:4px">🔒</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">HMAC-SHA256<br>Session key req.<br>Relay fails</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="ih">💀 NO CRACK NEEDED — RELAY THE HASH</div>
+    <div class="il">NTLM relay works by <span style="color:#e85050">forwarding the auth handshake live</span>. The target server never knows it's talking to an attacker, not the real user.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">95%</div><div class="sl">WORKSTATIONS<br>UNSIGNED</div></div>
+    <div class="sc"><div class="sv am">0s</div><div class="sl">CRACK<br>TIME</div></div>
+    <div class="sc"><div class="sv" style="color:#c080ff">RELAY</div><div class="sl">ATTACK<br>TYPE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: STEP 1 — LLMNR POISONING WITH RESPONDER ═══ -->
+<div class="scene" id="s2" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505;border-bottom:1px solid #3a1010">
+    <div class="hdr-title">STEP 1 — LLMNR POISONING</div>
+    <div class="hdr-sub">RESPONDER ANSWERS "THAT'S ME" TO EVERY BROADCAST</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">RESPONDER</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">LLMNR POISON</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- NETWORK MAP -->
+      <div style="height:180px;position:relative;background:#0d0000;border:2px solid #3a1010;border-radius:3px">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 180">
+          <!-- broadcast ring -->
+          <circle id="bc_ring1" cx="80" cy="90" r="30" fill="none" stroke="#1a0808" stroke-width="1.5" stroke-dasharray="4,4" opacity="0"/>
+          <circle id="bc_ring2" cx="80" cy="90" r="55" fill="none" stroke="#1a0808" stroke-width="1" stroke-dasharray="3,5" opacity="0"/>
+          <!-- lines victim → attacker, victim → real server (dim) -->
+          <line id="l_va" x1="80" y1="90" x2="290" y2="60" stroke="#1a0808" stroke-width="1.5" stroke-dasharray="5,3"/>
+          <line id="l_vs" x1="80" y1="90" x2="290" y2="130" stroke="#0d0808" stroke-width="1" stroke-dasharray="3,5"/>
+        </svg>
+        <!-- VICTIM workstation -->
+        <div style="position:absolute;left:28px;top:62px;text-align:center;width:56px">
+          <div id="vic_ico" style="font-size:22px;transition:filter .3s">🖥️</div>
+          <div style="font-size:5.5px;color:#aaa;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.6">VICTIM<br>WIN10</div>
+          <div id="vic_typing" style="font-size:5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px;opacity:0;transition:opacity .3s;line-height:1.5">\\fileserv<br>BROADCAST</div>
+        </div>
+        <!-- ATTACKER with Responder -->
+        <div style="position:absolute;right:14px;top:36px;text-align:center;width:76px">
+          <div style="font-size:22px">🕵️</div>
+          <div style="font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.6">ATTACKER<br>RESPONDER</div>
+          <div id="resp_ans" style="font-size:5.5px;color:#4eff9a;font-family:'Press Start 2P',monospace;margin-top:3px;opacity:0;transition:opacity .3s;background:#051a08;border:1px solid #0d3010;padding:2px 3px;line-height:1.6">"That's me!<br>Send auth!"</div>
+        </div>
+        <!-- REAL SERVER (unreachable) -->
+        <div style="position:absolute;right:14px;bottom:10px;text-align:center;width:76px">
+          <div style="font-size:18px;filter:grayscale(1) brightness(.3)">🗄️</div>
+          <div style="font-size:5px;color:#333;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">REAL<br>\\FILESERVER<br>(OFFLINE)</div>
+        </div>
+        <!-- broadcast packets radiating out -->
+        <div id="bc1" class="pkt" style="width:9px;height:9px;background:#e8a020;box-shadow:0 0 5px #e8a020;top:90px;left:80px"></div>
+        <div id="bc2" class="pkt" style="width:9px;height:9px;background:#e8a020;box-shadow:0 0 5px #e8a020;top:90px;left:80px"></div>
+        <!-- response packet back -->
+        <div id="resp_pkt" class="pkt" style="width:9px;height:9px;background:#e85050;box-shadow:0 0 6px #e85050;top:60px;left:290px"></div>
+        <!-- NTLM hash captured -->
+        <div id="hash_pkt" class="pkt" style="width:9px;height:9px;background:#c080ff;box-shadow:0 0 6px #c080ff;top:60px;left:80px"></div>
+        <div id="captured_lbl" style="position:absolute;right:12px;top:8px;font-size:6px;color:#4eff9a;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center">NTLMv2<br>CAPTURED ✓</div>
+      </div>
+
+      <!-- RESPONDER OUTPUT -->
+      <div class="panel" id="s2_output" style="background:#050000;border:1px solid #2a1010;padding:0;overflow:hidden">
+        <div style="background:#120000;padding:5px 10px;border-bottom:1px solid #2a1010">
+          <div style="font-size:7px;color:#e85050">RESPONDER TERMINAL OUTPUT</div>
+        </div>
+        <div style="padding:8px 10px;font-size:6.5px;line-height:2.2;font-family:monospace">
+          <div id="ro1" style="opacity:0;transition:opacity .3s;color:#aaa">$ sudo python3 Responder.py -I eth0 -wPv</div>
+          <div id="ro2" style="opacity:0;transition:opacity .3s;color:#e8a020">[*] Listening for events...</div>
+          <div id="ro3" style="opacity:0;transition:opacity .3s;color:#4ec9e1">[*] [LLMNR] Poisoned answer sent to 192.168.1.50</div>
+          <div id="ro4" style="opacity:0;transition:opacity .3s;color:#e85050">[SMB] NTLMv2-SSP Client   : 192.168.1.50</div>
+          <div id="ro5" style="opacity:0;transition:opacity .3s;color:#e85050">[SMB] NTLMv2-SSP Username : CORP\jsmith</div>
+          <div id="ro6" style="opacity:0;transition:opacity .3s;color:#c080ff">[SMB] NTLMv2-SSP Hash     : jsmith::CORP:aad3b...</div>
+        </div>
+      </div>
+
+      <!-- WHAT LLMNR IS -->
+      <div class="panel" id="s2_what" style="background:#080000;border:1px solid #2a1010;padding:8px 10px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">WHY LLMNR EXISTS:</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">When DNS fails, Windows broadcasts <span style="color:#e85050">LLMNR</span> (UDP 5355) + <span style="color:#e85050">NBT-NS</span> (UDP 137): "Does anyone know where <span style="color:#e8a020">\\fileserver</span> is?" — <span style="color:#e85050">anyone on the LAN</span> can answer.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="ih">📡 LLMNR IS ON BY DEFAULT</div>
+    <div class="il">Windows broadcasts hostname queries to the <span style="color:#e85050">entire LAN segment</span>. Responder answers all of them, triggering NTLM authentication to the attacker's machine.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">5355</div><div class="sl">LLMNR<br>UDP PORT</div></div>
+    <div class="sc"><div class="sv am">137</div><div class="sl">NBT-NS<br>UDP PORT</div></div>
+    <div class="sc"><div class="sv" style="color:#c080ff">NTLMv2</div><div class="sl">HASH<br>CAPTURED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: STEP 2 — NTLM RELAY WITH NTLMRELAYX ═══ -->
+<div class="scene" id="s3" style="background:#0f0015">
+  <div class="hdr" style="background:#0f0015;border-bottom:1px solid #280830">
+    <div class="hdr-title">STEP 2 — NTLM RELAY</div>
+    <div class="hdr-sub">NTLMRELAYX FORWARDS AUTH TO TARGET IN REAL TIME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c080ff">NTLMRELAYX</span>
+    <span class="sbadge" style="color:#c080ff;border-color:#c080ff">RELAY ATTACK</span>
+  </div>
+  <div class="anim" style="background:#0f0015">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- RELAY FLOW MAP -->
+      <div style="height:175px;position:relative;background:#080010;border:2px solid #280830;border-radius:3px">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 175">
+          <!-- victim → attacker -->
+          <line id="rl1" x1="60" y1="65" x2="183" y2="88" stroke="#1a0828" stroke-width="2"/>
+          <!-- attacker → target -->
+          <line id="rl2" x1="183" y1="88" x2="306" y2="65" stroke="#1a0828" stroke-width="2"/>
+          <!-- challenge back paths -->
+          <line id="rl3" x1="183" y1="88" x2="60" y2="65" stroke="#1a0828" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <line id="rl4" x1="306" y1="65" x2="183" y2="88" stroke="#1a0828" stroke-width="1.5" stroke-dasharray="4,3"/>
+        </svg>
+        <!-- VICTIM -->
+        <div style="position:absolute;left:14px;top:40px;text-align:center;width:56px">
+          <div style="font-size:20px">🖥️</div>
+          <div style="font-size:5.5px;color:#aaa;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.6">VICTIM<br>CORP\jsmith</div>
+        </div>
+        <!-- ATTACKER middle (relay) -->
+        <div id="relay_box" style="position:absolute;left:147px;top:60px;width:72px;height:55px;background:#0a0018;border:2px solid #280830;border-radius:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:border-color .3s,background .3s">
+          <div style="font-size:13px">🔀</div>
+          <div style="font-size:5.5px;color:#c080ff;font-family:'Press Start 2P',monospace;text-align:center;line-height:1.5">NTLM<br>RELAY</div>
+        </div>
+        <!-- TARGET workstation -->
+        <div style="position:absolute;right:14px;top:38px;text-align:center;width:56px">
+          <div id="tgt_ico" style="font-size:20px;transition:filter .3s;filter:grayscale(1) brightness(.4)">🖥️</div>
+          <div style="font-size:5.5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.6">TARGET<br>WS-02</div>
+          <div id="tgt_sign" style="font-size:5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">SIGNING:<br>DISABLED</div>
+        </div>
+        <!-- step labels -->
+        <div id="rl_lbl1" style="position:absolute;left:82px;top:52px;font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center">NTLMv2<br>hash →</div>
+        <div id="rl_lbl2" style="position:absolute;right:80px;top:52px;font-size:5.5px;color:#c080ff;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center">relay →<br>target</div>
+        <div id="rl_lbl3" style="position:absolute;right:75px;top:76px;font-size:5.5px;color:#e8a020;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center">chall ←<br>resp →</div>
+        <!-- packet dots -->
+        <div id="rp1" class="pkt" style="width:9px;height:9px;background:#c080ff;box-shadow:0 0 6px #c080ff;top:65px;left:60px"></div>
+        <div id="rp2" class="pkt" style="width:9px;height:9px;background:#e8a020;box-shadow:0 0 5px #e8a020;top:88px;left:183px"></div>
+        <div id="rp3" class="pkt" style="width:9px;height:9px;background:#4eff9a;box-shadow:0 0 6px #4eff9a;top:65px;left:306px"></div>
+        <!-- shell result -->
+        <div id="shell_lbl" style="position:absolute;right:8px;bottom:8px;font-size:6px;color:#4eff9a;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:right;background:#001508;border:1px solid #0d3010;padding:3px 5px">SHELL<br>OPENED ✓</div>
+        <!-- signing note bottom -->
+        <div id="nosign_lbl" style="position:absolute;left:8px;bottom:8px;font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;line-height:1.5">No signing = no<br>session key check</div>
+      </div>
+
+      <!-- WHY IT WORKS -->
+      <div class="panel" id="s3_why" style="background:#080010;border:1px solid #1a0828">
+        <div style="font-size:7.5px;color:#c080ff;margin-bottom:7px">WHY RELAY WORKS WITHOUT SIGNING:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#050010;border-left:2px solid #e8a020">
+            <span style="font-size:12px;flex-shrink:0">1️⃣</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Target sends <span style="color:#e8a020">NTLM Challenge</span> to attacker → attacker forwards it to victim</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#050010;border-left:2px solid #c080ff">
+            <span style="font-size:12px;flex-shrink:0">2️⃣</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Victim signs challenge with <span style="color:#c080ff">real NTLM hash</span> → attacker relays response to target</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#050010;border-left:2px solid #4eff9a">
+            <span style="font-size:12px;flex-shrink:0">3️⃣</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Target validates response — <span style="color:#4eff9a">auth succeeds</span>. Without signing, no session key bound to connection.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NTLMRELAYX COMMAND -->
+      <div class="panel" id="s3_cmd" style="background:#050010;border:1px solid #1a0828">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">NTLMRELAYX COMMAND:</div>
+        <div style="font-size:6.5px;color:#4eff9a;font-family:monospace;line-height:2;background:#020008;padding:7px 8px;border:1px solid #0d0820">
+          <div style="color:#aaa">$ ntlmrelayx.py -tf targets.txt \</div>
+          <div style="color:#aaa">&nbsp;&nbsp;-smb2support -i</div>
+          <div style="color:#c080ff">[*] Servers started, waiting for connections</div>
+          <div id="relay_success" style="color:#4eff9a;opacity:0;transition:opacity .3s">[*] SMBD: Received auth for WS-02 → <span style="color:#4eff9a">SHELL ✓</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#c080ff">
+    <div class="ih" style="color:#c080ff">🔀 RELAY = MAN-IN-THE-MIDDLE AUTH</div>
+    <div class="il">Attacker never needs the password. They <span style="color:#c080ff">forward the challenge-response live</span>. SMB signing would cryptographically bind the session — without it, relay is trivial.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#c080ff">MITM</div><div class="sl">ATTACK<br>TYPE</div></div>
+    <div class="sc"><div class="sv am">-i</div><div class="sl">INTERACTIVE<br>SHELL FLAG</div></div>
+    <div class="sc"><div class="sv gn">SHELL</div><div class="sl">NO CRACK<br>NEEDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: STEP 3 — SHELL OPENED ═══ -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title">STEP 3 — DOMAIN COMPROMISE</div>
+    <div class="hdr-sub">SYSTEM SHELL VIA RELAY — ZERO CRACKING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SHELL OPENED</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">OWNED</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SHELL TERMINAL -->
+      <div class="panel" id="s4_shell" style="background:#020d04;border:2px solid #4eff9a;padding:0;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;border-bottom:1px solid #0d3018;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:6.5px;color:#4eff9a">SYSTEM SHELL — WS-02 (192.168.1.101)</div>
+          <div style="font-size:6px;color:#e85050">CORP\jsmith</div>
+        </div>
+        <div style="padding:8px 10px;font-size:7px;line-height:2.2;font-family:monospace;min-height:120px">
+          <div id="sh1" style="opacity:0;transition:opacity .3s;color:#aaa">C:\Windows\system32&gt; <span style="color:#4eff9a">whoami</span></div>
+          <div id="sh2" style="opacity:0;transition:opacity .3s;color:#ff8080">nt authority\system</div>
+          <div id="sh3" style="opacity:0;transition:opacity .3s;color:#aaa;margin-top:4px">C:\Windows\system32&gt; <span style="color:#4eff9a">net user /domain</span></div>
+          <div id="sh4" style="opacity:0;transition:opacity .3s;color:#e8a020">The command completed successfully.</div>
+          <div id="sh5" style="opacity:0;transition:opacity .3s;color:#e8a020">jsmith  administrator  svc_backup</div>
+          <div id="sh6" style="opacity:0;transition:opacity .3s;color:#aaa;margin-top:4px">C:\Windows\system32&gt; <span style="color:#4eff9a">net group "Domain Admins"</span></div>
+          <div id="sh7" style="opacity:0;transition:opacity .3s;color:#c080ff">Members: Administrator  jsmith</div>
+          <div id="sh8" style="opacity:0;transition:opacity .3s;color:#aaa">C:\Windows\system32&gt; <span class="cursor" style="color:#4eff9a">_</span></div>
+        </div>
+      </div>
+
+      <!-- ESCALATION PATH -->
+      <div class="panel" id="s4_path" style="background:#000d04;border:1px solid #0d3018">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:7px">FROM RELAY TO DOMAIN ADMIN:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#010d04;border-left:2px solid #4eff9a">
+            <span style="font-size:12px">🖥️</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">SYSTEM shell on workstation → <span style="color:#4eff9a">dump SAM hashes</span> (mimikatz / secretsdump)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#010d04;border-left:2px solid #e8a020">
+            <span style="font-size:12px">🔑</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Local admin hash → <span style="color:#e8a020">Pass-the-Hash</span> to other workstations sharing same local admin password</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#010d04;border-left:2px solid #c080ff">
+            <span style="font-size:12px">👑</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">If jsmith = Domain Admin → <span style="color:#c080ff">DCSync</span> → dump all domain hashes → full domain compromise</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TIMING NOTE -->
+      <div class="panel" id="s4_time" style="background:#000d04;border:1px solid #1a2a10;padding:8px 10px;display:flex;align-items:center;gap:10px">
+        <div style="font-size:22px;flex-shrink:0">⏱️</div>
+        <div>
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">REAL-WORLD TIMING</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.8">From Responder start to SYSTEM shell: typically <span style="color:#4eff9a">under 2 minutes</span>. Requires only a position on the same broadcast domain. No exploitation of software CVEs.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="ih gn">🏆 DOMAIN ADMIN IN UNDER 2 MINUTES</div>
+    <div class="il">One mistype, one SMB broadcast, <span style="color:#4eff9a">no cracking required</span>. If the relayed user is DA — game over for the entire domain. Pure protocol abuse.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">SYSTEM</div><div class="sl">SHELL<br>LEVEL</div></div>
+    <div class="sc"><div class="sv am">&lt;2min</div><div class="sl">ATTACK<br>TIME</div></div>
+    <div class="sc"><div class="sv" style="color:#c080ff">DA</div><div class="sl">IF VICTIM<br>IS DOM ADM</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: DETECTION ═══ -->
+<div class="scene" id="s5" style="background:#0a0005">
+  <div class="hdr" style="background:#0a0005;border-bottom:1px solid #200030">
+    <div class="hdr-title">DETECTION</div>
+    <div class="hdr-sub">HOW BLUE TEAM SPOTS NTLM RELAY IN PROGRESS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DETECTION</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">BLUE TEAM</span>
+  </div>
+  <div class="anim" style="background:#0a0005">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- EVENT LOG INDICATORS -->
+      <div class="panel" id="s5_events" style="background:#060005;border:1px solid #200030;padding:0;overflow:hidden">
+        <div style="background:#100015;padding:5px 10px;border-bottom:1px solid #200030">
+          <div style="font-size:7px;color:#4ec9e1">WINDOWS EVENT LOG INDICATORS</div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <div id="ev1" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-bottom:1px solid #1a0025;background:#080010">
+            <div style="font-size:7.5px;color:#e85050;flex-shrink:0;border:1px solid #e85050;padding:1px 4px">4648</div>
+            <div>
+              <div style="font-size:6.5px;color:#aaa;line-height:1.8">Logon attempt using explicit credentials — <span style="color:#e85050">source IP mismatch</span> from usual workstation</div>
+            </div>
+          </div>
+          <div id="ev2" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-bottom:1px solid #1a0025">
+            <div style="font-size:7.5px;color:#e85050;flex-shrink:0;border:1px solid #e85050;padding:1px 4px">4624</div>
+            <div>
+              <div style="font-size:6.5px;color:#aaa;line-height:1.8">Successful logon type 3 (network) from <span style="color:#e85050">unexpected source IP</span> — user never opened connection</div>
+            </div>
+          </div>
+          <div id="ev3" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:7px 8px;border-bottom:1px solid #1a0025;background:#080010">
+            <div style="font-size:7.5px;color:#e8a020;flex-shrink:0;border:1px solid #e8a020;padding:1px 4px">4776</div>
+            <div>
+              <div style="font-size:6.5px;color:#aaa;line-height:1.8">NTLM auth against DC — NTLMv1 in use (red flag; enforce NTLMv2 minimum)</div>
+            </div>
+          </div>
+          <div id="ev4" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:7px 8px">
+            <div style="font-size:7.5px;color:#e8a020;flex-shrink:0;border:1px solid #e8a020;padding:1px 4px">5140</div>
+            <div>
+              <div style="font-size:6.5px;color:#aaa;line-height:1.8">Network share accessed — <span style="color:#e8a020">IPC$</span> access from attacker IP to target (ntlmrelayx probe)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NETWORK DETECTION -->
+      <div class="panel" id="s5_net" style="background:#060005;border:1px solid #200030">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:7px">NETWORK-LEVEL DETECTION:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#040008;border-left:2px solid #4ec9e1">
+            <span style="font-size:12px;flex-shrink:0">🦈</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4ec9e1">Wireshark/Zeek</span>: LLMNR responses from non-DNS servers (unexpected responders)</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#040008;border-left:2px solid #c080ff">
+            <span style="font-size:12px;flex-shrink:0">📊</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#c080ff">SIEM rule</span>: same user authenticating from 2 different IPs within same second</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#040008;border-left:2px solid #e8a020">
+            <span style="font-size:12px;flex-shrink:0">🎯</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e8a020">Honeypot share</span>: create \\fakeshare — any access = Responder active on LAN</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="ih cy">🔵 EVENT 4648 + 4624 = RELAY IN PROGRESS</div>
+    <div class="il">Successful type-3 logon from an IP the user never touched is the <span style="color:#4ec9e1">smoking gun</span>. Correlate with LLMNR traffic spikes to confirm Responder.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">4648</div><div class="sl">KEY<br>EVENT ID</div></div>
+    <div class="sc"><div class="sv cy">4624</div><div class="sl">LOGON<br>EVENT</div></div>
+    <div class="sc"><div class="sv am">HONEY</div><div class="sl">SHARE<br>TRIPWIRE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 6: THE FIX — GPO + HARDENING ═══ -->
+<div class="scene" id="s6" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title">THE FIX</div>
+    <div class="hdr-sub">GPO + REGISTRY — KILL LLMNR AND FORCE SIGNING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">REMEDIATION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">GPO HARDENING</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- FIX 1: SMB SIGNING -->
+      <div class="panel" id="s6_smb" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">1</div>
+          <div style="font-size:7.5px;color:#4eff9a">ENABLE SMB SIGNING (GPO)</div>
+        </div>
+        <div style="background:#000805;padding:7px 8px;border:1px solid #0a2010;font-size:6.5px;line-height:2;font-family:monospace">
+          <div style="color:#aaa">Computer Config → Windows Settings →</div>
+          <div style="color:#aaa">Security Settings → Local Policies →</div>
+          <div style="color:#aaa">Security Options:</div>
+          <div style="color:#4eff9a;margin-top:3px">Microsoft network client: Digitally sign</div>
+          <div style="color:#4eff9a">&nbsp;communications (always) = <span style="color:#4eff9a;background:#001508">ENABLED</span></div>
+          <div style="color:#4eff9a">Microsoft network server: Digitally sign</div>
+          <div style="color:#4eff9a">&nbsp;communications (always) = <span style="color:#4eff9a;background:#001508">ENABLED</span></div>
+        </div>
+      </div>
+
+      <!-- FIX 2: DISABLE LLMNR -->
+      <div class="panel" id="s6_llmnr" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">2</div>
+          <div style="font-size:7.5px;color:#4eff9a">DISABLE LLMNR + NBT-NS</div>
+        </div>
+        <div style="background:#000805;padding:7px 8px;border:1px solid #0a2010;font-size:6.5px;line-height:2;font-family:monospace">
+          <div style="color:#aaa"># GPO path:</div>
+          <div style="color:#4eff9a">Computer Config → Admin Templates →</div>
+          <div style="color:#4eff9a">DNS Client → Turn off multicast name</div>
+          <div style="color:#4eff9a">&nbsp;resolution = <span style="background:#001508">ENABLED</span></div>
+          <div style="color:#aaa;margin-top:4px"># Also disable NBT-NS via DHCP option</div>
+          <div style="color:#aaa">or set NetBIOS over TCP/IP = DISABLED</div>
+          <div style="color:#aaa">on all NIC adapters via GPO</div>
+        </div>
+      </div>
+
+      <!-- FIX 3: ENFORCE NTLMV2 -->
+      <div class="panel" id="s6_ntlm" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">3</div>
+          <div style="font-size:7.5px;color:#4eff9a">ENFORCE NTLMV2 + EPA</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:5px 7px;background:#000805;border-left:2px solid #4eff9a">
+            LAN Manager Auth Level → <span style="color:#4eff9a">Send NTLMv2 only, refuse LM & NTLM</span>
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:5px 7px;background:#000805;border-left:2px solid #4ec9e1">
+            Enable <span style="color:#4ec9e1">Extended Protection for Auth (EPA)</span> on IIS/Exchange — binds NTLM to TLS channel, blocks relay even if hash captured
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:5px 7px;background:#000805;border-left:2px solid #c080ff">
+            Long term: migrate to <span style="color:#c080ff">Kerberos everywhere</span> — disable NTLM entirely via GPO on domain controllers
+          </div>
+        </div>
+      </div>
+
+      <!-- VERIFY -->
+      <div class="panel" id="s6_verify" style="background:#000d04;border:1px solid #1a3010;padding:8px 10px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">VERIFY SIGNING IS ON:</div>
+        <div style="font-size:7px;color:#4eff9a;font-family:monospace;line-height:2;background:#000805;padding:6px 8px;border:1px solid #0a2010">
+          <div>nmap --script smb2-security-mode.nse \</div>
+          <div>&nbsp;-p445 192.168.1.0/24</div>
+          <div id="nmap_out" style="color:#4eff9a;margin-top:3px;opacity:0;transition:opacity .3s">Message signing enabled and required ✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="ih gn">✓ THREE CONTROLS, PROBLEM SOLVED</div>
+    <div class="il"><span style="color:#4eff9a">SMB signing</span> kills relay. <span style="color:#4ec9e1">Disable LLMNR</span> stops hash capture. <span style="color:#c080ff">EPA</span> breaks relay on web services. Deploy all three.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">GPO</div><div class="sl">DEPLOY<br>METHOD</div></div>
+    <div class="sc"><div class="sv gn">OFF</div><div class="sl">LLMNR<br>TARGET</div></div>
+    <div class="sc"><div class="sv gn">EPA</div><div class="sl">WEB SVC<br>PROTECT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn gn" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function showSVG(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function hideSVG(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+function litLine(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.setAttribute('stroke',color);e.setAttribute('stroke-width','2.5');}});}
+function dimLine(id){const e=document.getElementById(id);if(e){e.setAttribute('stroke','#1a0808');e.setAttribute('stroke-width','1.5');}}
+function litBox(id,border,bg,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.borderColor=border;if(bg)e.style.background=bg;}});}
+
+function movePktEl(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.style.transition='none';
+    d.style.left=x1+'px';d.style.top=y1+'px';d.style.opacity='1';
+    af(40,()=>{
+      d.style.transition=`left ${durMs}ms linear, top ${durMs}ms linear`;
+      d.style.left=x2+'px';d.style.top=y2+'px';
+    });
+    af(durMs+80,()=>{d.style.opacity='0';});
+  });
+}
+
+function reset(n){
+  if(n===1){['s1_hook','s1_chain','s1_diff'].forEach(id=>hide(id));}
+  if(n===2){
+    ['s2_output','s2_what'].forEach(id=>hide(id));
+    ['ro1','ro2','ro3','ro4','ro5','ro6'].forEach(id=>hideEl(id));
+    ['bc_ring1','bc_ring2'].forEach(id=>hideSVG(id));
+    hideEl('vic_typing');hideEl('resp_ans');hideEl('captured_lbl');
+    ['bc1','bc2','resp_pkt','hash_pkt'].forEach(id=>{const d=document.getElementById(id);if(d)d.style.opacity='0';});
+    dimLine('l_va');dimLine('l_vs');
+  }
+  if(n===3){
+    ['s3_why','s3_cmd'].forEach(id=>hide(id));
+    ['rl_lbl1','rl_lbl2','rl_lbl3','relay_success'].forEach(id=>hideEl(id));
+    hideEl('shell_lbl');hideEl('nosign_lbl');
+    ['rp1','rp2','rp3'].forEach(id=>{const d=document.getElementById(id);if(d)d.style.opacity='0';});
+    ['rl1','rl2','rl3','rl4'].forEach(id=>dimLine(id));
+    litBox('relay_box','#280830','#0a0018',0);
+    const t=document.getElementById('tgt_ico');if(t)t.style.filter='grayscale(1) brightness(.4)';
+  }
+  if(n===4){
+    ['s4_shell','s4_path','s4_time'].forEach(id=>hide(id));
+    ['sh1','sh2','sh3','sh4','sh5','sh6','sh7','sh8'].forEach(id=>hideEl(id));
+  }
+  if(n===5){
+    ['s5_events','s5_net'].forEach(id=>hide(id));
+    ['ev1','ev2','ev3','ev4'].forEach(id=>hideEl(id));
+  }
+  if(n===6){
+    ['s6_smb','s6_llmnr','s6_ntlm','s6_verify'].forEach(id=>hide(id));
+    hideEl('nmap_out');
+  }
+}
+
+function play(n){
+  clr();reset(n);
+  if(n===1){
+    show('s1_hook',200);show('s1_chain',1000);show('s1_diff',2400);
+  }
+  if(n===2){
+    showEl('vic_typing',300);
+    showSVG('bc_ring1',400);showSVG('bc_ring2',600);
+    /* broadcast packets radiating */
+    movePktEl('bc1',80,90,183,90,500,500);
+    movePktEl('bc2',80,90,290,60,700,550);
+    litLine('l_va','#e8a020',800);
+    showEl('resp_ans',1100);
+    /* responder response back */
+    movePktEl('resp_pkt',290,60,80,90,1300,550);
+    /* hash captured travelling back to attacker */
+    movePktEl('hash_pkt',80,90,290,60,2100,600);
+    showEl('captured_lbl',2800);
+    show('s2_output',1000);
+    ['ro1','ro2','ro3','ro4','ro5','ro6'].forEach((id,i)=>showEl(id,1200+i*350));
+  }
+  if(n===3){
+    litLine('rl1','#c080ff',300);
+    movePktEl('rp1',60,65,183,88,300,600);
+    showEl('rl_lbl1',500);
+    litBox('relay_box','#c080ff','#180028',500);
+    litLine('rl2','#e8a020',1100);
+    movePktEl('rp2',183,88,306,65,1100,600);
+    showEl('rl_lbl2',1300);
+    af(1500,()=>{const t=document.getElementById('tgt_ico');if(t)t.style.filter='none';});
+    /* challenge/response dance */
+    litLine('rl4','#4ec9e1',1900);
+    litLine('rl3','#4ec9e1',1900);
+    movePktEl('rp3',306,65,183,88,2000,500);
+    showEl('rl_lbl3',2000);
+    /* shell opened */
+    showEl('shell_lbl',2700);
+    showEl('nosign_lbl',2700);
+    show('s3_why',1600);
+    show('s3_cmd',2000);
+    showEl('relay_success',3000);
+  }
+  if(n===4){
+    show('s4_shell',200);
+    ['sh1','sh2','sh3','sh4','sh5','sh6','sh7','sh8'].forEach((id,i)=>showEl(id,400+i*380));
+    show('s4_path',3400);
+    show('s4_time',4200);
+  }
+  if(n===5){
+    show('s5_events',200);
+    ['ev1','ev2','ev3','ev4'].forEach((id,i)=>showEl(id,400+i*350));
+    show('s5_net',1900);
+  }
+  if(n===6){
+    show('s6_smb',200);show('s6_llmnr',900);show('s6_ntlm',1600);show('s6_verify',2300);
+    showEl('nmap_out',2900);
+  }
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

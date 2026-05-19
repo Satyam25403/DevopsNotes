@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Load Balancer Algorithms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #101a10}
+.hdr-title{font-size:11px;color:#34d399;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#101a10;transition:background .2s}
+.dot.active{background:#34d399}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #34d399;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.cy{border-color:#22d3ee}.info.pu{border-color:#a78bfa}
+.il{color:#888}.ih{color:#34d399}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#22d3ee}.ih.pu{color:#a78bfa}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060d06;border:1px solid #101a10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#34d399;text-align:center;line-height:1.3}
+.sv.am{color:#e8a020}.sv.rd{color:#e85050}.sv.cy{color:#22d3ee}.sv.pu{color:#a78bfa}
+.sl{font-size:6px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #34d399;background:transparent;color:#34d399;cursor:pointer;transition:all .15s}
+.btn:hover{background:#34d39920}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── SERVER BOX ── */
+.srv-box{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  padding:7px 5px;border:2px solid #1a2a1a;border-radius:2px;
+  background:#060d06;flex:1;transition:all 0.25s;min-width:0;
+}
+.srv-box.hot{border-color:#e85050;background:#150808;animation:hotFlash 0.3s ease}
+.srv-box.active{border-color:#34d399;background:#051005}
+.srv-box.highlight{border-color:#4eff9a;background:#041208;box-shadow:0 0 8px #4eff9a40}
+@keyframes hotFlash{0%{box-shadow:0 0 8px #e85050}100%{box-shadow:none}}
+.srv-label{font-size:6px;color:#555}
+.srv-icon{font-size:18px;line-height:1}
+.srv-load-wrap{width:100%;background:#0a0f0a;height:6px;border-radius:3px;overflow:hidden}
+.srv-load-bar{height:100%;border-radius:3px;transition:width 0.4s ease-out,background 0.3s}
+.srv-conn{font-size:7px;color:#34d399;transition:color 0.3s}
+.srv-conn.red{color:#e85050}
+.srv-conn.am{color:#e8a020}
+
+/* ── REQUEST PACKET ── */
+.req-packet{
+  width:14px;height:10px;border-radius:1px;font-size:5px;
+  display:flex;align-items:center;justify-content:center;
+  position:absolute;transition:all 0.5s cubic-bezier(0.4,0,0.2,1);
+  pointer-events:none;z-index:10;border:1px solid;
+}
+
+/* ── LB BOX ── */
+.lb-box{
+  border:2px solid #34d399;background:#041208;border-radius:2px;
+  padding:5px 10px;text-align:center;font-size:7px;color:#34d399;
+}
+
+/* ── RING for consistent hashing ── */
+.ring-wrap{position:relative;width:200px;height:200px;margin:0 auto}
+.ring-node{
+  position:absolute;width:36px;height:24px;border:1px solid;border-radius:2px;
+  display:flex;align-items:center;justify-content:center;font-size:6px;
+  transform:translate(-50%,-50%);transition:all 0.3s;
+}
+.ring-key{
+  position:absolute;width:10px;height:10px;border-radius:50%;border:1px solid;
+  transform:translate(-50%,-50%);transition:all 0.4s;
+  display:flex;align-items:center;justify-content:center;font-size:5px;
+}
+
+/* ── connection count display ── */
+.conn-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:3px 6px;border:1px solid #1a2a1a;border-radius:2px;
+  font-size:6px;transition:all 0.3s;
+}
+
+/* progress bar */
+.pbar-wrap{background:#060d06;border:1px solid #101a10;height:8px;border-radius:4px;overflow:hidden}
+.pbar-fill{height:100%;border-radius:4px;transition:width 0.5s ease-out}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+@keyframes reqFly{0%{transform:scale(0)}30%{transform:scale(1.2)}100%{transform:scale(1)}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — ROUND ROBIN & WEIGHTED RR
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">LOAD BALANCER ALGORITHMS</div>
+    <div class="hdr-sub">ROUND ROBIN SOUNDS FAIR — IT ISN'T</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#34d399">ROUND ROBIN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">UNBALANCED</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- LB + servers -->
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ 8 requests → distributed in strict rotation</div>
+      <div style="position:relative;height:44px;background:#040a04;border:1px solid #101a10;border-radius:2px" id="s1-fly-zone">
+        <div class="lb-box" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:6px;padding:3px 8px">LB</div>
+      </div>
+      <div style="display:flex;gap:5px" id="s1-servers">
+        <div class="srv-box" id="s1-s0"><div class="srv-icon">🖥</div><div class="srv-label">S1</div><div style="font-size:6px;color:#1a3a1a">1ms avg</div><div class="srv-load-wrap"><div class="srv-load-bar" id="s1-b0" style="width:0%;background:#34d399"></div></div><div class="srv-conn" id="s1-c0">0 req</div></div>
+        <div class="srv-box" id="s1-s1"><div class="srv-icon">🖥</div><div class="srv-label">S2</div><div style="font-size:6px;color:#1a3a1a">1ms avg</div><div class="srv-load-wrap"><div class="srv-load-bar" id="s1-b1" style="width:0%;background:#34d399"></div></div><div class="srv-conn" id="s1-c1">0 req</div></div>
+        <div class="srv-box" id="s1-s2"><div class="srv-icon">🖥</div><div class="srv-label">S3</div><div style="font-size:6px;color:#555">10s req!</div><div class="srv-load-wrap"><div class="srv-load-bar" id="s1-b2" style="width:0%;background:#34d399"></div></div><div class="srv-conn" id="s1-c2">0 req</div></div>
+        <div class="srv-box" id="s1-s3"><div class="srv-icon">🖥</div><div class="srv-label">S4</div><div style="font-size:6px;color:#1a3a1a">1ms avg</div><div class="srv-load-wrap"><div class="srv-load-bar" id="s1-b3" style="width:0%;background:#34d399"></div></div><div class="srv-conn" id="s1-c3">0 req</div></div>
+      </div>
+
+      <!-- RR problem -->
+      <div id="s1-problem" style="opacity:0;transition:opacity 0.5s;background:#150808;border:2px solid #e85050;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">THE PROBLEM</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">S3 gets a 10-second request. Round robin<br>keeps sending new requests to it. S3 queues<br>up → latency spikes → users time out.</div>
+      </div>
+
+      <!-- Weighted RR -->
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ WEIGHTED ROUND ROBIN — capacity-aware</div>
+      <div style="display:flex;gap:5px">
+        <div style="flex:3;background:#051005;border:2px solid #34d399;padding:7px;border-radius:2px;text-align:center">
+          <div style="font-size:14px">🖥</div>
+          <div style="font-size:6px;color:#34d399;margin-top:3px">S1 (weight 3)</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">high capacity</div>
+          <div id="s1-wrr-a" style="font-size:8px;color:#4eff9a;margin-top:4px">0 req</div>
+        </div>
+        <div style="flex:1;background:#060d06;border:1px solid #1a2a1a;padding:7px;border-radius:2px;text-align:center">
+          <div style="font-size:14px">🖥</div>
+          <div style="font-size:6px;color:#555;margin-top:3px">S2 (weight 1)</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">low capacity</div>
+          <div id="s1-wrr-b" style="font-size:8px;color:#555;margin-top:4px">0 req</div>
+        </div>
+      </div>
+      <div id="s1-wrr-play" style="opacity:0;transition:opacity 0.5s;font-size:7px;color:#34d399;text-align:center">
+        for every 4 requests: S1 gets 3, S2 gets 1
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">round robin: ignores request duration</div>
+    <div class="ih rd">a 10s request + 1ms requests on same server<br>= S3 overwhelmed. latency disaster.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">BLIND</div><div class="sl">TO REQUEST<br>DURATION</div></div>
+    <div class="sc"><div class="sv am">3:1</div><div class="sl">WEIGHTED<br>RATIO</div></div>
+    <div class="sc"><div class="sv">O(1)</div><div class="sl">ROUTING<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — LEAST CONNECTIONS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">LOAD BALANCER ALGORITHMS</div>
+    <div class="hdr-sub">FEWEST ACTIVE SESSIONS WINS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">LEAST CONNECTIONS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BALANCED</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ LB tracks active connections per server in real time</div>
+
+      <!-- conn counters -->
+      <div style="display:flex;gap:5px" id="s2-servers">
+        <div class="srv-box" id="s2-s0">
+          <div class="srv-icon">🖥</div><div class="srv-label">S1</div>
+          <div class="srv-load-wrap"><div class="srv-load-bar" id="s2-b0" style="width:0%;background:#34d399"></div></div>
+          <div class="srv-conn" id="s2-c0">0 conn</div>
+        </div>
+        <div class="srv-box" id="s2-s1">
+          <div class="srv-icon">🖥</div><div class="srv-label">S2</div>
+          <div class="srv-load-wrap"><div class="srv-load-bar" id="s2-b1" style="width:0%;background:#34d399"></div></div>
+          <div class="srv-conn" id="s2-c1">0 conn</div>
+        </div>
+        <div class="srv-box" id="s2-s2">
+          <div class="srv-icon">🖥</div><div class="srv-label">S3</div>
+          <div class="srv-load-wrap"><div class="srv-load-bar" id="s2-b2" style="width:0%;background:#34d399"></div></div>
+          <div class="srv-conn" id="s2-c2">0 conn</div>
+        </div>
+        <div class="srv-box" id="s2-s3">
+          <div class="srv-icon">🖥</div><div class="srv-label">S4</div>
+          <div class="srv-load-wrap"><div class="srv-load-bar" id="s2-b3" style="width:0%;background:#34d399"></div></div>
+          <div class="srv-conn" id="s2-c3">0 conn</div>
+        </div>
+      </div>
+
+      <!-- fly zone for packets -->
+      <div style="position:relative;height:36px;background:#040a04;border:1px solid #101a10;border-radius:2px" id="s2-fly-zone">
+        <div class="lb-box" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:6px;padding:3px 8px">LB</div>
+      </div>
+
+      <!-- decision log -->
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ routing decisions</div>
+      <div id="s2-log" style="background:#040a04;border:1px solid #101a10;padding:7px;border-radius:2px;display:flex;flex-direction:column;gap:3px;min-height:60px">
+        <div style="font-size:6px;color:#1a3a3a">Awaiting requests…</div>
+      </div>
+
+      <!-- vs round robin callout -->
+      <div id="s2-compare" style="opacity:0;transition:opacity 0.5s;background:#041208;border:2px solid #4eff9a;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">VS ROUND ROBIN</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          S3 holding a 10s request? LB sees it has<br>
+          5 active conns while S1 has 1 → sends to S1.<br>
+          automatically adapts to slow/variable requests.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">route to server with fewest active sessions</div>
+    <div class="ih">dynamically adapts to request duration.<br>best for variable workloads (APIs, websockets).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DYNAMIC</div><div class="sl">ADAPTS TO<br>WORKLOAD</div></div>
+    <div class="sc"><div class="sv" id="s2-stat-routed">0</div><div class="sl">REQUESTS<br>ROUTED</div></div>
+    <div class="sc"><div class="sv gn">O(log N)</div><div class="sl">ROUTING<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — IP HASH (STICKY SESSIONS)
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">LOAD BALANCER ALGORITHMS</div>
+    <div class="hdr-sub">SAME CLIENT → SAME SERVER, ALWAYS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">IP HASH</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">STICKY</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ hash(client_ip) % N → always same server</div>
+
+      <!-- client → server mapping -->
+      <div id="s3-clients" style="display:flex;flex-direction:column;gap:4px">
+        <div style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s" id="s3-r1">
+          <div style="font-size:10px">💻</div>
+          <div style="font-size:6px;color:#22d3ee;min-width:88px">192.168.1.10</div>
+          <div style="flex:1;height:1px;background:#1a2a1a;position:relative" id="s3-l1">
+            <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#e8a020;transition:width 0.5s ease-out" id="s3-la1"></div>
+          </div>
+          <div style="font-size:8px;color:#1a2a1a">→</div>
+          <div style="font-size:7px;color:#e8a020;background:#150e04;border:1px solid #e8a020;padding:3px 6px;border-radius:2px;min-width:26px;text-align:center">S2</div>
+          <div style="font-size:6px;color:#555">(hash=42)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s" id="s3-r2">
+          <div style="font-size:10px">📱</div>
+          <div style="font-size:6px;color:#a78bfa;min-width:88px">10.0.0.54</div>
+          <div style="flex:1;height:1px;background:#1a2a1a;position:relative">
+            <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#e8a020;transition:width 0.5s ease-out" id="s3-la2"></div>
+          </div>
+          <div style="font-size:8px;color:#1a2a1a">→</div>
+          <div style="font-size:7px;color:#e8a020;background:#150e04;border:1px solid #e8a020;padding:3px 6px;border-radius:2px;min-width:26px;text-align:center">S4</div>
+          <div style="font-size:6px;color:#555">(hash=87)</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s" id="s3-r3">
+          <div style="font-size:10px">🖥</div>
+          <div style="font-size:6px;color:#4eff9a;min-width:88px">172.16.5.200</div>
+          <div style="flex:1;height:1px;background:#1a2a1a;position:relative">
+            <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#e8a020;transition:width 0.5s ease-out" id="s3-la3"></div>
+          </div>
+          <div style="font-size:8px;color:#1a2a1a">→</div>
+          <div style="font-size:7px;color:#e8a020;background:#150e04;border:1px solid #e8a020;padding:3px 6px;border-radius:2px;min-width:26px;text-align:center">S1</div>
+          <div style="font-size:6px;color:#555">(hash=11)</div>
+        </div>
+        <!-- 2nd pass: same IPs same servers -->
+        <div style="font-size:6px;color:#2a3a2a;text-align:center;padding:3px" id="s3-repeat-label" style="opacity:0">— same clients, new requests —</div>
+        <div style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s" id="s3-r4">
+          <div style="font-size:10px">💻</div>
+          <div style="font-size:6px;color:#22d3ee;min-width:88px">192.168.1.10</div>
+          <div style="flex:1;height:1px;background:#1a2a1a;position:relative">
+            <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#4eff9a;transition:width 0.5s ease-out" id="s3-la4"></div>
+          </div>
+          <div style="font-size:8px;color:#1a2a1a">→</div>
+          <div style="font-size:7px;color:#4eff9a;background:#041208;border:1px solid #4eff9a;padding:3px 6px;border-radius:2px;min-width:26px;text-align:center">S2 ✓</div>
+          <div style="font-size:6px;color:#34d399">same! ✓</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity 0.4s" id="s3-r5">
+          <div style="font-size:10px">📱</div>
+          <div style="font-size:6px;color:#a78bfa;min-width:88px">10.0.0.54</div>
+          <div style="flex:1;height:1px;background:#1a2a1a;position:relative">
+            <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#4eff9a;transition:width 0.5s ease-out" id="s3-la5"></div>
+          </div>
+          <div style="font-size:8px;color:#1a2a1a">→</div>
+          <div style="font-size:7px;color:#4eff9a;background:#041208;border:1px solid #4eff9a;padding:3px 6px;border-radius:2px;min-width:26px;text-align:center">S4 ✓</div>
+          <div style="font-size:6px;color:#34d399">same! ✓</div>
+        </div>
+      </div>
+
+      <!-- tradeoff -->
+      <div id="s3-tradeoff" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px">
+        <div style="flex:1;background:#041208;border:1px solid #1a2a1a;padding:7px;border-radius:2px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">✓ GOOD FOR</div>
+          <div style="font-size:6px;color:#666;line-height:1.8">session affinity<br>stateful apps<br>in-memory session state</div>
+        </div>
+        <div style="flex:1;background:#150808;border:1px solid #2a1a1a;padding:7px;border-radius:2px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">✗ BAD: ONE SERVER DOWN</div>
+          <div style="font-size:6px;color:#666;line-height:1.8">all sessions for that hash<br>lose affinity instantly<br>→ use consistent hashing</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">hash(client_ip) % num_servers → index</div>
+    <div class="ih am">same IP always hits same server. good for<br>sessions. brittle when server count changes.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">STICKY</div><div class="sl">SAME<br>CLIENT→SVR</div></div>
+    <div class="sc"><div class="sv rd">BRITTLE</div><div class="sl">SERVER<br>ADD/REMOVE</div></div>
+    <div class="sc"><div class="sv">O(1)</div><div class="sl">ROUTING<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — CONSISTENT HASHING RING
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">LOAD BALANCER ALGORITHMS</div>
+    <div class="hdr-sub">ADD/REMOVE SERVERS, MINIMAL DISRUPTION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a78bfa">CONSISTENT HASHING</span>
+    <span class="sbadge" style="color:#a78bfa;border-color:#a78bfa">DYNAMO · CASSANDRA</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-3px">▸ servers + keys on a hash ring — clockwise lookup</div>
+
+      <!-- Ring SVG -->
+      <div style="position:relative;height:200px;background:#040a04;border:1px solid #101a10;border-radius:2px">
+        <svg id="s4-svg" width="366" height="200" style="position:absolute;top:0;left:0">
+          <!-- ring circle -->
+          <circle cx="183" cy="100" r="74" fill="none" stroke="#101a10" stroke-width="2" stroke-dasharray="4 4"/>
+          <!-- server arcs / pointers drawn by JS -->
+        </svg>
+        <!-- server nodes positioned on ring -->
+        <div class="ring-node" id="rn-s1" style="left:183px;top:26px;border-color:#34d399;color:#34d399;background:#041208;opacity:0;transition:opacity 0.4s">S1</div>
+        <div class="ring-node" id="rn-s2" style="left:257px;top:100px;border-color:#22d3ee;color:#22d3ee;background:#04100f;opacity:0;transition:opacity 0.4s">S2</div>
+        <div class="ring-node" id="rn-s3" style="left:183px;top:174px;border-color:#a78bfa;color:#a78bfa;background:#0a0820;opacity:0;transition:opacity 0.4s">S3</div>
+        <div class="ring-node" id="rn-s4" style="left:109px;top:100px;border-color:#e8a020;color:#e8a020;background:#140e04;opacity:0;transition:opacity 0.4s">S4</div>
+        <!-- key dots -->
+        <div class="ring-key" id="rk-1" style="left:220px;top:47px;border-color:#4eff9a;background:#4eff9a;opacity:0;transition:opacity 0.4s;color:#000">K1</div>
+        <div class="ring-key" id="rk-2" style="left:244px;top:140px;border-color:#4eff9a;background:#4eff9a;opacity:0;transition:opacity 0.4s;color:#000">K2</div>
+        <div class="ring-key" id="rk-3" style="left:140px;top:47px;border-color:#4eff9a;background:#4eff9a;opacity:0;transition:opacity 0.4s;color:#000">K3</div>
+        <!-- new server -->
+        <div class="ring-node" id="rn-s5" style="left:235px;top:60px;border-color:#e85050;color:#e85050;background:#150508;opacity:0;transition:all 0.5s;font-size:5px">S5<br>NEW</div>
+        <div style="position:absolute;bottom:6px;right:8px;font-size:5px;color:#1a3a1a">clockwise → next server owns the key</div>
+      </div>
+
+      <!-- disruption comparison -->
+      <div id="s4-disrupt" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#1a3a1a;margin-bottom:4px">▸ adding S5: only K1 needs to move</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#150808;border:1px solid #2a1a1a;padding:7px;border-radius:2px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:4px">IP HASH (% N)</div>
+            <div style="font-size:6px;color:#666;line-height:1.8">add 1 server →<br>ALL keys remap<br>(N-1)/N keys move!</div>
+            <div style="font-size:9px;color:#e85050;margin-top:4px" id="s4-ip-pct">~75% disrupted</div>
+          </div>
+          <div style="flex:1;background:#041208;border:1px solid #1a2a1a;padding:7px;border-radius:2px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">CONSISTENT HASH</div>
+            <div style="font-size:6px;color:#666;line-height:1.8">add 1 server →<br>only 1/N keys<br>need to move</div>
+            <div style="font-size:9px;color:#4eff9a;margin-top:4px" id="s4-ch-pct">~20% disrupted</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4-users" style="opacity:0;transition:opacity 0.5s;background:#060d06;border:1px solid #101a10;padding:8px;border-radius:2px;font-size:6px;color:#555;line-height:1.9">
+        <span style="color:#a78bfa">Used by:</span> Amazon DynamoDB · Apache Cassandra<br>· Memcached · Discord · Riak
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">hash ring: only 1/N keys remap on server change</div>
+    <div class="ih pu">IP hash remaps everything when N changes.<br>consistent hashing: minimal redistribution.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">1/N</div><div class="sl">KEYS MOVED<br>ON CHANGE</div></div>
+    <div class="sc"><div class="sv rd">~75%</div><div class="sl">IP HASH<br>DISRUPTION</div></div>
+    <div class="sc"><div class="sv gn">~20%</div><div class="sl">CONS.HASH<br>DISRUPTION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 5 — COMPARISON + WHEN TO USE EACH
+═══════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">LOAD BALANCER ALGORITHMS</div>
+    <div class="hdr-sub">WHICH ONE DO YOU NEED?</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#34d399">COMPARISON</span>
+    <span class="sbadge" style="color:#34d399;border-color:#34d399">CHEAT SHEET</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <!-- comparison rows -->
+      <div id="cr1" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px;padding:8px;background:#040a04;border:1px solid #101a10;border-radius:2px">
+        <div style="min-width:90px">
+          <div style="font-size:7px;color:#34d399">ROUND ROBIN</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">O(1) · stateless</div>
+        </div>
+        <div style="flex:1;font-size:6px;color:#666;line-height:1.8">static files, homogeneous requests<br>where all requests take same time</div>
+        <div style="font-size:6px;color:#e85050;min-width:32px;text-align:right">AVOID<br>mixed</div>
+      </div>
+
+      <div id="cr2" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px;padding:8px;background:#040a04;border:1px solid #101a10;border-radius:2px">
+        <div style="min-width:90px">
+          <div style="font-size:7px;color:#e8a020">WEIGHTED RR</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">O(1) · configurable</div>
+        </div>
+        <div style="flex:1;font-size:6px;color:#666;line-height:1.8">mixed-capacity servers (2× CPU/RAM)<br>known traffic skew by server</div>
+        <div style="font-size:6px;color:#4eff9a;min-width:32px;text-align:right">GOOD<br>choice</div>
+      </div>
+
+      <div id="cr3" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px;padding:8px;background:#041208;border:2px solid #4eff9a;border-radius:2px">
+        <div style="min-width:90px">
+          <div style="font-size:7px;color:#4eff9a">LEAST CONN ★</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">O(log N) · dynamic</div>
+        </div>
+        <div style="flex:1;font-size:6px;color:#888;line-height:1.8">APIs, websockets, variable-duration<br>requests — the default best choice</div>
+        <div style="font-size:6px;color:#4eff9a;min-width:32px;text-align:right">BEST<br>default</div>
+      </div>
+
+      <div id="cr4" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px;padding:8px;background:#040a04;border:1px solid #101a10;border-radius:2px">
+        <div style="min-width:90px">
+          <div style="font-size:7px;color:#e8a020">IP HASH</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">O(1) · sticky</div>
+        </div>
+        <div style="flex:1;font-size:6px;color:#666;line-height:1.8">stateful apps, session data in memory<br>server-side session stores</div>
+        <div style="font-size:6px;color:#e8a020;min-width:32px;text-align:right">USE IF<br>stateful</div>
+      </div>
+
+      <div id="cr5" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px;padding:8px;background:#040a04;border:1px solid #101a10;border-radius:2px">
+        <div style="min-width:90px">
+          <div style="font-size:7px;color:#a78bfa">CONS. HASH</div>
+          <div style="font-size:6px;color:#555;margin-top:2px">O(log N) · elastic</div>
+        </div>
+        <div style="flex:1;font-size:6px;color:#666;line-height:1.8">distributed caches, auto-scaling<br>DynamoDB, Cassandra, Memcached</div>
+        <div style="font-size:6px;color:#a78bfa;min-width:32px;text-align:right">USE FOR<br>elastic</div>
+      </div>
+
+      <!-- interview tip -->
+      <div id="cr-tip" style="opacity:0;transition:opacity 0.5s;background:#0a0820;border:2px solid #a78bfa;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#a78bfa;margin-bottom:5px">SYSTEM DESIGN INTERVIEW TIP</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          default answer: least connections for APIs.<br>
+          if they say "stateful / sessions" → IP hash.<br>
+          if they say "elastic / auto-scale" → consistent hashing.<br>
+          always explain the tradeoff, not just the name.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">default: least connections. always explain why.</div>
+    <div class="ih gn">elastic clusters → consistent hashing.<br>sessions → IP hash. static → round robin.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">5</div><div class="sl">ALGORITHMS<br>COVERED</div></div>
+    <div class="sc"><div class="sv gn">LEAST<br>CONN</div><div class="sl">BEST<br>DEFAULT</div></div>
+    <div class="sc"><div class="sv pu">CONS.<br>HASH</div><div class="sl">ELASTIC<br>CLUSTERS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playS5()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  [playS1,playS2,playS3,playS4,playS5][n-1]();
+}
+
+// ── SCENE 1: ROUND ROBIN ──────────────────────
+function setBar(id, pct, color){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.style.width=pct+'%';
+  el.style.background=color;
+}
+function setSrv(scene, idx, conn, pct, color){
+  const c=document.getElementById(`s${scene}-c${idx}`);
+  const b=document.getElementById(`s${scene}-b${idx}`);
+  const box=document.getElementById(`s${scene}-s${idx}`);
+  if(c) c.textContent=conn;
+  if(b){ b.style.width=pct+'%'; b.style.background=color; }
+  if(box){
+    box.classList.remove('hot','active','highlight');
+    if(color==='#e85050') box.classList.add('hot');
+    else if(pct>0) box.classList.add('active');
+  }
+}
+
+function playS1(){
+  clearT();
+  for(let i=0;i<4;i++) setSrv(1,i,'0 req',0,'#34d399');
+  document.getElementById('s1-problem').style.opacity='0';
+  document.getElementById('s1-wrr-play').style.opacity='0';
+  document.getElementById('s1-wrr-a').textContent='0 req';
+  document.getElementById('s1-wrr-b').textContent='0 req';
+
+  // RR: 8 requests cycling 0→1→2→3→0→1→2→3
+  const counts=[0,0,0,0];
+  const sequence=[0,1,2,3,0,1,2,3];
+  sequence.forEach((srv,i)=>{
+    T(()=>{
+      counts[srv]++;
+      const isSlowSrv=srv===2;
+      // build up load on S3
+      const pct=srv===2?Math.min(100,counts[srv]*25):Math.min(100,counts[srv]*12);
+      const color=isSlowSrv&&counts[srv]>=2?'#e85050':counts[srv]>=3?'#e8a020':'#34d399';
+      setSrv(1,srv,counts[srv]+' req',pct,color);
+    },i*550+400);
+  });
+
+  T(()=>{ document.getElementById('s1-problem').style.opacity='1'; },8*550+400);
+
+  // WRR demo
+  T(()=>{
+    document.getElementById('s1-wrr-play').style.opacity='1';
+    let a=0,b=0,total=0;
+    const wrrSeq=[0,0,0,1,0,0,0,1]; // 3 S1 then 1 S2
+    const iv=setInterval(()=>{
+      if(total>=8){clearInterval(iv);return;}
+      if(wrrSeq[total]===0) a++;
+      else b++;
+      document.getElementById('s1-wrr-a').textContent=a+' req';
+      document.getElementById('s1-wrr-b').textContent=b+' req';
+      document.getElementById('s1-wrr-a').style.color=a>b?'#4eff9a':'#34d399';
+      total++;
+    },400);
+  },5600);
+}
+
+// ── SCENE 2: LEAST CONNECTIONS ────────────────
+function playS2(){
+  clearT();
+  for(let i=0;i<4;i++) setSrv(2,i,'0 conn',0,'#34d399');
+  document.getElementById('s2-compare').style.opacity='0';
+  document.getElementById('s2-log').innerHTML='<div style="font-size:6px;color:#1a3a3a">Awaiting requests…</div>';
+  document.getElementById('s2-stat-routed').textContent='0';
+
+  // connection state per server
+  const conns=[0,0,0,0];
+  let routed=0;
+
+  function addLog2(msg,color){
+    const log=document.getElementById('s2-log');
+    if(log.querySelector('[data-init]')) log.innerHTML='';
+    const el=document.createElement('div');
+    el.style.cssText=`font-size:6px;color:${color};line-height:1.6`;
+    el.textContent='▸ '+msg;
+    log.appendChild(el);
+    while(log.children.length>5)log.removeChild(log.firstChild);
+  }
+
+  function updateSrv2(idx, color){
+    const pct=Math.min(100,conns[idx]*20);
+    const col=conns[idx]>=4?'#e85050':conns[idx]>=2?'#e8a020':color;
+    setSrv(2,idx,conns[idx]+' conn',pct,col);
+    const connEl=document.getElementById('s2-c'+idx);
+    if(connEl){connEl.className='srv-conn'+(conns[idx]>=4?' red':conns[idx]>=2?' am':'');}
+  }
+
+  function routeLC(){
+    const min=Math.min(...conns);
+    const idx=conns.indexOf(min);
+    return idx;
+  }
+
+  const events=[
+    {type:'add',dur:0},   // fast req
+    {type:'add',dur:0},
+    {type:'add',dur:0},
+    {type:'slow',dur:5},  // S3 gets slow req, conns jump
+    {type:'add',dur:0},   // should skip S3
+    {type:'add',dur:0},
+    {type:'complete',srv:0},
+    {type:'add',dur:0},
+    {type:'complete',srv:1},
+    {type:'complete',srv:3},
+    {type:'add',dur:0},
+  ];
+
+  events.forEach((ev,i)=>{
+    T(()=>{
+      if(ev.type==='slow'){
+        // force S2 to have many conns (simulating slow requests accumulating)
+        conns[2]+=4;
+        updateSrv2(2,'#e85050');
+        addLog2('S3 holding 10s request · connections queuing up','#e85050');
+      } else if(ev.type==='add'){
+        const idx=routeLC();
+        conns[idx]++;
+        updateSrv2(idx,'#34d399');
+        routed++;
+        document.getElementById('s2-stat-routed').textContent=routed;
+        document.getElementById('s2-s'+idx).classList.add('highlight');
+        setTimeout(()=>document.getElementById('s2-s'+idx).classList.remove('highlight'),400);
+        addLog2(`req → S${idx+1} (fewest conns: ${conns[idx]-1})`,'#4eff9a');
+      } else if(ev.type==='complete'){
+        conns[ev.srv]=Math.max(0,conns[ev.srv]-1);
+        updateSrv2(ev.srv,'#34d399');
+        addLog2(`S${ev.srv+1} completed request · conns: ${conns[ev.srv]}`,'#22d3ee');
+      }
+    },i*700+400);
+  });
+
+  T(()=>{ document.getElementById('s2-compare').style.opacity='1'; },events.length*700+600);
+}
+
+// ── SCENE 3: IP HASH ──────────────────────────
+function playS3(){
+  clearT();
+  ['s3-r1','s3-r2','s3-r3','s3-r4','s3-r5'].forEach(id=>{
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('s3-tradeoff').style.opacity='0';
+  document.getElementById('s3-repeat-label').style.opacity='0';
+
+  const rows=['s3-r1','s3-r2','s3-r3'];
+  const arrows=['s3-la1','s3-la2','s3-la3'];
+  rows.forEach((id,i)=>{
+    T(()=>{
+      document.getElementById(id).style.opacity='1';
+      setTimeout(()=>{ document.getElementById(arrows[i]).style.width='100%'; },200);
+    },400+i*700);
+  });
+
+  T(()=>{
+    document.getElementById('s3-repeat-label').style.opacity='1';
+  },2800);
+
+  ['s3-r4','s3-r5'].forEach((id,i)=>{
+    const arrId='s3-la'+(4+i);
+    T(()=>{
+      document.getElementById(id).style.opacity='1';
+      setTimeout(()=>{ document.getElementById(arrId).style.width='100%'; },200);
+    },3200+i*700);
+  });
+
+  T(()=>{ document.getElementById('s3-tradeoff').style.opacity='1'; },4800);
+}
+
+// ── SCENE 4: CONSISTENT HASHING ───────────────
+function playS4(){
+  clearT();
+  ['rn-s1','rn-s2','rn-s3','rn-s4','rn-s5','rk-1','rk-2','rk-3'].forEach(id=>{
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('s4-disrupt').style.opacity='0';
+  document.getElementById('s4-users').style.opacity='0';
+  document.getElementById('s4-svg').querySelectorAll('.dyn-arc').forEach(el=>el.remove());
+
+  // show servers on ring
+  ['rn-s1','rn-s2','rn-s3','rn-s4'].forEach((id,i)=>{
+    T(()=>{ document.getElementById(id).style.opacity='1'; },400+i*350);
+  });
+
+  // show keys
+  T(()=>{
+    ['rk-1','rk-2','rk-3'].forEach((id,i)=>{
+      setTimeout(()=>{ document.getElementById(id).style.opacity='1'; },i*250);
+    });
+  },2000);
+
+  // add new server
+  T(()=>{
+    document.getElementById('rn-s5').style.opacity='1';
+    // K1 migrates (highlight it)
+    document.getElementById('rk-1').style.background='#e85050';
+    document.getElementById('rk-1').style.borderColor='#e85050';
+    document.getElementById('rk-1').style.color='#fff';
+    // K2, K3 stay
+    document.getElementById('rk-2').style.opacity='0.4';
+    document.getElementById('rk-3').style.opacity='0.4';
+  },3200);
+
+  T(()=>{
+    document.getElementById('s4-disrupt').style.opacity='1';
+  },4000);
+  T(()=>{
+    document.getElementById('s4-users').style.opacity='1';
+  },4800);
+}
+
+// ── SCENE 5: COMPARISON ───────────────────────
+function playS5(){
+  clearT();
+  ['cr1','cr2','cr3','cr4','cr5','cr-tip'].forEach(id=>{ document.getElementById(id).style.opacity='0'; });
+  ['cr1','cr2','cr3','cr4','cr5','cr-tip'].forEach((id,i)=>{
+    T(()=>{ document.getElementById(id).style.opacity='1'; },400+i*500);
+  });
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>L4 vs L7 Load Balancers</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.pu{border-color:#b07fff}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.ih.pu{color:#b07fff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sv.pu{color:#b07fff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── node boxes ── */
+.nbox{
+  border:2px solid #2a1f3d;border-radius:3px;
+  padding:6px 7px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:border-color .3s,background .3s;
+}
+.nbox-icon{font-size:13px;line-height:1}
+.nbox-lbl{font-size:6px;color:#888;text-align:center;line-height:1.5}
+.nbox-role{font-size:7px;text-align:center}
+.nbox.client-box{border-color:#555}
+.nbox.lb-l4{border-color:#e8a020;background:#e8a02010}
+.nbox.lb-l7{border-color:#4ec9e1;background:#4ec9e110}
+.nbox.srv-a{border-color:#4eff9a;background:#4eff9a0d}
+.nbox.srv-b{border-color:#b07fff;background:#b07fff0d}
+.nbox.srv-plain{border-color:#2a1f3d}
+.nbox.lit-gn{border-color:#4eff9a;background:#4eff9a15;animation:glo-gn .4s ease-in-out 2}
+.nbox.lit-pu{border-color:#b07fff;background:#b07fff15;animation:glo-pu .4s ease-in-out 2}
+@keyframes glo-gn{0%,100%{box-shadow:0 0 0 0 #4eff9a30}50%{box-shadow:0 0 10px 2px #4eff9a30}}
+@keyframes glo-pu{0%,100%{box-shadow:0 0 0 0 #b07fff30}50%{box-shadow:0 0 10px 2px #b07fff30}}
+
+/* ── packet beam ── */
+.beam-wrap{position:relative;height:16px;display:flex;align-items:center}
+.beam-track{position:absolute;left:0;right:0;height:2px;background:#1a1a2a}
+.beam-fill{position:absolute;left:0;height:2px;width:0%;border-radius:1px;transition:width .5s ease-out}
+.beam-pkt{position:absolute;width:9px;height:9px;border-radius:50%;top:50%;transform:translate(-50%,-50%);left:0%;transition:left .5s ease-out,opacity .3s;opacity:0}
+
+/* ── routing row ── */
+.rt-row{
+  display:flex;align-items:center;gap:6px;
+  padding:6px 8px;border-radius:3px;background:#130d1e;
+  opacity:0;transition:opacity .35s;border-left:3px solid #2a1f3d;
+}
+.rt-row.gn{border-color:#4eff9a}
+.rt-row.pu{border-color:#b07fff}
+.rt-row.am{border-color:#e8a020}
+.rt-path{font-size:7px;color:#4ec9e1;flex:1}
+.rt-arrow{font-size:8px;color:#4eff9a;flex-shrink:0}
+.rt-dst{font-size:7px;flex-shrink:0}
+
+/* ── ssl boxes ── */
+.ssl-row{
+  display:flex;align-items:center;gap:5px;
+  padding:7px 9px;border-radius:3px;background:#130d1e;
+  opacity:0;transition:opacity .35s;
+}
+.ssl-lock{font-size:14px;flex-shrink:0}
+.ssl-txt{font-size:7px;color:#ccc;flex:1;line-height:1.9}
+.ssl-badge{font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0}
+.ssl-badge.tls{background:#4ec9e120;border:1px solid #4ec9e1;color:#4ec9e1}
+.ssl-badge.plain{background:#4eff9a20;border:1px solid #4eff9a;color:#4eff9a}
+.ssl-badge.end{background:#b07fff20;border:1px solid #b07fff;color:#b07fff}
+
+/* ── cookie / sticky ── */
+.cookie-box{
+  background:#130d1e;border:2px solid #e8a020;border-radius:3px;
+  padding:8px 10px;opacity:0;transition:opacity .4s;
+}
+
+/* ── cmd / config line ── */
+.cfg-line{
+  font-size:7px;padding:5px 8px;background:#050c0f;
+  border-left:3px solid #4ec9e1;margin-bottom:4px;
+  opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;
+  border-radius:0 2px 2px 0;word-break:break-all;
+}
+.ck{color:#4ec9e1}
+.cv{color:#4eff9a}
+.cr{color:#e8a020}
+.ce{color:#e85050}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: L4 vs L7 Routing ══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">L4 vs L7 LOAD BALANCERS</div>
+    <div class="hdr-sub">NLB vs ALB — PICK THE RIGHT ONE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">L4 NLB vs L7 ALB</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ROUTING</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">L4 sees IP+port only. L7 opens the packet and reads HTTP.</div>
+
+      <!-- L4 block -->
+      <div style="background:#130d1e;border:2px solid #e8a020;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:7px">L4 — NETWORK LOAD BALANCER (NLB)</div>
+
+        <!-- mini diagram -->
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">
+          <div class="nbox client-box" style="flex:1">
+            <div class="nbox-icon">💻</div>
+            <div class="nbox-lbl">client<br>TCP:443</div>
+          </div>
+          <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div class="nbox lb-l4" style="padding:5px 6px">
+              <div class="nbox-icon" style="font-size:11px">⚖</div>
+              <div class="nbox-lbl">NLB<br>L4</div>
+            </div>
+            <div class="beam-wrap" style="width:100%">
+              <div class="beam-track"></div>
+              <div class="beam-fill" id="l4_beam1" style="background:#e8a020"></div>
+              <div class="beam-pkt" id="l4_pkt1" style="background:#e8a020"></div>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div class="nbox srv-plain" id="l4_s1"><div class="nbox-icon" style="font-size:10px">🖥</div><div class="nbox-lbl">backend 1</div></div>
+            <div class="nbox srv-plain" id="l4_s2"><div class="nbox-icon" style="font-size:10px">🖥</div><div class="nbox-lbl">backend 2</div></div>
+          </div>
+        </div>
+
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Routes by: <span style="color:#e8a020">IP + port</span> only. No HTTP inspection.<br>
+          Protocols: <span style="color:#4eff9a">TCP, UDP, TLS passthrough</span><br>
+          AWS use case: <span style="color:#888">gaming, IoT, raw TCP, ultra-low latency</span>
+        </div>
+
+        <div class="rt-row am" id="l4_r0" style="margin-top:7px">
+          <div class="rt-path">TCP:443 → any</div>
+          <div class="rt-arrow">→</div>
+          <div class="rt-dst" style="color:#e8a020">round-robin</div>
+        </div>
+      </div>
+
+      <!-- L7 block -->
+      <div style="background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:7px">L7 — APP LOAD BALANCER (ALB)</div>
+
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">
+          <div class="nbox client-box" style="flex:1">
+            <div class="nbox-icon">💻</div>
+            <div class="nbox-lbl">client<br>HTTPS</div>
+          </div>
+          <div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div class="nbox lb-l7" style="padding:5px 6px">
+              <div class="nbox-icon" style="font-size:11px">⚖</div>
+              <div class="nbox-lbl">ALB<br>L7</div>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+            <div class="nbox srv-a" id="l7_s1"><div class="nbox-icon" style="font-size:10px">🖥</div><div class="nbox-lbl">/api<br>servers</div></div>
+            <div class="nbox srv-b" id="l7_s2"><div class="nbox-icon" style="font-size:10px">🖥</div><div class="nbox-lbl">/static<br>servers</div></div>
+          </div>
+        </div>
+
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Routes by: <span style="color:#4ec9e1">URL, headers, cookies, method</span><br>
+          Protocols: <span style="color:#4eff9a">HTTP/1.1, HTTP/2, WebSocket</span><br>
+          AWS use case: <span style="color:#888">microservices, path-based routing, gRPC</span>
+        </div>
+
+        <div class="rt-row gn" id="l7_r0" style="margin-top:5px">
+          <div class="rt-path">GET /api/*</div>
+          <div class="rt-arrow">→</div>
+          <div class="rt-dst" style="color:#4eff9a">API target group</div>
+        </div>
+        <div class="rt-row pu" id="l7_r1" style="margin-top:4px">
+          <div class="rt-path">GET /static/*</div>
+          <div class="rt-arrow">→</div>
+          <div class="rt-dst" style="color:#b07fff">CDN / S3</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">L4 = blind TCP router. L7 = HTTP-aware smart proxy.</div>
+    <div class="ih am">Default to ALB for HTTP workloads. Use NLB only for non-HTTP or ultra-low latency.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">L4 NLB</div><div class="sl">IP+PORT<br>ROUTING</div></div>
+    <div class="sc"><div class="sv">L7 ALB</div><div class="sl">URL+HDR<br>ROUTING</div></div>
+    <div class="sc"><div class="sv gn">ALB</div><div class="sl">DEFAULT<br>CHOICE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: SSL Offloading vs Passthrough ══════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">L4 vs L7 LOAD BALANCERS</div>
+    <div class="hdr-sub">SSL OFFLOADING vs PASSTHROUGH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SSL OFFLOADING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">TLS TERMINATION</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Where does TLS terminate? At the LB or at the backend?</div>
+
+      <!-- SSL Offloading -->
+      <div style="background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">SSL OFFLOADING (most common)</div>
+
+        <!-- flow diagram -->
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
+          <div style="flex:1;background:#4ec9e115;border:1px solid #4ec9e140;border-radius:2px;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#4ec9e1">🔒 HTTPS</div>
+            <div style="font-size:6px;color:#888;margin-top:2px">client</div>
+          </div>
+          <div style="font-size:8px;color:#e8a020;flex-shrink:0">→</div>
+          <div style="background:#e8a02018;border:2px solid #e8a020;border-radius:2px;padding:5px;text-align:center;flex-shrink:0">
+            <div style="font-size:7px;color:#e8a020">ALB/NLB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">terminates TLS</div>
+          </div>
+          <div style="font-size:8px;color:#4eff9a;flex-shrink:0">→</div>
+          <div style="flex:1;background:#4eff9a0d;border:1px solid #4eff9a40;border-radius:2px;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a">🔓 HTTP</div>
+            <div style="font-size:6px;color:#888;margin-top:2px">backends</div>
+          </div>
+        </div>
+
+        <div class="ssl-row" id="ssl_o1">
+          <div class="ssl-lock">✓</div>
+          <div class="ssl-txt">LB holds the cert. Backends get plain HTTP.<br>Backend CPU freed from TLS handshake cost.</div>
+          <div class="ssl-badge plain">PLAIN HTTP</div>
+        </div>
+        <div class="ssl-row" id="ssl_o2" style="margin-top:5px">
+          <div class="ssl-lock">✓</div>
+          <div class="ssl-txt">Centralised cert renewal (ACM in AWS).<br>No cert rotation on each backend server.</div>
+          <div class="ssl-badge tls">CERT MGMT</div>
+        </div>
+      </div>
+
+      <!-- SSL Passthrough -->
+      <div style="background:#130d1e;border:2px solid #b07fff;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#b07fff;margin-bottom:8px">SSL PASSTHROUGH (end-to-end)</div>
+
+        <div style="display:flex;align-items:center;gap:4px;margin-bottom:8px">
+          <div style="flex:1;background:#b07fff15;border:1px solid #b07fff40;border-radius:2px;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#b07fff">🔒 HTTPS</div>
+            <div style="font-size:6px;color:#888;margin-top:2px">client</div>
+          </div>
+          <div style="font-size:8px;color:#888;flex-shrink:0">→</div>
+          <div style="background:#55555510;border:1px solid #555;border-radius:2px;padding:5px;text-align:center;flex-shrink:0">
+            <div style="font-size:7px;color:#888">NLB</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">passes thru</div>
+          </div>
+          <div style="font-size:8px;color:#b07fff;flex-shrink:0">→</div>
+          <div style="flex:1;background:#b07fff0d;border:1px solid #b07fff40;border-radius:2px;padding:5px;text-align:center">
+            <div style="font-size:7px;color:#b07fff">🔒 TLS</div>
+            <div style="font-size:6px;color:#888;margin-top:2px">backends</div>
+          </div>
+        </div>
+
+        <div class="ssl-row" id="ssl_p1">
+          <div class="ssl-lock">🔒</div>
+          <div class="ssl-txt">LB cannot inspect packet content.<br>Required for mutual TLS (mTLS) or PCI compliance.</div>
+          <div class="ssl-badge end">END-TO-END</div>
+        </div>
+        <div class="ssl-row" id="ssl_p2" style="margin-top:5px">
+          <div class="ssl-lock">⚠</div>
+          <div class="ssl-txt">L7 routing impossible — LB is blind.<br>Each backend must manage its own cert.</div>
+          <div class="ssl-badge end">NLB ONLY</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">SSL offloading: LB terminates TLS, backends get HTTP. Simpler, cheaper.</div>
+    <div class="ih">Use passthrough only for mTLS, PCI, or when you need E2E encryption.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">OFFLOAD</div><div class="sl">DEFAULT<br>CHOICE</div></div>
+    <div class="sc"><div class="sv pu">PASS-<br>THRU</div><div class="sl">MTLS /<br>PCI</div></div>
+    <div class="sc"><div class="sv gn">ACM</div><div class="sl">AWS CERT<br>MANAGER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Sticky Sessions + Decision Guide ══════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">L4 vs L7 LOAD BALANCERS</div>
+    <div class="hdr-sub">STICKY SESSIONS & WHEN TO USE WHAT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">STICKY SESSIONS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DECISION GUIDE</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Sticky sessions pin a client to a backend. It's a trap.</div>
+
+      <!-- Cookie sticky -->
+      <div class="cookie-box" id="s3_sticky">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:6px">COOKIE-BASED STICKY SESSIONS</div>
+        <div class="cfg-line" id="cf0" style="border-color:#e8a020">
+          <span class="cr"># ALB stickiness cookie</span><br>
+          Set-Cookie: <span class="cr">AWSALB</span>=<span class="cv">AbC123xYz</span>; Path=/; HttpOnly<br>
+          <span style="color:#555;font-size:6px">→ client always routed to backend-2</span>
+        </div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          ✓ Useful for server-side session state.<br>
+          <span style="color:#e85050">✗ Backend dies → session lost anyway.</span><br>
+          <span style="color:#e85050">✗ Uneven load distribution.</span>
+        </div>
+      </div>
+
+      <!-- Better: Redis sessions -->
+      <div style="background:#4eff9a0d;border:2px solid #4eff9a;border-radius:3px;padding:9px 10px;opacity:0;transition:opacity .4s" id="s3_redis">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:6px">BETTER: SHARED SESSION STORE</div>
+        <div class="cfg-line" id="cf1" style="border-color:#4eff9a">
+          <span class="cv"># Store session in Redis, not backend RAM</span><br>
+          session = <span class="ck">redis</span>.get(<span class="cv">"sess:AbC123"</span>)<br>
+          <span style="color:#555;font-size:6px">→ any backend can serve any client</span>
+        </div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          ✓ Any backend handles any request.<br>
+          ✓ True horizontal scaling.<br>
+          ✓ Session survives backend restart.
+        </div>
+      </div>
+
+      <!-- Decision table -->
+      <div id="s3_table" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">WHEN TO USE WHICH</div>
+        <div style="display:flex;gap:5px">
+          <div style="flex:1;background:#130d1e;border:2px solid #e8a020;border-radius:3px;padding:7px 8px">
+            <div style="font-size:6px;color:#e8a020;margin-bottom:5px;text-align:center">USE NLB (L4)</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              Non-HTTP protocols<br>
+              UDP / raw TCP<br>
+              Gaming / IoT / gRPC<br>
+              Static IP required<br>
+              Ultra-low latency<br>
+              &lt;1ms routing target
+            </div>
+          </div>
+          <div style="flex:1;background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:7px 8px">
+            <div style="font-size:6px;color:#4ec9e1;margin-bottom:5px;text-align:center">USE ALB (L7) ✓</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              HTTP / HTTPS<br>
+              Microservices<br>
+              Path-based routing<br>
+              Header rewrite<br>
+              WebSocket<br>
+              WAF integration
+            </div>
+          </div>
+        </div>
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">INTERVIEW ANSWER</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            "Default to ALB for HTTP. NLB only for non-HTTP or static IP requirements. Offload TLS at the LB, manage certs centrally in ACM. Replace sticky sessions with Redis for true stateless backends."
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Sticky sessions create hot spots. Shared Redis sessions scale cleanly.</div>
+    <div class="ih pu">Stateless backends + external session store = true horizontal scale.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">AVOID</div><div class="sl">COOKIE<br>STICKY</div></div>
+    <div class="sc"><div class="sv gn">REDIS</div><div class="sl">SESSION<br>STORE</div></div>
+    <div class="sc"><div class="sv">ALB</div><div class="sl">DEFAULT<br>LB PICK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  hide('l4_r0');
+  hide('l7_r0');
+  hide('l7_r1');
+  ['l4_s1','l4_s2','l7_s1','l7_s2'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e){e.classList.remove('lit-gn');e.classList.remove('lit-pu');}
+  });
+
+  // L4 routing animation
+  delay(function(){show('l4_r0');},500);
+  delay(function(){
+    var s=document.getElementById('l4_s1');
+    if(s){s.classList.add('lit-gn');}
+    setTimeout(function(){if(s)s.classList.remove('lit-gn');},600);
+  },900);
+  delay(function(){
+    var s=document.getElementById('l4_s2');
+    if(s){s.classList.add('lit-gn');}
+    setTimeout(function(){if(s)s.classList.remove('lit-gn');},600);
+  },1500);
+
+  // L7 routing animation
+  delay(function(){show('l7_r0');},2200);
+  delay(function(){show('l7_r1');},2700);
+  delay(function(){
+    var s=document.getElementById('l7_s1');
+    if(s){s.classList.add('lit-gn');}
+    setTimeout(function(){if(s)s.classList.remove('lit-gn');},700);
+  },3000);
+  delay(function(){
+    var s=document.getElementById('l7_s2');
+    if(s){s.classList.add('lit-pu');}
+    setTimeout(function(){if(s)s.classList.remove('lit-pu');},700);
+  },3700);
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['ssl_o1','ssl_o2','ssl_p1','ssl_p2'].forEach(hide);
+
+  delay(function(){show('ssl_o1');},400);
+  delay(function(){show('ssl_o2');},1000);
+  delay(function(){show('ssl_p1');},1800);
+  delay(function(){show('ssl_p2');},2500);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  document.getElementById('s3_sticky').style.opacity='0';
+  document.getElementById('s3_redis').style.opacity='0';
+  document.getElementById('s3_table').style.opacity='0';
+  ['cf0','cf1'].forEach(hide);
+
+  delay(function(){document.getElementById('s3_sticky').style.opacity='1';},300);
+  delay(function(){show('cf0');},700);
+  delay(function(){document.getElementById('s3_redis').style.opacity='1';},1600);
+  delay(function(){show('cf1');},2000);
+  delay(function(){document.getElementById('s3_table').style.opacity='1';},3000);
+}
+
+playS1();
+</script>
+</body>
+</html>

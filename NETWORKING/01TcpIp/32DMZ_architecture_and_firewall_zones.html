@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>DMZ Architecture & Firewall Zones</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.rd{border-color:#e85050}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── zone blocks ── */
+.zone-col{
+  border-radius:3px;
+  padding:8px 6px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:5px;
+}
+.zone-label{font-size:7px;letter-spacing:1px;text-align:center;margin-bottom:2px}
+.zone-outside{background:#e8505012;border:2px solid #e85050}
+.zone-fw{background:#e8a02012;border:2px solid #e8a020;padding:6px 4px}
+.zone-dmz{background:#4ec9e112;border:2px solid #4ec9e1}
+.zone-inside{background:#4eff9a12;border:2px solid #4eff9a}
+
+/* ── server/device boxes ── */
+.sbox{
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  border-radius:2px;
+  padding:4px 5px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:2px;
+  width:100%;
+  opacity:0;
+  transition:opacity .3s,border-color .3s,background .3s;
+}
+.sbox-icon{font-size:11px;line-height:1}
+.sbox-lbl{font-size:5px;color:#888;text-align:center;line-height:1.5}
+.sbox.compromised{border-color:#e85050;background:#e8505018;animation:shk .15s 3}
+.sbox.highlighted{border-color:#4eff9a;background:#4eff9a0d}
+@keyframes shk{0%,100%{transform:translateX(0)}50%{transform:translateX(3px)}}
+
+/* ── firewall box ── */
+.fw-box{
+  background:#e8a02018;
+  border:2px solid #e8a020;
+  border-radius:3px;
+  padding:6px 4px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  width:100%;
+  opacity:0;
+  transition:opacity .3s;
+}
+.fw-box-lbl{font-size:6px;color:#e8a020;text-align:center;line-height:1.6}
+
+/* ── traffic arrow row ── */
+.traffic-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 8px;
+  border-radius:3px;
+  background:#130d1e;
+  opacity:0;
+  transition:opacity .35s;
+  border-left:3px solid #2a1f3d;
+}
+.traffic-row.allowed{border-color:#4eff9a}
+.traffic-row.blocked{border-color:#e85050}
+.tr-src{font-size:6px;color:#888;min-width:52px}
+.tr-arrow{font-size:8px;flex-shrink:0}
+.tr-arrow.go{color:#4eff9a}
+.tr-arrow.no{color:#e85050}
+.tr-dst{font-size:6px;color:#888;flex:1}
+.tr-verdict{font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0}
+.tr-verdict.ok{background:#4eff9a20;border:1px solid #4eff9a;color:#4eff9a}
+.tr-verdict.deny{background:#e8505020;border:1px solid #e85050;color:#e85050}
+
+/* ── iptables cmd line ── */
+.ipt-line{
+  font-size:7px;
+  padding:5px 8px;
+  background:#050c0f;
+  border-left:3px solid #4ec9e1;
+  margin-bottom:4px;
+  opacity:0;
+  transition:opacity .3s;
+  line-height:1.9;
+  color:#aaa;
+  border-radius:0 2px 2px 0;
+  font-family:'Press Start 2P',monospace;
+  word-break:break-all;
+}
+.ik{color:#4ec9e1}
+.iv{color:#4eff9a}
+.ir{color:#e8a020}
+.ie{color:#e85050}
+
+/* ── flow packet dot ── */
+.pkt{
+  width:10px;height:10px;border-radius:50%;
+  position:absolute;
+  top:50%;transform:translateY(-50%);
+  transition:left .6s ease-out,opacity .4s;
+  opacity:0;
+}
+.pkt-track{position:relative;height:14px;margin:2px 0}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: 3-Zone Model ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DMZ ARCHITECTURE</div>
+    <div class="hdr-sub">FIREWALL ZONES — THE RIGHT WAY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">3-ZONE MODEL</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ARCHITECTURE</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Never put a web server on the same network as your HR database.</div>
+
+      <!-- 3-zone horizontal diagram -->
+      <div style="display:flex;gap:4px;align-items:stretch" id="s1_diagram">
+
+        <!-- Outside -->
+        <div class="zone-col zone-outside" style="flex:1;opacity:0;transition:opacity .4s" id="z_outside">
+          <div class="zone-label" style="color:#e85050">OUTSIDE<br>INTERNET</div>
+          <div class="sbox" id="sb_user" style="opacity:1">
+            <div class="sbox-icon">🌐</div>
+            <div class="sbox-lbl">users<br>attackers</div>
+          </div>
+          <div class="sbox" id="sb_atk" style="opacity:1">
+            <div class="sbox-icon">💀</div>
+            <div class="sbox-lbl">threats</div>
+          </div>
+        </div>
+
+        <!-- FW1 -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex-shrink:0;opacity:0;transition:opacity .4s" id="z_fw1">
+          <div style="font-size:14px">🛡</div>
+          <div style="font-size:5px;color:#e8a020;text-align:center;line-height:1.6">EDGE<br>FW</div>
+        </div>
+
+        <!-- DMZ -->
+        <div class="zone-col zone-dmz" style="flex:1;opacity:0;transition:opacity .4s" id="z_dmz">
+          <div class="zone-label" style="color:#4ec9e1">DMZ</div>
+          <div class="sbox" id="sb_web">
+            <div class="sbox-icon">🖥</div>
+            <div class="sbox-lbl">web<br>server</div>
+          </div>
+          <div class="sbox" id="sb_mail">
+            <div class="sbox-icon">📧</div>
+            <div class="sbox-lbl">mail<br>server</div>
+          </div>
+          <div class="sbox" id="sb_dns">
+            <div class="sbox-icon">🔍</div>
+            <div class="sbox-lbl">public<br>DNS</div>
+          </div>
+        </div>
+
+        <!-- FW2 -->
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;flex-shrink:0;opacity:0;transition:opacity .4s" id="z_fw2">
+          <div style="font-size:14px">🛡</div>
+          <div style="font-size:5px;color:#e8a020;text-align:center;line-height:1.6">INNER<br>FW</div>
+        </div>
+
+        <!-- Inside -->
+        <div class="zone-col zone-inside" style="flex:1;opacity:0;transition:opacity .4s" id="z_inside">
+          <div class="zone-label" style="color:#4eff9a">INSIDE<br>TRUSTED</div>
+          <div class="sbox" id="sb_db">
+            <div class="sbox-icon">🗄</div>
+            <div class="sbox-lbl">HR<br>DB</div>
+          </div>
+          <div class="sbox" id="sb_pay">
+            <div class="sbox-icon">💳</div>
+            <div class="sbox-lbl">payment<br>system</div>
+          </div>
+          <div class="sbox" id="sb_corp">
+            <div class="sbox-icon">💻</div>
+            <div class="sbox-lbl">corp<br>LAN</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Zone assumptions -->
+      <div id="s1_rules" style="display:flex;flex-direction:column;gap:5px">
+        <div style="background:#e8505015;border-left:3px solid #e85050;padding:7px 9px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .3s" id="s1_r0">
+          <div style="font-size:7px;color:#e85050;margin-bottom:3px">OUTSIDE — UNTRUSTED</div>
+          <div style="font-size:6px;color:#ccc;line-height:2">Treat every packet as hostile. Allow only known ports inbound to DMZ.</div>
+        </div>
+        <div style="background:#4ec9e115;border-left:3px solid #4ec9e1;padding:7px 9px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .3s" id="s1_r1">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">DMZ — ASSUMED COMPROMISED</div>
+          <div style="font-size:6px;color:#ccc;line-height:2">Public services live here. Design as if it will be breached.</div>
+        </div>
+        <div style="background:#4eff9a15;border-left:3px solid #4eff9a;padding:7px 9px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .3s" id="s1_r2">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">INSIDE — NEVER REACHABLE FROM DMZ</div>
+          <div style="font-size:6px;color:#ccc;line-height:2">Databases, payroll, internal apps. DMZ → Inside = DENY ALL.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">3 zones separated by 2 firewalls. Each zone has its own trust level.</div>
+    <div class="ih am">DMZ breach must NEVER reach the inside network. That's the whole point.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">OUTSIDE</div><div class="sl">ZERO<br>TRUST</div></div>
+    <div class="sc"><div class="sv">DMZ</div><div class="sl">LOW<br>TRUST</div></div>
+    <div class="sc"><div class="sv gn">INSIDE</div><div class="sl">HIGH<br>TRUST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: Traffic Flows ══════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DMZ ARCHITECTURE</div>
+    <div class="hdr-sub">TRAFFIC RULES — ALLOWED VS BLOCKED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TRAFFIC FLOWS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DENY DMZ→INSIDE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Green = allowed. Red = blocked. The critical rule is DMZ → Inside.</div>
+
+      <!-- Mini zone diagram (static) -->
+      <div style="display:flex;gap:3px;height:34px;align-items:center">
+        <div style="flex:1;background:#e8505015;border:1px solid #e8505050;border-radius:2px;display:flex;align-items:center;justify-content:center">
+          <div style="font-size:6px;color:#e85050;text-align:center;line-height:1.6">OUT<br>SIDE</div>
+        </div>
+        <div style="font-size:10px">🛡</div>
+        <div style="flex:1;background:#4ec9e115;border:1px solid #4ec9e150;border-radius:2px;display:flex;align-items:center;justify-content:center">
+          <div style="font-size:6px;color:#4ec9e1;text-align:center;line-height:1.6">DMZ</div>
+        </div>
+        <div style="font-size:10px">🛡</div>
+        <div style="flex:1;background:#4eff9a15;border:1px solid #4eff9a50;border-radius:2px;display:flex;align-items:center;justify-content:center">
+          <div style="font-size:6px;color:#4eff9a;text-align:center;line-height:1.6">IN<br>SIDE</div>
+        </div>
+      </div>
+
+      <!-- Traffic rules -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">FIREWALL POLICY</div>
+      <div class="traffic-row allowed" id="tr0">
+        <div class="tr-src">Internet</div>
+        <div class="tr-arrow go">→</div>
+        <div class="tr-dst">DMZ :80 :443</div>
+        <div class="tr-verdict ok">ALLOW</div>
+      </div>
+      <div class="traffic-row allowed" id="tr1">
+        <div class="tr-src">Internet</div>
+        <div class="tr-arrow go">→</div>
+        <div class="tr-dst">DMZ :25 (SMTP)</div>
+        <div class="tr-verdict ok">ALLOW</div>
+      </div>
+      <div class="traffic-row allowed" id="tr2">
+        <div class="tr-src">DMZ web</div>
+        <div class="tr-arrow go">→</div>
+        <div class="tr-dst">Inside :5432 DB<br><span style="font-size:5px;color:#555">(app-layer proxy only)</span></div>
+        <div class="tr-verdict ok">LIMITED</div>
+      </div>
+      <div class="traffic-row allowed" id="tr3">
+        <div class="tr-src">Inside</div>
+        <div class="tr-arrow go">→</div>
+        <div class="tr-dst">DMZ (patches, SSH)</div>
+        <div class="tr-verdict ok">ALLOW</div>
+      </div>
+      <div class="traffic-row blocked" id="tr4">
+        <div class="tr-src">DMZ any</div>
+        <div class="tr-arrow no">✕</div>
+        <div class="tr-dst">Inside any port</div>
+        <div class="tr-verdict deny">DENY</div>
+      </div>
+      <div class="traffic-row blocked" id="tr5">
+        <div class="tr-src">Internet</div>
+        <div class="tr-arrow no">✕</div>
+        <div class="tr-dst">Inside directly</div>
+        <div class="tr-verdict deny">DENY</div>
+      </div>
+
+      <!-- Critical rule callout -->
+      <div id="s2_critical" style="background:#e8505018;border:2px solid #e85050;padding:9px 11px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:8px;color:#e85050;margin-bottom:5px">⚠ THE CRITICAL RULE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          DMZ → Inside = <span style="color:#e85050">DENY ALL</span>.<br>
+          Even if the web server is 100% compromised,<br>
+          the attacker still cannot reach your DB.<br>
+          <span style="color:#4eff9a">Firewall 2 is the last line of defense.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">The DMZ web server talks to the DB via an app-layer proxy — not directly.</div>
+    <div class="ih rd">DMZ → Inside: default DENY ALL. No exceptions. Ever.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">DENY</div><div class="sl">DMZ →<br>INSIDE</div></div>
+    <div class="sc"><div class="sv gn">ALLOW</div><div class="sl">INET →<br>DMZ :443</div></div>
+    <div class="sc"><div class="sv am">PROXY</div><div class="sl">ONLY DB<br>ACCESS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: iptables + Zone-based FW ══════════════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">DMZ ARCHITECTURE</div>
+    <div class="hdr-sub">IPTABLES + ZONE-BASED FIREWALL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">IPTABLES CONFIG</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Default DROP policy. Allow only what you explicitly permit.</div>
+
+      <!-- iptables rules -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">INNER FIREWALL — iptables</div>
+
+      <div class="ipt-line" id="ip0" style="border-color:#e85050">
+        <span class="ie"># Default DROP everything</span><br>
+        <span class="ik">iptables</span> -P FORWARD <span class="ir">DROP</span><br>
+        <span class="ik">iptables</span> -P INPUT <span class="ir">DROP</span>
+      </div>
+
+      <div class="ipt-line" id="ip1">
+        <span class="ie"># Allow established sessions (stateful)</span><br>
+        <span class="ik">iptables</span> -A FORWARD -m state<br>
+        &nbsp;&nbsp;--state <span class="iv">ESTABLISHED,RELATED</span> -j <span class="iv">ACCEPT</span>
+      </div>
+
+      <div class="ipt-line" id="ip2" style="border-color:#4eff9a">
+        <span class="ie"># Inside → DMZ: allow SSH for admin</span><br>
+        <span class="ik">iptables</span> -A FORWARD -i <span class="ir">eth1</span> -o <span class="iv">eth0</span><br>
+        &nbsp;&nbsp;-p tcp --dport <span class="iv">22</span> -j <span class="iv">ACCEPT</span>
+      </div>
+
+      <div class="ipt-line" id="ip3" style="border-color:#e85050">
+        <span class="ie"># DMZ → Inside: DENY ALL (the rule)</span><br>
+        <span class="ik">iptables</span> -A FORWARD -i <span class="iv">eth0</span> -o <span class="ir">eth1</span><br>
+        &nbsp;&nbsp;-j <span class="ie">DROP</span>
+      </div>
+
+      <!-- Zone-based vs ACL comparison -->
+      <div id="s3_compare" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">ZONE-BASED vs INTERFACE ACLs</div>
+
+        <div style="display:flex;gap:5px">
+          <div style="flex:1;background:#130d1e;border:2px solid #4eff9a;border-radius:3px;padding:8px">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:5px;text-align:center">ZONE-BASED ✓</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              Rules tied to zones<br>
+              not interfaces<br>
+              Add interface → auto<br>
+              inherits zone policy<br>
+              Cisco IOS, pfSense,<br>
+              Palo Alto style
+            </div>
+          </div>
+          <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:8px">
+            <div style="font-size:6px;color:#888;margin-bottom:5px;text-align:center">INTERFACE ACLs</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              Rules per interface<br>
+              Hard to audit<br>
+              Add interface → must<br>
+              manually add ACLs<br>
+              Legacy iptables<br>
+              style approach
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">INTERVIEW ANSWER</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            "Use zone-based firewall policy. Zones abstract the physical topology — you define trust levels once, rules apply automatically as interfaces join zones. More maintainable at scale."
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Default DROP. Stateful ESTABLISHED,RELATED tracking. Explicit ACCEPT only.</div>
+    <div class="ih">Zone-based policy scales. Interface ACLs break under topology changes.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">DROP</div><div class="sl">DEFAULT<br>POLICY</div></div>
+    <div class="sc"><div class="sv gn">STATEFUL</div><div class="sl">CONN<br>TRACKING</div></div>
+    <div class="sc"><div class="sv">ZONE</div><div class="sl">FW MODEL<br>PREFERRED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var el=document.getElementById(id);if(el)el.style.opacity='1';}
+function hide(id){var el=document.getElementById(id);if(el)el.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  // reset zones
+  ['z_outside','z_fw1','z_dmz','z_fw2','z_inside'].forEach(hide);
+  ['sb_web','sb_mail','sb_dns','sb_db','sb_pay','sb_corp'].forEach(hide);
+  ['s1_r0','s1_r1','s1_r2'].forEach(hide);
+  ['sb_web','sb_mail','sb_dns','sb_db','sb_pay','sb_corp'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){el.classList.remove('compromised');el.classList.remove('highlighted');}
+  });
+
+  // reveal zones left to right
+  delay(function(){show('z_outside');},300);
+  delay(function(){show('z_fw1');},700);
+  delay(function(){show('z_dmz');},1000);
+
+  // DMZ servers appear
+  delay(function(){show('sb_web');},1100);
+  delay(function(){show('sb_mail');},1300);
+  delay(function(){show('sb_dns');},1500);
+
+  delay(function(){show('z_fw2');},1800);
+  delay(function(){show('z_inside');},2100);
+
+  // Inside servers appear
+  delay(function(){show('sb_db');},2200);
+  delay(function(){show('sb_pay');},2400);
+  delay(function(){show('sb_corp');},2600);
+
+  // Rules appear
+  delay(function(){show('s1_r0');},3100);
+  delay(function(){show('s1_r1');},3600);
+
+  // DMZ compromise animation
+  delay(function(){
+    var wb=document.getElementById('sb_web');
+    wb.classList.add('compromised');
+  },4200);
+
+  delay(function(){show('s1_r2');},4600);
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['tr0','tr1','tr2','tr3','tr4','tr5'].forEach(hide);
+  hide('s2_critical');
+
+  var rows=['tr0','tr1','tr2','tr3','tr4','tr5'];
+  rows.forEach(function(id,i){
+    delay(function(){show(id);}, 400+i*450);
+  });
+
+  delay(function(){show('s2_critical');}, 400+6*450);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['ip0','ip1','ip2','ip3'].forEach(hide);
+  hide('s3_compare');
+
+  delay(function(){show('ip0');},400);
+  delay(function(){show('ip1');},1200);
+  delay(function(){show('ip2');},2000);
+  delay(function(){show('ip3');},2800);
+  delay(function(){show('s3_compare');},3700);
+}
+
+playS1();
+</script>
+</body>
+</html>

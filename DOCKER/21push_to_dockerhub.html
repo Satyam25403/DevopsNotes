@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Push to Docker Hub</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* command blocks */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:9px;font-family:'Press Start 2P',monospace;line-height:2.0}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* naming anatomy */
+.name-wrap{display:flex;flex-direction:column;gap:6px}
+.name-full{font-size:11px;color:#fff;text-align:center;letter-spacing:.5px;padding:10px;border:1px solid #2a1f3d;border-radius:3px;background:#0a0a14;font-family:'Press Start 2P',monospace}
+.name-parts{display:flex;gap:4px;justify-content:center}
+.name-part{flex:1;border:2px solid;border-radius:3px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.np-val{font-size:8px;text-align:center;font-family:'Press Start 2P',monospace}
+.np-label{font-size:6px;text-align:center;color:#888}
+
+/* layer push animation */
+.layer-stack{display:flex;flex-direction:column;gap:4px}
+.layer-item{border:1px solid #2a1f3d;border-radius:2px;padding:6px 10px;display:flex;align-items:center;gap:8px;background:#0a0a14}
+.layer-id{font-size:7px;color:#555;width:80px;flex-shrink:0;font-family:'Press Start 2P',monospace}
+.layer-bar-wrap{flex:1;height:14px;background:#130d1e;border-radius:1px;overflow:hidden}
+.layer-bar{height:100%;width:0;transition:width .8s ease-out}
+.layer-status{font-size:6px;width:50px;flex-shrink:0;text-align:right;font-family:'Press Start 2P',monospace}
+
+/* world map machine boxes */
+.machine-row{display:flex;gap:6px;flex-wrap:wrap}
+.machine{flex:1;min-width:80px;border:2px solid #2a1f3d;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:5px;transition:border-color .4s,background .4s}
+.machine.pulling{border-color:#4ec9e1;background:#04101a}
+.machine.done{border-color:#4eff9a;background:#04140a}
+.machine-flag{font-size:20px}
+.machine-name{font-size:6px;color:#888;text-align:center}
+.machine-status{font-size:6px;text-align:center;font-family:'Press Start 2P',monospace}
+
+/* semver table */
+.sv-table{display:flex;flex-direction:column;gap:5px}
+.sv-row{display:flex;gap:8px;align-items:center;padding:6px 10px;border:1px solid #2a1f3d;border-radius:2px}
+.sv-tag{font-size:8px;font-family:'Press Start 2P',monospace;width:90px;flex-shrink:0}
+.sv-desc{font-size:7px;color:#aaa;line-height:1.7}
+
+/* flow diagram */
+.flow-row{display:flex;align-items:center;gap:0;width:100%}
+.flow-node{border:2px solid;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.flow-arrow{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+.flow-arrow-line{height:3px;width:0;border-radius:1px;transition:width .7s ease-out}
+.flow-arrow-label{font-size:6px;color:#888;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — THE THREE COMMANDS
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">PUSH TO DOCKER HUB</div>
+    <div class="hdr-sub">SHIP YOUR IMAGE TO THE WORLD</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THREE COMMANDS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">THE FLOW</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- step 1: login -->
+      <div class="fade" id="s1e1">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px;letter-spacing:1px">STEP 1 — LOGIN</div>
+        <div class="cmd-block">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line"><span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">login</span></div>
+          <div class="cmd-out">
+            Username: <span style="color:#4eff9a">yourname</span><br>
+            Password: ••••••••<br>
+            <span style="color:#4eff9a">Login Succeeded</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- step 2: tag -->
+      <div class="fade" id="s1e2">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px;letter-spacing:1px">STEP 2 — TAG</div>
+        <div class="cmd-block">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line"><span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">tag</span> <span style="color:#ccc">my-app</span> <span style="color:#4eff9a">yourname/my-app:1.0.0</span></div>
+          <div class="cmd-out">
+            <span style="color:#888"># no output = success</span><br>
+            local image → gets a registry name
+          </div>
+        </div>
+      </div>
+
+      <!-- step 3: push -->
+      <div class="fade" id="s1e3">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px;letter-spacing:1px">STEP 3 — PUSH</div>
+        <div class="cmd-block">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line"><span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">push</span> <span style="color:#4eff9a">yourname/my-app:1.0.0</span></div>
+          <div class="cmd-out">
+            The push refers to repository<br>
+            <span style="color:#4ec9e1">[docker.io/yourname/my-app]</span><br>
+            <span style="color:#4eff9a">1.0.0: digest: sha256:abc… ✓</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- anyone can pull now -->
+      <div class="fade" id="s1e4" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">🌍 NOW ANYONE CAN RUN YOUR APP</div>
+        <div class="cmd-line" style="font-size:8px"><span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">run</span> <span style="color:#4eff9a">yourname/my-app:1.0.0</span></div>
+        <div style="margin-top:6px;font-size:7px;color:#aaa;line-height:1.9">No Dockerfile. No source. No setup.<br>Any machine on Earth.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Login → Tag → Push. That's the whole flow.</div>
+    <div class="ih am">Three commands to ship to any machine on Earth.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">login</div><div class="sl">authenticate once</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">tag</div><div class="sl">name the image</div></div>
+    <div class="sc"><div class="sv gn">push</div><div class="sl">ship to registry</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — NAMING CONVENTION ANATOMY
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">NAMING CONVENTION</div>
+    <div class="hdr-sub">ANATOMY OF AN IMAGE NAME</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">IMAGE NAMES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ANATOMY</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- full name display -->
+      <div class="fade" id="s2e1" class="name-wrap">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">FULL IMAGE REFERENCE</div>
+        <div style="font-size:9px;color:#fff;text-align:center;padding:12px;border:1px solid #2a1f3d;border-radius:3px;background:#0a0a14;font-family:'Press Start 2P',monospace;line-height:1.8">
+          <span style="color:#e8a020">yourname</span><span style="color:#555">/</span><span style="color:#4ec9e1">my-app</span><span style="color:#555">:</span><span style="color:#4eff9a">1.0.0</span>
+        </div>
+      </div>
+
+      <!-- parts breakdown -->
+      <div class="fade" id="s2e2" style="display:flex;gap:5px">
+        <div style="flex:1;border:2px solid #e8a020;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="font-size:10px;color:#e8a020;font-family:'Press Start 2P',monospace">yourname</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.7">Docker Hub<br>username or<br>org name</div>
+        </div>
+        <div style="display:flex;align-items:center;font-size:14px;color:#555;flex-shrink:0">/</div>
+        <div style="flex:1;border:2px solid #4ec9e1;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="font-size:10px;color:#4ec9e1;font-family:'Press Start 2P',monospace">my-app</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.7">repository<br>name — what<br>the app is</div>
+        </div>
+        <div style="display:flex;align-items:center;font-size:14px;color:#555;flex-shrink:0">:</div>
+        <div style="flex:1;border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px">
+          <div style="font-size:10px;color:#4eff9a;font-family:'Press Start 2P',monospace">1.0.0</div>
+          <div style="font-size:6px;color:#888;text-align:center;line-height:1.7">tag — version<br>or env. defaults<br>to latest</div>
+        </div>
+      </div>
+
+      <!-- semver tags -->
+      <div class="fade" id="s2e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">SEMANTIC VERSIONING TAGS</div>
+        <div class="sv-table">
+          <div class="sv-row">
+            <span class="sv-tag" style="color:#4eff9a">:1.0.0</span>
+            <span class="sv-desc">exact release — immutable, safe for prod</span>
+          </div>
+          <div class="sv-row">
+            <span class="sv-tag" style="color:#4ec9e1">:1.0</span>
+            <span class="sv-desc">minor float — gets patch updates</span>
+          </div>
+          <div class="sv-row">
+            <span class="sv-tag" style="color:#4ec9e1">:1</span>
+            <span class="sv-desc">major float — gets minor + patch</span>
+          </div>
+          <div class="sv-row">
+            <span class="sv-tag" style="color:#e8a020">:latest</span>
+            <span class="sv-desc">default if no tag — avoid in prod!</span>
+          </div>
+          <div class="sv-row">
+            <span class="sv-tag" style="color:#888">:dev / :staging</span>
+            <span class="sv-desc">env-based tags for CI pipelines</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- warning about latest -->
+      <div class="fade" id="s2e4" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">⚠ NEVER USE :latest IN PRODUCTION</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          :latest is mutable — a new push overwrites it.<br>
+          Your "stable" deploy can silently change.<br>
+          Always pin to an exact version tag.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">username/repo:tag — three parts, one identity.</div>
+    <div class="ih am">Pin exact versions in prod. Never rely on :latest.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">user</div><div class="sl">your namespace</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">repo</div><div class="sl">the app name</div></div>
+    <div class="sc"><div class="sv gn">:tag</div><div class="sl">pin the version</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — LAYER PUSH ANIMATION
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">PUSHING LAYERS</div>
+    <div class="hdr-sub">DOCKER ONLY UPLOADS WHAT'S NEW</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PUSH INTERNALS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SMART UPLOAD</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- push command -->
+      <div class="fade" id="s3e0">
+        <div class="cmd-block" style="border-color:#4ec9e1">
+          <div class="cmd-prompt">$ docker push yourname/my-app:1.0.0</div>
+          <div class="cmd-out" id="pushout" style="min-height:14px"> </div>
+        </div>
+      </div>
+
+      <!-- layer progress -->
+      <div class="fade" id="s3e1">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">LAYER UPLOAD PROGRESS</div>
+        <div class="layer-stack">
+          <div class="layer-item">
+            <span class="layer-id">abc12345</span>
+            <div class="layer-bar-wrap"><div class="layer-bar" id="lb1" style="background:#2a1f3d"></div></div>
+            <span class="layer-status" id="ls1" style="color:#888">waiting</span>
+          </div>
+          <div class="layer-item">
+            <span class="layer-id">def67890</span>
+            <div class="layer-bar-wrap"><div class="layer-bar" id="lb2" style="background:#2a1f3d"></div></div>
+            <span class="layer-status" id="ls2" style="color:#888">waiting</span>
+          </div>
+          <div class="layer-item">
+            <span class="layer-id">ghi11223</span>
+            <div class="layer-bar-wrap"><div class="layer-bar" id="lb3" style="background:#2a1f3d"></div></div>
+            <span class="layer-status" id="ls3" style="color:#888">waiting</span>
+          </div>
+          <div class="layer-item">
+            <span class="layer-id">jkl44556</span>
+            <div class="layer-bar-wrap"><div class="layer-bar" id="lb4" style="background:#2a1f3d"></div></div>
+            <span class="layer-status" id="ls4" style="color:#888">waiting</span>
+          </div>
+          <div class="layer-item">
+            <span class="layer-id">mno77889</span>
+            <div class="layer-bar-wrap"><div class="layer-bar" id="lb5" style="background:#2a1f3d"></div></div>
+            <span class="layer-status" id="ls5" style="color:#888">waiting</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- layer dedup explanation -->
+      <div class="fade" id="s3e2" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">⚡ DOCKER IS SMART ABOUT LAYERS</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">Already on Hub = <span style="color:#4eff9a">Layer already exists</span></span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span style="color:#4ec9e1;flex-shrink:0">↑</span>
+            <span style="color:#ccc;line-height:1.7">New or changed = uploaded fresh</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:7px">
+            <span style="color:#e8a020;flex-shrink:0">→</span>
+            <span style="color:#ccc;line-height:1.7">Only your app layer changes per deploy</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- second push is instant -->
+      <div class="fade" id="s3e3" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">SECOND PUSH AFTER SMALL CHANGE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2.1;font-family:'Press Start 2P',monospace">
+          abc12345: <span style="color:#4eff9a">Layer already exists</span><br>
+          def67890: <span style="color:#4eff9a">Layer already exists</span><br>
+          ghi11223: <span style="color:#4eff9a">Layer already exists</span><br>
+          jkl44556: <span style="color:#4eff9a">Layer already exists</span><br>
+          mno77889: <span style="color:#4ec9e1">Pushed ← only this changed</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Docker diffs layers — only new ones are uploaded.</div>
+    <div class="ih cy">Typical redeploy = 1 layer pushed, rest skipped.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">cached</div><div class="sl">base layers skip</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1 layer</div><div class="sl">typical push</div></div>
+    <div class="sc"><div class="sv gn">fast</div><div class="sl">incremental only</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — GLOBAL PULL FLOW
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">BUILD → PUSH → PULL</div>
+    <div class="hdr-sub">YOUR IMAGE. ANY MACHINE. ANYWHERE.</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL FLOW</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SHIPPED ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- flow diagram: local → hub → world -->
+      <div class="fade" id="s4e1">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">THE COMPLETE FLOW</div>
+        <div style="display:flex;align-items:center;gap:0;width:100%">
+          <!-- local -->
+          <div style="border:2px solid #e8a020;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;width:84px;flex-shrink:0">
+            <div style="font-size:18px">💻</div>
+            <div style="font-size:6px;color:#e8a020;text-align:center">YOUR<br>MACHINE</div>
+            <div style="font-size:6px;color:#888;text-align:center">my-app</div>
+          </div>
+          <!-- arrow to hub -->
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:6px;color:#4ec9e1;text-align:center">docker push</div>
+            <div style="width:100%;position:relative;height:16px">
+              <div id="arr1" style="height:3px;background:#4ec9e1;width:0;transition:width .7s ease-out;margin-top:6px;border-radius:1px"></div>
+            </div>
+          </div>
+          <!-- hub -->
+          <div style="border:2px solid #4ec9e1;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;width:84px;flex-shrink:0">
+            <div style="font-size:18px">🐳</div>
+            <div style="font-size:6px;color:#4ec9e1;text-align:center">DOCKER<br>HUB</div>
+            <div style="font-size:6px;color:#888;text-align:center">registry</div>
+          </div>
+          <!-- arrow to world -->
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:6px;color:#4eff9a;text-align:center">docker run</div>
+            <div style="width:100%;position:relative;height:16px">
+              <div id="arr2" style="height:3px;background:#4eff9a;width:0;transition:width .7s ease-out;margin-top:6px;border-radius:1px"></div>
+            </div>
+          </div>
+          <!-- world -->
+          <div style="border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;width:84px;flex-shrink:0">
+            <div style="font-size:18px">🌍</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">ANY<br>MACHINE</div>
+            <div style="font-size:6px;color:#888;text-align:center">anywhere</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- machines pulling -->
+      <div class="fade" id="s4e2">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">PULLING ON DIFFERENT MACHINES</div>
+        <div class="machine-row">
+          <div class="machine" id="m1">
+            <div class="machine-flag">🧑‍💻</div>
+            <div class="machine-name">teammate<br>laptop</div>
+            <div class="machine-status" id="ms1" style="color:#555">idle</div>
+          </div>
+          <div class="machine" id="m2">
+            <div class="machine-flag">🖥️</div>
+            <div class="machine-name">CI server<br>GitHub Actions</div>
+            <div class="machine-status" id="ms2" style="color:#555">idle</div>
+          </div>
+          <div class="machine" id="m3">
+            <div class="machine-flag">☁️</div>
+            <div class="machine-name">cloud VM<br>AWS / GCP</div>
+            <div class="machine-status" id="ms3" style="color:#555">idle</div>
+          </div>
+          <div class="machine" id="m4">
+            <div class="machine-flag">🚢</div>
+            <div class="machine-name">k8s pod<br>production</div>
+            <div class="machine-status" id="ms4" style="color:#555">idle</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- final cheatsheet -->
+      <div class="fade" id="s4e3" style="border:2px solid #4eff9a;border-radius:3px;padding:12px 14px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">✅ COMPLETE WORKFLOW</div>
+        <div style="font-size:8px;line-height:2.4;color:#ccc;font-family:'Press Start 2P',monospace">
+          <span style="color:#888"># build it</span><br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">build</span> -t my-app .<br>
+          <span style="color:#888"># give it a registry name</span><br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">tag</span> my-app <span style="color:#4eff9a">you/my-app:1.0.0</span><br>
+          <span style="color:#888"># ship it</span><br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">push</span> <span style="color:#4eff9a">you/my-app:1.0.0</span><br>
+          <span style="color:#888"># anyone can now run it</span><br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">run</span> <span style="color:#4eff9a">you/my-app:1.0.0</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Build once. Push once. Run anywhere.</div>
+    <div class="ih" style="color:#4eff9a">The loop is closed: build → test → ship.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">build</div><div class="sl">local image</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">push</div><div class="sl">to Docker Hub</div></div>
+    <div class="sc"><div class="sv gn">run</div><div class="sl">anywhere on Earth</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e0','s3e1','s3e2','s3e3'],
+    4:['s4e1','s4e2','s4e3']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  // reset layer bars
+  for(let i=1;i<=5;i++){
+    const lb=document.getElementById('lb'+i);
+    const ls=document.getElementById('ls'+i);
+    if(lb){lb.style.width='0';lb.style.background='#2a1f3d';}
+    if(ls){ls.textContent='waiting';ls.style.color='#888';}
+  }
+  // reset arrows
+  ['arr1','arr2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+  // reset machines
+  for(let i=1;i<=4;i++){
+    const m=document.getElementById('m'+i);
+    const ms=document.getElementById('ms'+i);
+    if(m){m.className='machine';}
+    if(ms){ms.textContent='idle';ms.style.color='#555';}
+  }
+  // reset push output
+  const po=document.getElementById('pushout');
+  if(po) po.innerHTML=' ';
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1200);
+  show('s1e3',2100);
+  show('s1e4',3100);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  show('s2e2',900);
+  show('s2e3',1700);
+  show('s2e4',2900);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e0',300);
+
+  // show push output text
+  setTimeout(()=>{
+    const po=document.getElementById('pushout');
+    if(po) po.innerHTML='Pushing to docker.io/yourname/my-app…';
+  },600);
+
+  show('s3e1',900);
+
+  // animate layers sequentially
+  const layerData=[
+    {bar:'lb1',stat:'ls1',color:'#4eff9a',label:'Layer already exists',delay:1100},
+    {bar:'lb2',stat:'ls2',color:'#4eff9a',label:'Layer already exists',delay:1600},
+    {bar:'lb3',stat:'ls3',color:'#4eff9a',label:'Layer already exists',delay:2000},
+    {bar:'lb4',stat:'ls4',color:'#4ec9e1',label:'Pushing…',delay:2400,pushColor:'#4ec9e1'},
+    {bar:'lb5',stat:'ls5',color:'#4ec9e1',label:'Pushed ✓',delay:2800,pushColor:'#4ec9e1'}
+  ];
+
+  layerData.forEach(({bar,stat,color,label,delay,pushColor})=>{
+    setTimeout(()=>{
+      const lb=document.getElementById(bar);
+      const ls=document.getElementById(stat);
+      if(lb){
+        lb.style.background=pushColor||color;
+        lb.style.width='100%';
+        lb.style.transition='width '+(pushColor?'1s':'0.3s')+' ease-out';
+      }
+      if(ls){ls.textContent=label;ls.style.color=color;}
+    },delay);
+  });
+
+  show('s3e2',3800);
+  show('s3e3',4600);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+
+  // animate arrows
+  setTimeout(()=>{
+    const a1=document.getElementById('arr1');
+    if(a1) a1.style.width='100%';
+  },600);
+  setTimeout(()=>{
+    const a2=document.getElementById('arr2');
+    if(a2) a2.style.width='100%';
+  },1300);
+
+  show('s4e2',1800);
+
+  // machines pull one by one
+  const machines=[
+    {id:1,delay:2100,label:'pulling…',doneLabel:'running ✓'},
+    {id:2,delay:2600,label:'pulling…',doneLabel:'running ✓'},
+    {id:3,delay:3100,label:'pulling…',doneLabel:'running ✓'},
+    {id:4,delay:3600,label:'pulling…',doneLabel:'running ✓'}
+  ];
+
+  machines.forEach(({id,delay,label,doneLabel})=>{
+    setTimeout(()=>{
+      const m=document.getElementById('m'+id);
+      const ms=document.getElementById('ms'+id);
+      if(m) m.className='machine pulling';
+      if(ms){ms.textContent=label;ms.style.color='#4ec9e1';}
+      setTimeout(()=>{
+        if(m) m.className='machine done';
+        if(ms){ms.textContent=doneLabel;ms.style.color='#4eff9a';}
+      },700);
+    },delay);
+  });
+
+  show('s4e3',4600);
+}
+
+play1();
+</script>
+</body>
+</html>

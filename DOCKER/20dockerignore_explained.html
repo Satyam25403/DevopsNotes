@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>.dockerignore Explained</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* file tree */
+.ftree{display:flex;flex-direction:column;gap:3px;font-size:8px;line-height:1.8;font-family:'Press Start 2P',monospace}
+.frow{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:2px}
+.frow.bad{background:#1a0808;border-left:3px solid #e85050}
+.frow.ok{background:#041a04;border-left:3px solid #4eff9a}
+.frow.neutral{border-left:3px solid #2a1f3d}
+.fsize{font-size:7px;margin-left:auto;flex-shrink:0}
+
+/* transfer arrow animation */
+.xfer-track{position:relative;height:24px;margin:4px 0;overflow:hidden}
+.xfer-fill{height:100%;width:0;border-radius:2px;transition:width 1.1s ease-out;display:flex;align-items:center;padding-left:8px}
+.xfer-fill span{font-size:6px;white-space:nowrap;font-family:'Press Start 2P',monospace}
+
+/* packet dots */
+.pkt-row{display:flex;gap:4px;flex-wrap:wrap;padding:6px 0}
+.pkt{width:14px;height:14px;border-radius:2px;display:inline-block;transition:opacity .3s}
+
+/* diff table */
+.diff-row{display:flex;gap:6px}
+.diff-col{flex:1;border:2px solid;border-radius:3px;padding:8px 8px;display:flex;flex-direction:column;gap:6px}
+.diff-title{font-size:9px;text-align:center;margin-bottom:2px}
+.diff-item{font-size:7px;line-height:1.8;color:#ccc}
+
+/* ignore file display */
+.ignore-file{border:2px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a}
+.ignore-line{font-size:8px;line-height:2.3;font-family:'Press Start 2P',monospace;display:flex;align-items:center;gap:8px}
+.ignore-comment{color:#555}
+.ignore-entry{color:#4eff9a}
+.ignore-badge{font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — WHAT IS BUILD CONTEXT?
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">.dockerignore</div>
+    <div class="hdr-sub">STOP SENDING JUNK TO THE DAEMON</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">BUILD CONTEXT</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">THE PROBLEM</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- what docker build does -->
+      <div class="fade" id="s1e1" style="border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">WHEN YOU RUN</div>
+        <div style="font-size:9px;color:#e8a020;font-family:'Press Start 2P',monospace;margin-bottom:8px">$ docker build .</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          The <span style="color:#4ec9e1">.</span> means "send everything in this<br>
+          directory to the Docker daemon."<br>
+          Docker calls this the <span style="color:#4eff9a">build context</span>.
+        </div>
+      </div>
+
+      <!-- local dir → daemon transfer -->
+      <div class="fade" id="s1e2">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">WITHOUT .dockerignore</div>
+        <!-- local box -->
+        <div style="display:flex;align-items:center;gap:0">
+          <div style="border:2px solid #e85050;border-radius:3px;padding:8px 10px;width:110px;flex-shrink:0">
+            <div style="font-size:7px;color:#e85050;margin-bottom:4px">LOCAL DIR</div>
+            <div style="font-size:6px;color:#ccc;line-height:1.8">
+              src/ · 2MB<br>
+              node_modules 180MB<br>
+              .git/ · 40MB<br>
+              .env · secrets!<br>
+              dist/ · 20MB
+            </div>
+          </div>
+          <!-- arrow track -->
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:6px;color:#e85050;text-align:center">EVERYTHING</div>
+            <div style="width:100%;position:relative;height:20px">
+              <div id="arrow1" style="height:4px;background:#e85050;width:0;transition:width .9s ease-out;margin-top:8px;border-radius:1px"></div>
+              <div id="arrowhead1" style="position:absolute;right:0;top:4px;opacity:0;transition:opacity .3s;font-size:10px;color:#e85050;line-height:1">▶</div>
+            </div>
+            <div id="xfersize1" style="font-size:6px;color:#e85050;opacity:0;transition:opacity .4s">242 MB sent</div>
+          </div>
+          <!-- daemon box -->
+          <div style="border:2px solid #2a1f3d;border-radius:3px;padding:8px 10px;width:90px;flex-shrink:0">
+            <div style="font-size:7px;color:#888;margin-bottom:4px">DAEMON</div>
+            <div style="font-size:6px;color:#888;line-height:1.8">
+              reads only<br>
+              what COPY<br>
+              needs… rest<br>
+              is wasted
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- packet visualization -->
+      <div class="fade" id="s1e3" style="border:1px solid #e85050;border-radius:3px;padding:10px 12px;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">242MB OF PACKETS — MOST USELESS</div>
+        <div class="pkt-row" id="pktrow">
+        </div>
+        <div style="display:flex;gap:10px;margin-top:6px">
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#e85050;border-radius:1px"></div><span style="font-size:6px;color:#aaa">junk (ignored by build)</span></div>
+          <div style="display:flex;align-items:center;gap:4px"><div style="width:10px;height:10px;background:#4eff9a;border-radius:1px"></div><span style="font-size:6px;color:#aaa">actually needed</span></div>
+        </div>
+      </div>
+
+      <!-- key insight -->
+      <div class="fade" id="s1e4" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#0d1a2e">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">💡 .dockerignore FIXES THIS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Just like .gitignore tells git what to skip,<br>
+          <span style="color:#4eff9a">.dockerignore</span> tells Docker what to <span style="color:#4eff9a">exclude</span><br>
+          from the build context before it's sent.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Docker sends your entire directory to the daemon.</div>
+    <div class="ih rd">Without .dockerignore = 200MB of junk every build.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">242MB</div><div class="sl">context w/o ignore</div></div>
+    <div class="sc"><div class="sv am">180MB</div><div class="sl">node_modules alone</div></div>
+    <div class="sc"><div class="sv rd">wasted</div><div class="sl">on every build</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — BEFORE vs AFTER
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">BEFORE vs AFTER</div>
+    <div class="hdr-sub">SAME PROJECT — DIFFERENT CONTEXT SIZE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CONTEXT SIZE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SLOW → FAST</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- before bar -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px;letter-spacing:1px">❌ WITHOUT .dockerignore</div>
+        <div style="height:32px;background:#1a0808;border:1px solid #e85050;border-radius:2px;overflow:hidden;position:relative">
+          <div id="bbar1" style="width:0;height:100%;background:#e85050;transition:width 1.1s ease-out;display:flex;align-items:center;padding-left:8px">
+            <span style="font-size:7px;color:#000;font-family:'Press Start 2P',monospace;white-space:nowrap">242 MB — sending everything</span>
+          </div>
+        </div>
+        <div style="margin-top:5px;display:flex;gap:5px;flex-wrap:wrap" id="tags1">
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">node_modules 180MB</span>
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">.git 40MB</span>
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">dist 20MB</span>
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">.env secrets</span>
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">logs 1MB</span>
+          <span style="font-size:6px;padding:2px 6px;border:1px solid #e85050;border-radius:2px;color:#e85050">coverage/ 800KB</span>
+        </div>
+      </div>
+
+      <!-- after bar -->
+      <div class="fade" id="s2e2">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:1px">✅ WITH .dockerignore</div>
+        <div style="height:32px;background:#04140a;border:1px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div id="bbar2" style="width:0;height:100%;background:#4eff9a;max-width:10%;transition:width 1.1s ease-out;display:flex;align-items:center;padding-left:8px">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:5px">
+          <div style="display:flex;gap:5px">
+            <span style="font-size:6px;padding:2px 6px;border:1px solid #4eff9a;border-radius:2px;color:#4eff9a">src/ 2MB</span>
+            <span style="font-size:6px;padding:2px 6px;border:1px solid #4eff9a;border-radius:2px;color:#4eff9a">package.json 4KB</span>
+          </div>
+          <span style="font-size:8px;color:#4eff9a">~2MB</span>
+        </div>
+      </div>
+
+      <!-- savings callout -->
+      <div class="fade" id="s2e3" style="display:flex;gap:6px">
+        <div style="flex:1;border:1px solid #4eff9a;border-radius:3px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;background:#04140a">
+          <div style="font-size:14px;color:#4eff9a">-99%</div>
+          <div style="font-size:6px;color:#aaa;text-align:center">context size</div>
+        </div>
+        <div style="flex:1;border:1px solid #4eff9a;border-radius:3px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;background:#04140a">
+          <div style="font-size:14px;color:#4eff9a">120×</div>
+          <div style="font-size:6px;color:#aaa;text-align:center">faster transfer</div>
+        </div>
+        <div style="flex:1;border:1px solid #4ec9e1;border-radius:3px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;background:#04101a">
+          <div style="font-size:14px;color:#4ec9e1">safer</div>
+          <div style="font-size:6px;color:#aaa;text-align:center">no secrets leak</div>
+        </div>
+      </div>
+
+      <!-- build output comparison -->
+      <div class="fade" id="s2e4" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#888;letter-spacing:1px">BUILD OUTPUT — TERMINAL</div>
+        <div style="padding:8px 10px">
+          <div style="font-size:7px;color:#e85050;line-height:2.1;font-family:'Press Start 2P',monospace">
+            Sending build context…<br>
+            <span style="color:#e85050">242.3MB</span>
+          </div>
+          <div style="font-size:7px;color:#aaa;margin:4px 0;text-align:center">vs</div>
+          <div style="font-size:7px;color:#4eff9a;line-height:2.1;font-family:'Press Start 2P',monospace">
+            Sending build context…<br>
+            <span style="color:#4eff9a">1.97MB</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Same source code. 99% less data sent to daemon.</div>
+    <div class="ih am">One file. Massive impact on every single build.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">242MB</div><div class="sl">without ignore</div></div>
+    <div class="sc"><div class="sv gn">2MB</div><div class="sl">with ignore</div></div>
+    <div class="sc"><div class="sv gn">120×</div><div class="sl">faster transfer</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — CANONICAL .dockerignore FILE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE FILE ITSELF</div>
+    <div class="hdr-sub">CANONICAL .dockerignore ENTRIES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE ENTRIES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COPY THIS</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- the file -->
+      <div class="ignore-file fade" id="s3e1">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px;letter-spacing:1px">📄 .dockerignore</div>
+
+        <div class="ignore-line fade" id="ig1">
+          <span class="ignore-comment"># deps — rebuilt inside container</span>
+        </div>
+        <div class="ignore-line fade" id="ig2">
+          <span class="ignore-entry">node_modules</span>
+          <span class="ignore-badge" style="background:#1a0808;color:#e85050;border:1px solid #e85050">180MB</span>
+        </div>
+        <div class="ignore-line fade" id="ig3">
+          <span class="ignore-entry">vendor/</span>
+          <span class="ignore-badge" style="background:#1a0808;color:#e85050;border:1px solid #e85050">Go/PHP deps</span>
+        </div>
+        <div class="ignore-line fade" id="ig4">
+          <span class="ignore-entry">.venv</span>
+          <span class="ignore-badge" style="background:#1a0808;color:#e85050;border:1px solid #e85050">Python venv</span>
+        </div>
+
+        <div class="ignore-line fade" id="ig5" style="margin-top:4px">
+          <span class="ignore-comment"># version control</span>
+        </div>
+        <div class="ignore-line fade" id="ig6">
+          <span class="ignore-entry">.git</span>
+          <span class="ignore-badge" style="background:#1a1208;color:#e8a020;border:1px solid #e8a020">40MB history</span>
+        </div>
+        <div class="ignore-line fade" id="ig7">
+          <span class="ignore-entry">.gitignore</span>
+          <span class="ignore-badge" style="background:#1a1208;color:#e8a020;border:1px solid #e8a020">not needed</span>
+        </div>
+
+        <div class="ignore-line fade" id="ig8" style="margin-top:4px">
+          <span class="ignore-comment"># secrets &amp; config</span>
+        </div>
+        <div class="ignore-line fade" id="ig9">
+          <span class="ignore-entry">.env</span>
+          <span class="ignore-badge" style="background:#1a0808;color:#e85050;border:1px solid #e85050">⚠ SECRETS</span>
+        </div>
+        <div class="ignore-line fade" id="ig10">
+          <span class="ignore-entry">.env.*</span>
+          <span class="ignore-badge" style="background:#1a0808;color:#e85050;border:1px solid #e85050">⚠ SECRETS</span>
+        </div>
+
+        <div class="ignore-line fade" id="ig11" style="margin-top:4px">
+          <span class="ignore-comment"># build output</span>
+        </div>
+        <div class="ignore-line fade" id="ig12">
+          <span class="ignore-entry">dist/</span>
+          <span class="ignore-badge" style="background:#04101a;color:#4ec9e1;border:1px solid #4ec9e1">rebuilt in image</span>
+        </div>
+        <div class="ignore-line fade" id="ig13">
+          <span class="ignore-entry">build/</span>
+          <span class="ignore-badge" style="background:#04101a;color:#4ec9e1;border:1px solid #4ec9e1">rebuilt in image</span>
+        </div>
+        <div class="ignore-line fade" id="ig14">
+          <span class="ignore-entry">target/</span>
+          <span class="ignore-badge" style="background:#04101a;color:#4ec9e1;border:1px solid #4ec9e1">Java/Rust out</span>
+        </div>
+
+        <div class="ignore-line fade" id="ig15" style="margin-top:4px">
+          <span class="ignore-comment"># dev noise</span>
+        </div>
+        <div class="ignore-line fade" id="ig16">
+          <span class="ignore-entry">*.log</span>
+          <span class="ignore-badge" style="background:#130d1e;color:#888;border:1px solid #2a1f3d">logs</span>
+        </div>
+        <div class="ignore-line fade" id="ig17">
+          <span class="ignore-entry">coverage/</span>
+          <span class="ignore-badge" style="background:#130d1e;color:#888;border:1px solid #2a1f3d">test output</span>
+        </div>
+        <div class="ignore-line fade" id="ig18">
+          <span class="ignore-entry">.DS_Store</span>
+          <span class="ignore-badge" style="background:#130d1e;color:#888;border:1px solid #2a1f3d">macOS junk</span>
+        </div>
+        <div class="ignore-line fade" id="ig19">
+          <span class="ignore-entry">Dockerfile*</span>
+          <span class="ignore-badge" style="background:#130d1e;color:#888;border:1px solid #2a1f3d">already used</span>
+        </div>
+        <div class="ignore-line fade" id="ig20">
+          <span class="ignore-entry">README.md</span>
+          <span class="ignore-badge" style="background:#130d1e;color:#888;border:1px solid #2a1f3d">docs</span>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Deps + secrets + VCS + build output = the big four.</div>
+    <div class="ih cy">One .dockerignore covers Node, Python, Go, Java, Rust.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">deps</div><div class="sl">biggest offender</div></div>
+    <div class="sc"><div class="sv rd">.env</div><div class="sl">security risk</div></div>
+    <div class="sc"><div class="sv am">.git</div><div class="sl">40MB wasted</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — HOW IT WORKS + CORRECT DOCKERFILE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">HOW IT WORKS</div>
+    <div class="hdr-sub">RULES + CORRECT PATTERN</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL PICTURE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- syntax rules -->
+      <div class="fade" id="s4e1" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#4ec9e1;letter-spacing:1px">SYNTAX — SAME AS .gitignore</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#4eff9a;width:80px;flex-shrink:0;font-family:'Press Start 2P',monospace">folder/</span>
+            <span style="color:#aaa">ignore entire directory</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#4eff9a;width:80px;flex-shrink:0;font-family:'Press Start 2P',monospace">*.log</span>
+            <span style="color:#aaa">wildcard by extension</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#4eff9a;width:80px;flex-shrink:0;font-family:'Press Start 2P',monospace">!keep.txt</span>
+            <span style="color:#aaa">! = re-include exception</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#555;width:80px;flex-shrink:0;font-family:'Press Start 2P',monospace"># comment</span>
+            <span style="color:#aaa">lines starting with #</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- where to put it -->
+      <div class="fade" id="s4e2" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">📁 FILE LOCATION MATTERS</div>
+        <div class="ftree">
+          <div class="frow neutral"><span style="color:#888">📁</span><span style="color:#ccc">my-project/</span></div>
+          <div class="frow ok"><span style="color:#4eff9a;margin-left:12px">📄</span><span style="color:#4eff9a">.dockerignore</span><span style="color:#4eff9a;margin-left:4px;font-size:7px">← same dir as Dockerfile</span></div>
+          <div class="frow neutral"><span style="color:#888;margin-left:12px">📄</span><span style="color:#ccc">Dockerfile</span></div>
+          <div class="frow neutral"><span style="color:#888;margin-left:12px">📁</span><span style="color:#ccc">src/</span></div>
+          <div class="frow bad"><span style="color:#e85050;margin-left:12px">📁</span><span style="color:#e85050">node_modules/</span><span style="color:#e85050;margin-left:4px;font-size:7px">← excluded ✓</span></div>
+        </div>
+      </div>
+
+      <!-- correct dockerfile pattern -->
+      <div class="fade" id="s4e3" style="border:2px solid #4eff9a;border-radius:3px;padding:12px 14px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">✅ THE PATTERN THAT WORKS</div>
+        <div style="font-size:8px;line-height:2.3;color:#ccc;font-family:'Press Start 2P',monospace">
+          <span style="color:#888"># .dockerignore excludes deps</span><br>
+          <span style="color:#888">FROM</span> node:18-slim<br>
+          <span style="color:#888">WORKDIR</span> /app<br>
+          <span style="color:#888">COPY</span> package*.json ./<br>
+          <span style="color:#e8a020">RUN</span> npm ci<span style="color:#888"> # installs fresh inside</span><br>
+          <span style="color:#888">COPY</span> . .<span style="color:#888">    # fast — no node_modules</span><br>
+          <span style="color:#4ec9e1">CMD</span> ["node","index.js"]
+        </div>
+      </div>
+
+      <!-- common mistake -->
+      <div class="fade" id="s4e4" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">⚠ COMMON MISTAKE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          COPY . . before RUN npm ci<br>
+          means you copy node_modules in<br>
+          <span style="color:#e8a020">even if .dockerignore excludes them.</span><br>
+          Always COPY package.json first,<br>
+          RUN install, THEN COPY . .
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Same level as Dockerfile. Works like .gitignore.</div>
+    <div class="ih" style="color:#4eff9a">Copy package.json → install → COPY . . is the pattern.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">same</div><div class="sl">level as Dockerfile</div></div>
+    <div class="sc"><div class="sv gn">gitignore</div><div class="sl">same syntax</div></div>
+    <div class="sc"><div class="sv am">!</div><div class="sl">re-include prefix</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1',
+       'ig1','ig2','ig3','ig4','ig5','ig6','ig7','ig8','ig9','ig10',
+       'ig11','ig12','ig13','ig14','ig15','ig16','ig17','ig18','ig19','ig20'],
+    4:['s4e1','s4e2','s4e3','s4e4']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  ['bbar1','bbar2','arrow1','arrowhead1'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+  const xf=document.getElementById('xfersize1');
+  if(xf) xf.style.opacity='0';
+  const ah=document.getElementById('arrowhead1');
+  if(ah) ah.style.opacity='0';
+  const pkt=document.getElementById('pktrow');
+  if(pkt) pkt.innerHTML='';
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',900);
+  // animate arrow
+  setTimeout(()=>{
+    const a=document.getElementById('arrow1');
+    if(a) a.style.width='100%';
+  },1100);
+  setTimeout(()=>{
+    const ah=document.getElementById('arrowhead1');
+    if(ah) ah.style.opacity='1';
+    const xf=document.getElementById('xfersize1');
+    if(xf) xf.style.opacity='1';
+  },2000);
+  show('s1e3',2400);
+  // build packets
+  setTimeout(()=>{
+    const pkt=document.getElementById('pktrow');
+    if(!pkt) return;
+    for(let i=0;i<48;i++){
+      const d=document.createElement('div');
+      d.className='pkt';
+      d.style.background=i<4?'#4eff9a':'#e85050';
+      d.style.opacity='0';
+      pkt.appendChild(d);
+      setTimeout(()=>{d.style.opacity='1';},i*40);
+    }
+  },2600);
+  show('s1e4',4200);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  setTimeout(()=>{
+    const b=document.getElementById('bbar1');
+    if(b) b.style.width='100%';
+  },500);
+  show('s2e2',1500);
+  setTimeout(()=>{
+    const b=document.getElementById('bbar2');
+    if(b) b.style.width='10%';
+  },1700);
+  show('s2e3',2500);
+  show('s2e4',3200);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',200);
+  const entries=[
+    'ig1','ig2','ig3','ig4',
+    'ig5','ig6','ig7',
+    'ig8','ig9','ig10',
+    'ig11','ig12','ig13','ig14',
+    'ig15','ig16','ig17','ig18','ig19','ig20'
+  ];
+  entries.forEach((id,i)=>show(id,400+i*150));
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  show('s4e2',1100);
+  show('s4e3',2000);
+  show('s4e4',2900);
+}
+
+play1();
+</script>
+</body>
+</html>

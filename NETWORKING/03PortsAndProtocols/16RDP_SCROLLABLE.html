@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RDP Port 3389</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+
+/* ── viewport container ── */
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+
+/* ── every scene fills the container exactly ── */
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+/* ── scrollable animation area ── */
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#c080ff}
+.il{color:#ccc}.ih{color:#e85050}
+.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.pu{color:#c080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#c080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505018}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02018}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a18}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e118}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+.pkt{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;transition:opacity .15s}
+@keyframes shellblink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.cur{animation:shellblink .7s step-end infinite}
+@keyframes warningPulse{0%,100%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
+.wpulse{animation:warningPulse .8s ease infinite}
+@keyframes scanline{0%{transform:translateY(0)}100%{transform:translateY(160px)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1: HOOK — BLUEKEEP EMERGENCY ═══ -->
+<div class="scene active" id="s1" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505;border-bottom:1px solid #3a1010">
+    <div class="hdr-title">RDP — PORT 3389</div>
+    <div class="hdr-sub">BLUEKEEP · NLA · PASS-THE-HASH</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">BLUEKEEP</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CVE-2019-0708</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- EMERGENCY ALERT BANNER -->
+      <div class="panel" id="s1_alert" style="background:#0f0000;border:2px solid #e85050;padding:10px 12px">
+        <div style="text-align:center;font-size:9px;color:#e85050;margin-bottom:8px;animation:warningPulse 1s ease infinite">⚠️ CRITICAL SECURITY ADVISORY ⚠️</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div id="a1" style="opacity:0;transition:opacity .35s;display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border:1px solid #3a1010">
+            <div style="font-size:14px;flex-shrink:0">🇺🇸</div>
+            <div>
+              <div style="font-size:7px;color:#e85050">NSA PUBLIC ADVISORY</div>
+              <div style="font-size:5.5px;color:#888;margin-top:2px;line-height:1.6">May 2019 — NSA urges immediate patching; warns WannaCry-level risk</div>
+            </div>
+          </div>
+          <div id="a2" style="opacity:0;transition:opacity .35s;display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border:1px solid #3a1010">
+            <div style="font-size:14px;flex-shrink:0">🪟</div>
+            <div>
+              <div style="font-size:7px;color:#e8a020">MICROSOFT PATCHES WIN7/2008</div>
+              <div style="font-size:5.5px;color:#888;margin-top:2px;line-height:1.6">Even EOL systems got emergency patches — signal of severity</div>
+            </div>
+          </div>
+          <div id="a3" style="opacity:0;transition:opacity .35s;display:flex;align-items:center;gap:8px;padding:5px 8px;background:#0a0000;border:1px solid #3a1010">
+            <div style="font-size:14px;flex-shrink:0">🛡️</div>
+            <div>
+              <div style="font-size:7px;color:#4ec9e1">CISA EMERGENCY DIRECTIVE</div>
+              <div style="font-size:5.5px;color:#888;margin-top:2px;line-height:1.6">All federal agencies: patch within 48 hours or disable RDP</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHY RDP IS A CROWN JEWEL -->
+      <div class="panel" id="s1_why" style="background:#0f0000;border:1px solid #2a1010">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:7px">WHY RDP IS THE CROWN JEWEL:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #e85050">
+            <span style="font-size:14px">🖥️</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Full <span style="color:#e85050">graphical Windows desktop</span> — attacker sees and controls everything the admin can</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #e8a020">
+            <span style="font-size:14px">🌐</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Port 3389 exposed on internet: <span style="color:#e85050">3.5 million+ servers</span> (Shodan, 2024)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 7px;background:#080000;border-left:2px solid #c080ff">
+            <span style="font-size:14px">💀</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#c080ff">BlueKeep</span>: unauthenticated RCE — shell before login screen even appears</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- THREE THREAT VECTORS -->
+      <div class="panel" id="s1_three" style="background:#0f0000;border:1px solid #2a1010;padding:8px 10px">
+        <div style="font-size:7px;color:#aaa;margin-bottom:7px;text-align:center">THREE ATTACK SURFACES ON PORT 3389</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px">
+          <div style="text-align:center;padding:8px 4px;background:#0a0000;border:1px solid #3a1010;border-radius:2px">
+            <div style="font-size:15px;margin-bottom:4px">💥</div>
+            <div style="font-size:6.5px;color:#e85050">BLUE<br>KEEP</div>
+            <div style="font-size:5px;color:#666;margin-top:3px;line-height:1.6">Pre-auth<br>RCE</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;background:#0a0000;border:1px solid #2a1028;border-radius:2px">
+            <div style="font-size:15px;margin-bottom:4px">🔑</div>
+            <div style="font-size:6.5px;color:#c080ff">PASS<br>HASH</div>
+            <div style="font-size:5px;color:#666;margin-top:3px;line-height:1.6">No pwd<br>GUI shell</div>
+          </div>
+          <div style="text-align:center;padding:8px 4px;background:#001508;border:1px solid #0d3018;border-radius:2px">
+            <div style="font-size:15px;margin-bottom:4px">🛡️</div>
+            <div style="font-size:6.5px;color:#4eff9a">NLA<br>FIX</div>
+            <div style="font-size:5px;color:#666;margin-top:3px;line-height:1.6">Creds first<br>kills all</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e85050">
+    <div class="ih">💀 WORMABLE — NO AUTH REQUIRED</div>
+    <div class="il">BlueKeep needed <span style="color:#e85050">zero credentials</span>. Like WannaCry, it could self-propagate. One exposed port 3389 = full network compromise.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3389</div><div class="sl">DEFAULT<br>RDP PORT</div></div>
+    <div class="sc"><div class="sv am">3.5M</div><div class="sl">EXPOSED<br>ON INTERNET</div></div>
+    <div class="sc"><div class="sv" style="color:#c080ff">0708</div><div class="sl">CVE<br>SUFFIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: BLUEKEEP DEEP DIVE ═══ -->
+<div class="scene" id="s2" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505;border-bottom:1px solid #3a1010">
+    <div class="hdr-title">BLUEKEEP — CVE-2019-0708</div>
+    <div class="hdr-sub">USE-AFTER-FREE IN MS_T120 RDP CHANNEL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">BLUEKEEP</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">WORMABLE RCE</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ATTACK ANIMATION MAP -->
+      <div style="height:165px;position:relative;background:#0d0000;border:2px solid #3a1010;border-radius:3px">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 165">
+          <line id="bk_l1" x1="56" y1="83" x2="183" y2="83" stroke="#2a0808" stroke-width="2"/>
+          <line id="bk_l2" x1="183" y1="83" x2="310" y2="83" stroke="#2a0808" stroke-width="2"/>
+          <rect id="bk_chan" x="153" y="55" width="60" height="55" rx="2" fill="#0d0000" stroke="#2a0808" stroke-width="1.5"/>
+        </svg>
+        <div style="position:absolute;left:10px;top:56px;text-align:center;width:52px">
+          <div style="font-size:20px">🕵️</div>
+          <div style="font-size:5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">ATTACKER<br>NO CREDS</div>
+        </div>
+        <div style="position:absolute;left:153px;top:55px;width:60px;height:55px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+          <div id="bk_ico" style="font-size:13px;transition:filter .3s">🔓</div>
+          <div style="font-size:5px;color:#888;font-family:'Press Start 2P',monospace;text-align:center;line-height:1.5">MS_T120<br>CHANNEL</div>
+        </div>
+        <div style="position:absolute;right:10px;top:54px;text-align:center;width:58px">
+          <div id="tgt_srv" style="font-size:20px;filter:grayscale(1) brightness(.4);transition:filter .4s">🖥️</div>
+          <div style="font-size:5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">WIN7 /<br>SRV2008</div>
+          <div id="tgt_owned" style="font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px;opacity:0;transition:opacity .3s">OWNED ✗</div>
+        </div>
+        <div id="bk_pkt" class="pkt" style="width:11px;height:11px;background:#e85050;box-shadow:0 0 8px #e85050;top:83px;left:56px"></div>
+        <div id="bk_rce" style="position:absolute;right:8px;top:10px;font-size:6px;color:#e85050;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center;background:#1a0000;border:1px solid #3a1010;padding:3px 5px;line-height:1.6">KERNEL<br>RCE ✓</div>
+        <div id="bk_uaf" style="position:absolute;left:148px;top:8px;font-size:5.5px;color:#e8a020;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s;text-align:center;line-height:1.5">USE-AFTER<br>-FREE</div>
+        <div id="bk_lbl" style="position:absolute;bottom:5px;left:0;right:0;text-align:center;font-size:5.5px;color:#e8a020;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">HEAP SPRAY → POINTER OVERWRITE → SHELLCODE EXEC</div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="panel" id="s2_timeline" style="background:#0d0000;border:1px solid #2a1010;padding:0;overflow:hidden">
+        <div style="background:#150000;padding:5px 10px;border-bottom:1px solid #2a1010">
+          <div style="font-size:7px;color:#e85050">BLUEKEEP DISCLOSURE TIMELINE</div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <div id="tl1" style="opacity:0;transition:opacity .3s;display:grid;grid-template-columns:70px 1fr;gap:6px;padding:5px 8px;border-bottom:1px solid #1a0505;align-items:start">
+            <div style="font-size:6px;color:#e85050">May 2019</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">Microsoft patches CVE-2019-0708. Calls it "wormable".</div>
+          </div>
+          <div id="tl2" style="opacity:0;transition:opacity .3s;display:grid;grid-template-columns:70px 1fr;gap:6px;padding:5px 8px;border-bottom:1px solid #1a0505;background:#0a0000;align-items:start">
+            <div style="font-size:6px;color:#e8a020">May 2019</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">NSA issues <span style="color:#e8a020">public advisory</span> — first time NSA warned about a non-NSA-developed vuln.</div>
+          </div>
+          <div id="tl3" style="opacity:0;transition:opacity .3s;display:grid;grid-template-columns:70px 1fr;gap:6px;padding:5px 8px;border-bottom:1px solid #1a0505;align-items:start">
+            <div style="font-size:6px;color:#4ec9e1">Jun 2019</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">CISA emergency directive: federal agencies patch in 48 hours.</div>
+          </div>
+          <div id="tl4" style="opacity:0;transition:opacity .3s;display:grid;grid-template-columns:70px 1fr;gap:6px;padding:5px 8px;align-items:start;background:#0a0000">
+            <div style="font-size:6px;color:#c080ff">Sep 2019</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.7">Public exploit (Metasploit). <span style="color:#e85050">900,000 systems</span> still unpatched on Shodan scan.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WHAT MAKES IT WORMABLE -->
+      <div class="panel" id="s2_worm" style="background:#080000;border:1px solid #2a1010;padding:8px 10px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">WHAT MAKES IT "WORMABLE":</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Pre-auth: hits <span style="color:#e85050">before login screen</span>. No user interaction. Affects port 3389 directly. Can self-propagate host-to-host like <span style="color:#e85050">WannaCry</span> via EternalBlue. 5 unpatched hosts → entire network.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e85050">
+    <div class="ih">💥 USE-AFTER-FREE IN RDP KERNEL DRIVER</div>
+    <div class="il">Attacker sends crafted RDP packet to MS_T120 channel. <span style="color:#e85050">No username, no password</span>. Heap spray overwrites kernel pointer → shellcode runs as SYSTEM.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">PRE</div><div class="sl">AUTH<br>NEEDED</div></div>
+    <div class="sc"><div class="sv am">CVSS</div><div class="sl">9.8<br>CRITICAL</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050">WIN7</div><div class="sl">PRIMARY<br>TARGET</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: NO-NLA vs NLA ═══ -->
+<div class="scene" id="s3" style="background:#08040f">
+  <div class="hdr" style="background:#08040f;border-bottom:1px solid #1a0830">
+    <div class="hdr-title">NLA — NETWORK LEVEL AUTH</div>
+    <div class="hdr-sub">CREDENTIALS BEFORE SESSION = KILLS PRE-AUTH ATTACKS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c080ff">NO-NLA vs NLA</span>
+    <span class="sbadge" style="color:#c080ff;border-color:#c080ff">COMPARISON</span>
+  </div>
+  <div class="anim" style="background:#08040f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SIDE BY SIDE COMPARISON -->
+      <div class="panel" id="s3_cmp" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 6px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">WITHOUT NLA</div>
+          </div>
+          <div style="padding:7px 6px;display:flex;flex-direction:column;gap:5px">
+            <div style="text-align:center">
+              <div style="font-size:24px">🖥️</div>
+              <div style="font-size:5.5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px">SESSION<br>STARTED</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div id="nno1" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#e85050;padding:3px 5px;background:#0a0000;border-left:1px solid #e85050;line-height:1.6">1. TCP connect :3389</div>
+              <div id="nno2" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#e85050;padding:3px 5px;background:#0a0000;border-left:1px solid #e85050;line-height:1.6">2. RDP handshake<br>&nbsp;&nbsp;&nbsp;completes</div>
+              <div id="nno3" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#e85050;padding:3px 5px;background:#0a0000;border-left:1px solid #e85050;line-height:1.6">3. FULL SESSION<br>&nbsp;&nbsp;&nbsp;ESTABLISHED<br>&nbsp;&nbsp;&nbsp;←exploit HERE</div>
+              <div id="nno4" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#e8a020;padding:3px 5px;background:#0a0000;border-left:1px solid #e8a020;line-height:1.6">4. Login prompt<br>&nbsp;&nbsp;&nbsp;shown (too late)</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001508;padding:5px 6px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">WITH NLA</div>
+          </div>
+          <div style="padding:7px 6px;display:flex;flex-direction:column;gap:5px">
+            <div style="text-align:center">
+              <div style="font-size:24px">🔒</div>
+              <div style="font-size:5.5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px">AUTH FIRST</div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div id="nla1" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#4eff9a;padding:3px 5px;background:#000d04;border-left:1px solid #4eff9a;line-height:1.6">1. TCP connect :3389</div>
+              <div id="nla2" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#4eff9a;padding:3px 5px;background:#000d04;border-left:1px solid #4eff9a;line-height:1.6">2. CredSSP auth<br>&nbsp;&nbsp;&nbsp;BEFORE session</div>
+              <div id="nla3" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#4eff9a;padding:3px 5px;background:#000d04;border-left:1px solid #4eff9a;line-height:1.6">3. Wrong creds →<br>&nbsp;&nbsp;&nbsp;DISCONNECT</div>
+              <div id="nla4" style="opacity:0;transition:opacity .35s;font-size:5.5px;color:#4eff9a;padding:3px 5px;background:#000d04;border-left:1px solid #4eff9a;line-height:1.6">4. BlueKeep has<br>&nbsp;&nbsp;&nbsp;no target ✓</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NLA TECHNICAL NOTE -->
+      <div class="panel" id="s3_tech" style="background:#080010;border:1px solid #1a0830">
+        <div style="font-size:7.5px;color:#c080ff;margin-bottom:7px">HOW NLA WORKS (CredSSP):</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:4px 7px;background:#050010;border-left:2px solid #c080ff">
+            NLA uses <span style="color:#c080ff">CredSSP (Credential Security Support Provider)</span> — TLS tunnel + Kerberos/NTLM auth happens before RDP session is allocated
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:4px 7px;background:#050010;border-left:2px solid #4eff9a">
+            Server never reaches the vulnerable RDP code path until <span style="color:#4eff9a">valid credentials are supplied</span> — BlueKeep can't reach the MS_T120 channel
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:4px 7px;background:#050010;border-left:2px solid #e8a020">
+            Also protects against credential theft: password is <span style="color:#e8a020">never transmitted in cleartext</span> — CredSSP uses delegation tokens
+          </div>
+        </div>
+      </div>
+
+      <!-- ENABLE NLA -->
+      <div class="panel" id="s3_enable" style="background:#060010;border:1px solid #1a0828;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">ENABLE NLA (GPO):</div>
+        <div style="font-size:6.5px;color:#4eff9a;font-family:monospace;line-height:2;background:#020008;padding:6px 8px;border:1px solid #0d0820">
+          Computer Config → Admin Templates →<br>
+          Windows Components → Remote Desktop<br>
+          Services → RD Session Host →<br>
+          <span style="color:#4eff9a">Require NLA = ENABLED</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="ih pu">🛡️ NLA KILLS PRE-AUTH EXPLOITS</div>
+    <div class="il">Without NLA: attacker reaches <span style="color:#e85050">vulnerable kernel code</span> before authentication. With NLA: CredSSP auth comes first — no creds, no session, no exploit surface.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">CredSSP</div><div class="sl">NLA<br>PROTOCOL</div></div>
+    <div class="sc"><div class="sv gn">PRE</div><div class="sl">AUTH<br>REQUIRED</div></div>
+    <div class="sc"><div class="sv gn">WIN8+</div><div class="sl">NLA DEFAULT<br>ENABLED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: PASS-THE-HASH VIA RDP ═══ -->
+<div class="scene" id="s4" style="background:#0d0015">
+  <div class="hdr" style="background:#0d0015;border-bottom:1px solid #260830">
+    <div class="hdr-title">PASS-THE-HASH VIA RDP</div>
+    <div class="hdr-sub">xfreerdp /pth — FULL GUI WITHOUT THE PASSWORD</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#c080ff">PASS-THE-HASH</span>
+    <span class="sbadge" style="color:#c080ff;border-color:#c080ff">RDP PtH</span>
+  </div>
+  <div class="anim" style="background:#0d0015">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ATTACK FLOW -->
+      <div style="height:155px;position:relative;background:#080010;border:2px solid #260830;border-radius:3px">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none" viewBox="0 0 366 155">
+          <line id="ph_l1" x1="56" y1="78" x2="183" y2="78" stroke="#1a0828" stroke-width="2"/>
+          <line id="ph_l2" x1="183" y1="78" x2="310" y2="78" stroke="#1a0828" stroke-width="2"/>
+        </svg>
+        <div style="position:absolute;left:10px;top:52px;text-align:center;width:52px">
+          <div style="font-size:20px">🕵️</div>
+          <div style="font-size:5px;color:#c080ff;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">ATTACKER<br>HAS HASH</div>
+          <div id="ph_hash_lbl" style="font-size:5px;color:#e8a020;font-family:'Press Start 2P',monospace;margin-top:2px;opacity:0;transition:opacity .3s;line-height:1.5">aad3b4:<br>c1e5...</div>
+        </div>
+        <div id="pth_box" style="position:absolute;left:148px;top:50px;width:70px;height:55px;background:#080010;border:2px solid #260830;border-radius:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:border-color .3s,background .3s">
+          <div style="font-size:13px">🔀</div>
+          <div style="font-size:5px;color:#c080ff;font-family:'Press Start 2P',monospace;text-align:center;line-height:1.5">xfreerdp<br>/pth</div>
+        </div>
+        <div style="position:absolute;right:8px;top:50px;text-align:center;width:58px">
+          <div id="pth_tgt" style="font-size:20px;filter:grayscale(1) brightness(.4);transition:filter .4s">🖥️</div>
+          <div style="font-size:5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px;line-height:1.5">TARGET<br>WS-02</div>
+          <div id="pth_gui" style="font-size:5.5px;color:#4eff9a;font-family:'Press Start 2P',monospace;margin-top:2px;opacity:0;transition:opacity .3s;line-height:1.5">GUI<br>SESSION ✓</div>
+        </div>
+        <div id="pth_pkt" class="pkt" style="width:10px;height:10px;background:#c080ff;box-shadow:0 0 7px #c080ff;top:78px;left:56px"></div>
+        <div id="pth_req" style="position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:5.5px;color:#888;font-family:'Press Start 2P',monospace;opacity:0;transition:opacity .3s">REQUIRES: Restricted Admin Mode OR Domain Admin hash</div>
+      </div>
+
+      <!-- THE COMMAND -->
+      <div class="panel" id="s4_cmd" style="background:#060010;border:1px solid #260830">
+        <div style="font-size:7px;color:#c080ff;margin-bottom:6px">THE COMMAND:</div>
+        <div style="background:#030008;padding:8px;border:1px solid #1a0828;font-size:7px;line-height:2.2;font-family:monospace">
+          <div id="pc1" style="opacity:0;transition:opacity .3s;color:#aaa"># Step 1: dump hash from compromised host</div>
+          <div id="pc2" style="opacity:0;transition:opacity .3s;color:#e8a020">secretsdump.py CORP/user@dc01</div>
+          <div id="pc3" style="opacity:0;transition:opacity .3s;color:#888;margin-top:4px"># Step 2: use hash directly with xfreerdp</div>
+          <div id="pc4" style="opacity:0;transition:opacity .3s;color:#c080ff">xfreerdp /u:Administrator /pth:<span style="color:#e85050">aad3b4...c1e5</span> /v:192.168.1.101</div>
+          <div id="pc5" style="opacity:0;transition:opacity .3s;color:#4eff9a">[INFO] GUI session opened — no password needed</div>
+        </div>
+      </div>
+
+      <!-- CONDITIONS + DEFENSES -->
+      <div class="panel" id="s4_cond" style="background:#060010;border:1px solid #1a0828">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:7px">REQUIREMENTS + LIMITS:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:8px;padding:4px 7px;background:#040008;border-left:2px solid #c080ff;font-size:6.5px;color:#aaa;line-height:1.8">
+            <span style="color:#c080ff;flex-shrink:0">REQ:</span>
+            <span>Target must have <span style="color:#c080ff">Restricted Admin Mode</span> enabled, OR attacker hash is local admin</span>
+          </div>
+          <div style="display:flex;gap:8px;padding:4px 7px;background:#040008;border-left:2px solid #e8a020;font-size:6.5px;color:#aaa;line-height:1.8">
+            <span style="color:#e8a020;flex-shrink:0">WHY:</span>
+            <span>RDP with Restricted Admin doesn't send creds to target — NTLM hash is sufficient</span>
+          </div>
+          <div style="display:flex;gap:8px;padding:4px 7px;background:#040008;border-left:2px solid #4eff9a;font-size:6.5px;color:#aaa;line-height:1.8">
+            <span style="color:#4eff9a;flex-shrink:0">FIX:</span>
+            <span>Disable Restricted Admin: <span style="color:#4eff9a">reg add HKLM\...\lsa /v DisableRestrictedAdmin /t REG_DWORD /d 1</span></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="ih pu">🔑 HASH = KEY — NO CRACKING NEEDED</div>
+    <div class="il">Once you have an NTLM hash from any method (Responder, secretsdump), <span style="color:#c080ff">xfreerdp /pth</span> gives a full Windows GUI. No password ever required.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">/pth</div><div class="sl">xfreerdp<br>FLAG</div></div>
+    <div class="sc"><div class="sv am">RAdm</div><div class="sl">RESTRICTED<br>ADMIN REQ</div></div>
+    <div class="sc"><div class="sv gn">REG</div><div class="sl">DISABLE<br>FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: DETECTION ═══ -->
+<div class="scene" id="s5" style="background:#050510">
+  <div class="hdr" style="background:#050510;border-bottom:1px solid #101030">
+    <div class="hdr-title">DETECTION</div>
+    <div class="hdr-sub">SPOTTING RDP ATTACKS IN EVENT LOGS + NETWORK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DETECTION</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">BLUE TEAM</span>
+  </div>
+  <div class="anim" style="background:#050510">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- EVENT LOG TABLE -->
+      <div class="panel" id="s5_events" style="background:#030310;border:1px solid #101030;padding:0;overflow:hidden">
+        <div style="background:#0a0a20;padding:5px 10px;border-bottom:1px solid #101030">
+          <div style="font-size:7px;color:#4ec9e1">KEY EVENT IDS — WINDOWS SECURITY LOG</div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <div id="ev1" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #101030;background:#040415">
+            <div style="font-size:7px;color:#e85050;flex-shrink:0;border:1px solid #e85050;padding:1px 4px;white-space:nowrap">4625</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Failed logon — <span style="color:#e85050">brute force</span>: 100+ per minute from same IP, logon type 10 (RemoteInteractive)</div>
+          </div>
+          <div id="ev2" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #101030">
+            <div style="font-size:7px;color:#e8a020;flex-shrink:0;border:1px solid #e8a020;padding:1px 4px;white-space:nowrap">4624</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Successful logon type 10 from <span style="color:#e8a020">unusual geolocation</span> or non-business-hours access</div>
+          </div>
+          <div id="ev3" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #101030;background:#040415">
+            <div style="font-size:7px;color:#c080ff;flex-shrink:0;border:1px solid #c080ff;padding:1px 4px;white-space:nowrap">4648</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#c080ff">Pass-the-Hash</span> indicator: type-10 logon where source IP ≠ workstation IP of that user account</div>
+          </div>
+          <div id="ev4" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px">
+            <div style="font-size:7px;color:#4ec9e1;flex-shrink:0;border:1px solid #4ec9e1;padding:1px 4px;white-space:nowrap">1149</div>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">TerminalServices-RemoteConnectionManager: <span style="color:#4ec9e1">successful RDP auth</span> — logs source IP even for NLA</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NETWORK SIGNATURES -->
+      <div class="panel" id="s5_net" style="background:#030310;border:1px solid #101030">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:7px">NETWORK DETECTION:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#020210;border-left:2px solid #e85050">
+            <span style="font-size:12px;flex-shrink:0">🔍</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">Shodan/Censys alert</span>: monitor if your external IPs appear with port 3389 open — set up alerts</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#020210;border-left:2px solid #4ec9e1">
+            <span style="font-size:12px;flex-shrink:0">🦈</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4ec9e1">Zeek/Suricata</span>: alert on RDP connections from internet (SRC not in VPN/allowlist range)</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 7px;background:#020210;border-left:2px solid #e8a020">
+            <span style="font-size:12px;flex-shrink:0">📊</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e8a020">SIEM rule</span>: event 4625 count &gt; 10 in 60 seconds from same source IP on port 3389</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="ih cy">🔵 LOGON TYPE 10 = RDP FINGERPRINT</div>
+    <div class="il">All RDP logons produce type 10 in event logs. Combined with <span style="color:#4ec9e1">unexpected source IPs</span> or off-hours timing, this is the clearest RDP attack signal.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#e85050">4625</div><div class="sl">BRUTE<br>FORCE</div></div>
+    <div class="sc"><div class="sv pu">4648</div><div class="sl">PtH<br>INDICATOR</div></div>
+    <div class="sc"><div class="sv cy">1149</div><div class="sl">RDP AUTH<br>SOURCE IP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 6: HARDENING + SUMMARY ═══ -->
+<div class="scene" id="s6" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title">RDP HARDENING CHECKLIST</div>
+    <div class="hdr-sub">NEVER EXPOSE 3389 TO INTERNET — EVER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HARDENING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CHECKLIST</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- CHECKLIST -->
+      <div class="panel" id="s6_list" style="background:#000d04;border:1px solid #0d3018;padding:0;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;border-bottom:1px solid #0d3018">
+          <div style="font-size:7px;color:#4eff9a">RDP HARDENING CHECKLIST</div>
+        </div>
+        <div style="display:flex;flex-direction:column">
+          <div id="c1" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #0d2010;background:#000d04">
+            <div style="font-size:12px;flex-shrink:0;color:#4eff9a">✓</div>
+            <div>
+              <div style="font-size:7px;color:#4eff9a">ENABLE NLA EVERYWHERE</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">GPO: Require NLA = Enabled. Kills BlueKeep + pre-auth attacks instantly.</div>
+            </div>
+          </div>
+          <div id="c2" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #0d2010">
+            <div style="font-size:12px;flex-shrink:0;color:#4eff9a">✓</div>
+            <div>
+              <div style="font-size:7px;color:#4eff9a">NEVER EXPOSE :3389 TO INTERNET</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Firewall: deny inbound 3389 from 0.0.0.0/0. Put behind VPN — no exceptions.</div>
+            </div>
+          </div>
+          <div id="c3" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #0d2010;background:#000d04">
+            <div style="font-size:12px;flex-shrink:0;color:#4eff9a">✓</div>
+            <div>
+              <div style="font-size:7px;color:#4eff9a">ALLOWLIST SOURCE IPs</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Only VPN gateway + jump box IPs may reach :3389. IPTables / SG / NSG rules.</div>
+            </div>
+          </div>
+          <div id="c4" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #0d2010">
+            <div style="font-size:12px;flex-shrink:0;color:#e8a020">✓</div>
+            <div>
+              <div style="font-size:7px;color:#e8a020">DISABLE RESTRICTED ADMIN MODE</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Blocks PtH via RDP. Reg: DisableRestrictedAdmin = 1 under HKLM\...\lsa</div>
+            </div>
+          </div>
+          <div id="c5" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-bottom:1px solid #0d2010;background:#000d04">
+            <div style="font-size:12px;flex-shrink:0;color:#e8a020">✓</div>
+            <div>
+              <div style="font-size:7px;color:#e8a020">PATCH IMMEDIATELY</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">BlueKeep, DejaBlue (CVE-2019-1181/1182) — KB4499175+. Auto-updates on.</div>
+            </div>
+          </div>
+          <div id="c6" style="opacity:0;transition:opacity .3s;display:flex;align-items:flex-start;gap:8px;padding:6px 8px">
+            <div style="font-size:12px;flex-shrink:0;color:#4ec9e1">✓</div>
+            <div>
+              <div style="font-size:7px;color:#4ec9e1">MFA ON ALL RDP</div>
+              <div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Azure AD NPS extension, Duo, or Okta RADIUS. Even stolen hashes require 2nd factor.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VERIFY EXPOSURE -->
+      <div class="panel" id="s6_verify" style="background:#000d04;border:1px solid #1a3010;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">CHECK YOUR EXPOSURE:</div>
+        <div style="font-size:6.5px;color:#4eff9a;font-family:monospace;line-height:2.1;background:#000805;padding:6px 8px;border:1px solid #0a2010">
+          <div># Scan your own perimeter</div>
+          <div id="v1" style="opacity:0;transition:opacity .3s;color:#aaa">nmap -sV -p 3389 --open YOUR_IP_RANGE</div>
+          <div id="v2" style="opacity:0;transition:opacity .3s;color:#aaa;margin-top:4px"># Check NLA is required</div>
+          <div id="v3" style="opacity:0;transition:opacity .3s;color:#4eff9a">nmap -p 3389 --script rdp-enum-encryption target</div>
+          <div id="v4" style="opacity:0;transition:opacity .3s;color:#4eff9a"># "NLA supported" → good. No NLA → patch now.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="ih gn">✓ VPN + NLA + ALLOWLIST = SAFE RDP</div>
+    <div class="il"><span style="color:#4eff9a">No direct internet exposure</span> kills 99% of RDP attacks. NLA kills pre-auth exploits. MFA kills credential theft. All three together.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">VPN</div><div class="sl">GATE<br>ACCESS</div></div>
+    <div class="sc"><div class="sv gn">NLA</div><div class="sl">AUTH<br>FIRST</div></div>
+    <div class="sc"><div class="sv cy">MFA</div><div class="sl">SECOND<br>FACTOR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn gn" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function litBox(id,border,bg,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.borderColor=border;if(bg)e.style.background=bg;}});}
+function litSVGLine(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.setAttribute('stroke',color);e.setAttribute('stroke-width','2.5');}});}
+function litSVGRect(id,stroke,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('stroke',stroke);});}
+
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.style.transition='none';d.style.left=x1+'px';d.style.top=y1+'px';d.style.opacity='1';
+    af(40,()=>{
+      d.style.transition=`left ${durMs}ms linear, top ${durMs}ms linear`;
+      d.style.left=x2+'px';d.style.top=y2+'px';
+    });
+    af(durMs+80,()=>{d.style.opacity='0';});
+  });
+}
+
+function reset(n){
+  if(n===1){['s1_alert','s1_why','s1_three'].forEach(id=>hide(id));['a1','a2','a3'].forEach(id=>hideEl(id));}
+  if(n===2){
+    ['s2_timeline','s2_worm'].forEach(id=>hide(id));
+    ['tl1','tl2','tl3','tl4'].forEach(id=>hideEl(id));
+    hideEl('bk_rce');hideEl('bk_uaf');hideEl('bk_lbl');
+    const bkp=document.getElementById('bk_pkt');if(bkp)bkp.style.opacity='0';
+    const ts=document.getElementById('tgt_srv');if(ts)ts.style.filter='grayscale(1) brightness(.4)';
+    hideEl('tgt_owned');
+    litSVGRect('bk_chan','#2a0808',0);
+    ['bk_l1','bk_l2'].forEach(id=>{const e=document.getElementById(id);if(e){e.setAttribute('stroke','#2a0808');e.setAttribute('stroke-width','2');}});
+  }
+  if(n===3){
+    ['s3_cmp','s3_tech','s3_enable'].forEach(id=>hide(id));
+    ['nno1','nno2','nno3','nno4','nla1','nla2','nla3','nla4'].forEach(id=>hideEl(id));
+  }
+  if(n===4){
+    ['s4_cmd','s4_cond'].forEach(id=>hide(id));
+    ['pc1','pc2','pc3','pc4','pc5','ph_hash_lbl','pth_gui','pth_req'].forEach(id=>hideEl(id));
+    const p=document.getElementById('pth_pkt');if(p)p.style.opacity='0';
+    const t=document.getElementById('pth_tgt');if(t)t.style.filter='grayscale(1) brightness(.4)';
+    litBox('pth_box','#260830','#080010',0);
+    ['ph_l1','ph_l2'].forEach(id=>{const e=document.getElementById(id);if(e){e.setAttribute('stroke','#1a0828');e.setAttribute('stroke-width','1.5');}});
+  }
+  if(n===5){
+    ['s5_events','s5_net'].forEach(id=>hide(id));
+    ['ev1','ev2','ev3','ev4'].forEach(id=>hideEl(id));
+  }
+  if(n===6){
+    ['s6_list','s6_verify'].forEach(id=>hide(id));
+    ['c1','c2','c3','c4','c5','c6','v1','v2','v3','v4'].forEach(id=>hideEl(id));
+  }
+}
+
+function play(n){
+  clr();reset(n);
+  if(n===1){
+    show('s1_alert',200);
+    ['a1','a2','a3'].forEach((id,i)=>showEl(id,400+i*400));
+    show('s1_why',1600);
+    show('s1_three',2600);
+  }
+  if(n===2){
+    const e=document.getElementById('bk_l1');if(e){e.setAttribute('stroke','#e85050');e.setAttribute('stroke-width','2.5');}
+    movePkt('bk_pkt',56,83,183,83,200,600);
+    litSVGRect('bk_chan','#e85050',400);
+    showEl('bk_uaf',700);
+    const e2=document.getElementById('bk_l2');if(e2){e2.setAttribute('stroke','#e85050');e2.setAttribute('stroke-width','2.5');}
+    movePkt('bk_pkt',183,83,310,83,900,600);
+    af(1400,()=>{const t=document.getElementById('tgt_srv');if(t)t.style.filter='none';});
+    showEl('tgt_owned',1500);
+    showEl('bk_rce',1600);
+    showEl('bk_lbl',1800);
+    show('s2_timeline',2000);
+    ['tl1','tl2','tl3','tl4'].forEach((id,i)=>showEl(id,2200+i*350));
+    show('s2_worm',3700);
+  }
+  if(n===3){
+    show('s3_cmp',200);
+    ['nno1','nno2','nno3','nno4'].forEach((id,i)=>showEl(id,400+i*350));
+    ['nla1','nla2','nla3','nla4'].forEach((id,i)=>showEl(id,400+i*350));
+    show('s3_tech',2000);
+    show('s3_enable',2700);
+  }
+  if(n===4){
+    showEl('ph_hash_lbl',300);
+    litSVGLine('ph_l1','#c080ff',400);
+    movePkt('pth_pkt',56,78,183,78,400,600);
+    litBox('pth_box','#c080ff','#180028',600);
+    litSVGLine('ph_l2','#4eff9a',1100);
+    af(1200,()=>{const t=document.getElementById('pth_tgt');if(t)t.style.filter='none';});
+    showEl('pth_gui',1300);
+    showEl('pth_req',1500);
+    show('s4_cmd',800);
+    ['pc1','pc2','pc3','pc4','pc5'].forEach((id,i)=>showEl(id,1000+i*380));
+    show('s4_cond',3000);
+  }
+  if(n===5){
+    show('s5_events',200);
+    ['ev1','ev2','ev3','ev4'].forEach((id,i)=>showEl(id,400+i*350));
+    show('s5_net',2000);
+  }
+  if(n===6){
+    show('s6_list',200);
+    ['c1','c2','c3','c4','c5','c6'].forEach((id,i)=>showEl(id,400+i*300));
+    show('s6_verify',2300);
+    ['v1','v2','v3','v4'].forEach((id,i)=>showEl(id,2500+i*280));
+  }
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight; // force reflow
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>
