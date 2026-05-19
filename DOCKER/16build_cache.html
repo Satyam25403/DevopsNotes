@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Build Cache — The Rule That Saves Minutes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1a2e}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.rd{color:#e85050}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#06080f;border:1px solid #1a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #1a1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.rd{border-left-color:#e85050}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.rd{color:#e85050}.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}
+
+/* layer block */
+.layer-block{
+  display:flex;align-items:center;
+  border:2px solid;border-radius:3px;overflow:hidden;
+  opacity:0;transform:translateY(-10px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.layer-block.visible{opacity:1;transform:translateY(0)}
+.layer-num{width:28px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.layer-body{flex:1;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.layer-cmd{font-size:8px;line-height:1.4}
+.layer-desc{font-size:6px;color:#888;line-height:1.6}
+.layer-badge{font-size:6px;padding:2px 5px;border-radius:2px;margin-left:auto;flex-shrink:0;margin-right:5px;align-self:center;border:1px solid}
+
+/* timer bar */
+.timer-bar{height:10px;border-radius:2px;transition:width 1.2s ease-out;width:0%}
+
+/* cache miss flash */
+@keyframes missPulse{
+  0%,100%{background:#200808}
+  50%{background:#3a0808}
+}
+.cache-miss{animation:missPulse .6s ease 3}
+
+/* cache hit shimmer */
+@keyframes hitShimmer{
+  0%,100%{background:#0a1a0d}
+  50%{background:#0d2a14}
+}
+.cache-hit{animation:hitShimmer .8s ease 2}
+
+/* build progress bar animate */
+@keyframes progressGrow{
+  from{width:0%}
+}
+
+/* connector dot */
+.connector{height:8px;margin:0 40px;opacity:0;transition:opacity .2s;display:flex;align-items:center;justify-content:center}
+.connector.visible{opacity:1}
+
+/* terminal line */
+.tl{opacity:0;transition:opacity .25s}
+.tl.visible{opacity:1}
+
+/* chain reaction flash */
+@keyframes chainFlash{
+  0%{border-color:#e85050;background:#200808}
+  50%{border-color:#ff5050;background:#300808}
+  100%{border-color:#e85050;background:#200808}
+}
+.chain-flash{animation:chainFlash .4s ease forwards}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SCENE 1: HOOK ════════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">DOCKER BUILD CACHE</div>
+    <div class="hdr-sub">LAYER ORDER · CACHE INVALIDATION · REAL SAVINGS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">COMMON MISTAKE</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- hero callout -->
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">THE RULE YOU'RE PROBABLY BREAKING</div>
+        <div style="font-size:9px;color:#ffcccc;line-height:1.9;margin-bottom:8px">ONE WRONG LINE ORDER<br>IN YOUR DOCKERFILE<br>COSTS YOU 3 MINUTES.<br>EVERY. SINGLE. BUILD.</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">You change one .js file.<br>Docker reruns npm install.<br>3 minutes wasted.<br>Fix: 1 line swap.</div>
+      </div>
+
+      <!-- before/after time comparison -->
+      <div id="s1-times" style="opacity:0;transition:opacity .5s;border:1px solid #1a1a2e;border-radius:3px;padding:12px;background:#04060c">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:10px;text-align:center">BUILD TIME COMPARISON</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:7px;color:#e85050">BAD ORDER (today)</span>
+              <span style="font-size:7px;color:#e85050">~3 min</span>
+            </div>
+            <div style="height:14px;background:#1a0808;border:1px solid #3a0808;border-radius:2px;overflow:hidden">
+              <div id="s1-bad-bar" style="height:100%;width:0%;background:#e85050;transition:width 1.2s ease-out"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <span style="font-size:7px;color:#4eff9a">GOOD ORDER (fix)</span>
+              <span style="font-size:7px;color:#4eff9a">~8 sec</span>
+            </div>
+            <div style="height:14px;background:#0a1a0d;border:1px solid #0d3010;border-radius:2px;overflow:hidden">
+              <div id="s1-good-bar" style="height:100%;width:0%;background:#4eff9a;transition:width 1.2s .2s ease-out"></div>
+            </div>
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:7px;color:#4eff9a">22× faster with correct layer order</div>
+      </div>
+
+      <!-- the key rule -->
+      <div id="s1-rule" style="opacity:0;transition:opacity .5s;border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c;text-align:center">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">THE GOLDEN RULE</div>
+        <div style="font-size:8px;color:#fff;line-height:1.9">COPY things that change <span style="color:#e85050">RARELY</span> first<br>COPY things that change <span style="color:#e85050">OFTEN</span> last</div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE WHY
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">CACHE INVALIDATION</div>
+    <div class="ih rd">When one layer changes, ALL layers after it rebuild</div>
+    <div class="il" style="font-size:7px">Docker caches each layer. Change a layer → cache busted → every instruction below it reruns. Wrong order = npm install on every single code change.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3min</div><div class="sl">wasted per<br>bad build</div></div>
+    <div class="sc"><div class="sv gn">8sec</div><div class="sl">with correct<br>layer order</div></div>
+    <div class="sc"><div class="sv am">22×</div><div class="sl">faster<br>after fix</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 2: BAD ORDER ════════════════ -->
+<div class="scene" id="s2" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title" style="color:#e85050">BAD ORDER — SLOW BUILD</div>
+    <div class="hdr-sub">COPY . . BEFORE npm install = CACHE BUSTED ALWAYS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">BEFORE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SLOW</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:4px">
+
+      <!-- bad Dockerfile -->
+      <div id="s2-file" style="border:2px solid #e85050;border-radius:3px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #2a0808;font-size:6px;color:#555">Dockerfile ❌ (bad order)</div>
+        <div style="padding:8px 12px;font-size:7px;line-height:2.2">
+          <div class="tl" id="b1" style="color:#4ec9e1">FROM node:18-alpine</div>
+          <div class="tl" id="b2" style="color:#4ec9e1">WORKDIR /app</div>
+          <div class="tl rd" id="b3" style="color:#e85050">COPY . .  <span style="color:#555;font-size:5px"># ← THE MISTAKE: copies everything</span></div>
+          <div class="tl rd" id="b4" style="color:#e85050">RUN npm install  <span style="color:#555;font-size:5px"># ← runs EVERY build</span></div>
+          <div class="tl" id="b5" style="color:#4ec9e1">EXPOSE 3000</div>
+          <div class="tl" id="b6" style="color:#4ec9e1">CMD ["node","index.js"]</div>
+        </div>
+      </div>
+
+      <!-- layer stack with cache states -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px;text-align:center;padding:4px 0;opacity:0;transition:opacity .4s" id="s2-stklbl">LAYER CACHE STATUS — AFTER CHANGING index.js</div>
+
+      <!-- Layer 1: FROM -->
+      <div class="layer-block" id="s2-l1" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">1</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">FROM node:18-alpine</div>
+          <div class="layer-desc">Base image — never changes</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED</div>
+      </div>
+      <div class="connector" id="s2-c1"><div style="width:2px;height:8px;background:#1a2a1a"></div></div>
+
+      <!-- Layer 2: WORKDIR -->
+      <div class="layer-block" id="s2-l2" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">2</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">WORKDIR /app</div>
+          <div class="layer-desc">Working directory — never changes</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED</div>
+      </div>
+      <div class="connector" id="s2-c2"><div style="width:2px;height:8px;background:#2a1010"></div></div>
+
+      <!-- Layer 3: COPY . . — CACHE MISS! -->
+      <div class="layer-block" id="s2-l3" style="border-color:#e85050">
+        <div class="layer-num" style="color:#e85050;background:#200808">3</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#e85050">COPY . .</div>
+          <div class="layer-desc">index.js changed → cache BUSTED here</div>
+        </div>
+        <div class="layer-badge" style="color:#e85050;border-color:#e85050;background:#200808">MISS ✕</div>
+      </div>
+      <div class="connector" id="s2-c3"><div style="width:2px;height:8px;background:#3a1010"></div></div>
+
+      <!-- Layer 4: npm install — forced rebuild! -->
+      <div class="layer-block" id="s2-l4" style="border-color:#e85050">
+        <div class="layer-num" style="color:#e85050;background:#200808">4</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#e85050">RUN npm install</div>
+          <div class="layer-desc">All layers below MISS auto-rebuild — 3 min!</div>
+        </div>
+        <div class="layer-badge" style="color:#e85050;border-color:#e85050;background:#200808">REBUILD ✕</div>
+      </div>
+      <div class="connector" id="s2-c4"><div style="width:2px;height:8px;background:#2a1010"></div></div>
+
+      <!-- Layer 5: EXPOSE, CMD -->
+      <div class="layer-block" id="s2-l5" style="border-color:#e85050">
+        <div class="layer-num" style="color:#e85050;background:#200808">5</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#e85050">EXPOSE + CMD</div>
+          <div class="layer-desc">Forced rebuild even though unchanged</div>
+        </div>
+        <div class="layer-badge" style="color:#e85050;border-color:#e85050;background:#200808">REBUILD ✕</div>
+      </div>
+
+      <!-- build time indicator -->
+      <div id="s2-timer" style="opacity:0;transition:opacity .4s;border:1px solid #3a0808;border-radius:3px;padding:8px;background:#0d0404;margin-top:4px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:7px;color:#e85050">Total build time</span>
+          <span style="font-size:7px;color:#e85050" id="s2-time-val">~3 min 10 sec</span>
+        </div>
+        <div style="height:10px;background:#1a0808;border-radius:2px;overflow:hidden">
+          <div id="s2-tbar" style="height:100%;width:0%;background:#e85050;transition:width 1.5s ease-out"></div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:5px">3 min wasted on npm install every time you change a .js file</div>
+      </div>
+
+      <div class="step-block rd" id="s2-s1">
+        <div class="step-num rd">!</div>
+        <div class="step-text"><span class="rd">COPY . .</span> copies ALL your source files including index.js. When index.js changes, layer 3's hash changes. <span class="rd">Every layer below it must rebuild.</span> npm install reruns. Every time.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">CACHE MISS CASCADE</div>
+    <div class="ih rd">One changed file → everything below rebuilds</div>
+    <div class="il" style="font-size:7px">Layer 3 COPY . . includes your source. It changes on every commit. npm install doesn't care that package.json is identical — it just runs because it's below the miss.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">L3</div><div class="sl">cache busted<br>COPY . .</div></div>
+    <div class="sc"><div class="sv rd">L4+</div><div class="sl">all below<br>must rebuild</div></div>
+    <div class="sc"><div class="sv am">3min</div><div class="sl">npm install<br>every build</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 3: GOOD ORDER ════════════════ -->
+<div class="scene" id="s3" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">GOOD ORDER — FAST BUILD</div>
+    <div class="hdr-sub">COPY package.json FIRST → npm install CACHED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">AFTER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAST</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:4px">
+
+      <!-- good Dockerfile -->
+      <div id="s3-file" style="border:2px solid #4eff9a;border-radius:3px;background:#040c04;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0d2010;font-size:6px;color:#4eff9a">Dockerfile ✓ (correct order)</div>
+        <div style="padding:8px 12px;font-size:7px;line-height:2.2">
+          <div class="tl" id="g1" style="color:#4ec9e1">FROM node:18-alpine</div>
+          <div class="tl" id="g2" style="color:#4ec9e1">WORKDIR /app</div>
+          <div class="tl gn" id="g3" style="color:#4eff9a">COPY package*.json ./  <span style="color:#555;font-size:5px"># ← only manifests first</span></div>
+          <div class="tl gn" id="g4" style="color:#4eff9a">RUN npm ci  <span style="color:#555;font-size:5px"># ← cached unless package.json changes</span></div>
+          <div class="tl gn" id="g5" style="color:#4eff9a">COPY . .  <span style="color:#555;font-size:5px"># ← source code LAST</span></div>
+          <div class="tl" id="g6" style="color:#4ec9e1">EXPOSE 3000</div>
+          <div class="tl" id="g7" style="color:#4ec9e1">CMD ["node","index.js"]</div>
+        </div>
+      </div>
+
+      <div style="font-size:7px;color:#555;letter-spacing:1px;text-align:center;padding:4px 0;opacity:0;transition:opacity .4s" id="s3-stklbl">LAYER CACHE STATUS — AFTER CHANGING index.js</div>
+
+      <!-- Layer 1: FROM -->
+      <div class="layer-block" id="s3-l1" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">1</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">FROM node:18-alpine</div>
+          <div class="layer-desc">Base image</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED ✓</div>
+      </div>
+      <div class="connector" id="s3-c1"><div style="width:2px;height:8px;background:#1a2a1a"></div></div>
+
+      <!-- Layer 2: WORKDIR -->
+      <div class="layer-block" id="s3-l2" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">2</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">WORKDIR /app</div>
+          <div class="layer-desc">Working directory</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED ✓</div>
+      </div>
+      <div class="connector" id="s3-c2"><div style="width:2px;height:8px;background:#1a2a1a"></div></div>
+
+      <!-- Layer 3: COPY package.json — still cached! -->
+      <div class="layer-block" id="s3-l3" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">3</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">COPY package*.json ./</div>
+          <div class="layer-desc">package.json unchanged → cache HIT</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED ✓</div>
+      </div>
+      <div class="connector" id="s3-c3"><div style="width:2px;height:8px;background:#1a2a1a"></div></div>
+
+      <!-- Layer 4: npm ci — CACHED! -->
+      <div class="layer-block" id="s3-l4" style="border-color:#1a3a1a">
+        <div class="layer-num" style="color:#4eff9a;background:#0a1a0d">4</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#4eff9a">RUN npm ci</div>
+          <div class="layer-desc">node_modules from cache — instant!</div>
+        </div>
+        <div class="layer-badge" style="color:#4eff9a;border-color:#4eff9a;background:#0a1a0d">CACHED ✓</div>
+      </div>
+      <div class="connector" id="s3-c4"><div style="width:2px;height:8px;background:#1a2a1a"></div></div>
+
+      <!-- Layer 5: COPY . . — only THIS layer rebuilds -->
+      <div class="layer-block" id="s3-l5" style="border-color:#e8a020">
+        <div class="layer-num" style="color:#e8a020;background:#150d00">5</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#e8a020">COPY . .</div>
+          <div class="layer-desc">Source changes here — only this layer rebuilds</div>
+        </div>
+        <div class="layer-badge" style="color:#e8a020;border-color:#e8a020;background:#150d00">REBUILD</div>
+      </div>
+      <div class="connector" id="s3-c5"><div style="width:2px;height:8px;background:#1a1a0a"></div></div>
+
+      <!-- Layer 6: CMD (fast) -->
+      <div class="layer-block" id="s3-l6" style="border-color:#e8a020">
+        <div class="layer-num" style="color:#e8a020;background:#150d00">6</div>
+        <div class="layer-body">
+          <div class="layer-cmd" style="color:#e8a020">EXPOSE + CMD</div>
+          <div class="layer-desc">Rebuilds quickly — just metadata</div>
+        </div>
+        <div class="layer-badge" style="color:#e8a020;border-color:#e8a020;background:#150d00">~0.1s</div>
+      </div>
+
+      <!-- build time indicator -->
+      <div id="s3-timer" style="opacity:0;transition:opacity .4s;border:1px solid #0d3010;border-radius:3px;padding:8px;background:#040c04;margin-top:4px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <span style="font-size:7px;color:#4eff9a">Total build time</span>
+          <span style="font-size:7px;color:#4eff9a">~8 sec</span>
+        </div>
+        <div style="height:10px;background:#0a1a0d;border-radius:2px;overflow:hidden">
+          <div id="s3-tbar" style="height:100%;width:0%;background:#4eff9a;transition:width 0.4s ease-out"></div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:5px">npm install SKIPPED — node_modules restored from cache instantly</div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">✓</div>
+        <div class="step-text"><span class="gn">package.json rarely changes.</span> Copying it first means npm install only reruns when dependencies actually change — not every time you fix a typo in index.js.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">CACHE HIT</div>
+    <div class="ih gn">npm install skipped — node_modules from cache</div>
+    <div class="il" style="font-size:7px">Layers 1–4 are identical to last build. Docker restores node_modules in &lt;1 second from its layer cache. Only COPY . . and CMD rebuild — total ~8 seconds.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">L1-L4</div><div class="sl">all cached<br>instant</div></div>
+    <div class="sc"><div class="sv am">L5-L6</div><div class="sl">only source<br>rebuilds</div></div>
+    <div class="sc"><div class="sv gn">8sec</div><div class="sl">total build<br>time</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 4: RULES + PATTERNS ════════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">CACHE RULES & PATTERNS</div>
+    <div class="hdr-sub">WHAT INVALIDATES CACHE · BEST PRACTICES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">RULES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PATTERNS</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- invalidation rules -->
+      <div id="s4-rules" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px">WHAT INVALIDATES A LAYER'S CACHE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="step-block visible cy" style="opacity:1;transform:none;border-color:#0a1a2e;border-left-color:#e85050;padding:7px">
+            <div style="font-size:8px;flex-shrink:0;width:20px">①</div>
+            <div class="step-text"><span class="rd">The instruction text changes</span> — e.g. RUN npm install → RUN npm ci</div>
+          </div>
+          <div class="step-block visible" style="opacity:1;transform:none;border-color:#0a1a2e;border-left-color:#e85050;padding:7px">
+            <div style="font-size:8px;flex-shrink:0;width:20px">②</div>
+            <div class="step-text"><span class="rd">A COPY/ADD file content changes</span> — file hash is checked, not just name</div>
+          </div>
+          <div class="step-block visible" style="opacity:1;transform:none;border-color:#0a1a2e;border-left-color:#e85050;padding:7px">
+            <div style="font-size:8px;flex-shrink:0;width:20px">③</div>
+            <div class="step-text"><span class="rd">Any parent layer was invalidated</span> — cascades down to ALL children</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- language patterns -->
+      <div id="s4-patterns" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:6px">THE SAME PATTERN — ALL LANGUAGES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+
+          <div class="step-block gn" id="s4-p1">
+            <div style="font-size:8px;flex-shrink:0;width:40px;color:#4ec9e1;text-align:center">Node</div>
+            <div class="step-text" style="font-size:6px">
+              <span class="gn">COPY package*.json ./</span><br>
+              RUN npm ci<br>
+              COPY . .
+            </div>
+          </div>
+
+          <div class="step-block gn" id="s4-p2">
+            <div style="font-size:8px;flex-shrink:0;width:40px;color:#e8a020;text-align:center">Python</div>
+            <div class="step-text" style="font-size:6px">
+              <span class="gn">COPY requirements.txt ./</span><br>
+              RUN pip install -r requirements.txt<br>
+              COPY . .
+            </div>
+          </div>
+
+          <div class="step-block gn" id="s4-p3">
+            <div style="font-size:8px;flex-shrink:0;width:40px;color:#e85050;text-align:center">Go</div>
+            <div class="step-text" style="font-size:6px">
+              <span class="gn">COPY go.mod go.sum ./</span><br>
+              RUN go mod download<br>
+              COPY . .
+            </div>
+          </div>
+
+          <div class="step-block gn" id="s4-p4">
+            <div style="font-size:8px;flex-shrink:0;width:40px;color:#a060c0;text-align:center">Ruby</div>
+            <div class="step-text" style="font-size:6px">
+              <span class="gn">COPY Gemfile Gemfile.lock ./</span><br>
+              RUN bundle install<br>
+              COPY . .
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bonus tips -->
+      <div id="s4-bonus" style="border:1px solid #0a1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:7px">BONUS TIPS</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div><span class="gn">npm ci</span> vs npm install → ci is faster, deterministic, fails on lockfile mismatch</div>
+          <div><span class="cy">.dockerignore</span> → exclude node_modules, .git, *.md from COPY . . context</div>
+          <div><span class="am">--mount=type=cache</span> → BuildKit cache mounts for pip/npm persist between builds</div>
+          <div><span class="gn">Multi-stage builds</span> → separate builder stage keeps final image small</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">THE RULE IN ONE SENTENCE</div>
+    <div class="ih">Stable dependencies first. Changing source code last.</div>
+    <div class="il" style="font-size:7px">This pattern works for every language: copy the manifest (package.json / requirements.txt / go.mod) before copying source. That's it. 1 line swap. 22× faster builds.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">manifest</div><div class="sl">first: rarely<br>changes</div></div>
+    <div class="sc"><div class="sv rd">COPY .</div><div class="sl">last: changes<br>every commit</div></div>
+    <div class="sc"><div class="sv gn">22×</div><div class="sl">faster<br>with fix</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+const tl=id=>{const el=document.getElementById(id);if(el)el.classList.add('visible');}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-times','s1-rule','s1-cta'].forEach(id=>setOp(id,'0'));
+    const b=document.getElementById('s1-bad-bar');if(b){b.style.transition='none';b.style.width='0%';}
+    const g=document.getElementById('s1-good-bar');if(g){g.style.transition='none';g.style.width='0%';}
+  }
+  if(n===2){
+    setOp('s2-file','0'); setOp('s2-stklbl','0'); setOp('s2-timer','0');
+    rmV('s2-s1');
+    for(let i=1;i<=5;i++){rmV('s2-l'+i);rmV('s2-c'+i);}
+    ['b1','b2','b3','b4','b5','b6'].forEach(id=>rmV(id));
+    const b=document.getElementById('s2-tbar');if(b){b.style.transition='none';b.style.width='0%';}
+  }
+  if(n===3){
+    setOp('s3-file','0'); setOp('s3-stklbl','0'); setOp('s3-timer','0');
+    rmV('s3-s1');
+    for(let i=1;i<=6;i++){rmV('s3-l'+i);}
+    for(let i=1;i<=5;i++){rmV('s3-c'+i);}
+    ['g1','g2','g3','g4','g5','g6','g7'].forEach(id=>rmV(id));
+    const b=document.getElementById('s3-tbar');if(b){b.style.transition='none';b.style.width='0%';}
+  }
+  if(n===4){
+    setOp('s4-rules','0'); setOp('s4-patterns','0'); setOp('s4-bonus','0');
+    ['s4-p1','s4-p2','s4-p3','s4-p4'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>{
+      setOp('s1-times','1');
+      delay(()=>{
+        const b=document.getElementById('s1-bad-bar');
+        const g=document.getElementById('s1-good-bar');
+        if(b){b.style.transition='width 1.2s ease-out';b.style.width='100%';}
+        if(g){g.style.transition='width 1.2s .2s ease-out';g.style.width='4.5%';}
+      },100);
+    },800);
+    delay(()=>setOp('s1-rule','1'),1800);
+    delay(()=>setOp('s1-cta','1'),2500);
+  }
+
+  if(n===2){
+    delay(()=>setOp('s2-file','1'),200);
+    ['b1','b2','b3','b4','b5','b6'].forEach((id,i)=>delay(()=>tl(id),400+i*200));
+    delay(()=>setOp('s2-stklbl','1'),1600);
+    delay(()=>addV('s2-l1'),1800);
+    delay(()=>addV('s2-c1'),2000);
+    delay(()=>addV('s2-l2'),2100);
+    delay(()=>addV('s2-c2'),2300);
+    delay(()=>{
+      addV('s2-l3');
+      // flash cache miss
+      delay(()=>document.getElementById('s2-l3')?.classList.add('cache-miss'),100);
+    },2500);
+    delay(()=>addV('s2-c3'),2700);
+    delay(()=>{
+      addV('s2-l4');
+      delay(()=>document.getElementById('s2-l4')?.classList.add('cache-miss'),100);
+    },2900);
+    delay(()=>addV('s2-c4'),3100);
+    delay(()=>addV('s2-l5'),3300);
+    delay(()=>{
+      setOp('s2-timer','1');
+      delay(()=>{
+        const b=document.getElementById('s2-tbar');
+        if(b){b.style.transition='width 1.5s ease-out';b.style.width='100%';}
+      },100);
+    },3600);
+    delay(()=>addV('s2-s1'),2000);
+  }
+
+  if(n===3){
+    delay(()=>setOp('s3-file','1'),200);
+    ['g1','g2','g3','g4','g5','g6','g7'].forEach((id,i)=>delay(()=>tl(id),400+i*200));
+    delay(()=>setOp('s3-stklbl','1'),1800);
+    // cached layers snap in fast
+    delay(()=>addV('s3-l1'),2000);
+    delay(()=>addV('s3-c1'),2150);
+    delay(()=>addV('s3-l2'),2300);
+    delay(()=>addV('s3-c2'),2450);
+    delay(()=>{
+      addV('s3-l3');
+      delay(()=>document.getElementById('s3-l3')?.classList.add('cache-hit'),100);
+    },2600);
+    delay(()=>addV('s3-c3'),2750);
+    delay(()=>{
+      addV('s3-l4');
+      delay(()=>document.getElementById('s3-l4')?.classList.add('cache-hit'),100);
+    },2900);
+    delay(()=>addV('s3-c4'),3050);
+    delay(()=>addV('s3-l5'),3200);
+    delay(()=>addV('s3-c5'),3350);
+    delay(()=>addV('s3-l6'),3500);
+    delay(()=>{
+      setOp('s3-timer','1');
+      delay(()=>{
+        const b=document.getElementById('s3-tbar');
+        if(b){b.style.transition='width 0.35s ease-out';b.style.width='4.5%';}
+      },100);
+    },3700);
+    delay(()=>addV('s3-s1'),2200);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-rules','1'),200);
+    delay(()=>setOp('s4-patterns','1'),900);
+    ['s4-p1','s4-p2','s4-p3','s4-p4'].forEach((id,i)=>delay(()=>addV(id),1000+i*300));
+    delay(()=>setOp('s4-bonus','1'),2400);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Switch Hardening</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4eff9a;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:7px}
+.dot{width:10px;height:10px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4eff9a}.dot.done{background:#4ec9e1}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4eff9a;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.rd{border-color:#e85050}.info.am{border-color:#e8a020}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4eff9a;text-align:center;line-height:1.3}
+.sv.rd{color:#e85050}.sv.am{color:#e8a020}.sv.cy{color:#4ec9e1}.sv.pu{color:#a06eff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4eff9a;background:transparent;color:#4eff9a;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4eff9a20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4ec9e1;color:#4ec9e1}.btn.play:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+.fs{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border:1px solid #2a1f3d;border-radius:2px;opacity:0;transition:opacity .4s}
+.fs.show{opacity:1}
+.fd{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:2px}
+/* Toggle row */
+.trow{display:flex;align-items:center;gap:0;padding:7px 10px;border-radius:3px;transition:background .4s,border-color .4s;border:1px solid #1a1a1a}
+.trow.off{background:#0a0a0a;border-color:#1a1a1a}
+.trow.on{border-color:#4eff9a22}
+.tog{width:36px;height:18px;border-radius:9px;background:#1a1a1a;position:relative;flex-shrink:0;transition:background .4s;cursor:default}
+.tog.on{background:#4eff9a22;border:1px solid #4eff9a}
+.tog-knob{position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#333;transition:left .35s,background .35s}
+.tog.on .tog-knob{left:20px;background:#4eff9a}
+.tinfo{flex:1;padding-left:10px}
+.tname{font-size:8px;color:#444;transition:color .4s;line-height:1.4}
+.trow.on .tname{color:#4eff9a}
+.tattk{font-size:6px;color:#333;transition:color .4s;margin-top:2px}
+.trow.on .tattk{color:#888}
+.tblock{font-size:6px;color:#333;transition:all .4s;padding:2px 6px;border:1px solid transparent;border-radius:2px}
+.trow.on .tblock{color:#e85050;border-color:#e8505044;background:#1a0505}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ S1: HOOK / DASHBOARD INTRO ══════════════════ -->
+<div class="scene active" id="s1" style="background:#0a0f0a">
+  <div class="hdr" style="background:#0a0f0a">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">6 COMMANDS · ALL DISABLED BY DEFAULT</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ALL OFF</span>
+  </div>
+  <div class="anim" style="background:#0a0f0a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s1_hook" style="opacity:0;transition:opacity .5s;border:2px solid #e85050;border-radius:4px;padding:12px 12px;background:#0f0505">
+        <div style="font-size:8px;color:#e85050;line-height:2.2">
+          "These 6 switch commands block<br>
+          <span style="color:#fff">90% of Layer 2 attacks</span> —<br>
+          and most switches ship with<br>
+          <span style="color:#e8a020">none of them enabled.</span>"
+        </div>
+      </div>
+
+      <!-- The 6 toggles, all OFF -->
+      <div id="s1_dash" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+
+        <div style="font-size:7px;color:#666;letter-spacing:.5px;margin-bottom:2px">SECURITY FEATURE STATUS — FACTORY DEFAULT</div>
+
+        <div class="trow off" id="t1">
+          <div class="tog" id="tog1"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">PORT SECURITY</div>
+            <div class="tattk">blocks: MAC flood</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+        <div class="trow off" id="t2">
+          <div class="tog" id="tog2"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">BPDU GUARD</div>
+            <div class="tattk">blocks: STP attacks</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+        <div class="trow off" id="t3">
+          <div class="tog" id="tog3"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">DHCP SNOOPING</div>
+            <div class="tattk">blocks: rogue DHCP</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+        <div class="trow off" id="t4">
+          <div class="tog" id="tog4"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">DYNAMIC ARP INSP.</div>
+            <div class="tattk">blocks: ARP spoofing</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+        <div class="trow off" id="t5">
+          <div class="tog" id="tog5"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">STORM CONTROL</div>
+            <div class="tattk">blocks: broadcast storm</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+        <div class="trow off" id="t6">
+          <div class="tog" id="tog6"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">802.1X NAC</div>
+            <div class="tattk">blocks: unauthorized access</div>
+          </div>
+          <div class="tblock">OFF</div>
+        </div>
+
+      </div>
+
+      <div id="s1_warn" style="opacity:0;transition:opacity .5s;background:#1a0808;border:1px solid #e8505033;border-radius:3px;padding:7px 9px">
+        <div style="font-size:7px;color:#888;line-height:2">
+          ⚠ Default IOS config: access ports have<br>
+          <span style="color:#e85050">zero L2 security features enabled.</span><br>
+          Attacker plugs in → full network access.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Factory config = no MAC limits, no ARP checks, no auth.</div>
+    <div class="ih rd">Every feature needs explicit configuration.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">6</div><div class="sl">FEATURES<br>DISABLED</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">ENABLED<br>DEFAULT</div></div>
+    <div class="sc"><div class="sv am">90%</div><div class="sl">ATTACKS<br>BLOCKED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S2: PORT SECURITY ══════════════════ -->
+<div class="scene" id="s2" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">① PORT SECURITY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">PORT SECURITY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MAC LIMIT</span>
+  </div>
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2_threat" style="opacity:0;transition:opacity .5s;background:#0f0505;border:1px solid #e8505033;border-radius:4px;padding:9px 11px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:4px">ATTACK: MAC FLOOD</div>
+        <div style="font-size:7px;color:#888;line-height:2">
+          Attacker sends frames with <span style="color:#e85050">thousands<br>of fake source MACs</span> → fills CAM table<br>→ switch floods all traffic like a hub.
+        </div>
+      </div>
+
+      <div id="s2_config" style="opacity:0;transition:opacity .5s;background:#030a03;border:2px solid #4eff9a44;border-radius:4px;padding:10px 11px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:7px">CONFIG — PORT SECURITY</div>
+        <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2.1;background:#020602;padding:8px 9px;border-radius:2px">
+          interface GigabitEthernet0/1<br>
+          &nbsp;switchport mode <span style="color:#4ec9e1">access</span><br>
+          &nbsp;switchport port-security<br>
+          &nbsp;switchport port-security maximum <span style="color:#4eff9a">2</span><br>
+          &nbsp;switchport port-security <span style="color:#4eff9a">violation shutdown</span><br>
+          &nbsp;switchport port-security mac-address <span style="color:#e8a020">sticky</span>
+        </div>
+      </div>
+
+      <div id="s2_explain" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;gap:6px;align-items:flex-start;padding:6px 8px;background:#030a03;border:1px solid #4eff9a22;border-radius:3px">
+          <div style="font-size:7px;color:#4eff9a;min-width:56px;flex-shrink:0">maximum 2</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">Only 2 MACs per port. 3rd MAC triggers violation.</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-start;padding:6px 8px;background:#030a03;border:1px solid #e8505022;border-radius:3px">
+          <div style="font-size:7px;color:#e85050;min-width:56px;flex-shrink:0">shutdown</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">Port goes err-disabled. Admin must re-enable.</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-start;padding:6px 8px;background:#030a03;border:1px solid #e8a02022;border-radius:3px">
+          <div style="font-size:7px;color:#e8a020;min-width:56px;flex-shrink:0">sticky</div>
+          <div style="font-size:7px;color:#888;line-height:1.9">First MACs seen are auto-learned and saved to config.</div>
+        </div>
+      </div>
+
+      <div id="s2_verify" style="opacity:0;transition:opacity .5s;background:#020802;border:1px solid #2a3a2a;border-radius:3px;padding:7px 9px">
+        <div style="font-size:7px;color:#666;margin-bottom:4px">VERIFY</div>
+        <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:1.9">
+          show port-security interface Gi0/1<br>
+          show port-security address
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Sticky + shutdown = zero-config MAC whitelist.</div>
+    <div class="ih">MAC flood fills 2 slots then port shuts. Attack over.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">2</div><div class="sl">MAX<br>MACs</div></div>
+    <div class="sc"><div class="sv rd">SHUT</div><div class="sl">VIOLATION<br>ACTION</div></div>
+    <div class="sc"><div class="sv am">STICKY</div><div class="sl">AUTO<br>LEARN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S3: BPDU GUARD + DHCP SNOOPING ══════════════════ -->
+<div class="scene" id="s3" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">② BPDU GUARD  ③ DHCP SNOOPING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STP + DHCP</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">GUARD</span>
+  </div>
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- BPDU Guard -->
+      <div id="s3_bpdu_block" style="opacity:0;transition:opacity .5s;background:#030a03;border:2px solid #4eff9a44;border-radius:4px;overflow:hidden">
+        <div style="background:#082008;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#4eff9a">② BPDU GUARD</div>
+          <div style="font-size:7px;padding:2px 7px;border:1px solid #e85050;border-radius:2px;color:#e85050">blocks STP attack</div>
+        </div>
+        <div style="padding:8px 10px">
+          <div style="font-size:7px;color:#888;line-height:1.9;margin-bottom:6px">
+            BPDU on access port = attacker running STP.<br>
+            <span style="color:#4eff9a">Shut the port immediately.</span>
+          </div>
+          <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#020602;padding:7px 8px;border-radius:2px">
+            interface GigabitEthernet0/1<br>
+            &nbsp;spanning-tree portfast<br>
+            &nbsp;spanning-tree <span style="color:#4eff9a">bpduguard enable</span><br>
+            <span style="color:#666">! or globally:</span><br>
+            spanning-tree portfast bpduguard default
+          </div>
+        </div>
+      </div>
+
+      <!-- DHCP Snooping -->
+      <div id="s3_dhcp_block" style="opacity:0;transition:opacity .5s;background:#030a03;border:2px solid #4ec9e144;border-radius:4px;overflow:hidden">
+        <div style="background:#041820;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#4ec9e1">③ DHCP SNOOPING</div>
+          <div style="font-size:7px;padding:2px 7px;border:1px solid #e85050;border-radius:2px;color:#e85050">blocks rogue DHCP</div>
+        </div>
+        <div style="padding:8px 10px">
+          <div style="font-size:7px;color:#888;line-height:1.9;margin-bottom:6px">
+            Rogue DHCP server gives attacker-controlled<br>
+            gateway IP. Only <span style="color:#4ec9e1">trusted uplink</span> responds.
+          </div>
+          <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#020610;padding:7px 8px;border-radius:2px">
+            ip dhcp snooping<br>
+            ip dhcp snooping vlan <span style="color:#4ec9e1">10,20,30</span><br>
+            <span style="color:#666">!</span><br>
+            interface GigabitEthernet0/24 <span style="color:#666">! uplink</span><br>
+            &nbsp;ip dhcp snooping <span style="color:#4eff9a">trust</span><br>
+            <span style="color:#666">! access ports: untrusted by default</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s3_note" class="fs" style="border-color:#4eff9a33">
+        <div class="fd" style="background:#4eff9a"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          DHCP snooping also builds a<br>
+          <span style="color:#4eff9a">binding table</span> (MAC+IP+port) used<br>
+          by DAI in the next step.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">BPDU Guard: any BPDU → port dies instantly.</div>
+    <div class="ih cy">DHCP Snooping: builds binding table for DAI.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">BPDU<br>→SHUT</div><div class="sl">STP<br>BLOCK</div></div>
+    <div class="sc"><div class="sv cy">TRUST<br>UPLINK</div><div class="sl">DHCP<br>FILTER</div></div>
+    <div class="sc"><div class="sv">TABLE</div><div class="sl">BINDING<br>DB</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S4: DAI + STORM CONTROL ══════════════════ -->
+<div class="scene" id="s4" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">④ DAI  ⑤ STORM CONTROL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ARP + STORMS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">INSPECT</span>
+  </div>
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- DAI -->
+      <div id="s4_dai_block" style="opacity:0;transition:opacity .5s;background:#030a03;border:2px solid #e8a02044;border-radius:4px;overflow:hidden">
+        <div style="background:#120c00;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#e8a020">④ DYNAMIC ARP INSPECTION</div>
+          <div style="font-size:7px;padding:2px 7px;border:1px solid #e85050;border-radius:2px;color:#e85050">blocks ARP spoof</div>
+        </div>
+        <div style="padding:8px 10px">
+          <div style="font-size:7px;color:#888;line-height:1.9;margin-bottom:6px">
+            Validates every ARP against DHCP<br>
+            snooping table. <span style="color:#e8a020">Mismatch = drop.</span><br>
+            Requires DHCP snooping enabled first.
+          </div>
+          <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#060400;padding:7px 8px;border-radius:2px">
+            ip arp inspection vlan <span style="color:#e8a020">10,20,30</span><br>
+            <span style="color:#666">!</span><br>
+            interface GigabitEthernet0/24 <span style="color:#666">! uplink</span><br>
+            &nbsp;ip arp inspection <span style="color:#4eff9a">trust</span><br>
+            <span style="color:#666">! verify command:</span><br>
+            show ip arp inspection vlan 10
+          </div>
+        </div>
+      </div>
+
+      <!-- Storm Control -->
+      <div id="s4_storm_block" style="opacity:0;transition:opacity .5s;background:#030a03;border:2px solid #a06eff44;border-radius:4px;overflow:hidden">
+        <div style="background:#100820;padding:7px 10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:8px;color:#a06eff">⑤ STORM CONTROL</div>
+          <div style="font-size:7px;padding:2px 7px;border:1px solid #e85050;border-radius:2px;color:#e85050">blocks broadcast storms</div>
+        </div>
+        <div style="padding:8px 10px">
+          <div style="font-size:7px;color:#888;line-height:1.9;margin-bottom:6px">
+            Rate-limits broadcast / multicast / unicast<br>
+            to <span style="color:#a06eff">% of port bandwidth.</span> Exceeding →<br>
+            packets dropped or port shut.
+          </div>
+          <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#060010;padding:7px 8px;border-radius:2px">
+            interface GigabitEthernet0/1<br>
+            &nbsp;storm-control broadcast level <span style="color:#a06eff">20.00</span><br>
+            &nbsp;storm-control multicast level <span style="color:#a06eff">20.00</span><br>
+            &nbsp;storm-control action <span style="color:#4eff9a">shutdown</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4_note" class="fs" style="border-color:#e8a02033">
+        <div class="fd" style="background:#e8a020"></div>
+        <div style="font-size:8px;line-height:1.9;color:#ccc">
+          DAI needs DHCP snooping as its<br>
+          <span style="color:#e8a020">truth source</span>. Enable snooping first.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">DAI: every ARP checked against binding table.</div>
+    <div class="ih am">Storm control: 20% broadcast ceiling, then shut.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">ARP<br>VALID</div><div class="sl">DAI<br>CHECK</div></div>
+    <div class="sc"><div class="sv pu">20%</div><div class="sl">STORM<br>CEILING</div></div>
+    <div class="sc"><div class="sv rd">DROP</div><div class="sl">EXCEED<br>ACTION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S5: 802.1X ══════════════════ -->
+<div class="scene" id="s5" style="background:#080f08">
+  <div class="hdr" style="background:#080f08">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">⑥ 802.1X — PORT-BASED AUTH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">802.1X NAC</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ZERO TRUST</span>
+  </div>
+  <div class="anim" style="background:#080f08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s5_intro" style="opacity:0;transition:opacity .5s;background:#04080c;border:1px solid #4ec9e133;border-radius:4px;padding:9px 11px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:5px">⑥ 802.1X — NO AUTH = NO NETWORK</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Port stays in <span style="color:#e85050">unauthorized state</span><br>
+          until supplicant authenticates via<br>
+          RADIUS. No credentials → no L2 access.
+        </div>
+      </div>
+
+      <!-- Auth flow -->
+      <div id="s5_flow" style="opacity:0;transition:opacity .5s;background:#030810;border:1px solid #2a1f5d;border-radius:4px;padding:9px 11px">
+        <div style="font-size:7px;color:#666;margin-bottom:7px;letter-spacing:.5px">802.1X EAPOL FLOW</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div id="s5_f1" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s">
+            <div style="font-size:10px">💻</div>
+            <div style="flex:1;height:1px;background:#4ec9e1"></div>
+            <div style="font-size:7px;padding:3px 5px;border:1px solid #4ec9e1;border-radius:2px;color:#4ec9e1">SW</div>
+            <div style="font-size:6px;color:#888;min-width:70px">EAPOL-Start →</div>
+          </div>
+          <div id="s5_f2" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s">
+            <div style="font-size:10px;opacity:.4">💻</div>
+            <div style="flex:1;height:1px;background:#e8a020"></div>
+            <div style="font-size:7px;padding:3px 5px;border:1px solid #4ec9e1;border-radius:2px;color:#4ec9e1">SW</div>
+            <div style="font-size:6px;color:#e8a020;min-width:70px">← EAP-Request</div>
+          </div>
+          <div id="s5_f3" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s">
+            <div style="font-size:10px">💻</div>
+            <div style="flex:1;height:1px;background:#4eff9a"></div>
+            <div style="font-size:7px;padding:3px 5px;border:1px solid #4ec9e1;border-radius:2px;color:#4ec9e1">SW</div>
+            <div style="font-size:6px;color:#4eff9a;min-width:70px">credentials →</div>
+          </div>
+          <div id="s5_f4" style="display:flex;align-items:center;gap:6px;opacity:0;transition:opacity .3s">
+            <div style="font-size:10px;opacity:.4">💻</div>
+            <div style="flex:1;height:1px;background:#4eff9a"></div>
+            <div style="font-size:7px;padding:3px 5px;border:1px solid #4ec9e1;border-radius:2px;color:#4ec9e1">SW</div>
+            <div style="font-size:10px">🔑</div>
+            <div style="font-size:7px;padding:3px 5px;border:1px solid #a06eff;border-radius:2px;color:#a06eff">RADIUS</div>
+            <div id="s5_access" style="font-size:6px;color:#666;min-width:40px;opacity:0;transition:opacity .3s">ACCESS!</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s5_config" style="opacity:0;transition:opacity .5s;background:#030a03;border:1px solid #4ec9e122;border-radius:3px;padding:8px 10px">
+        <div style="font-family:monospace;font-size:8px;color:#ccc;line-height:2;background:#020608;padding:7px 8px;border-radius:2px">
+          aaa new-model<br>
+          aaa authentication dot1x default group radius<br>
+          dot1x system-auth-control<br>
+          <span style="color:#666">!</span><br>
+          interface GigabitEthernet0/1<br>
+          &nbsp;authentication port-control <span style="color:#4ec9e1">auto</span><br>
+          &nbsp;dot1x pae <span style="color:#4ec9e1">authenticator</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Unauthorized port = only EAPOL frames pass.</div>
+    <div class="ih cy">No RADIUS auth = no ARP, no IP, no network.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">EAP</div><div class="sl">AUTH<br>PROTOCOL</div></div>
+    <div class="sc"><div class="sv pu">RADIUS</div><div class="sl">AUTH<br>SERVER</div></div>
+    <div class="sc"><div class="sv rd">DENY</div><div class="sl">DEFAULT<br>STATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S6: FULL DASHBOARD — ALL ON ══════════════════ -->
+<div class="scene" id="s6" style="background:#050f05">
+  <div class="hdr" style="background:#050f05">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">FULL DASHBOARD — ALL ENABLED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ALL 6 ON</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDENED</span>
+  </div>
+  <div class="anim" style="background:#050f05">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- All toggles ON -->
+      <div id="s6_dash" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:.5px;margin-bottom:2px">SECURITY FEATURE STATUS — HARDENED</div>
+
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">PORT SECURITY</div>
+            <div class="tattk">max 2 MACs · sticky · shutdown</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">BPDU GUARD</div>
+            <div class="tattk">portfast · bpduguard enable</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">DHCP SNOOPING</div>
+            <div class="tattk">trust uplink · vlan 10,20,30</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">DYNAMIC ARP INSP.</div>
+            <div class="tattk">validates vs binding table</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">STORM CONTROL</div>
+            <div class="tattk">broadcast 20% · action shutdown</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+        <div class="trow on">
+          <div class="tog on"><div class="tog-knob"></div></div>
+          <div class="tinfo">
+            <div class="tname">802.1X NAC</div>
+            <div class="tattk">dot1x auto · RADIUS backend</div>
+          </div>
+          <div style="font-size:6px;color:#4eff9a;padding:2px 6px;border:1px solid #4eff9a44;border-radius:2px">ON</div>
+        </div>
+      </div>
+
+      <!-- Attack blocked summary -->
+      <div id="s6_attacks" style="opacity:0;transition:opacity .5s;background:#030a03;border:1px solid #4eff9a22;border-radius:4px;padding:8px 10px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;letter-spacing:.5px">ATTACKS BLOCKED</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">MAC flood</span><span style="color:#4eff9a">✓ port security</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">STP takeover</span><span style="color:#4eff9a">✓ BPDU Guard</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">Rogue DHCP</span><span style="color:#4eff9a">✓ DHCP snooping</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">ARP spoofing</span><span style="color:#4eff9a">✓ DAI</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">Broadcast storm</span><span style="color:#4eff9a">✓ storm control</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#888">Unauthorized device</span><span style="color:#4eff9a">✓ 802.1X</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">6 features. ~20 lines of config per switch.</div>
+    <div class="ih">None are on by default. All take under 5 minutes.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">6/6</div><div class="sl">FEATURES<br>ENABLED</div></div>
+    <div class="sc"><div class="sv">6</div><div class="sl">ATTACKS<br>BLOCKED</div></div>
+    <div class="sc"><div class="sv am">90%</div><div class="sl">L2 RISK<br>REDUCED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(6)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ S7: QUICK-COPY TEMPLATE ══════════════════ -->
+<div class="scene" id="s7" style="background:#030a03">
+  <div class="hdr" style="background:#030a03">
+    <div class="hdr-title">SWITCH HARDENING</div>
+    <div class="hdr-sub">COPY-PASTE ACCESS PORT TEMPLATE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">TEMPLATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">IOS CONFIG</span>
+  </div>
+  <div class="anim" style="background:#030a03">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s7_global" style="opacity:0;transition:opacity .5s;background:#020802;border:1px solid #4eff9a22;border-radius:4px;overflow:hidden">
+        <div style="background:#082008;padding:6px 10px;font-size:7px;color:#4eff9a;letter-spacing:.5px">GLOBAL CONFIG</div>
+        <div style="padding:8px 9px;font-family:monospace;font-size:8px;color:#ccc;line-height:2.1">
+          ip dhcp snooping<br>
+          ip dhcp snooping vlan <span style="color:#4ec9e1">10,20,30</span><br>
+          ip arp inspection vlan <span style="color:#e8a020">10,20,30</span><br>
+          dot1x system-auth-control<br>
+          spanning-tree portfast bpduguard default
+        </div>
+      </div>
+
+      <div id="s7_access" style="opacity:0;transition:opacity .5s;background:#020802;border:1px solid #4eff9a22;border-radius:4px;overflow:hidden">
+        <div style="background:#082008;padding:6px 10px;font-size:7px;color:#4eff9a;letter-spacing:.5px">ACCESS PORT (repeat per port)</div>
+        <div style="padding:8px 9px;font-family:monospace;font-size:8px;color:#ccc;line-height:2.1">
+          interface GigabitEthernet0/<span style="color:#e8a020">X</span><br>
+          &nbsp;switchport mode access<br>
+          &nbsp;switchport access vlan <span style="color:#e8a020">10</span><br>
+          &nbsp;switchport nonegotiate<br>
+          &nbsp;switchport port-security<br>
+          &nbsp;switchport port-security maximum <span style="color:#4eff9a">2</span><br>
+          &nbsp;switchport port-security violation shutdown<br>
+          &nbsp;switchport port-security mac-address sticky<br>
+          &nbsp;spanning-tree portfast<br>
+          &nbsp;spanning-tree bpduguard enable<br>
+          &nbsp;storm-control broadcast level <span style="color:#a06eff">20.00</span><br>
+          &nbsp;storm-control action shutdown<br>
+          &nbsp;authentication port-control auto<br>
+          &nbsp;dot1x pae authenticator
+        </div>
+      </div>
+
+      <div id="s7_uplink" style="opacity:0;transition:opacity .5s;background:#020802;border:1px solid #4ec9e122;border-radius:4px;overflow:hidden">
+        <div style="background:#041820;padding:6px 10px;font-size:7px;color:#4ec9e1;letter-spacing:.5px">UPLINK / TRUNK (one per switch)</div>
+        <div style="padding:8px 9px;font-family:monospace;font-size:8px;color:#ccc;line-height:2.1">
+          interface GigabitEthernet0/<span style="color:#4ec9e1">24</span><br>
+          &nbsp;switchport mode trunk<br>
+          &nbsp;switchport trunk native vlan <span style="color:#4eff9a">999</span><br>
+          &nbsp;switchport nonegotiate<br>
+          &nbsp;ip dhcp snooping trust<br>
+          &nbsp;ip arp inspection trust<br>
+          &nbsp;spanning-tree guard root
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">This template is your L2 hardening baseline.</div>
+    <div class="ih">Apply to every access port. Uplink needs trust flags.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">GLOBAL</div><div class="sl">5 LINES</div></div>
+    <div class="sc"><div class="sv">ACCESS</div><div class="sl">14 LINES</div></div>
+    <div class="sc"><div class="sv cy">TRUNK</div><div class="sl">7 LINES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="prev(7)">◀ PREV</button>
+    <button class="btn play" onclick="play(7)">▶ PLAY</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="next(7)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+const TOTAL = 7;
+let timers = {};
+
+function clearTimers(n) {
+  if (timers[n]) { timers[n].forEach(clearTimeout); timers[n] = []; }
+}
+function t(n, fn, d) {
+  if (!timers[n]) timers[n] = [];
+  timers[n].push(setTimeout(fn, d));
+}
+function showEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '1';
+  if (e.classList.contains('fs')) e.classList.add('show');
+}
+function hideEl(id) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  e.style.opacity = '0';
+  if (e.classList.contains('fs')) e.classList.remove('show');
+}
+
+function flipToggle(idx) {
+  const row = document.getElementById('t' + idx);
+  const tog = document.getElementById('tog' + idx);
+  if (!row || !tog) return;
+  row.classList.remove('off');
+  row.classList.add('on');
+  tog.classList.add('on');
+  // Update block text
+  const block = row.querySelector('.tblock');
+  if (block) {
+    block.style.color = '#e85050';
+    block.style.borderColor = '#e8505044';
+    block.style.background = '#1a0505';
+    block.textContent = 'BLOCKED';
+  }
+}
+function resetToggle(idx) {
+  const row = document.getElementById('t' + idx);
+  const tog = document.getElementById('tog' + idx);
+  if (!row || !tog) return;
+  row.classList.remove('on');
+  row.classList.add('off');
+  tog.classList.remove('on');
+  const block = row.querySelector('.tblock');
+  if (block) {
+    block.style.color = '#333';
+    block.style.borderColor = 'transparent';
+    block.style.background = 'transparent';
+    block.textContent = 'OFF';
+  }
+}
+
+function resetScene(n) {
+  clearTimers(n);
+  if (n === 1) {
+    ['s1_hook','s1_dash','s1_warn'].forEach(hideEl);
+    [1,2,3,4,5,6].forEach(resetToggle);
+  } else if (n === 2) {
+    ['s2_threat','s2_config','s2_explain','s2_verify'].forEach(hideEl);
+  } else if (n === 3) {
+    ['s3_bpdu_block','s3_dhcp_block','s3_note'].forEach(hideEl);
+  } else if (n === 4) {
+    ['s4_dai_block','s4_storm_block','s4_note'].forEach(hideEl);
+  } else if (n === 5) {
+    ['s5_intro','s5_flow','s5_config'].forEach(hideEl);
+    ['s5_f1','s5_f2','s5_f3','s5_f4'].forEach(hideEl);
+    const sa = document.getElementById('s5_access');
+    if (sa) sa.style.opacity = '0';
+  } else if (n === 6) {
+    ['s6_dash','s6_attacks'].forEach(hideEl);
+  } else if (n === 7) {
+    ['s7_global','s7_access','s7_uplink'].forEach(hideEl);
+  }
+}
+
+function animate(n) {
+  if (n === 1) {
+    t(1, () => showEl('s1_hook'), 300);
+    t(1, () => showEl('s1_dash'), 1000);
+    // Toggles flipping on then off — show the "all off" problem
+    t(1, () => showEl('s1_warn'), 2500);
+  } else if (n === 2) {
+    t(2, () => showEl('s2_threat'), 300);
+    t(2, () => showEl('s2_config'), 1100);
+    t(2, () => showEl('s2_explain'), 2100);
+    t(2, () => showEl('s2_verify'), 3200);
+  } else if (n === 3) {
+    t(3, () => showEl('s3_bpdu_block'), 300);
+    t(3, () => showEl('s3_dhcp_block'), 1400);
+    t(3, () => showEl('s3_note'), 2700);
+  } else if (n === 4) {
+    t(4, () => showEl('s4_dai_block'), 300);
+    t(4, () => showEl('s4_storm_block'), 1400);
+    t(4, () => showEl('s4_note'), 2700);
+  } else if (n === 5) {
+    t(5, () => showEl('s5_intro'), 300);
+    t(5, () => showEl('s5_flow'), 1000);
+    t(5, () => showEl('s5_f1'), 1500);
+    t(5, () => showEl('s5_f2'), 2100);
+    t(5, () => showEl('s5_f3'), 2700);
+    t(5, () => showEl('s5_f4'), 3300);
+    t(5, () => { const sa = document.getElementById('s5_access'); if (sa) sa.style.opacity = '1'; }, 4000);
+    t(5, () => showEl('s5_config'), 4500);
+  } else if (n === 6) {
+    t(6, () => showEl('s6_dash'), 300);
+    t(6, () => showEl('s6_attacks'), 1500);
+  } else if (n === 7) {
+    t(7, () => showEl('s7_global'), 300);
+    t(7, () => showEl('s7_access'), 1100);
+    t(7, () => showEl('s7_uplink'), 2200);
+  }
+}
+
+function play(n) { resetScene(n); setTimeout(() => animate(n), 60); }
+
+function next(n) {
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  const nxt = n < TOTAL ? n + 1 : 1;
+  document.getElementById('s' + nxt).classList.add('active');
+  setTimeout(() => animate(nxt), 100);
+}
+function prev(n) {
+  if (n <= 1) return;
+  resetScene(n);
+  document.getElementById('s' + n).classList.remove('active');
+  document.getElementById('s' + (n - 1)).classList.add('active');
+  setTimeout(() => animate(n - 1), 100);
+}
+
+window.addEventListener('load', () => setTimeout(() => animate(1), 400));
+</script>
+</body>
+</html>

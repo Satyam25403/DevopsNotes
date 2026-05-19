@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Router Internals</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1: HOOK ═══ -->
+<div class="scene active" id="s1" style="background:#000a14">
+  <div class="hdr" style="background:#000a14;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">ROUTER INTERNALS</div>
+    <div class="hdr-sub">RIB · FIB · CEF · NANOSECONDS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000a14">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDWARE</span>
+  </div>
+  <div class="anim" style="background:#000a14">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SPEED COMPARISON ANIMATION -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="175" viewBox="0 0 366 175" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="ghk"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Labels -->
+          <text x="183" y="16" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace">FORWARDING SPEED COMPARISON</text>
+
+          <!-- PROCESS SWITCHING row -->
+          <text x="10" y="45" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">PROCESS</text>
+          <text x="10" y="56" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">SWITCH</text>
+          <!-- Track -->
+          <rect x="90" y="38" width="240" height="22" fill="#0d0002" stroke="#2a0008" stroke-width="1" rx="1"/>
+          <!-- Slow packet bar -->
+          <rect id="ps_bar" x="91" y="39" width="0" height="20" fill="#e85050" rx="1" opacity="0"/>
+          <text id="ps_time" x="340" y="52" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">~1ms</text>
+
+          <!-- CEF row -->
+          <text x="10" y="90" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">CEF</text>
+          <text x="10" y="101" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">ASIC</text>
+          <!-- Track -->
+          <rect x="90" y="83" width="240" height="22" fill="#000d04" stroke="#0d2808" stroke-width="1" rx="1"/>
+          <!-- Fast packet bar -->
+          <rect id="cef_bar" x="91" y="84" width="0" height="20" fill="#4eff9a" rx="1" opacity="0"/>
+          <text id="cef_time" x="340" y="97" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">~50ns</text>
+
+          <!-- Ratio label -->
+          <text id="ratio_label" x="183" y="130" text-anchor="middle" font-size="7" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">20,000× FASTER</text>
+          <text id="ratio_sub" x="183" y="145" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">same router, different path</text>
+
+          <!-- Packet dots racing -->
+          <circle id="ps_pkt" cx="91" cy="49" r="5" fill="#e85050" opacity="0" filter="url(#ghk)"/>
+          <circle id="cef_pkt" cx="91" cy="94" r="5" fill="#4eff9a" opacity="0" filter="url(#ghk)"/>
+
+          <!-- CPU icon for process switching -->
+          <text id="cpu_icon" x="58" y="52" text-anchor="middle" font-size="16" opacity="0">🐌</text>
+          <!-- ASIC icon for CEF -->
+          <text id="asic_icon" x="58" y="97" text-anchor="middle" font-size="16" opacity="0">⚡</text>
+        </svg>
+      </div>
+
+      <!-- QUOTE -->
+      <div class="panel" id="h_quote" style="background:#000810;border:2px solid #4ec9e1">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">💬 THE TRICK</div>
+        <div style="font-size:7px;color:#ddd;line-height:2">"Your router makes a forwarding decision in nanoseconds — the secret is pre-computing the answer before the packet arrives."</div>
+      </div>
+
+      <!-- THREE LAYERS PREVIEW -->
+      <div class="panel" id="h_layers" style="background:#000810;border:1px solid #0d2030">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">WHAT'S INSIDE A ROUTER</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:center;padding:5px 8px;background:#000d14;border-left:2px solid #a080ff">
+            <span style="font-size:14px;flex-shrink:0">📚</span>
+            <div><div style="font-size:6.5px;color:#a080ff">RIB — ROUTING INFORMATION BASE</div><div style="font-size:6px;color:#555;margin-top:2px;line-height:1.7">All routes from all protocols. Control plane.</div></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:5px 8px;background:#000d14;border-left:2px solid #4ec9e1">
+            <span style="font-size:14px;flex-shrink:0">⚡</span>
+            <div><div style="font-size:6.5px;color:#4ec9e1">FIB — FORWARDING INFORMATION BASE</div><div style="font-size:6px;color:#555;margin-top:2px;line-height:1.7">Hardware-optimized lookup table. Data plane.</div></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:5px 8px;background:#000d14;border-left:2px solid #4eff9a">
+            <span style="font-size:14px;flex-shrink:0">🔲</span>
+            <div><div style="font-size:6.5px;color:#4eff9a">CEF — CISCO EXPRESS FORWARDING</div><div style="font-size:6px;color:#555;margin-top:2px;line-height:1.7">ASIC that runs FIB at near line-rate.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="margin:0 12px;border-color:#4ec9e1">
+    <div class="il">Route convergence and forwarding are separate problems.</div>
+    <div class="ih">RIB = what to know. FIB = what to do. CEF = how fast.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">~1ms</div><div class="sl">PROCESS SW</div></div>
+    <div class="sc"><div class="sv gn">50ns</div><div class="sl">CEF ASIC</div></div>
+    <div class="sc"><div class="sv am">20K×</div><div class="sl">FASTER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: RIB — ROUTING TABLE ═══ -->
+<div class="scene" id="s2" style="background:#080014">
+  <div class="hdr" style="background:#080014;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff">RIB — ROUTING INFO BASE</div>
+    <div class="hdr-sub">ALL PROTOCOLS FEED THE RIB</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#080014">
+    <span class="slabel" style="color:#a080ff">RIB</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">CONTROL PLANE</span>
+  </div>
+  <div class="anim" style="background:#080014">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- RIB FEED DIAGRAM -->
+      <div style="background:#040010;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="grib"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Protocol sources on left -->
+          <rect id="rib_ospf" x="8" y="12" width="60" height="22" fill="#050010" stroke="#3a1060" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="rib_ospf_t" x="38" y="27" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">OSPF</text>
+
+          <rect id="rib_bgp" x="8" y="44" width="60" height="22" fill="#050010" stroke="#3a1060" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="rib_bgp_t" x="38" y="59" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">BGP</text>
+
+          <rect id="rib_static" x="8" y="76" width="60" height="22" fill="#050010" stroke="#3a1060" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="rib_static_t" x="38" y="91" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">STATIC</text>
+
+          <rect id="rib_conn" x="8" y="108" width="60" height="22" fill="#050010" stroke="#3a1060" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="rib_conn_t" x="38" y="123" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">CONN</text>
+
+          <!-- Feed lines to RIB -->
+          <line id="rib_l1" x1="68" y1="23" x2="148" y2="75" stroke="#1a0838" stroke-width="1.5" opacity="0"/>
+          <line id="rib_l2" x1="68" y1="55" x2="148" y2="78" stroke="#1a0838" stroke-width="1.5" opacity="0"/>
+          <line id="rib_l3" x1="68" y1="87" x2="148" y2="85" stroke="#1a0838" stroke-width="1.5" opacity="0"/>
+          <line id="rib_l4" x1="68" y1="119" x2="148" y2="92" stroke="#1a0838" stroke-width="1.5" opacity="0"/>
+
+          <!-- RIB box (centre) -->
+          <rect id="rib_box" x="148" y="58" width="90" height="54" fill="#0a0020" stroke="#a080ff" stroke-width="2" rx="3" opacity="0"/>
+          <text id="rib_box_t1" x="193" y="80" text-anchor="middle" font-size="8" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">RIB</text>
+          <text id="rib_box_t2" x="193" y="94" text-anchor="middle" font-size="5.5" fill="#3a2060" font-family="'Press Start 2P',monospace" opacity="0">ip route show</text>
+          <text id="rib_box_t3" x="193" y="106" text-anchor="middle" font-size="5.5" fill="#3a2060" font-family="'Press Start 2P',monospace" opacity="0">show ip route</text>
+
+          <!-- Packet dots feeding RIB -->
+          <circle id="rib_p1" cx="38" cy="23" r="4" fill="#a080ff" opacity="0" filter="url(#grib)"/>
+          <circle id="rib_p2" cx="38" cy="55" r="4" fill="#a080ff" opacity="0" filter="url(#grib)"/>
+          <circle id="rib_p3" cx="38" cy="87" r="4" fill="#a080ff" opacity="0" filter="url(#grib)"/>
+          <circle id="rib_p4" cx="38" cy="119" r="4" fill="#a080ff" opacity="0" filter="url(#grib)"/>
+
+          <!-- Best route selection arrow out right -->
+          <line id="rib_out" x1="238" y1="85" x2="310" y2="85" stroke="#1a0838" stroke-width="2" opacity="0"/>
+          <polygon id="rib_out_arr" points="314,85 306,81 306,89" fill="#1a0838" opacity="0"/>
+          <text id="rib_out_t" x="274" y="79" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">BEST</text>
+          <text id="rib_out_t2" x="274" y="90" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">ROUTE</text>
+          <text id="rib_out_t3" x="274" y="101" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">→ FIB</text>
+
+          <!-- AD values label -->
+          <text id="rib_ad" x="183" y="152" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">AD: OSPF=110  BGP=20(ext)  Static=1</text>
+        </svg>
+      </div>
+
+      <!-- RIB ENTRY EXAMPLE -->
+      <div class="panel" id="rib_table" style="background:#040010;border:1px solid #1a0838">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:7px">LINUX: ip route show</div>
+        <div style="background:#020008;padding:8px;font-size:6.5px;line-height:2.2;border:1px solid #100028">
+          <div><span style="color:#4eff9a">C</span> <span style="color:#aaa">192.168.1.0/24</span> <span style="color:#555">dev eth0</span></div>
+          <div><span style="color:#a080ff">O</span> <span style="color:#aaa">10.0.0.0/8</span> <span style="color:#555">via 192.168.1.1</span> <span style="color:#3a2060">[110/20]</span></div>
+          <div><span style="color:#4ec9e1">B</span> <span style="color:#aaa">0.0.0.0/0</span> <span style="color:#555">via 10.0.0.1</span> <span style="color:#3a2060">[20/0]</span></div>
+          <div><span style="color:#e8a020">S</span> <span style="color:#aaa">172.16.0.0/16</span> <span style="color:#555">via 10.0.0.2</span> <span style="color:#3a2060">[1/0]</span></div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:5px;line-height:1.8">C=connected  O=OSPF  B=BGP  S=static  [AD/metric]</div>
+      </div>
+
+      <!-- KEY POINT -->
+      <div class="panel" id="rib_key" style="background:#040010;border:1px solid #a080ff;display:flex;align-items:center;gap:10px">
+        <div style="font-size:20px;flex-shrink:0">🧠</div>
+        <div>
+          <div style="font-size:7px;color:#a080ff;margin-bottom:4px">RIB = FULL KNOWLEDGE</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">RIB holds ALL routes including suboptimal ones. CPU processes it. Not used for forwarding — too slow.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu" style="margin:0 12px">
+    <div class="il">RIB = full routing table from all sources.</div>
+    <div class="ih pu">AD selects best route when protocols disagree.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">ALL</div><div class="sl">PROTOCOLS</div></div>
+    <div class="sc"><div class="sv am">AD</div><div class="sl">TIEBREAKER</div></div>
+    <div class="sc"><div class="sv rd">CPU</div><div class="sl">SLOW PATH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: FIB + CEF ═══ -->
+<div class="scene" id="s3" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">FIB + CEF</div>
+    <div class="hdr-sub">RIB COMPILES → HARDWARE ASIC</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">FIB / CEF</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DATA PLANE</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- FIB/CEF PIPELINE DIAGRAM -->
+      <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="175" viewBox="0 0 366 175" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gcef"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- RIB box (source) -->
+          <rect id="fib_rib" x="8" y="68" width="64" height="38" fill="#0a0020" stroke="#a080ff" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="fib_rib_t1" x="40" y="84" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">RIB</text>
+          <text id="fib_rib_t2" x="40" y="97" text-anchor="middle" font-size="5.5" fill="#3a2060" font-family="'Press Start 2P',monospace" opacity="0">control</text>
+
+          <!-- Compile arrow -->
+          <line id="fib_comp_line" x1="72" y1="87" x2="110" y2="87" stroke="#0d3018" stroke-width="2" opacity="0"/>
+          <polygon id="fib_comp_arr" points="114,87 106,83 106,91" fill="#0d3018" opacity="0"/>
+          <text id="fib_comp_t" x="91" y="81" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">compile</text>
+
+          <!-- FIB box -->
+          <rect id="fib_box" x="114" y="60" width="74" height="54" fill="#001808" stroke="#4ec9e1" stroke-width="2" rx="3" opacity="0"/>
+          <text id="fib_box_t1" x="151" y="82" text-anchor="middle" font-size="8" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">FIB</text>
+          <text id="fib_box_t2" x="151" y="95" text-anchor="middle" font-size="5.5" fill="#1a4030" font-family="'Press Start 2P',monospace" opacity="0">prefix</text>
+          <text id="fib_box_t3" x="151" y="106" text-anchor="middle" font-size="5.5" fill="#1a4030" font-family="'Press Start 2P',monospace" opacity="0">→ next-hop</text>
+
+          <!-- FIB to CEF arrow -->
+          <line id="fib_to_cef" x1="188" y1="87" x2="218" y2="87" stroke="#0d3018" stroke-width="2" opacity="0"/>
+          <polygon id="fib_to_cef_arr" points="222,87 214,83 214,91" fill="#0d3018" opacity="0"/>
+          <text id="fib_to_cef_t" x="205" y="81" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">load</text>
+
+          <!-- CEF ASIC box -->
+          <rect id="cef_box" x="222" y="52" width="90" height="70" fill="#001408" stroke="#4eff9a" stroke-width="2.5" rx="3" opacity="0"/>
+          <text id="cef_box_t1" x="267" y="76" text-anchor="middle" font-size="7.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">CEF</text>
+          <text id="cef_box_t2" x="267" y="90" text-anchor="middle" font-size="5.5" fill="#2a5020" font-family="'Press Start 2P',monospace" opacity="0">ASIC / TCAM</text>
+          <text id="cef_box_t3" x="267" y="102" text-anchor="middle" font-size="5.5" fill="#2a5020" font-family="'Press Start 2P',monospace" opacity="0">wire-speed</text>
+          <text id="cef_box_t4" x="267" y="114" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">~50ns/pkt</text>
+
+          <!-- Packets flying through CEF right side -->
+          <line id="cef_in" x1="312" y1="80" x2="348" y2="70" stroke="#0d3018" stroke-width="1.5" opacity="0"/>
+          <line id="cef_out" x1="312" y1="94" x2="348" y2="104" stroke="#0d3018" stroke-width="1.5" opacity="0"/>
+          <text id="cef_in_t" x="352" y="72" font-size="13" opacity="0">📦</text>
+          <text id="cef_out_t" x="352" y="110" font-size="13" opacity="0">📦</text>
+          <text id="cef_in_label" x="338" y="66" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">IN</text>
+          <text id="cef_out_label" x="338" y="120" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">OUT</text>
+
+          <!-- Animated packet through pipeline -->
+          <circle id="fib_pkt" cx="8" cy="87" r="5" fill="#4eff9a" opacity="0" filter="url(#gcef)"/>
+
+          <!-- TCAM explanation -->
+          <text id="tcam_note" x="183" y="155" text-anchor="middle" font-size="5.5" fill="#2a5020" font-family="'Press Start 2P',monospace" opacity="0">TCAM: ternary CAM — 0/1/X match — O(1) lookup</text>
+          <text id="tcam_note2" x="183" y="167" text-anchor="middle" font-size="5.5" fill="#1a3010" font-family="'Press Start 2P',monospace" opacity="0">entire FIB searched in parallel in hardware</text>
+        </svg>
+      </div>
+
+      <!-- WHAT TCAM DOES -->
+      <div class="panel" id="tcam_card" style="background:#000d04;border:1px solid #0d3018">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:7px">WHY TCAM = INSTANT LOOKUP</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;align-items:center;padding:5px 8px;background:#001208;border-left:2px solid #e85050">
+            <span style="font-size:14px;flex-shrink:0">🐌</span>
+            <div><div style="font-size:6.5px;color:#e85050">SOFTWARE LOOKUP</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">Walk a trie tree in RAM. O(log n). Each hop = memory access = slow.</div></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;padding:5px 8px;background:#001208;border-left:2px solid #4eff9a">
+            <span style="font-size:14px;flex-shrink:0">⚡</span>
+            <div><div style="font-size:6.5px;color:#4eff9a">TCAM LOOKUP</div><div style="font-size:6px;color:#666;line-height:1.7;margin-top:2px">ALL prefixes matched in parallel in hardware. O(1). Single clock cycle.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CISCO SHOW COMMAND -->
+      <div class="panel" id="cef_show" style="background:#000d04;border:1px solid #0d3018">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">CISCO: show ip cef</div>
+        <div style="background:#020a04;padding:7px;font-size:6px;line-height:2.1;border:1px solid #0a1808">
+          <div><span style="color:#aaa">0.0.0.0/0</span>         <span style="color:#4eff9a">via 10.0.0.1</span></div>
+          <div><span style="color:#aaa">10.0.0.0/8</span>        <span style="color:#4eff9a">via 192.168.1.1</span></div>
+          <div><span style="color:#aaa">192.168.1.0/24</span>    <span style="color:#4eff9a">attached</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn" style="margin:0 12px">
+    <div class="il">FIB is RIB compressed into hardware-friendly form.</div>
+    <div class="ih">TCAM matches all prefixes simultaneously — O(1).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">O(1)</div><div class="sl">LOOKUP</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">TCAM</div><div class="sl">PARALLEL</div></div>
+    <div class="sc"><div class="sv gn">CEF</div><div class="sl">DEFAULT ON</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: PROCESS SWITCHING vs CEF ═══ -->
+<div class="scene" id="s4" style="background:#100005">
+  <div class="hdr" style="background:#100005;border-bottom:1px solid #300010">
+    <div class="hdr-title" style="color:#e85050">PROCESS SW vs CEF</div>
+    <div class="hdr-sub">CPU PER PACKET vs HARDWARE ASIC</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#100005">
+    <span class="slabel" style="color:#e85050">COMPARISON</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">SWITCHING</span>
+  </div>
+  <div class="anim" style="background:#100005">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- SIDE-BY-SIDE PATHS -->
+      <div style="background:#080003;border:2px solid #300010;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="185" viewBox="0 0 366 185" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gcmp"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Divider -->
+          <line x1="183" y1="5" x2="183" y2="180" stroke="#1a0008" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="91" y="16" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace">PROCESS SWITCH</text>
+          <text x="275" y="16" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace">CEF / FAST PATH</text>
+
+          <!-- LEFT: Process switching path -->
+          <!-- NIC -->
+          <text id="ps_nic" x="30" y="48" text-anchor="middle" font-size="16" opacity="0">🔌</text>
+          <text id="ps_nic_t" x="30" y="62" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">NIC</text>
+          <!-- Arrow up to CPU -->
+          <line id="ps_l1" x1="30" y1="40" x2="30" y2="25" stroke="#0d2838" stroke-width="1.5" opacity="0"/>
+          <polygon id="ps_a1" points="30,21 26,29 34,29" fill="#0d2838" opacity="0"/>
+          <!-- CPU -->
+          <text id="ps_cpu" x="91" y="25" text-anchor="middle" font-size="16" opacity="0">🖥️</text>
+          <text id="ps_cpu_t" x="91" y="39" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">CPU</text>
+          <!-- Arrow from NIC to CPU -->
+          <line id="ps_l2" x1="44" y1="32" x2="75" y2="24" stroke="#0d2838" stroke-width="1.5" opacity="0"/>
+          <!-- interrupt badge -->
+          <rect id="ps_int" x="50" y="22" width="40" height="12" fill="#1a0008" rx="1" opacity="0"/>
+          <text id="ps_int_t" x="70" y="31" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">interrupt!</text>
+          <!-- CPU → RIB lookup -->
+          <line id="ps_l3" x1="91" y1="42" x2="91" y2="72" stroke="#0d2838" stroke-width="1.5" opacity="0"/>
+          <polygon id="ps_a3" points="91,76 87,68 95,68" fill="#0d2838" opacity="0"/>
+          <rect id="ps_rib_l" x="60" y="78" width="62" height="20" fill="#0d0020" stroke="#3a1060" stroke-width="1" rx="1" opacity="0"/>
+          <text id="ps_rib_lt" x="91" y="92" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">RIB LOOKUP</text>
+          <!-- RIB → forward -->
+          <line id="ps_l4" x1="91" y1="98" x2="91" y2="118" stroke="#0d2838" stroke-width="1.5" opacity="0"/>
+          <polygon id="ps_a4" points="91,122 87,114 95,114" fill="#0d2838" opacity="0"/>
+          <text id="ps_out" x="91" y="137" text-anchor="middle" font-size="16" opacity="0">📦</text>
+          <text id="ps_out_t" x="91" y="152" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">~1ms</text>
+          <text id="ps_out_t2" x="91" y="163" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">per packet</text>
+
+          <!-- Animated slow packet -->
+          <circle id="ps_pkt_anim" cx="30" cy="48" r="5" fill="#e85050" opacity="0" filter="url(#gcmp)"/>
+
+          <!-- RIGHT: CEF path -->
+          <!-- NIC -->
+          <text id="cef_nic" x="213" y="48" text-anchor="middle" font-size="16" opacity="0">🔌</text>
+          <text id="cef_nic_t" x="213" y="62" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">NIC</text>
+          <!-- Direct to ASIC arrow -->
+          <line id="cef_l1" x1="230" y1="50" x2="296" y2="50" stroke="#0d2838" stroke-width="2" opacity="0"/>
+          <polygon id="cef_a1" points="300,50 292,46 292,54" fill="#0d2838" opacity="0"/>
+          <!-- ASIC box -->
+          <rect id="cef_asic" x="300" y="28" width="60" height="44" fill="#001808" stroke="#4eff9a" stroke-width="2" rx="2" opacity="0"/>
+          <text id="cef_asic_t1" x="330" y="47" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">ASIC</text>
+          <text id="cef_asic_t2" x="330" y="62" text-anchor="middle" font-size="5.5" fill="#2a5020" font-family="'Press Start 2P',monospace" opacity="0">FIB/TCAM</text>
+          <!-- ASIC → output -->
+          <line id="cef_l2" x1="330" y1="72" x2="330" y2="102" stroke="#0d2838" stroke-width="2" opacity="0"/>
+          <polygon id="cef_a2" points="330,106 326,98 334,98" fill="#0d2838" opacity="0"/>
+          <text id="cef_out" x="330" y="122" text-anchor="middle" font-size="16" opacity="0">📦</text>
+          <text id="cef_out_t" x="330" y="137" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">~50ns</text>
+          <text id="cef_out_t2" x="330" y="148" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">per packet</text>
+
+          <!-- NO CPU interrupt label -->
+          <text id="cef_nocpu" x="275" y="85" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">no CPU</text>
+          <text id="cef_nocpu2" x="275" y="96" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">interrupt</text>
+
+          <!-- Animated fast packet -->
+          <circle id="cef_pkt_anim" cx="213" cy="50" r="5" fill="#4eff9a" opacity="0" filter="url(#gcmp)"/>
+        </svg>
+      </div>
+
+      <!-- WHEN PROCESS SWITCHING STILL HAPPENS -->
+      <div class="panel" id="ps_when" style="background:#080003;border:1px solid #300010">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:7px">WHEN CPU PATH STILL FIRES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:7px;padding:4px 8px;background:#0d0002;border-left:2px solid #e85050">
+            <span style="font-size:12px;flex-shrink:0">❌</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Packets to router itself (SSH, SNMP, routing protocol updates)</div>
+          </div>
+          <div style="display:flex;gap:7px;padding:4px 8px;background:#0d0002;border-left:2px solid #e85050">
+            <span style="font-size:12px;flex-shrink:0">❌</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">TTL=1 (traceroute) — must generate ICMP time exceeded</div>
+          </div>
+          <div style="display:flex;gap:7px;padding:4px 8px;background:#0d0002;border-left:2px solid #e8a020">
+            <span style="font-size:12px;flex-shrink:0">⚠️</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">FIB miss — unknown dest falls back to process switching</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd" style="margin:0 12px">
+    <div class="il">Process switching: CPU interrupted per packet.</div>
+    <div class="ih rd">CEF: ASIC checks FIB in hardware, CPU not touched.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">CPU</div><div class="sl">SLOW PATH</div></div>
+    <div class="sc"><div class="sv gn">ASIC</div><div class="sl">FAST PATH</div></div>
+    <div class="sc"><div class="sv am">TTL=1</div><div class="sl">CPU PUNT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: ROUTER SECURITY ═══ -->
+<div class="scene" id="s5" style="background:#0a0800">
+  <div class="hdr" style="background:#0a0800;border-bottom:1px solid #2a2000">
+    <div class="hdr-title" style="color:#e8a020">ROUTER HARDENING</div>
+    <div class="hdr-sub">SOURCE ROUTING · uRPF · CoPP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0800">
+    <span class="slabel" style="color:#e8a020">SECURITY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HARDENING</span>
+  </div>
+  <div class="anim" style="background:#0a0800">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- SOURCE ROUTING -->
+      <div class="panel" id="sec_sr" style="background:#060400;border:2px solid #e85050">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:7.5px;color:#e85050">DISABLE SOURCE ROUTING</div>
+          <div style="font-size:5.5px;padding:2px 5px;border:1px solid #e85050;color:#e85050">IP OPTION</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-bottom:7px">IP source routing lets the sender dictate the path through routers — bypass firewalls, map topology, spoof return paths.</div>
+        <div style="background:#080200;padding:6px;font-size:6.5px;color:#4eff9a;border:1px solid #1a0800;line-height:1.8">
+          <div style="color:#555"># Cisco IOS</div>
+          <div>no ip source-route</div>
+          <div style="color:#555"># Linux sysctl</div>
+          <div>sysctl -w net.ipv4.conf.all.accept_source_route=0</div>
+        </div>
+      </div>
+
+      <!-- uRPF -->
+      <div class="panel" id="sec_urpf" style="background:#060400;border:2px solid #4ec9e1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:7.5px;color:#4ec9e1">uRPF — ANTI-SPOOF</div>
+          <div style="font-size:5.5px;padding:2px 5px;border:1px solid #4ec9e1;color:#4ec9e1">URPF</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-bottom:7px">Unicast Reverse Path Forwarding: check that the source IP of an incoming packet is reachable via the same interface it arrived on. Drops spoofed packets.</div>
+        <div style="background:#050300;padding:6px;font-size:6.5px;color:#4eff9a;border:1px solid #0a1800;line-height:1.8">
+          <div style="color:#555"># Cisco — enable on ingress interface</div>
+          <div>ip verify unicast source reachable-via rx</div>
+        </div>
+      </div>
+
+      <!-- CoPP -->
+      <div class="panel" id="sec_copp" style="background:#060400;border:2px solid #4eff9a">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:7.5px;color:#4eff9a">CONTROL-PLANE POLICING</div>
+          <div style="font-size:5.5px;padding:2px 5px;border:1px solid #4eff9a;color:#4eff9a">CoPP</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-bottom:7px">Rate-limits traffic destined for the router's CPU (control plane). Prevents CPU exhaustion attacks — e.g. flooding with TTL=1 packets to overwhelm process switching.</div>
+        <div style="background:#040400;padding:6px;font-size:6.5px;color:#4eff9a;border:1px solid #0a1800;line-height:1.8">
+          <div style="color:#555"># Cisco MQC policy-map applied to control-plane</div>
+          <div>service-policy input COPP-POLICY</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am" style="margin:0 12px">
+    <div class="il">Three controls every router needs in prod.</div>
+    <div class="ih am">Source-route off. uRPF on ingress. CoPP always.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">SRC-RT</div><div class="sl">DISABLE</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">uRPF</div><div class="sl">ANTI-SPOOF</div></div>
+    <div class="sc"><div class="sv gn">CoPP</div><div class="sl">CPU GUARD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn rd" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+function svgStroke(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('stroke',color);});}
+function svgFill(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('fill',color);});}
+
+function moveSVGPkt(id,x1,y1,x2,y2,startMs,durMs,doneCb){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else{d.setAttribute('opacity','0');if(doneCb)doneCb();}
+    }
+    af(16,step);
+  });
+}
+
+function animBar(id,targetW,startMs,durMs,doneCb){
+  af(startMs,()=>{
+    const e=document.getElementById(id);if(!e)return;
+    e.style.opacity='1';
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      e.setAttribute('width',targetW*p);
+      if(f<frames)af(16,step);else if(doneCb)doneCb();
+    }
+    step();
+  });
+}
+
+function reset(n){
+  if(n===1){
+    const pb=document.getElementById('ps_bar');if(pb){pb.setAttribute('width','0');pb.style.opacity='0';}
+    const cb=document.getElementById('cef_bar');if(cb){cb.setAttribute('width','0');cb.style.opacity='0';}
+    ['ps_time','cef_time','ratio_label','ratio_sub','ps_pkt','cef_pkt','cpu_icon','asic_icon'].forEach(id=>svgHide(id));
+    hide('h_quote');hide('h_layers');
+  }
+  if(n===2){
+    ['rib_ospf','rib_ospf_t','rib_bgp','rib_bgp_t','rib_static','rib_static_t','rib_conn','rib_conn_t',
+     'rib_l1','rib_l2','rib_l3','rib_l4','rib_box','rib_box_t1','rib_box_t2','rib_box_t3',
+     'rib_out','rib_out_arr','rib_out_t','rib_out_t2','rib_out_t3','rib_ad',
+     'rib_p1','rib_p2','rib_p3','rib_p4'].forEach(id=>svgHide(id));
+    hide('rib_table');hide('rib_key');
+  }
+  if(n===3){
+    ['fib_rib','fib_rib_t1','fib_rib_t2','fib_comp_line','fib_comp_arr','fib_comp_t',
+     'fib_box','fib_box_t1','fib_box_t2','fib_box_t3','fib_to_cef','fib_to_cef_arr','fib_to_cef_t',
+     'cef_box','cef_box_t1','cef_box_t2','cef_box_t3','cef_box_t4',
+     'cef_in','cef_out','cef_in_t','cef_out_t','cef_in_label','cef_out_label',
+     'fib_pkt','tcam_note','tcam_note2'].forEach(id=>svgHide(id));
+    hide('tcam_card');hide('cef_show');
+  }
+  if(n===4){
+    ['ps_nic','ps_nic_t','ps_l1','ps_a1','ps_cpu','ps_cpu_t','ps_l2','ps_int','ps_int_t',
+     'ps_l3','ps_a3','ps_rib_l','ps_rib_lt','ps_l4','ps_a4','ps_out','ps_out_t','ps_out_t2',
+     'ps_pkt_anim',
+     'cef_nic','cef_nic_t','cef_l1','cef_a1','cef_asic','cef_asic_t1','cef_asic_t2',
+     'cef_l2','cef_a2','cef_out','cef_out_t','cef_out_t2','cef_nocpu','cef_nocpu2',
+     'cef_pkt_anim'].forEach(id=>svgHide(id));
+    hide('ps_when');
+  }
+  if(n===5){hide('sec_sr');hide('sec_urpf');hide('sec_copp');}
+}
+
+function play(n){
+  clr();reset(n);
+
+  if(n===1){
+    svgShow('cpu_icon',200);svgShow('asic_icon',300);
+    // Process switching — slow bar
+    moveSVGPkt('ps_pkt',91,49,330,49,400,1800);
+    animBar('ps_bar',238,400,1800,()=>{svgShow('ps_time',0);});
+    // CEF — fast bar
+    moveSVGPkt('cef_pkt',91,94,330,94,700,200);
+    animBar('cef_bar',10,700,200,()=>{svgShow('cef_time',0);});
+    svgShow('ratio_label',1600);svgShow('ratio_sub',1900);
+    show('h_quote',2300);show('h_layers',2900);
+  }
+
+  if(n===2){
+    // Protocol boxes appear
+    svgShow('rib_ospf',300);svgShow('rib_ospf_t',350);
+    svgShow('rib_bgp',500);svgShow('rib_bgp_t',550);
+    svgShow('rib_static',700);svgShow('rib_static_t',750);
+    svgShow('rib_conn',900);svgShow('rib_conn_t',950);
+    // Lines light up and packets flow in
+    svgStroke('rib_l1','#a080ff',1100);moveSVGPkt('rib_p1',38,23,148,75,1150,400);
+    svgStroke('rib_l2','#a080ff',1300);moveSVGPkt('rib_p2',38,55,148,78,1350,400);
+    svgStroke('rib_l3','#a080ff',1500);moveSVGPkt('rib_p3',38,87,148,85,1550,400);
+    svgStroke('rib_l4','#a080ff',1700);moveSVGPkt('rib_p4',38,119,148,92,1750,400);
+    // RIB box appears
+    svgShow('rib_box',1900);svgShow('rib_box_t1',1950);svgShow('rib_box_t2',2000);svgShow('rib_box_t3',2050);
+    // Best route out
+    svgStroke('rib_out','#4ec9e1',2300);svgFill('rib_out_arr','#4ec9e1',2350);
+    svgShow('rib_out_t',2300);svgShow('rib_out_t2',2350);svgShow('rib_out_t3',2400);
+    svgShow('rib_ad',2700);
+    show('rib_table',3000);show('rib_key',3500);
+  }
+
+  if(n===3){
+    svgShow('fib_rib',300);svgShow('fib_rib_t1',350);svgShow('fib_rib_t2',400);
+    svgStroke('fib_comp_line','#4ec9e1',700);svgFill('fib_comp_arr','#4ec9e1',750);svgShow('fib_comp_t',700);
+    moveSVGPkt('fib_pkt',8,87,114,87,800,500);
+    svgShow('fib_box',800);svgShow('fib_box_t1',850);svgShow('fib_box_t2',900);svgShow('fib_box_t3',950);
+    svgStroke('fib_to_cef','#4eff9a',1400);svgFill('fib_to_cef_arr','#4eff9a',1450);svgShow('fib_to_cef_t',1400);
+    moveSVGPkt('fib_pkt',114,87,222,87,1500,500);
+    svgShow('cef_box',1500);svgShow('cef_box_t1',1550);svgShow('cef_box_t2',1600);svgShow('cef_box_t3',1650);svgShow('cef_box_t4',1700);
+    svgStroke('cef_in','#4eff9a',2100);svgStroke('cef_out','#4eff9a',2100);
+    svgShow('cef_in_t',2100);svgShow('cef_out_t',2100);svgShow('cef_in_label',2150);svgShow('cef_out_label',2150);
+    svgShow('tcam_note',2400);svgShow('tcam_note2',2500);
+    show('tcam_card',2800);show('cef_show',3300);
+  }
+
+  if(n===4){
+    // Process switching path (left)
+    svgShow('ps_nic',300);svgShow('ps_nic_t',350);
+    svgStroke('ps_l2','#e85050',600);svgShow('ps_int',650);svgShow('ps_int_t',700);
+    svgShow('ps_cpu',600);svgShow('ps_cpu_t',650);
+    moveSVGPkt('ps_pkt_anim',30,48,91,24,700,500);
+    svgStroke('ps_l3','#e85050',1250);svgFill('ps_a3','#e85050',1300);
+    svgShow('ps_rib_l',1300);svgShow('ps_rib_lt',1350);
+    svgStroke('ps_l4','#e85050',1700);svgFill('ps_a4','#e85050',1750);
+    svgShow('ps_out',1750);svgShow('ps_out_t',1800);svgShow('ps_out_t2',1850);
+    // CEF path (right) — simultaneously but faster
+    svgShow('cef_nic',300);svgShow('cef_nic_t',350);
+    svgStroke('cef_l1','#4eff9a',600);svgFill('cef_a1','#4eff9a',650);
+    moveSVGPkt('cef_pkt_anim',213,50,300,50,650,200);
+    svgShow('cef_asic',700);svgShow('cef_asic_t1',750);svgShow('cef_asic_t2',800);
+    svgStroke('cef_l2','#4eff9a',850);svgFill('cef_a2','#4eff9a',900);
+    svgShow('cef_out',900);svgShow('cef_out_t',950);svgShow('cef_out_t2',1000);
+    svgShow('cef_nocpu',1100);svgShow('cef_nocpu2',1150);
+    show('ps_when',2200);
+  }
+
+  if(n===5){
+    show('sec_sr',300);show('sec_urpf',900);show('sec_copp',1500);
+  }
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;document.getElementById('s'+n).classList.add('active');
+  reset(n);af(80,()=>play(n));
+}
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

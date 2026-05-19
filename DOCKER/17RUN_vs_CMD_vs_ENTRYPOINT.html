@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker: RUN vs CMD vs ENTRYPOINT</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.pu{border-color:#b07fff}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.ih.pu{color:#b07fff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sv.pu{color:#b07fff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── dockerfile layer block ── */
+.df-line{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:7px 9px;border-radius:3px;
+  border-left:3px solid #2a1f3d;
+  background:#130d1e;
+  opacity:0;transition:opacity .35s;
+}
+.df-line.run-line{border-color:#e8a020}
+.df-line.cmd-line-el{border-color:#4ec9e1}
+.df-line.ep-line{border-color:#b07fff}
+.df-line.from-line{border-color:#555}
+.df-kw{font-size:9px;min-width:88px;flex-shrink:0}
+.df-kw.kw-run{color:#e8a020}
+.df-kw.kw-cmd{color:#4ec9e1}
+.df-kw.kw-ep{color:#b07fff}
+.df-kw.kw-from{color:#555}
+.df-val{font-size:8px;color:#aaa;line-height:1.8}
+.df-badge{font-size:6px;padding:2px 5px;border-radius:2px;margin-left:auto;flex-shrink:0;align-self:center}
+.df-badge.build{background:#e8a02020;border:1px solid #e8a020;color:#e8a020}
+.df-badge.start{background:#4ec9e120;border:1px solid #4ec9e1;color:#4ec9e1}
+.df-badge.fixed{background:#b07fff20;border:1px solid #b07fff;color:#b07fff}
+
+/* ── phase timeline ── */
+.phase-track{display:flex;gap:0;height:36px;border-radius:3px;overflow:hidden}
+.phase-seg{flex:1;display:flex;align-items:center;justify-content:center;font-size:6px;text-align:center;line-height:1.6;transition:background .4s,opacity .4s;opacity:.3}
+.phase-seg.lit{opacity:1}
+.ph-build{background:#e8a02022;border:1px solid #e8a02044;color:#e8a020}
+.ph-image{background:#55555522;border:1px solid #55555544;color:#888}
+.ph-run{background:#4ec9e122;border:1px solid #4ec9e144;color:#4ec9e1}
+
+/* ── terminal output ── */
+.term{background:#050c0f;border:1px solid #1a2a2a;border-radius:3px;padding:8px 10px;font-size:7px;color:#4eff9a;line-height:2;min-height:40px}
+.term-line{opacity:0;transition:opacity .3s}
+.term-prompt{color:#555}
+.term-cmd{color:#4ec9e1}
+.term-out{color:#4eff9a}
+.term-err{color:#e85050}
+
+/* ── comparison table ── */
+.cmp-row{display:flex;gap:5px;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.cmp-kw{font-size:8px;min-width:88px;flex-shrink:0;padding:6px 7px;border-radius:2px;text-align:center}
+.cmp-cell{flex:1;font-size:6px;color:#ccc;line-height:2;padding:5px 7px;background:#130d1e;border:1px solid #1a1a2a;border-radius:2px}
+
+/* ── override demo ── */
+.override-box{background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:9px 11px;opacity:0;transition:opacity .4s}
+.override-box.pu{border-color:#b07fff}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: RUN — Build Time ══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">RUN vs CMD vs ENTRYPOINT</div>
+    <div class="hdr-sub">THREE COMMANDS. ONE PURPOSE EACH.</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">RUN = BUILD TIME</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">LAYER</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">RUN executes during <span style="color:#e8a020">docker build</span>. Each RUN = a new image layer.</div>
+
+      <!-- Phase track -->
+      <div class="phase-track">
+        <div class="phase-seg ph-build lit" id="ph1_build">🔨 BUILD<br>PHASE</div>
+        <div class="phase-seg ph-image" id="ph1_image">📦 IMAGE<br>FROZEN</div>
+        <div class="phase-seg ph-run" id="ph1_run">▶ CONTAINER<br>START</div>
+      </div>
+
+      <!-- Dockerfile lines -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">DOCKERFILE</div>
+      <div class="df-line from-line" id="dl0">
+        <div class="df-kw kw-from">FROM</div>
+        <div class="df-val">python:3.12-slim</div>
+      </div>
+      <div class="df-line run-line" id="dl1">
+        <div class="df-kw kw-run">RUN</div>
+        <div class="df-val">apt-get update &amp;&amp; apt-get install -y curl</div>
+        <div class="df-badge build">BUILD</div>
+      </div>
+      <div class="df-line run-line" id="dl2">
+        <div class="df-kw kw-run">RUN</div>
+        <div class="df-val">pip install flask gunicorn</div>
+        <div class="df-badge build">BUILD</div>
+      </div>
+      <div class="df-line run-line" id="dl3">
+        <div class="df-kw kw-run">RUN</div>
+        <div class="df-val">mkdir -p /app &amp;&amp; useradd appuser</div>
+        <div class="df-badge build">BUILD</div>
+      </div>
+
+      <!-- Terminal: build output -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">docker build OUTPUT</div>
+      <div class="term" id="s1_term">
+        <div class="term-line" id="tl0"><span class="term-prompt">$ </span><span class="term-cmd">docker build -t myapp .</span></div>
+        <div class="term-line" id="tl1"><span class="term-out">Step 1/4 : FROM python:3.12-slim</span></div>
+        <div class="term-line" id="tl2"><span class="term-out">Step 2/4 : RUN apt-get update...</span></div>
+        <div class="term-line" id="tl3"><span class="term-out"> ---> Running in a1b2c3d4e5f6</span></div>
+        <div class="term-line" id="tl4"><span class="term-out"> ---> Layer cached ✓</span></div>
+        <div class="term-line" id="tl5"><span class="term-out">Step 3/4 : RUN pip install flask</span></div>
+        <div class="term-line" id="tl6"><span class="term-out">Step 4/4 : RUN mkdir -p /app...</span></div>
+        <div class="term-line" id="tl7"><span class="term-out">Successfully built <span style="color:#4ec9e1">f7a3b91c2d</span> ✓</span></div>
+      </div>
+
+      <!-- Key rule -->
+      <div id="s1_rule" style="background:#e8a02015;border:2px solid #e8a020;padding:9px 11px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">KEY RULE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          RUN bakes the result into the image.<br>
+          Runs <span style="color:#e8a020">once at build</span>, never again at runtime.<br>
+          Chain commands with <span style="color:#4eff9a">&amp;&amp;</span> to minimise layers.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">RUN executes shell commands during image build, creating layers.</div>
+    <div class="ih am">Install deps, compile code, create dirs — all RUN. Never starts your app.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">BUILD</div><div class="sl">WHEN IT<br>RUNS</div></div>
+    <div class="sc"><div class="sv am">LAYER</div><div class="sl">WHAT IT<br>CREATES</div></div>
+    <div class="sc"><div class="sv gn">CACHED</div><div class="sl">IF INPUT<br>UNCHANGED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: CMD — Default Start Command ══════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">RUN vs CMD vs ENTRYPOINT</div>
+    <div class="hdr-sub">CMD = DEFAULT — BUT OVERRIDABLE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CMD = RUNTIME DEFAULT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OVERRIDABLE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">CMD sets the <span style="color:#4ec9e1">default command</span> when the container starts. Easily replaced.</div>
+
+      <!-- Phase track -->
+      <div class="phase-track">
+        <div class="phase-seg ph-build" id="ph2_build">🔨 BUILD<br>PHASE</div>
+        <div class="phase-seg ph-image lit" id="ph2_image">📦 IMAGE<br>FROZEN</div>
+        <div class="phase-seg ph-run lit" id="ph2_run">▶ CONTAINER<br>START</div>
+      </div>
+
+      <!-- Dockerfile with CMD -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">DOCKERFILE</div>
+      <div class="df-line from-line" id="s2_dl0" style="opacity:1">
+        <div class="df-kw kw-from">FROM</div>
+        <div class="df-val">python:3.12-slim</div>
+      </div>
+      <div class="df-line run-line" id="s2_dl1">
+        <div class="df-kw kw-run">RUN</div>
+        <div class="df-val">pip install flask</div>
+        <div class="df-badge build">BUILD</div>
+      </div>
+      <div class="df-line cmd-line-el" id="s2_dl2">
+        <div class="df-kw kw-cmd">CMD</div>
+        <div class="df-val">["python", "app.py"]</div>
+        <div class="df-badge start">START</div>
+      </div>
+
+      <!-- Normal run -->
+      <div class="override-box" id="s2_normal">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">▶ NORMAL RUN — CMD executes</div>
+        <div class="term" style="margin-bottom:0">
+          <div class="term-line" id="s2_t0"><span class="term-prompt">$ </span><span class="term-cmd">docker run myapp</span></div>
+          <div class="term-line" id="s2_t1"><span class="term-out">→ runs: python app.py</span></div>
+          <div class="term-line" id="s2_t2"><span class="term-out">* Serving Flask on :5000 ✓</span></div>
+        </div>
+      </div>
+
+      <!-- Override run -->
+      <div class="override-box" id="s2_override" style="border-color:#e85050">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">⚡ CMD OVERRIDDEN — replaced entirely</div>
+        <div class="term" style="margin-bottom:0">
+          <div class="term-line" id="s2_t3"><span class="term-prompt">$ </span><span class="term-cmd">docker run myapp <span style="color:#e85050">bash</span></span></div>
+          <div class="term-line" id="s2_t4"><span class="term-out">→ runs: bash &nbsp;<span style="color:#e85050">(not python app.py)</span></span></div>
+          <div class="term-line" id="s2_t5"><span class="term-out">root@c3d4e5:/# _</span></div>
+        </div>
+      </div>
+
+      <!-- Rule -->
+      <div id="s2_rule" style="background:#4ec9e115;border:2px solid #4ec9e1;padding:9px 11px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">KEY RULE</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          CMD is the <span style="color:#4ec9e1">suggestion</span>, not the law.<br>
+          Anything after <span style="color:#4eff9a">docker run &lt;image&gt;</span> replaces CMD.<br>
+          Use CMD for sensible defaults.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">CMD = default command at container start. Completely replaceable.</div>
+    <div class="ih">docker run myapp bash → CMD ignored, bash runs instead.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">START</div><div class="sl">WHEN IT<br>RUNS</div></div>
+    <div class="sc"><div class="sv rd">YES</div><div class="sl">EASILY<br>OVERRIDDEN</div></div>
+    <div class="sc"><div class="sv gn">DEFAULT</div><div class="sl">USE FOR<br>SENSIBLE ⬇</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: ENTRYPOINT + the combo ══════ -->
+<div class="scene" id="s3" style="background:#0a0f1e">
+  <div class="hdr" style="background:#0a0f1e">
+    <div class="hdr-title">RUN vs CMD vs ENTRYPOINT</div>
+    <div class="hdr-sub">ENTRYPOINT + THE POWER COMBO</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#b07fff">ENTRYPOINT = FIXED</span>
+    <span class="sbadge" style="color:#b07fff;border-color:#b07fff">+ CMD = ARGS</span>
+  </div>
+
+  <div class="anim" style="background:#0a0f1e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">ENTRYPOINT is the <span style="color:#b07fff">fixed executable</span>. CMD becomes its default arguments.</div>
+
+      <!-- Dockerfile with ENTRYPOINT + CMD -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">DOCKERFILE</div>
+      <div class="df-line from-line" id="s3_dl0" style="opacity:1">
+        <div class="df-kw kw-from">FROM</div>
+        <div class="df-val">python:3.12-slim</div>
+      </div>
+      <div class="df-line ep-line" id="s3_dl1">
+        <div class="df-kw kw-ep">ENTRYPOINT</div>
+        <div class="df-val">["python", "app.py"]</div>
+        <div class="df-badge fixed">FIXED</div>
+      </div>
+      <div class="df-line cmd-line-el" id="s3_dl2">
+        <div class="df-kw kw-cmd">CMD</div>
+        <div class="df-val">["--port", "5000"]</div>
+        <div class="df-badge start">ARGS</div>
+      </div>
+
+      <!-- Behaviour boxes -->
+      <div class="override-box pu" id="s3_b1">
+        <div style="font-size:7px;color:#b07fff;margin-bottom:6px">▶ DEFAULT — ENTRYPOINT + CMD</div>
+        <div class="term" style="margin-bottom:0">
+          <div class="term-line" id="s3_t0"><span class="term-prompt">$ </span><span class="term-cmd">docker run myapp</span></div>
+          <div class="term-line" id="s3_t1"><span style="color:#b07fff">python app.py</span> <span class="term-out">--port 5000</span></div>
+        </div>
+      </div>
+
+      <div class="override-box pu" id="s3_b2">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">⚡ OVERRIDE CMD — changes args only</div>
+        <div class="term" style="margin-bottom:0">
+          <div class="term-line" id="s3_t2"><span class="term-prompt">$ </span><span class="term-cmd">docker run myapp <span style="color:#4ec9e1">--port 8080</span></span></div>
+          <div class="term-line" id="s3_t3"><span style="color:#b07fff">python app.py</span> <span class="term-out">--port 8080</span></div>
+        </div>
+      </div>
+
+      <!-- Quick comparison table -->
+      <div id="s3_table" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:0">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:5px">QUICK CHEATSHEET</div>
+        <div class="cmp-row" id="cr0">
+          <div class="cmp-kw" style="background:#e8a02018;border:1px solid #e8a02040;color:#e8a020">RUN</div>
+          <div class="cmp-cell">Build time. Installs, compiles, configures. Creates a layer.</div>
+        </div>
+        <div class="cmp-row" id="cr1">
+          <div class="cmp-kw" style="background:#4ec9e118;border:1px solid #4ec9e140;color:#4ec9e1">CMD</div>
+          <div class="cmp-cell">Start time default. Fully replaced by <span style="color:#4ec9e1">docker run &lt;image&gt; &lt;cmd&gt;</span>.</div>
+        </div>
+        <div class="cmp-row" id="cr2">
+          <div class="cmp-kw" style="background:#b07fff18;border:1px solid #b07fff40;color:#b07fff">ENTRYPOINT</div>
+          <div class="cmp-cell">Fixed executable. CMD becomes its args. Use <span style="color:#b07fff">--entrypoint</span> to override.</div>
+        </div>
+        <div class="cmp-row" id="cr3">
+          <div class="cmp-kw" style="background:#4eff9a18;border:1px solid #4eff9a40;color:#4eff9a">COMBO</div>
+          <div class="cmp-cell">ENTRYPOINT = the binary. CMD = default flags. Best for CLI tools.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">ENTRYPOINT locks the executable. CMD supplies overridable default args.</div>
+    <div class="ih pu">Together: docker run myapp --port 8080 just swaps the port, not the binary.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">FIXED</div><div class="sl">ENTRYPOINT<br>IS...</div></div>
+    <div class="sc"><div class="sv gn">ARGS</div><div class="sl">CMD ROLE<br>WITH EP</div></div>
+    <div class="sc"><div class="sv">--ep</div><div class="sl">FLAG TO<br>OVERRIDE EP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){document.getElementById(id).style.opacity='1';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1: RUN ─── */
+function playS1(){
+  clearAll();
+  ['dl0','dl1','dl2','dl3'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+  ['tl0','tl1','tl2','tl3','tl4','tl5','tl6','tl7'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+  document.getElementById('s1_rule').style.opacity='0';
+  document.getElementById('ph1_image').classList.remove('lit');
+  document.getElementById('ph1_run').classList.remove('lit');
+  document.getElementById('ph1_build').classList.add('lit');
+
+  // reveal dockerfile lines
+  delay(function(){show('dl0');},300);
+  delay(function(){show('dl1');},700);
+  delay(function(){show('dl2');},1100);
+  delay(function(){show('dl3');},1500);
+
+  // terminal output lines
+  var tlines=['tl0','tl1','tl2','tl3','tl4','tl5','tl6','tl7'];
+  tlines.forEach(function(id,i){
+    delay(function(){show(id);}, 1900+i*350);
+  });
+
+  // phase advances
+  delay(function(){
+    document.getElementById('ph1_image').classList.add('lit');
+  }, 1900+5*350);
+
+  delay(function(){
+    document.getElementById('s1_rule').style.opacity='1';
+  }, 1900+8*350);
+}
+
+/* ─── SCENE 2: CMD ─── */
+function playS2(){
+  clearAll();
+  ['s2_dl1','s2_dl2'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+  document.getElementById('s2_normal').style.opacity='0';
+  document.getElementById('s2_override').style.opacity='0';
+  document.getElementById('s2_rule').style.opacity='0';
+  ['s2_t0','s2_t1','s2_t2','s2_t3','s2_t4','s2_t5'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+
+  delay(function(){show('s2_dl1');},300);
+  delay(function(){show('s2_dl2');},700);
+
+  // normal run
+  delay(function(){document.getElementById('s2_normal').style.opacity='1';},1200);
+  delay(function(){show('s2_t0');},1500);
+  delay(function(){show('s2_t1');},1900);
+  delay(function(){show('s2_t2');},2300);
+
+  // override run
+  delay(function(){document.getElementById('s2_override').style.opacity='1';},2900);
+  delay(function(){show('s2_t3');},3200);
+  delay(function(){show('s2_t4');},3600);
+  delay(function(){show('s2_t5');},4000);
+
+  delay(function(){show('s2_rule');},4600);
+}
+
+/* ─── SCENE 3: ENTRYPOINT ─── */
+function playS3(){
+  clearAll();
+  ['s3_dl1','s3_dl2'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+  document.getElementById('s3_b1').style.opacity='0';
+  document.getElementById('s3_b2').style.opacity='0';
+  document.getElementById('s3_table').style.opacity='0';
+  ['s3_t0','s3_t1','s3_t2','s3_t3'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+  ['cr0','cr1','cr2','cr3'].forEach(function(id){document.getElementById(id).style.opacity='0';});
+
+  delay(function(){show('s3_dl1');},300);
+  delay(function(){show('s3_dl2');},700);
+
+  delay(function(){document.getElementById('s3_b1').style.opacity='1';},1200);
+  delay(function(){show('s3_t0');},1500);
+  delay(function(){show('s3_t1');},1900);
+
+  delay(function(){document.getElementById('s3_b2').style.opacity='1';},2500);
+  delay(function(){show('s3_t2');},2800);
+  delay(function(){show('s3_t3');},3200);
+
+  delay(function(){document.getElementById('s3_table').style.opacity='1';},3900);
+  ['cr0','cr1','cr2','cr3'].forEach(function(id,i){
+    delay(function(){show(id);},4000+i*300);
+  });
+}
+
+playS1();
+</script>
+</body>
+</html>

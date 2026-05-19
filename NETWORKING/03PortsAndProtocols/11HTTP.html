@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HTTP Port 80 — Attack Surface</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — HOOK: curl -I LEAKS
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">HTTP PORT 80</div>
+    <div class="hdr-sub">RICHEST ATTACK SURFACE IN ANY NETWORK</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">1 SECOND</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hook quote -->
+      <div id="s1_quote" class="panel" style="background:#100005;border:2px solid #e85050;padding:12px 14px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px">⚡ ONE COMMAND</div>
+        <div style="font-size:8px;color:#fff;line-height:2.1"><span style="color:#4ec9e1">curl -I</span> gives you the web server version, PHP version, and missing security headers in <span style="color:#e85050">under 1 second</span></div>
+      </div>
+
+      <!-- Terminal: curl -I output -->
+      <div style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">curl</span> <span style="color:#aaa">-I http://target.com</span></div>
+
+          <div id="s1_l1" class="tline" style="color:#4eff9a;margin-top:4px">HTTP/1.1 200 OK</div>
+
+          <!-- Leaky headers — each with a red badge -->
+          <div id="s1_l2" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">Server: </span><span style="color:#ff4040">Apache/2.4.49</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0008;border:1px solid #e85050;color:#e85050;flex-shrink:0;margin-left:4px">CVE-2021-41773</span>
+          </div>
+          <div id="s1_l3" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">X-Powered-By: </span><span style="color:#ff4040">PHP/7.4.3</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0008;border:1px solid #e85050;color:#e85050;flex-shrink:0;margin-left:4px">CVE-2021-21702</span>
+          </div>
+          <div id="s1_l4" class="tline" style="color:#aaa">Content-Type: text/html; charset=UTF-8</div>
+          <div id="s1_l5" class="tline" style="color:#aaa">Date: Mon, 19 May 2025 13:37:00 GMT</div>
+
+          <!-- Missing headers — amber warning -->
+          <div id="s1_l6" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#555">X-Frame-Options:</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#1a0800;border:1px solid #e8a020;color:#e8a020;flex-shrink:0">MISSING</span>
+          </div>
+          <div id="s1_l7" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#555">X-Content-Type-Options:</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#1a0800;border:1px solid #e8a020;color:#e8a020;flex-shrink:0">MISSING</span>
+          </div>
+          <div id="s1_l8" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#555">Strict-Transport-Security:</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#1a0800;border:1px solid #e8a020;color:#e8a020;flex-shrink:0">MISSING</span>
+          </div>
+          <div id="s1_l9" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#555">Content-Security-Policy:</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#1a0800;border:1px solid #e8a020;color:#e8a020;flex-shrink:0">MISSING</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Summary card -->
+      <div id="s1_summary" class="panel" style="background:#0d0002;border:1px solid #2d0010;display:flex;gap:10px;align-items:center;padding:10px 12px">
+        <div style="font-size:22px;flex-shrink:0">🎯</div>
+        <div>
+          <div style="font-size:7.5px;color:#e85050;margin-bottom:5px">2 VULNS + 4 MISSING HEADERS</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">Default configs broadcast your entire stack. An attacker now knows exactly which CVEs to try — before sending a single exploit.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Default HTTP headers are an attacker's recon gift.</div>
+    <div class="ih rd">Version → CVE lookup takes 10 seconds on NVD.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1s</div><div class="sl">TO RECON</div></div>
+    <div class="sc"><div class="sv rd">2</div><div class="sl">CVES MAPPED</div></div>
+    <div class="sc"><div class="sv am">4</div><div class="sl">HDRS MISSING</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — HARDENED curl -I
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">HARDENED RESPONSE</div>
+    <div class="hdr-sub">SAME SERVER — NOTHING LEAKS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">HARDENED</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BEFORE → AFTER</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hardened terminal -->
+      <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001808;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4ec9e1"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#a0d040"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal — hardened</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">curl</span> <span style="color:#aaa">-I https://target.com</span></div>
+
+          <div id="s2_l1" class="tline" style="color:#4eff9a;margin-top:4px">HTTP/2 200</div>
+
+          <!-- Removed headers -->
+          <div id="s2_l2" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">Server: </span><span style="color:#4eff9a">nginx</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">NO VERSION</span>
+          </div>
+          <div id="s2_l3" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="color:#555">X-Powered-By:</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0">REMOVED ✓</span>
+          </div>
+
+          <!-- Security headers added -->
+          <div id="s2_l4" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">X-Frame-Options: </span><span style="color:#4eff9a">DENY</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">✓ SET</span>
+          </div>
+          <div id="s2_l5" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">X-Content-Type-Options: </span><span style="color:#4eff9a">nosniff</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">✓ SET</span>
+          </div>
+          <div id="s2_l6" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">Strict-Transport-Security: </span><span style="color:#4eff9a">max-age=31536000</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">✓ HSTS</span>
+          </div>
+          <div id="s2_l7" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">Content-Security-Policy: </span><span style="color:#4eff9a">default-src 'self'</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">✓ CSP</span>
+          </div>
+          <div id="s2_l8" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span><span style="color:#555">Referrer-Policy: </span><span style="color:#4eff9a">no-referrer</span></span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#001808;border:1px solid #4eff9a;color:#4eff9a;flex-shrink:0;margin-left:4px">✓ SET</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diff comparison -->
+      <div id="s2_diff" class="panel" style="background:#000d04;border:1px solid #0d3018;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px">WHAT CHANGED</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;flex-shrink:0">❌</span>
+            <div style="font-size:6.5px;color:#e85050;line-height:1.8">Apache/2.4.49 → version stripped from Server header</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;flex-shrink:0">❌</span>
+            <div style="font-size:6.5px;color:#e85050;line-height:1.8">X-Powered-By: PHP/7.4.3 → header removed entirely</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;flex-shrink:0">✅</span>
+            <div style="font-size:6.5px;color:#4eff9a;line-height:1.8">5 security headers added — stops clickjacking, MIME sniff, downgrade attacks</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Strip version tokens. Add security headers. Done.</div>
+    <div class="ih">Same server — attacker learns nothing from curl -I.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">0</div><div class="sl">VERSIONS OUT</div></div>
+    <div class="sc"><div class="sv gn">5</div><div class="sl">HDRS ADDED</div></div>
+    <div class="sc"><div class="sv gn">HTTP/2</div><div class="sl">TLS FORCED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — GOBUSTER DIR
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#00101a">
+  <div class="hdr" style="background:#00101a;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">DIRECTORY BUSTING</div>
+    <div class="hdr-sub">GOBUSTER — HIDDEN FILES & ADMIN PANELS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#00101a">
+    <span class="slabel" style="color:#e8a020">DIR ENUM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">HIDDEN FILES</span>
+  </div>
+  <div class="anim" style="background:#00101a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Gobuster terminal -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">gobuster</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">gobuster</span> dir -u http://target.com <span style="color:#aaa">-w common.txt</span></div>
+          <div id="s3_init" class="tline" style="color:#555;margin-top:4px">=============== Gobuster ===============</div>
+
+          <!-- Found paths — staggered reveal -->
+          <div id="s3_r1" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#4eff9a">/admin</span>
+            <span style="color:#555">(Status:</span><span style="color:#e85050">200</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">ADMIN PANEL</span>
+          </div>
+          <div id="s3_r2" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#4eff9a">/backup.zip</span>
+            <span style="color:#555">(Status:</span><span style="color:#e85050">200</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">SRC CODE</span>
+          </div>
+          <div id="s3_r3" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#4eff9a">/phpinfo.php</span>
+            <span style="color:#555">(Status:</span><span style="color:#e85050">200</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">PHP CONFIG</span>
+          </div>
+          <div id="s3_r4" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#4eff9a">/.env</span>
+            <span style="color:#555">(Status:</span><span style="color:#e85050">200</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">DB CREDS</span>
+          </div>
+          <div id="s3_r5" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#e8a020">/.git</span>
+            <span style="color:#555">(Status:</span><span style="color:#e8a020">403</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#1a0800;border:1px solid #e8a020;color:#e8a020">GIT REPO</span>
+          </div>
+          <div id="s3_r6" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#4eff9a">/config.bak</span>
+            <span style="color:#555">(Status:</span><span style="color:#e85050">200</span><span style="color:#555">)</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">OLD CONFIG</span>
+          </div>
+          <div id="s3_end" class="tline" style="color:#e85050;font-size:7px;margin-top:4px">Found: 6 interesting paths in 14s</div>
+        </div>
+      </div>
+
+      <!-- .env contents preview -->
+      <div id="s3_env" class="panel" style="background:#000810;border:2px solid #e85050;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">$ curl http://target.com/.env</div>
+        <div style="background:#050002;padding:8px;font-size:6.5px;line-height:2.2;border:1px solid #1a0008">
+          <div><span style="color:#555">DB_HOST=</span><span style="color:#ff4040">localhost</span></div>
+          <div><span style="color:#555">DB_USER=</span><span style="color:#ff4040">root</span></div>
+          <div><span style="color:#555">DB_PASS=</span><span style="color:#ff4040">Sup3rS3cr3t!</span></div>
+          <div><span style="color:#555">APP_KEY=</span><span style="color:#ff4040">base64:abc123…</span></div>
+          <div><span style="color:#555">STRIPE_SECRET=</span><span style="color:#ff4040">sk_live_xxxx</span></div>
+        </div>
+      </div>
+
+      <!-- Dir listing note -->
+      <div id="s3_note" class="panel" style="background:#000810;border:1px solid #0d2030;display:flex;gap:10px;align-items:flex-start;padding:10px 12px">
+        <div style="font-size:18px;flex-shrink:0">⚠️</div>
+        <div>
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">ALSO: DIRECTORY LISTING</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">Apache/Nginx with <span style="color:#e85050">Options +Indexes</span> exposes all files. Disable with <span style="color:#4eff9a">Options -Indexes</span> in config. Check: just visit any directory path.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">gobuster finds what robots.txt won't show you.</div>
+    <div class="ih rd">.env with DB creds = full compromise in one curl.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">/.env</div><div class="sl">DB CREDS</div></div>
+    <div class="sc"><div class="sv rd">6</div><div class="sl">PATHS FOUND</div></div>
+    <div class="sc"><div class="sv am">14s</div><div class="sl">TO SCAN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — SECURITY HEADERS DEEP DIVE
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">SECURITY HEADERS</div>
+    <div class="hdr-sub">WHAT EACH ONE BLOCKS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">ADD THESE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">4 HEADERS</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- X-Frame-Options -->
+      <div id="sh_1" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:7.5px;color:#4eff9a">X-Frame-Options</div>
+          <div style="font-size:6px;padding:2px 6px;border:1px solid #4eff9a;color:#4eff9a">CLICKJACKING</div>
+        </div>
+        <div style="background:#020a04;padding:6px;font-size:6px;color:#4eff9a;border:1px solid #0a1808;margin-bottom:6px;line-height:1.8">X-Frame-Options: DENY</div>
+        <div style="font-size:6.5px;color:#888;line-height:1.8">Prevents your page being embedded in an iframe on attacker's site. <span style="color:#e85050">DENY</span> = never frame. <span style="color:#e8a020">SAMEORIGIN</span> = your domain only.</div>
+      </div>
+
+      <!-- X-Content-Type-Options -->
+      <div id="sh_2" class="panel" style="background:#000d04;border-left:4px solid #4ec9e1;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:7.5px;color:#4ec9e1">X-Content-Type-Options</div>
+          <div style="font-size:6px;padding:2px 6px;border:1px solid #4ec9e1;color:#4ec9e1">MIME SNIFF</div>
+        </div>
+        <div style="background:#020a04;padding:6px;font-size:6px;color:#4ec9e1;border:1px solid #0a1808;margin-bottom:6px;line-height:1.8">X-Content-Type-Options: nosniff</div>
+        <div style="font-size:6.5px;color:#888;line-height:1.8">Browser won't override Content-Type. Without this, a browser may execute a .jpg as JS if the content looks like a script.</div>
+      </div>
+
+      <!-- HSTS -->
+      <div id="sh_3" class="panel" style="background:#000d04;border-left:4px solid #a0d040;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:7.5px;color:#a0d040">Strict-Transport-Security</div>
+          <div style="font-size:6px;padding:2px 6px;border:1px solid #a0d040;color:#a0d040">SSL STRIP</div>
+        </div>
+        <div style="background:#020a04;padding:6px;font-size:6px;color:#a0d040;border:1px solid #0a1808;margin-bottom:6px;line-height:1.8">Strict-Transport-Security: max-age=31536000; includeSubDomains</div>
+        <div style="font-size:6.5px;color:#888;line-height:1.8">Forces HTTPS for 1 year. Browser won't downgrade to HTTP. Blocks SSLstrip MITM attacks on public WiFi.</div>
+      </div>
+
+      <!-- CSP -->
+      <div id="sh_4" class="panel" style="background:#000d04;border-left:4px solid #e8a020;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:7.5px;color:#e8a020">Content-Security-Policy</div>
+          <div style="font-size:6px;padding:2px 6px;border:1px solid #e8a020;color:#e8a020">XSS</div>
+        </div>
+        <div style="background:#020a04;padding:6px;font-size:6px;color:#e8a020;border:1px solid #0a1808;margin-bottom:6px;line-height:1.8">Content-Security-Policy: default-src 'self'; script-src 'self'</div>
+        <div style="font-size:6.5px;color:#888;line-height:1.8">Whitelist which origins can load scripts, styles, images. Most powerful XSS mitigation at the browser level.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Four headers, four different attack classes blocked.</div>
+    <div class="ih">Add them in nginx.conf or Apache .htaccess — 5 mins.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">XFO</div><div class="sl">CLICKJACK</div></div>
+    <div class="sc"><div class="sv gn">HSTS</div><div class="sl">SSL STRIP</div></div>
+    <div class="sc"><div class="sv gn">CSP</div><div class="sl">XSS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 5 — REMOVE / ADD CHECKLIST
+══════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#000a18">
+  <div class="hdr" style="background:#000a18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">HARDEN CHECKLIST</div>
+    <div class="hdr-sub">REMOVE LEAKS · ADD DEFENCES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000a18">
+    <span class="slabel" style="color:#4ec9e1">FINAL</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#000a18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- REMOVE section -->
+      <div id="ck_remove" class="panel" style="background:#000810;border:2px solid #e85050;padding:10px 12px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:9px">❌ REMOVE / HIDE</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">Server version</span> — set <span style="color:#4ec9e1">ServerTokens Prod</span> (Apache) or <span style="color:#4ec9e1">server_tokens off</span> (Nginx)</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">X-Powered-By</span> — <span style="color:#4ec9e1">Header unset X-Powered-By</span> in Apache or php.ini: <span style="color:#4ec9e1">expose_php = Off</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">Directory listing</span> — <span style="color:#4ec9e1">Options -Indexes</span> globally, never leave on</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">Verbose errors</span> — disable stack traces in prod. Custom 404/500 pages only</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#e85050">.env / .git / backup files</span> — block with location rules or delete from webroot</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADD section -->
+      <div id="ck_add" class="panel" style="background:#000810;border:2px solid #4eff9a;padding:10px 12px">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:9px">✅ ADD</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">X-Frame-Options: DENY</span> — clickjacking</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">X-Content-Type-Options: nosniff</span> — MIME sniff</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">Strict-Transport-Security</span> — HSTS 1 year</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0;font-size:9px">▸</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">Content-Security-Policy</span> — XSS whitelist</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Audit command -->
+      <div id="ck_audit" class="panel" style="background:#000810;border:2px solid #4ec9e1;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:7px">AUDIT IN 3 COMMANDS</div>
+        <div style="background:#020408;padding:7px;font-size:6px;color:#4eff9a;line-height:2.3;border:1px solid #0d2030">
+          <div><span style="color:#4ec9e1">curl</span> -I http://target.com<span style="color:#555">       # headers</span></div>
+          <div><span style="color:#4ec9e1">gobuster</span> dir -u http://target.com -w common.txt</div>
+          <div><span style="color:#4ec9e1">nikto</span> -h http://target.com<span style="color:#555">     # full scan</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">HTTP leaks by default. Every item above is a free win.</div>
+    <div class="ih">securityheaders.com grades your headers instantly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">5</div><div class="sl">REMOVE</div></div>
+    <div class="sc"><div class="sv gn">4</div><div class="sl">ADD</div></div>
+    <div class="sc"><div class="sv gn">A+</div><div class="sl">GRADE TARGET</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function tshow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+function reset(n){
+  if(n===1){
+    ['s1_l1','s1_l2','s1_l3','s1_l4','s1_l5','s1_l6','s1_l7','s1_l8','s1_l9'].forEach(id=>hide(id));
+    hide('s1_quote');hide('s1_summary');
+  }
+  if(n===2){
+    ['s2_l1','s2_l2','s2_l3','s2_l4','s2_l5','s2_l6','s2_l7','s2_l8'].forEach(id=>hide(id));
+    hide('s2_diff');
+  }
+  if(n===3){
+    ['s3_init','s3_r1','s3_r2','s3_r3','s3_r4','s3_r5','s3_r6','s3_end'].forEach(id=>hide(id));
+    hide('s3_env');hide('s3_note');
+  }
+  if(n===4){hide('sh_1');hide('sh_2');hide('sh_3');hide('sh_4');}
+  if(n===5){hide('ck_remove');hide('ck_add');hide('ck_audit');}
+}
+
+function play(n){
+  clr();reset(n);
+
+  if(n===1){
+    show('s1_quote',200);
+    tshow('s1_l1',800);
+    tshow('s1_l2',1200);tshow('s1_l3',1550);
+    tshow('s1_l4',1900);tshow('s1_l5',2100);
+    tshow('s1_l6',2400);tshow('s1_l7',2700);tshow('s1_l8',3000);tshow('s1_l9',3300);
+    show('s1_summary',3800);
+  }
+
+  if(n===2){
+    tshow('s2_l1',300);
+    tshow('s2_l2',700);tshow('s2_l3',1000);
+    tshow('s2_l4',1400);tshow('s2_l5',1700);tshow('s2_l6',2000);tshow('s2_l7',2300);tshow('s2_l8',2600);
+    show('s2_diff',3100);
+  }
+
+  if(n===3){
+    tshow('s3_init',300);
+    ['s3_r1','s3_r2','s3_r3','s3_r4','s3_r5','s3_r6'].forEach((id,i)=>tshow(id,700+i*380));
+    tshow('s3_end',3100);
+    show('s3_env',3500);
+    show('s3_note',4100);
+  }
+
+  if(n===4){
+    show('sh_1',300);show('sh_2',800);show('sh_3',1300);show('sh_4',1800);
+  }
+
+  if(n===5){
+    show('ck_remove',300);show('ck_add',900);show('ck_audit',1500);
+  }
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

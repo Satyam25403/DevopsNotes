@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Cache Monitoring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a0d}
+.hdr-title{font-size:13px;color:#22d3ee;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a1a;transition:background .2s}
+.dot.active{background:#22d3ee}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #22d3ee;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.am{border-color:#e8a020}
+.il{color:#888}.ih{color:#22d3ee}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060d0d;border:1px solid #0d1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#22d3ee;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #22d3ee;background:transparent;color:#22d3ee;cursor:pointer;transition:all .15s}
+.btn:hover{background:#22d3ee20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#040a0a;border:2px solid #0d1a1a;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#22d3ee}
+.cmd-key{color:#4eff9a}
+.cmd-field{color:#e8a020}
+.cmd-val{color:#fff}
+.cmd-comment{color:#0d2a2a;font-size:7px}
+
+/* ── GAUGE CARD ── */
+.gauge-card{background:#040a0a;border:2px solid #0d1a1a;border-radius:2px;padding:8px;display:flex;flex-direction:column;gap:5px;transition:border-color 0.3s}
+.gauge-card.alert{border-color:#e85050;animation:alertPulse 0.6s ease 3}
+.gauge-card.warn{border-color:#e8a020}
+.gauge-card.ok{border-color:#4eff9a}
+@keyframes alertPulse{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px #e85050}}
+
+.gauge-title{font-size:7px;color:#555;letter-spacing:1px}
+.gauge-value{font-size:20px;text-align:center;transition:color 0.4s,all 0.3s;line-height:1.2}
+.gauge-value.alert-shake{animation:valueShake 0.4s ease}
+@keyframes valueShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+
+.gauge-bar-wrap{background:#0a0a0f;height:8px;border-radius:4px;overflow:hidden;position:relative}
+.gauge-bar{height:100%;border-radius:4px;transition:width 0.8s ease-out,background 0.4s}
+
+.gauge-threshold{font-size:6px;color:#555;display:flex;justify-content:space-between;margin-top:1px}
+.gauge-status{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid;text-align:center;transition:all 0.3s}
+
+/* ── SPARKLINE ── */
+.sparkline{height:28px;position:relative;overflow:hidden}
+.spark-bar{position:absolute;bottom:0;width:6px;border-radius:1px 1px 0 0;transition:height 0.3s ease}
+
+/* ── ALERT BADGE ── */
+.alert-badge{display:none;font-size:7px;padding:4px 8px;border:1px solid #e85050;color:#e85050;background:#150508;border-radius:2px;animation:badgePop 0.4s ease}
+.alert-badge.show{display:block}
+@keyframes badgePop{0%{transform:scale(0.8);opacity:0}60%{transform:scale(1.05)}100%{transform:scale(1);opacity:1}}
+
+/* ── 2x2 dashboard grid ── */
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+
+/* ── INFO timeline ── */
+.metric-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:2px;border:1px solid #0d1a1a;font-size:7px;opacity:0;transition:opacity 0.4s}
+.metric-row.show{opacity:1}
+.metric-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ── REDIS INFO output ── */
+.info-line{font-size:7px;line-height:1.9;transition:all 0.3s}
+.info-line.highlight{background:#0d2a2a;border-radius:2px;padding:1px 4px;margin:-1px -4px}
+.info-key{color:#22d3ee}
+.info-val-good{color:#4eff9a}
+.info-val-bad{color:#e85050}
+.info-val-warn{color:#e8a020}
+
+/* fix card */
+.fix-card{opacity:0;transition:opacity 0.5s;background:#040a0a;border:1px solid #0d1a1a;padding:8px 10px;border-radius:2px}
+.fix-card.show{opacity:1}
+.fix-title{font-size:7px;margin-bottom:4px}
+.fix-desc{font-size:6px;color:#666;line-height:1.8}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — LIVE DASHBOARD + ALERT FIRES
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060d0d">
+  <div class="hdr" style="background:#060d0d">
+    <div class="hdr-title">CACHE MONITORING</div>
+    <div class="hdr-sub">IS YOUR CACHE ACTUALLY WORKING?</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#22d3ee">DASHBOARD</span>
+    <span class="sbadge" style="color:#22d3ee;border-color:#22d3ee">LIVE</span>
+  </div>
+
+  <div class="anim" style="background:#060d0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- 2×2 gauge grid -->
+      <div class="dash-grid">
+
+        <!-- HIT RATIO -->
+        <div class="gauge-card ok" id="g-hit">
+          <div class="gauge-title">HIT RATIO</div>
+          <div class="gauge-value" id="gv-hit" style="color:#4eff9a">94%</div>
+          <div class="gauge-bar-wrap">
+            <div class="gauge-bar" id="gb-hit" style="width:94%;background:#4eff9a"></div>
+          </div>
+          <div class="gauge-threshold"><span>ALERT &lt;80%</span><span id="gs-hit" style="color:#4eff9a">● GOOD</span></div>
+          <div class="sparkline" id="sp-hit"></div>
+        </div>
+
+        <!-- EVICTION RATE -->
+        <div class="gauge-card ok" id="g-evict">
+          <div class="gauge-title">EVICTIONS/S</div>
+          <div class="gauge-value" id="gv-evict" style="color:#4eff9a">12</div>
+          <div class="gauge-bar-wrap">
+            <div class="gauge-bar" id="gb-evict" style="width:6%;background:#4eff9a"></div>
+          </div>
+          <div class="gauge-threshold"><span>WARN &gt;100</span><span id="gs-evict" style="color:#4eff9a">● LOW</span></div>
+          <div class="sparkline" id="sp-evict"></div>
+        </div>
+
+        <!-- MEMORY USED -->
+        <div class="gauge-card ok" id="g-mem">
+          <div class="gauge-title">MEMORY USED</div>
+          <div class="gauge-value" id="gv-mem" style="color:#4eff9a">61%</div>
+          <div class="gauge-bar-wrap">
+            <div class="gauge-bar" id="gb-mem" style="width:61%;background:#4eff9a"></div>
+          </div>
+          <div class="gauge-threshold"><span>WARN &gt;85%</span><span id="gs-mem" style="color:#4eff9a">● OK</span></div>
+          <div class="sparkline" id="sp-mem"></div>
+        </div>
+
+        <!-- P99 LATENCY -->
+        <div class="gauge-card ok" id="g-lat">
+          <div class="gauge-title">P99 LATENCY</div>
+          <div class="gauge-value" id="gv-lat" style="color:#4eff9a">0.8ms</div>
+          <div class="gauge-bar-wrap">
+            <div class="gauge-bar" id="gb-lat" style="width:8%;background:#4eff9a"></div>
+          </div>
+          <div class="gauge-threshold"><span>ALERT &gt;5ms</span><span id="gs-lat" style="color:#4eff9a">● FAST</span></div>
+          <div class="sparkline" id="sp-lat"></div>
+        </div>
+
+      </div>
+
+      <!-- Global alert banner -->
+      <div class="alert-badge" id="s1-alert">⚠ ALERT — HIT RATIO BELOW THRESHOLD — INVESTIGATE NOW</div>
+
+      <!-- Scrolling event log -->
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-3px">▸ INCIDENT LOG</div>
+      <div id="s1-log" style="background:#040a0a;border:1px solid #0d1a1a;padding:7px;border-radius:2px;display:flex;flex-direction:column;gap:4px;min-height:64px">
+        <div style="font-size:6px;color:#1a3a3a">Waiting for events…</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">hit ratio dropped → cache misconfigured or polluted</div>
+    <div class="ih rd">alert threshold: &lt;80% hit ratio fires PagerDuty.<br>every missed hit = unnecessary DB query.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s1-final-hit">—</div><div class="sl">HIT RATIO<br>AFTER DROP</div></div>
+    <div class="sc"><div class="sv am" id="s1-final-evict">—</div><div class="sl">EVICTIONS<br>/SEC</div></div>
+    <div class="sc"><div class="sv rd">ALERT</div><div class="sl">STATUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — REDIS INFO COMMAND DEEP DIVE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060d0d">
+  <div class="hdr" style="background:#060d0d">
+    <div class="hdr-title">CACHE MONITORING</div>
+    <div class="hdr-sub">REDIS INFO — THE SOURCE OF TRUTH</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#22d3ee">REDIS INFO</span>
+    <span class="sbadge" style="color:#22d3ee;border-color:#22d3ee">COMMAND</span>
+  </div>
+
+  <div class="anim" style="background:#060d0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" style="color:#fff">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- INFO stats output -->
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ redis INFO stats — key metrics highlighted</div>
+      <div class="cmd-box" id="s2-output" style="min-height:auto;display:flex;flex-direction:column;gap:1px">
+        <div class="info-line"><span class="info-key" id="il-hits">keyspace_hits:</span> <span id="iv-hits" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-misses">keyspace_misses:</span> <span id="iv-misses" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-ratio">hit_ratio:</span> <span id="iv-ratio" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-evict">evicted_keys:</span> <span id="iv-evict" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-mem">used_memory_human:</span> <span id="iv-mem" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-maxmem">maxmemory_human:</span> <span id="iv-maxmem" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-lat">latency_p99_us:</span> <span id="iv-lat" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-conn">connected_clients:</span> <span id="iv-conn" style="color:#1a3a3a">…</span></div>
+        <div class="info-line"><span class="info-key" id="il-policy">maxmemory_policy:</span> <span id="iv-policy" style="color:#1a3a3a">…</span></div>
+      </div>
+
+      <!-- calculated hit ratio formula -->
+      <div id="s2-formula" style="opacity:0;transition:opacity 0.5s;background:#040a0a;border:2px solid #22d3ee;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#22d3ee;margin-bottom:6px">CALCULATING HIT RATIO</div>
+        <div style="font-size:7px;color:#888;line-height:1.9;text-align:center">
+          hits ÷ (hits + misses)<br>
+          <span style="color:#4eff9a" id="s2-calc">…</span>
+        </div>
+      </div>
+
+      <!-- metric guide -->
+      <div id="s2-guide" style="opacity:0;transition:opacity 0.5s;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:7px;color:#0d2a2a;margin-bottom:1px">▸ what each metric tells you</div>
+        <div class="metric-row show" style="border-color:#4eff9a20">
+          <div class="metric-dot" style="background:#4eff9a"></div>
+          <div><span style="color:#4eff9a;font-size:7px">hit_ratio &gt;90%</span> <span style="font-size:6px;color:#666">— cache is working well</span></div>
+        </div>
+        <div class="metric-row show" style="border-color:#e8a02020">
+          <div class="metric-dot" style="background:#e8a020"></div>
+          <div><span style="color:#e8a020;font-size:7px">evicted_keys rising</span> <span style="font-size:6px;color:#666">— cache too small or bad policy</span></div>
+        </div>
+        <div class="metric-row show" style="border-color:#e8505020">
+          <div class="metric-dot" style="background:#e85050"></div>
+          <div><span style="color:#e85050;font-size:7px">used_mem &gt;85% max</span> <span style="font-size:6px;color:#666">— scale up or tune TTLs</span></div>
+        </div>
+        <div class="metric-row show" style="border-color:#22d3ee20">
+          <div class="metric-dot" style="background:#22d3ee"></div>
+          <div><span style="color:#22d3ee;font-size:7px">latency_p99 &gt;5ms</span> <span style="font-size:6px;color:#666">— network or serialization issue</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">redis INFO stats / memory / latency</div>
+    <div class="ih">one command, all the data. poll every 60s.<br>pipe into Prometheus → alert in Grafana.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">94%</div><div class="sl">HIT<br>RATIO</div></div>
+    <div class="sc"><div class="sv am">12/s</div><div class="sl">EVICTION<br>RATE</div></div>
+    <div class="sc"><div class="sv">0.8ms</div><div class="sl">P99<br>LATENCY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — WHAT EACH METRIC MEANS + FIXES
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060d0d">
+  <div class="hdr" style="background:#060d0d">
+    <div class="hdr-title">CACHE MONITORING</div>
+    <div class="hdr-sub">METRICS · ROOT CAUSES · FIXES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">DIAGNOSE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ROOT CAUSE</span>
+  </div>
+
+  <div class="anim" style="background:#060d0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ symptom → root cause → fix</div>
+
+      <div class="fix-card" id="fc1">
+        <div class="fix-title" style="color:#e85050">① HIT RATIO DROPS</div>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#e85050;margin-bottom:2px">ROOT CAUSE</div>
+            cache pollution (junk data evicting hot keys), wrong TTL, keys never populated, cold start after deploy
+          </div>
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#4eff9a;margin-bottom:2px">FIX</div>
+            separate namespaces, tune TTLs, add cache warming on deploy, check eviction policy
+          </div>
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc2">
+        <div class="fix-title" style="color:#e8a020">② EVICTION RATE SPIKES</div>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#e85050;margin-bottom:2px">ROOT CAUSE</div>
+            cache too small for dataset, TTLs too long locking memory, wrong policy (allkeys-random evicts hot data)
+          </div>
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#4eff9a;margin-bottom:2px">FIX</div>
+            increase maxmemory, switch to allkeys-lru, shorten TTLs on low-value keys
+          </div>
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc3">
+        <div class="fix-title" style="color:#e8a020">③ MEMORY APPROACHING MAX</div>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#e85050;margin-bottom:2px">ROOT CAUSE</div>
+            dataset growth, TTL too long, no eviction policy set (noeviction = OOM errors)
+          </div>
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#4eff9a;margin-bottom:2px">FIX</div>
+            scale Redis instance, set maxmemory-policy, alert at 85% not 100%
+          </div>
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc4">
+        <div class="fix-title" style="color:#22d3ee">④ P99 LATENCY SPIKE</div>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#e85050;margin-bottom:2px">ROOT CAUSE</div>
+            large value serialization, slow O(N) commands (KEYS, SMEMBERS on big sets), network jitter, memory swap
+          </div>
+          <div style="flex:1;font-size:6px;color:#666;line-height:1.8">
+            <div style="color:#4eff9a;margin-bottom:2px">FIX</div>
+            use SCAN not KEYS, limit value size, disable swap, use pipelining for batches
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">symptom → metric → root cause → fix</div>
+    <div class="ih am">don't just alert on hit ratio. track all 4.<br>they tell different parts of the same story.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">HIT↓</div><div class="sl">POLLUTED<br>OR COLD</div></div>
+    <div class="sc"><div class="sv am">EVICT↑</div><div class="sl">TOO SMALL<br>OR BAD LRU</div></div>
+    <div class="sc"><div class="sv">P99↑</div><div class="sl">SLOW CMD<br>OR SWAP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — TOOLING: EXPORTER + GRAFANA
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#060d0d">
+  <div class="hdr" style="background:#060d0d">
+    <div class="hdr-title">CACHE MONITORING</div>
+    <div class="hdr-sub">TOOLS · ALERTS · OBSERVABILITY STACK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">TOOLING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION</span>
+  </div>
+
+  <div class="anim" style="background:#060d0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ observability pipeline</div>
+
+      <!-- Pipeline flow -->
+      <div id="s4-pipe" style="opacity:0;transition:opacity 0.5s;background:#040a0a;border:1px solid #0d1a1a;padding:10px;border-radius:2px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:4px">
+          <div style="text-align:center;flex:1">
+            <div style="font-size:16px">🗄️</div>
+            <div style="font-size:6px;color:#22d3ee;margin-top:3px">REDIS</div>
+            <div style="font-size:5px;color:#555">INFO stats</div>
+          </div>
+          <div style="font-size:10px;color:#0d2a2a;flex-shrink:0" id="arr1">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:16px">📦</div>
+            <div style="font-size:6px;color:#e8a020;margin-top:3px">EXPORTER</div>
+            <div style="font-size:5px;color:#555">redis_exporter</div>
+          </div>
+          <div style="font-size:10px;color:#0d2a2a;flex-shrink:0" id="arr2">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:16px">📊</div>
+            <div style="font-size:6px;color:#e85050;margin-top:3px">PROMETHEUS</div>
+            <div style="font-size:5px;color:#555">scrape / store</div>
+          </div>
+          <div style="font-size:10px;color:#0d2a2a;flex-shrink:0" id="arr3">→</div>
+          <div style="text-align:center;flex:1">
+            <div style="font-size:16px">📈</div>
+            <div style="font-size:6px;color:#4eff9a;margin-top:3px">GRAFANA</div>
+            <div style="font-size:5px;color:#555">dashboard</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alert rules -->
+      <div id="s4-alerts" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#0d2a2a;margin-bottom:5px">▸ prometheus alert rules</div>
+        <div class="cmd-box" style="font-size:7px;line-height:1.9;padding:8px 10px">
+          <div style="color:#0d2a2a"># alert.rules.yml</div>
+          <div><span style="color:#4eff9a">- alert:</span> <span style="color:#fff">CacheHitRatioLow</span></div>
+          <div style="padding-left:8px"><span style="color:#22d3ee">expr:</span> <span style="color:#e8a020">redis_keyspace_hits / (redis_keyspace_hits + redis_keyspace_misses) &lt; 0.8</span></div>
+          <div style="padding-left:8px"><span style="color:#22d3ee">for:</span> <span style="color:#fff">5m</span></div>
+          <div style="margin-top:3px"><span style="color:#4eff9a">- alert:</span> <span style="color:#fff">CacheEvictionHigh</span></div>
+          <div style="padding-left:8px"><span style="color:#22d3ee">expr:</span> <span style="color:#e8a020">rate(redis_evicted_keys_total[1m]) &gt; 100</span></div>
+          <div style="padding-left:8px"><span style="color:#22d3ee">for:</span> <span style="color:#fff">2m</span></div>
+        </div>
+      </div>
+
+      <!-- Quick ref cards -->
+      <div id="s4-quickref" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#0d2a2a;margin-bottom:5px">▸ alert thresholds — quick reference</div>
+        <div style="display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;gap:6px;padding:5px 8px;background:#040a0a;border:1px solid #0d1a1a;border-radius:2px;font-size:7px;align-items:center">
+            <span style="color:#4eff9a;min-width:100px">Hit Ratio</span>
+            <span style="color:#e85050;min-width:70px">&lt;80% → ALERT</span>
+            <span style="color:#555;font-size:6px">cache likely broken</span>
+          </div>
+          <div style="display:flex;gap:6px;padding:5px 8px;background:#040a0a;border:1px solid #0d1a1a;border-radius:2px;font-size:7px;align-items:center">
+            <span style="color:#4eff9a;min-width:100px">Eviction Rate</span>
+            <span style="color:#e8a020;min-width:70px">&gt;100/s → WARN</span>
+            <span style="color:#555;font-size:6px">cache too small</span>
+          </div>
+          <div style="display:flex;gap:6px;padding:5px 8px;background:#040a0a;border:1px solid #0d1a1a;border-radius:2px;font-size:7px;align-items:center">
+            <span style="color:#4eff9a;min-width:100px">Memory</span>
+            <span style="color:#e8a020;min-width:70px">&gt;85% → WARN</span>
+            <span style="color:#555;font-size:6px">scale or tune TTLs</span>
+          </div>
+          <div style="display:flex;gap:6px;padding:5px 8px;background:#040a0a;border:1px solid #0d1a1a;border-radius:2px;font-size:7px;align-items:center">
+            <span style="color:#4eff9a;min-width:100px">P99 Latency</span>
+            <span style="color:#e85050;min-width:70px">&gt;5ms → ALERT</span>
+            <span style="color:#555;font-size:6px">slow commands</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">redis_exporter → prometheus → grafana → pagerduty</div>
+    <div class="ih gn">instrument once. alert on all 4 metrics.<br>a cache with no monitoring is a time bomb.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">KEY<br>METRICS</div></div>
+    <div class="sc"><div class="sv am">60s</div><div class="sl">SCRAPE<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv">5m</div><div class="sl">ALERT<br>WINDOW</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();if(n===2)playS2();if(n===3)playS3();if(n===4)playS4();
+}
+
+// ── sparkline builder ─────────────────────────
+function buildSparkline(containerId, values, color){
+  const c=document.getElementById(containerId);
+  c.innerHTML='';
+  const max=Math.max(...values,1);
+  values.forEach((v,i)=>{
+    const bar=document.createElement('div');
+    bar.className='spark-bar';
+    const pct=Math.round(v/max*100);
+    bar.style.cssText=`left:${i*8}px;width:6px;height:${Math.max(2,pct*0.26)}px;background:${color};opacity:0.7`;
+    c.appendChild(bar);
+  });
+}
+
+// ── SCENE 1: LIVE DASHBOARD ───────────────────
+function setGauge(id, value, barPct, color, statusText, statusColor, cardClass){
+  document.getElementById('gv-'+id).textContent=value;
+  document.getElementById('gv-'+id).style.color=color;
+  document.getElementById('gb-'+id).style.width=barPct+'%';
+  document.getElementById('gb-'+id).style.background=color;
+  document.getElementById('gs-'+id).textContent=statusText;
+  document.getElementById('gs-'+id).style.color=statusColor;
+  const card=document.getElementById('g-'+id);
+  card.className='gauge-card '+cardClass;
+}
+
+function addLog(msg, color, delay){
+  T(()=>{
+    const log=document.getElementById('s1-log');
+    if(log.querySelector('[data-init]')) log.innerHTML='';
+    const el=document.createElement('div');
+    el.style.cssText=`font-size:6px;color:${color};line-height:1.6;animation:fadeUp 0.3s ease`;
+    el.textContent='▸ '+msg;
+    log.appendChild(el);
+    // keep last 5
+    while(log.children.length>5) log.removeChild(log.firstChild);
+  },delay);
+}
+
+function playS1(){
+  clearT();
+  // reset to healthy state
+  setGauge('hit','94%',94,'#4eff9a','● GOOD','#4eff9a','ok');
+  setGauge('evict','12',6,'#4eff9a','● LOW','#4eff9a','ok');
+  setGauge('mem','61%',61,'#4eff9a','● OK','#4eff9a','ok');
+  setGauge('lat','0.8ms',8,'#4eff9a','● FAST','#4eff9a','ok');
+  document.getElementById('s1-alert').classList.remove('show');
+  document.getElementById('s1-final-hit').textContent='—';
+  document.getElementById('s1-final-evict').textContent='—';
+  document.getElementById('s1-log').innerHTML='<div style="font-size:6px;color:#1a3a3a" data-init>System nominal — watching for anomalies…</div>';
+
+  // sparkline initial data
+  buildSparkline('sp-hit',[94,95,93,94,96,95,94,92,91,90,88,85],'#4eff9a');
+  buildSparkline('sp-evict',[10,12,11,14,13,12,15,18,22,28,40,55],'#4eff9a');
+  buildSparkline('sp-mem',[58,59,60,61,61,62,63,64,65,67,69,71],'#4eff9a');
+  buildSparkline('sp-lat',[0.7,0.8,0.8,0.9,0.8,0.7,0.9,1.0,0.9,0.8,0.9,1.1],'#4eff9a');
+
+  // t=1s: evictions start climbing
+  addLog('[12:04:01] eviction rate climbing: 12 → 28/s', '#e8a020', 1000);
+  T(()=>{ setGauge('evict','28',14,'#e8a020','● RISING','#e8a020','warn'); },1000);
+
+  // t=2s: memory grows
+  addLog('[12:04:12] memory at 74% of maxmemory (6.2GB / 8GB)', '#e8a020', 2000);
+  T(()=>{ setGauge('mem','74%',74,'#e8a020','● WARN','#e8a020','warn'); },2000);
+
+  // t=3s: hit ratio drops
+  addLog('[12:04:28] hit ratio falling: 94% → 81%', '#e8a020', 3000);
+  T(()=>{ setGauge('hit','81%',81,'#e8a020','● WARN','#e8a020','warn'); },3000);
+
+  // t=4s: evictions spike
+  addLog('[12:04:41] evictions: 180/s — hot keys being evicted!', '#e85050', 4000);
+  T(()=>{ setGauge('evict','180',90,'#e85050','● HIGH','#e85050','alert'); },4000);
+
+  // t=5s: hit ratio crashes below threshold → ALERT
+  addLog('[12:04:55] ⚠ HIT RATIO BREACHED THRESHOLD: 72% < 80%', '#e85050', 5000);
+  T(()=>{
+    setGauge('hit','72%',72,'#e85050','● ALERT','#e85050','alert');
+    document.getElementById('gv-hit').classList.add('alert-shake');
+    document.getElementById('s1-alert').classList.add('show');
+    document.getElementById('s1-final-hit').textContent='72%';
+    document.getElementById('s1-final-hit').className='sv rd';
+    document.getElementById('s1-final-evict').textContent='180/s';
+    document.getElementById('s1-final-evict').className='sv am';
+    buildSparkline('sp-hit',[94,95,93,91,88,85,82,81,79,75,72,72],'#e85050');
+    buildSparkline('sp-evict',[10,12,14,18,25,40,65,90,120,155,175,180],'#e85050');
+  },5000);
+
+  addLog('[12:04:56] PagerDuty alert fired → on-call notified', '#e85050', 5600);
+  T(()=>{ setGauge('lat','2.1ms',21,'#e8a020','● SLOW','#e8a020','warn'); },5800);
+}
+
+// ── SCENE 2: REDIS INFO ───────────────────────
+const infoData=[
+  {key:'il-hits', valId:'iv-hits', val:'284,921,443', cls:'info-val-good'},
+  {key:'il-misses', valId:'iv-misses', val:'20,781,221', cls:'info-val-warn'},
+  {key:'il-ratio', valId:'iv-ratio', val:'93.2%', cls:'info-val-good'},
+  {key:'il-evict', valId:'iv-evict', val:'12', cls:'info-val-good'},
+  {key:'il-mem', valId:'iv-mem', val:'5.2GB', cls:'info-val-good'},
+  {key:'il-maxmem', valId:'iv-maxmem', val:'8.0GB', cls:'info-val-good'},
+  {key:'il-lat', valId:'iv-lat', val:'820μs', cls:'info-val-good'},
+  {key:'il-conn', valId:'iv-conn', val:'248', cls:'info-val-good'},
+  {key:'il-policy', valId:'iv-policy', val:'allkeys-lru', cls:'info-val-good'},
+];
+function playS2(){
+  clearT();
+  infoData.forEach(({valId})=>{ document.getElementById(valId).textContent='…'; document.getElementById(valId).className=''; });
+  document.getElementById('s2-formula').style.opacity='0';
+  document.getElementById('s2-guide').style.opacity='0';
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">INFO</span> <span style="color:#e8a020">stats</span>';
+    document.getElementById('s2-cmd-comment').textContent='# returns all stats metrics';
+  },400);
+
+  infoData.forEach(({valId,val,cls},i)=>{
+    T(()=>{
+      const el=document.getElementById(valId);
+      el.textContent=val;
+      el.className=cls;
+    },900+i*250);
+  });
+
+  T(()=>{
+    document.getElementById('s2-formula').style.opacity='1';
+    document.getElementById('s2-calc').textContent='284.9M ÷ (284.9M + 20.8M) = 93.2%';
+  },3600);
+
+  T(()=>{ document.getElementById('s2-guide').style.opacity='1'; },4400);
+}
+
+// ── SCENE 3: ROOT CAUSES ──────────────────────
+function playS3(){
+  clearT();
+  ['fc1','fc2','fc3','fc4'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+  T(()=>{ document.getElementById('fc1').classList.add('show'); },400);
+  T(()=>{ document.getElementById('fc2').classList.add('show'); },1400);
+  T(()=>{ document.getElementById('fc3').classList.add('show'); },2400);
+  T(()=>{ document.getElementById('fc4').classList.add('show'); },3400);
+}
+
+// ── SCENE 4: TOOLING ──────────────────────────
+function playS4(){
+  clearT();
+  document.getElementById('s4-pipe').style.opacity='0';
+  document.getElementById('s4-alerts').style.opacity='0';
+  document.getElementById('s4-quickref').style.opacity='0';
+  ['arr1','arr2','arr3'].forEach(id=>{ document.getElementById(id).style.color='#0d2a2a'; });
+
+  T(()=>{ document.getElementById('s4-pipe').style.opacity='1'; },400);
+  T(()=>{ document.getElementById('arr1').style.color='#22d3ee'; },900);
+  T(()=>{ document.getElementById('arr2').style.color='#e8a020'; },1400);
+  T(()=>{ document.getElementById('arr3').style.color='#e85050'; },1900);
+  T(()=>{ document.getElementById('s4-alerts').style.opacity='1'; },2600);
+  T(()=>{ document.getElementById('s4-quickref').style.opacity='1'; },4000);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

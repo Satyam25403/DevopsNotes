@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Image Layers</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1025}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1025;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#08080f;border:1px solid #1a1025;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sl2{font-size:7px;color:#444;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.pu{border-color:#9060d0;color:#9060d0}.btn.pu:hover{background:#9060d020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+
+/* ── SECTION LABEL ── */
+.sec-label{font-size:7px;color:#222;text-align:center;letter-spacing:.5px;padding:2px 0}
+
+/* ── LAYER BLOCKS ── */
+.layer-stack{display:flex;flex-direction:column-reverse;gap:3px;align-items:center;padding:0 12px}
+.layer-block{width:100%;border:2px solid #333;padding:9px 12px;display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(-10px);transition:opacity .4s,transform .4s}
+.layer-block.vis{opacity:1;transform:translateY(0)}
+.lb-num{font-size:8px;color:#333;width:20px;text-align:center;flex-shrink:0}
+.lb-icon{font-size:16px;flex-shrink:0}
+.lb-body{flex:1}
+.lb-instruction{font-size:8px;margin-bottom:2px;letter-spacing:.3px}
+.lb-desc{font-size:6px;color:#555;line-height:1.7}
+.lb-hash{font-size:5px;color:#2a2040;margin-top:2px}
+.lb-size{font-size:6px;padding:2px 5px;border:1px solid currentColor;flex-shrink:0}
+.lb-badge{font-size:5px;padding:1px 4px;border:1px solid #333;color:#555;margin-left:4px}
+
+/* ── LAYER INDICATOR arrow ── */
+.stack-arrow{width:100%;display:flex;justify-content:center;padding:1px 0;opacity:0;transition:opacity .3s}
+.stack-arrow.vis{opacity:1}
+
+/* ── HASH LINE ── */
+.hash-line{font-size:6px;color:#2a2040;padding:2px 0;text-align:center;opacity:0;transition:opacity .4s}
+.hash-line.vis{opacity:1}
+
+/* ── SHARED LAYER VISUALISER ── */
+.shared-wrap{padding:0 10px}
+.shared-cols{display:flex;gap:10px;align-items:flex-end}
+.shared-col{flex:1;display:flex;flex-direction:column;gap:3px;align-items:center}
+.shared-title{font-size:7px;text-align:center;margin-bottom:4px;letter-spacing:.3px}
+.sh-block{width:100%;border:2px solid #333;padding:6px 8px;display:flex;flex-direction:column;align-items:center;gap:2px;opacity:0;transition:opacity .5s,border-color .3s}
+.sh-block.vis{opacity:1}
+.sh-instr{font-size:7px;text-align:center;letter-spacing:.3px}
+.sh-desc{font-size:5px;text-align:center;color:#555;line-height:1.5}
+.sh-shared{border-style:dashed}
+.shared-badge{font-size:6px;padding:2px 8px;border:1px solid;text-align:center;opacity:0;transition:opacity .5s;width:100%}
+.shared-badge.vis{opacity:1}
+
+/* connector line between two stacks */
+.connector{height:12px;display:flex;align-items:center;justify-content:center;gap:0;opacity:0;transition:opacity .4s;margin:3px 0}
+.connector.vis{opacity:1}
+.conn-left{flex:1;height:2px;background:linear-gradient(to right,transparent,#4eff9a)}
+.conn-mid{font-size:7px;color:#4eff9a;padding:0 4px;flex-shrink:0}
+.conn-right{flex:1;height:2px;background:linear-gradient(to left,transparent,#4eff9a)}
+
+/* ── CACHE ANIMATION ── */
+.cache-row{display:flex;align-items:center;gap:8px;padding:5px 0;opacity:0;transition:opacity .4s}
+.cache-row.vis{opacity:1}
+.cr-label{font-size:7px;width:80px;flex-shrink:0}
+.cr-bar{flex:1;height:16px;border:1px solid #1a1025;overflow:hidden;position:relative}
+.cr-fill{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .8s ease-out;display:flex;align-items:center;padding-left:5px}
+.cr-fill-text{font-size:5px;white-space:nowrap;opacity:0;transition:opacity .3s .6s}
+.cr-fill-text.vis{opacity:1}
+.cr-time{font-size:6px;width:36px;text-align:right;flex-shrink:0}
+.cr-badge{font-size:5px;padding:1px 5px;border:1px solid;flex-shrink:0}
+
+/* ── TERMINAL ── */
+.term{background:#06060e;border:2px solid #1a1025;font-size:8px}
+.term-bar{padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a1025}
+.term-dot{width:8px;height:8px;border-radius:50%}
+.term-title{font-size:7px;color:#333;flex:1;text-align:center;letter-spacing:.5px}
+.term-body{padding:8px 10px}
+.tline{display:flex;align-items:baseline;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.tline.vis{opacity:1}
+.prompt{color:#4eff9a;margin-right:6px;flex-shrink:0}
+.tcmd{color:#ddd;letter-spacing:.3px;line-height:1.6}
+.tcmd .flag{color:#4ec9e1}
+.tcmd .arg{color:#e8a020}
+.tline.out  .tcmd{color:#555;font-size:7px}
+.tline.ok   .tcmd{color:#4eff9a;font-size:7px}
+.tline.step .tcmd{color:#4ec9e1;font-size:7px}
+.tline.warn .tcmd{color:#e8a020;font-size:7px}
+.tline.hit  .tcmd{color:#4eff9a;font-size:7px}
+.tline.miss .tcmd{color:#e85050;font-size:7px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cur{display:inline-block;width:6px;height:10px;background:#4eff9a;vertical-align:middle;margin-left:2px;animation:blink .7s infinite}
+
+/* ── CALLOUT ── */
+.callout{display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .45s;padding:0 2px}
+.callout.vis{opacity:1}
+.callout-line{width:2px;flex-shrink:0;margin-top:4px;border-radius:1px;align-self:stretch}
+.callout-body{flex:1;border:1px solid #1a1025;padding:6px 8px}
+.callout-title{font-size:8px;margin-bottom:3px;letter-spacing:.3px}
+.callout-text{font-size:6px;color:#555;line-height:1.9}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     S1 — LAYERS BUILD UP ONE BY ONE
+════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">IMAGE LAYERS</div>
+    <div class="hdr-sub">DOCKER DOESN'T REBUILD FROM SCRATCH</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">BUILDING UP</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LAYER STACK</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div class="sec-label">EACH DOCKERFILE INSTRUCTION = ONE IMMUTABLE LAYER</div>
+
+      <!-- stack builds bottom-up, displayed top-down using column-reverse -->
+      <div class="layer-stack" id="lstack">
+
+        <!-- Layer 5 — top = app code (shown first in DOM but last visually due to column-reverse) -->
+        <div class="layer-block" id="bl5" style="border-color:#4eff9a;background:#041808">
+          <div class="lb-num">5</div>
+          <div class="lb-icon">📄</div>
+          <div class="lb-body">
+            <div class="lb-instruction" style="color:#4eff9a">COPY . .</div>
+            <div class="lb-desc">Your source code lands here. Changes most often → top layer.</div>
+            <div class="lb-hash">sha256: 9f3a…  writable layer above this</div>
+          </div>
+          <div class="lb-size" style="color:#4eff9a;border-color:#4eff9a">~5 KB</div>
+        </div>
+
+        <!-- Layer 4 -->
+        <div class="layer-block" id="bl4" style="border-color:#e8a020;background:#140a00">
+          <div class="lb-num">4</div>
+          <div class="lb-icon">📦</div>
+          <div class="lb-body">
+            <div class="lb-instruction" style="color:#e8a020">RUN npm install</div>
+            <div class="lb-desc">Installs dependencies. Big layer — cached unless package.json changes.</div>
+            <div class="lb-hash">sha256: 7c2b…</div>
+          </div>
+          <div class="lb-size" style="color:#e8a020;border-color:#e8a020">~30 MB</div>
+        </div>
+
+        <!-- Layer 3 -->
+        <div class="layer-block" id="bl3" style="border-color:#e8a020;background:#140a00">
+          <div class="lb-num">3</div>
+          <div class="lb-icon">📋</div>
+          <div class="lb-body">
+            <div class="lb-instruction" style="color:#e8a020">COPY package*.json ./</div>
+            <div class="lb-desc">Only package files first — so npm install layer can be cached.</div>
+            <div class="lb-hash">sha256: 4a8d…</div>
+          </div>
+          <div class="lb-size" style="color:#e8a020;border-color:#e8a020">~2 KB</div>
+        </div>
+
+        <!-- Layer 2 -->
+        <div class="layer-block" id="bl2" style="border-color:#9060d0;background:#100828">
+          <div class="lb-num">2</div>
+          <div class="lb-icon">📁</div>
+          <div class="lb-body">
+            <div class="lb-instruction" style="color:#9060d0">WORKDIR /app</div>
+            <div class="lb-desc">Creates /app directory. Near-zero overhead — just a metadata entry.</div>
+            <div class="lb-hash">sha256: 2e1f…</div>
+          </div>
+          <div class="lb-size" style="color:#9060d0;border-color:#9060d0">&lt;1 KB</div>
+        </div>
+
+        <!-- Layer 1 — base (bottom of visual stack) -->
+        <div class="layer-block" id="bl1" style="border-color:#4ec9e1;background:#040e1a">
+          <div class="lb-num">1</div>
+          <div class="lb-icon">🏗️</div>
+          <div class="lb-body">
+            <div class="lb-instruction" style="color:#4ec9e1">FROM node:20-alpine</div>
+            <div class="lb-desc">Base OS + Node runtime. Pulled once, shared by every node image you build.</div>
+            <div class="lb-hash">sha256: a3f6…  pulled from Docker Hub</div>
+          </div>
+          <div class="lb-size" style="color:#4ec9e1;border-color:#4ec9e1">~50 MB</div>
+        </div>
+
+      </div>
+
+      <!-- callout: what immutable means -->
+      <div class="callout" id="co1">
+        <div class="callout-line" style="background:#4ec9e1"></div>
+        <div class="callout-body" style="border-color:#4ec9e1;background:#040e1a">
+          <div class="callout-title" style="color:#4ec9e1">LAYERS ARE IMMUTABLE</div>
+          <div class="callout-text">Once written, a layer never changes. Its SHA256 hash is its identity. Same hash = exact same bytes. Docker never rewrites a layer — it creates a new one.</div>
+        </div>
+      </div>
+
+      <div class="callout" id="co2">
+        <div class="callout-line" style="background:#e8a020"></div>
+        <div class="callout-body" style="border-color:#e8a020;background:#140a00">
+          <div class="callout-title" style="color:#e8a020">TOP LAYER = MOST LIKELY TO CHANGE</div>
+          <div class="callout-text">Put your source code at the top. Base image and deps at the bottom — they change rarely so they stay cached. Rebuild hits only changed layers and above.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Layers stack bottom → top like a <span style="color:#4ec9e1">read-only filesystem.</span></div>
+    <div class="il">A running container adds one thin <span style="color:#4eff9a">writable layer</span> on top. The image layers underneath are never touched — ever.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">5</div><div class="sl2">LAYERS</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:7px">~80 MB</div><div class="sl2">TOTAL IMAGE</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:7px">immutable</div><div class="sl2">READ-ONLY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S2 — SHARED BASE LAYERS
+════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">IMAGE LAYERS</div>
+    <div class="hdr-sub">ONE BASE LAYER — TWO IMAGES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SHARING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BASE LAYER</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="sec-label">TWO DIFFERENT IMAGES, ONE COPY OF ALPINE ON DISK</div>
+
+      <div class="shared-wrap">
+        <!-- two stacks side by side -->
+        <div class="shared-cols">
+
+          <!-- LEFT: nginx:alpine -->
+          <div class="shared-col">
+            <div class="shared-title" style="color:#4ec9e1">nginx:alpine</div>
+            <!-- unique layers (top) -->
+            <div class="sh-block" id="sh_n3" style="border-color:#4ec9e1;background:#040e1a">
+              <div class="sh-instr" style="color:#4eff9a">NGINX CONFIG</div>
+              <div class="sh-desc">nginx.conf<br>2 KB</div>
+            </div>
+            <div class="sh-block" id="sh_n2" style="border-color:#4ec9e1;background:#040e1a">
+              <div class="sh-instr" style="color:#4ec9e1">NGINX BINARY</div>
+              <div class="sh-desc">nginx + libs<br>8 MB</div>
+            </div>
+          </div>
+
+          <!-- RIGHT: node:alpine -->
+          <div class="shared-col">
+            <div class="shared-title" style="color:#e8a020">node:20-alpine</div>
+            <div class="sh-block" id="sh_nd3" style="border-color:#e8a020;background:#140a00">
+              <div class="sh-instr" style="color:#4eff9a">YOUR APP</div>
+              <div class="sh-desc">src/ + deps<br>35 MB</div>
+            </div>
+            <div class="sh-block" id="sh_nd2" style="border-color:#e8a020;background:#140a00">
+              <div class="sh-instr" style="color:#e8a020">NODE RUNTIME</div>
+              <div class="sh-desc">node binary<br>40 MB</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- connector — shared base -->
+        <div class="connector" id="conn1">
+          <div class="conn-left"></div>
+          <div class="conn-mid">SHARED</div>
+          <div class="conn-right"></div>
+        </div>
+
+        <!-- shared base block spanning full width -->
+        <div class="sh-block sh-shared" id="sh_base" style="border-color:#4eff9a;background:#041808;width:100%;flex-direction:row;gap:10px;padding:10px 12px">
+          <div style="font-size:20px">🔗</div>
+          <div style="flex:1">
+            <div class="sh-instr" style="color:#4eff9a;font-size:8px;text-align:left">ALPINE LINUX BASE</div>
+            <div class="sh-desc" style="text-align:left;margin-top:3px;font-size:6px">sha256: a3f6bc05… · 3.5 MB · stored ONCE on disk</div>
+          </div>
+          <div class="shared-badge" style="color:#4eff9a;border-color:#4eff9a;width:auto;font-size:6px;padding:3px 6px">×1 ON DISK</div>
+        </div>
+
+      </div>
+
+      <!-- disk usage comparison -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s" id="diskcomp">
+        <div style="font-size:7px;color:#333;margin-bottom:6px;letter-spacing:.5px">ACTUAL DISK USAGE — LAYER DEDUPLICATION</div>
+        <div class="cache-row" id="dc1">
+          <div class="cr-label" style="color:#4ec9e1">nginx:alpine</div>
+          <div class="cr-bar">
+            <div class="cr-fill" id="dcf1" style="background:#4ec9e1">
+              <div class="cr-fill-text" id="dcft1" style="color:#040e1a">11.5 MB unique</div>
+            </div>
+          </div>
+          <div class="cr-time" style="color:#4ec9e1">11.5 MB</div>
+        </div>
+        <div class="cache-row" id="dc2">
+          <div class="cr-label" style="color:#e8a020">node:alpine</div>
+          <div class="cr-bar">
+            <div class="cr-fill" id="dcf2" style="background:#e8a020">
+              <div class="cr-fill-text" id="dcft2" style="color:#140a00">75 MB unique</div>
+            </div>
+          </div>
+          <div class="cr-time" style="color:#e8a020">75 MB</div>
+        </div>
+        <div class="cache-row" id="dc3">
+          <div class="cr-label" style="color:#4eff9a">TOTAL DISK</div>
+          <div class="cr-bar">
+            <div class="cr-fill" id="dcf3" style="background:#4eff9a">
+              <div class="cr-fill-text" id="dcft3" style="color:#041808">90 MB (not 90 + 3.5 twice)</div>
+            </div>
+          </div>
+          <div class="cr-time" style="color:#4eff9a">90 MB</div>
+        </div>
+      </div>
+
+      <div class="callout" id="co3" style="padding:0">
+        <div class="callout-line" style="background:#4eff9a"></div>
+        <div class="callout-body" style="border-color:#4eff9a;background:#041808">
+          <div class="callout-title" style="color:#4eff9a">SHARED = STORED ONCE</div>
+          <div class="callout-text">Docker's content-addressable store uses the SHA256 hash as the key. Same hash already on disk? Zero bytes downloaded. 10 images sharing alpine = alpine stored once.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">Pull 10 node images — alpine base downloaded <span style="color:#4eff9a">once.</span></div>
+    <div class="il">Docker Hub pushes/pulls only layers your machine is missing. Layer sharing is why <span style="color:#4eff9a">docker pull</span> is often almost instant on repeated runs.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:7px">3.5 MB</div><div class="sl2">SHARED ONCE</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:7px">2 images</div><div class="sl2">1 BASE COPY</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:7px">90 MB</div><div class="sl2">TOTAL DISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn gn" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S3 — CACHE HITS vs MISSES
+════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">IMAGE LAYERS</div>
+    <div class="hdr-sub">CACHE HIT vs CACHE MISS — SEE THE DIFF</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CACHE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HIT vs MISS</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="sec-label">CHANGE ONE FILE — WATCH WHAT REBUILDS</div>
+
+      <!-- scenario A: edit index.js (only layer 5 misses) -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s" id="scenA">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px;letter-spacing:.3px">SCENARIO A — edit index.js only</div>
+        <div class="cache-row" id="ca1">
+          <div class="cr-label" style="color:#4ec9e1;font-size:6px">FROM node</div>
+          <div class="cr-bar"><div class="cr-fill" id="caf1" style="background:#4eff9a"><div class="cr-fill-text" id="caft1" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="ca2">
+          <div class="cr-label" style="color:#9060d0;font-size:6px">WORKDIR</div>
+          <div class="cr-bar"><div class="cr-fill" id="caf2" style="background:#4eff9a"><div class="cr-fill-text" id="caft2" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="ca3">
+          <div class="cr-label" style="color:#e8a020;font-size:6px">COPY pkg</div>
+          <div class="cr-bar"><div class="cr-fill" id="caf3" style="background:#4eff9a"><div class="cr-fill-text" id="caft3" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="ca4">
+          <div class="cr-label" style="color:#e8a020;font-size:6px">RUN npm</div>
+          <div class="cr-bar"><div class="cr-fill" id="caf4" style="background:#4eff9a"><div class="cr-fill-text" id="caft4" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="ca5">
+          <div class="cr-label" style="color:#4eff9a;font-size:6px">COPY . .</div>
+          <div class="cr-bar"><div class="cr-fill" id="caf5" style="background:#e85050"><div class="cr-fill-text" id="caft5" style="color:#1a0505">CACHE MISS — rebuilding</div></div></div>
+          <div class="cr-badge" style="color:#e85050;border-color:#e85050">MISS</div>
+          <div class="cr-time" style="color:#e85050">0.3s</div>
+        </div>
+        <div style="font-size:6px;color:#4eff9a;margin-top:5px;text-align:right">TOTAL BUILD: <span style="color:#4eff9a">0.3s</span> 🚀</div>
+      </div>
+
+      <!-- scenario B: edit package.json (layers 3-5 all miss) -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s" id="scenB">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:.3px">SCENARIO B — edit package.json</div>
+        <div class="cache-row" id="cb1">
+          <div class="cr-label" style="color:#4ec9e1;font-size:6px">FROM node</div>
+          <div class="cr-bar"><div class="cr-fill" id="cbf1" style="background:#4eff9a"><div class="cr-fill-text" id="cbft1" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="cb2">
+          <div class="cr-label" style="color:#9060d0;font-size:6px">WORKDIR</div>
+          <div class="cr-bar"><div class="cr-fill" id="cbf2" style="background:#4eff9a"><div class="cr-fill-text" id="cbft2" style="color:#041808">CACHE HIT ✓</div></div></div>
+          <div class="cr-badge" style="color:#4eff9a;border-color:#4eff9a">HIT</div>
+          <div class="cr-time" style="color:#4eff9a">0.0s</div>
+        </div>
+        <div class="cache-row" id="cb3">
+          <div class="cr-label" style="color:#e85050;font-size:6px">COPY pkg</div>
+          <div class="cr-bar"><div class="cr-fill" id="cbf3" style="background:#e85050"><div class="cr-fill-text" id="cbft3" style="color:#1a0505">CACHE MISS — pkg.json changed</div></div></div>
+          <div class="cr-badge" style="color:#e85050;border-color:#e85050">MISS</div>
+          <div class="cr-time" style="color:#e85050">0.1s</div>
+        </div>
+        <div class="cache-row" id="cb4">
+          <div class="cr-label" style="color:#e85050;font-size:6px">RUN npm</div>
+          <div class="cr-bar"><div class="cr-fill" id="cbf4" style="background:#e85050"><div class="cr-fill-text" id="cbft4" style="color:#1a0505">FORCED MISS — chain broken</div></div></div>
+          <div class="cr-badge" style="color:#e85050;border-color:#e85050">MISS</div>
+          <div class="cr-time" style="color:#e85050">4.2s</div>
+        </div>
+        <div class="cache-row" id="cb5">
+          <div class="cr-label" style="color:#e85050;font-size:6px">COPY . .</div>
+          <div class="cr-bar"><div class="cr-fill" id="cbf5" style="background:#e85050"><div class="cr-fill-text" id="cbft5" style="color:#1a0505">FORCED MISS — chain broken</div></div></div>
+          <div class="cr-badge" style="color:#e85050;border-color:#e85050">MISS</div>
+          <div class="cr-time" style="color:#e85050">0.3s</div>
+        </div>
+        <div style="font-size:6px;color:#e8a020;margin-top:5px;text-align:right">TOTAL BUILD: <span style="color:#e85050">4.6s</span> — 15× slower</div>
+      </div>
+
+      <!-- rule callout -->
+      <div class="callout" id="co4" style="padding:0">
+        <div class="callout-line" style="background:#e8a020"></div>
+        <div class="callout-body" style="border-color:#e8a020;background:#140a00">
+          <div class="callout-title" style="color:#e8a020">CACHE INVALIDATION RULE</div>
+          <div class="callout-text">Once any layer misses, <span style="color:#e85050">all layers above it also miss</span> — even if their files didn't change. The chain is broken. Order your Dockerfile so the most stable instructions come first.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e8a020">
+    <div class="il">A cache miss <span style="color:#e85050">breaks the chain</span> — every layer above rebuilds.</div>
+    <div class="il">That's why <span style="color:#4eff9a">COPY package.json → RUN npm install → COPY . .</span> is the canonical pattern. Dependencies change rarely; source code changes constantly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">0.3s</div><div class="sl2">CODE CHANGE</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:8px">4.6s</div><div class="sl2">DEP CHANGE</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:8px">15×</div><div class="sl2">DIFFERENCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S4 — DOCKER HISTORY + INSPECT
+════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">IMAGE LAYERS</div>
+    <div class="hdr-sub">INSPECT LAYERS WITH docker history</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#9060d0">INSPECT</span>
+    <span class="sbadge" style="color:#9060d0;border-color:#9060d0">docker history</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="sec-label">SEE EVERY LAYER'S SIZE AND INSTRUCTION</div>
+
+      <div class="term">
+        <div class="term-bar" style="background:#111128">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — inspect layers</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="h1a"><span class="prompt">$</span><span class="tcmd">docker history <span class="arg">myapp:1.0</span></span></div>
+          <div class="tline out" id="h1b"><span class="tcmd">IMAGE       CREATED BY                SIZE</span></div>
+          <div class="tline step" id="h1c"><span class="tcmd">9f3a…  COPY . .                   4.8 kB</span></div>
+          <div class="tline step" id="h1d"><span class="tcmd">7c2b…  RUN npm install            31.2 MB</span></div>
+          <div class="tline step" id="h1e"><span class="tcmd">4a8d…  COPY package*.json ./      2.1 kB</span></div>
+          <div class="tline step" id="h1f"><span class="tcmd">2e1f…  WORKDIR /app               0 B</span></div>
+          <div class="tline step" id="h1g"><span class="tcmd">a3f6…  /bin/sh -c #(node base)    49.2 MB</span></div>
+          <div class="tline" id="h1h"><span class="prompt">$</span><span class="tcmd">docker image inspect <span class="flag">--format</span> <span class="arg">'{{.RootFS.Layers}}'</span> myapp:1.0</span></div>
+          <div class="tline out" id="h1i"><span class="tcmd">[sha256:a3f6… sha256:2e1f… sha256:4a8d… sha256:7c2b… sha256:9f3a…]</span></div>
+          <div class="tline" id="h1j"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+      <!-- tips grid -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s" id="tipgrid">
+        <div style="font-size:7px;color:#333;margin-bottom:6px;letter-spacing:.5px">LAYER OPTIMISATION CHEATSHEET</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+
+          <div style="display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .4s" id="tip1">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:7px;color:#4eff9a;margin-bottom:2px">Chain RUN commands with &amp;&amp;</div>
+              <div style="font-size:6px;color:#444;line-height:1.7">RUN apt update &amp;&amp; apt install -y curl &amp;&amp; rm -rf /var/lib/apt/lists/*<br>One layer. Cleanup included. Smaller image.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .4s" id="tip2">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:7px;color:#4eff9a;margin-bottom:2px">Copy deps before source</div>
+              <div style="font-size:6px;color:#444;line-height:1.7">COPY package*.json ./ → RUN npm install → COPY . .<br>npm install layer cached unless deps actually change.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .4s" id="tip3">
+            <span style="color:#e85050;font-size:8px;flex-shrink:0">✗</span>
+            <div>
+              <div style="font-size:7px;color:#e85050;margin-bottom:2px">Don't put secrets in layers</div>
+              <div style="font-size:6px;color:#444;line-height:1.7">Even if you RUN rm secret.txt later, the secret lives in the earlier layer forever. Use build args or runtime secrets.</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .4s" id="tip4">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:7px;color:#4eff9a;margin-bottom:2px">Use .dockerignore</div>
+              <div style="font-size:6px;color:#444;line-height:1.7">Exclude node_modules, .git, *.log — keeps build context small and COPY . . layer from bloating.</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#9060d0">
+    <div class="il"><span style="color:#9060d0">docker history</span> = X-ray for your image</div>
+    <div class="il">Shows every layer, its size, and the instruction that created it. Use it to find which layer is bloating your image — then optimize the Dockerfile order.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:7px">history</div><div class="sl2">SEE LAYERS</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:7px">&amp;&amp; chain</div><div class="sl2">THIN LAYERS</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:7px">no secrets</div><div class="sl2">IN LAYERS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn pu" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn gn" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+function vis(id){let e=document.getElementById(id);if(e){e.classList.add('vis');e.style.opacity='1';}}
+function hide(id){let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}}
+function so(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v;}
+
+function growBar(fillId, labelId, pct, delay, dur){
+  dur = dur||800;
+  t(()=>{
+    let f=document.getElementById(fillId);
+    if(!f)return;
+    f.style.transition='none'; f.style.width='0';
+    setTimeout(()=>{f.style.transition=`width ${dur/1000}s ease-out`; f.style.width=pct+'%';},30);
+    t(()=>{let l=document.getElementById(labelId);if(l)l.classList.add('vis');},dur);
+  },delay);
+}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+// ── S1: layers build bottom → top ──
+function playS1(){
+  clearT();
+  ['bl1','bl2','bl3','bl4','bl5','co1','co2'].forEach(hide);
+  // bottom layer first
+  t(()=>vis('bl1'),300);
+  t(()=>vis('bl2'),900);
+  t(()=>vis('bl3'),1500);
+  t(()=>vis('bl4'),2100);
+  t(()=>vis('bl5'),2700);
+  t(()=>vis('co1'),3400);
+  t(()=>vis('co2'),4100);
+}
+
+// ── S2: shared layers ──
+function playS2(){
+  clearT();
+  ['sh_n3','sh_n2','sh_nd3','sh_nd2','conn1','sh_base','diskcomp','co3'].forEach(hide);
+  ['dcf1','dcf2','dcf3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  ['dcft1','dcft2','dcft3'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+
+  // top layers of both images appear
+  t(()=>vis('sh_n2'),300);
+  t(()=>vis('sh_nd2'),400);
+  t(()=>vis('sh_n3'),700);
+  t(()=>vis('sh_nd3'),800);
+  // connector + shared base
+  t(()=>vis('conn1'),1400);
+  t(()=>vis('sh_base'),1800);
+  // disk comparison bars
+  t(()=>{
+    so('diskcomp','1');
+    vis('dc1'); growBar('dcf1','dcft1',14,100,700);
+    t(()=>{vis('dc2'); growBar('dcf2','dcft2',92,0,700);},500);
+    t(()=>{vis('dc3'); growBar('dcf3','dcft3',100,0,700);},1000);
+  },2400);
+  t(()=>vis('co3'),3800);
+}
+
+// ── S3: cache hits/misses ──
+function playS3(){
+  clearT();
+  ['scenA','scenB','co4'].forEach(id=>so(id,'0'));
+  let allBars=['caf1','caf2','caf3','caf4','caf5','cbf1','cbf2','cbf3','cbf4','cbf5'];
+  allBars.forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  let allLabels=['caft1','caft2','caft3','caft4','caft5','cbft1','cbft2','cbft3','cbft4','cbft5'];
+  allLabels.forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+  let cacheRows=['ca1','ca2','ca3','ca4','ca5','cb1','cb2','cb3','cb4','cb5'];
+  cacheRows.forEach(hide);
+
+  // Scenario A
+  t(()=>so('scenA','1'),200);
+  let Abars=[['ca1','caf1','caft1',100],['ca2','caf2','caft2',100],['ca3','caf3','caft3',100],['ca4','caf4','caft4',100],['ca5','caf5','caft5',40]];
+  Abars.forEach(([row,bar,lbl,pct],i)=>{
+    t(()=>{vis(row); growBar(bar,lbl,pct,0,600);},400+i*400);
+  });
+
+  // Scenario B
+  t(()=>so('scenB','1'),3200);
+  let Bbars=[['cb1','cbf1','cbft1',100],['cb2','cbf2','cbft2',100],['cb3','cbf3','cbft3',95],['cb4','cbf4','cbft4',95],['cb5','cbf5','cbft5',95]];
+  Bbars.forEach(([row,bar,lbl,pct],i)=>{
+    t(()=>{vis(row); growBar(bar,lbl,pct,0,600);},3400+i*400);
+  });
+
+  t(()=>vis('co4'),5800);
+}
+
+// ── S4: docker history + tips ──
+function playS4(){
+  clearT();
+  let tlines=['h1a','h1b','h1c','h1d','h1e','h1f','h1g','h1h','h1i','h1j'];
+  tlines.forEach(hide);
+  so('tipgrid','0');
+  ['tip1','tip2','tip3','tip4'].forEach(id=>so(id,'0'));
+
+  let delays=[200,700,1100,1500,1900,2300,2700,3100,3600,4000];
+  tlines.forEach((id,i)=>t(()=>vis(id),delays[i]));
+
+  t(()=>so('tipgrid','1'),4500);
+  t(()=>so('tip1','1'),4700);
+  t(()=>so('tip2','1'),5300);
+  t(()=>so('tip3','1'),5900);
+  t(()=>so('tip4','1'),6500);
+}
+
+playS1();
+</script>
+</body>
+</html>
