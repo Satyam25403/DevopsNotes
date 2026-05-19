@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Negative Caching</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a1a}
+.hdr-title{font-size:13px;color:#06b6d4;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a1a;transition:background .2s}
+.dot.active{background:#06b6d4}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #06b6d4;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.am{border-color:#e8a020}
+.il{color:#888}.ih{color:#06b6d4}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060c0d;border:1px solid #0d1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#06b6d4;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #06b6d4;background:transparent;color:#06b6d4;cursor:pointer;transition:all .15s}
+.btn:hover{background:#06b6d420}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#040a0b;border:2px solid #0d1a1a;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#06b6d4}
+.cmd-key{color:#4eff9a}
+.cmd-arg{color:#e8a020}
+.cmd-str{color:#fff}
+.cmd-comment{color:#0d2a2a;font-size:7px}
+.cmd-result-gn{color:#4eff9a;font-size:7px}
+.cmd-result-rd{color:#e85050;font-size:7px}
+.cmd-result-cy{color:#06b6d4;font-size:7px}
+
+/* ── REQUEST TIMELINE ── */
+.req-row{display:flex;align-items:center;gap:0;opacity:0;transition:opacity 0.4s;margin-bottom:4px}
+.req-row.show{opacity:1}
+.req-num{width:26px;font-size:7px;color:#555;flex-shrink:0;text-align:center}
+.req-label{font-size:7px;padding:4px 6px;border:1px solid;border-radius:2px;flex-shrink:0;min-width:60px;text-align:center}
+.req-arrow{flex:1;height:1px;position:relative;margin:0 3px}
+.req-arrow-line{height:1px;width:0;transition:width 0.35s ease-out;border-radius:1px;position:absolute;top:0;left:0}
+.req-node{font-size:7px;padding:4px 5px;border:1px solid;border-radius:2px;flex-shrink:0;min-width:44px;text-align:center;transition:all 0.3s}
+.req-arrow2{width:14px;flex-shrink:0;text-align:center;font-size:8px}
+.req-result{font-size:6px;padding:3px 5px;border-radius:2px;border:1px solid;flex-shrink:0;min-width:48px;text-align:center}
+
+/* ── CACHE SLOT ── */
+.cache-slot{background:#040a0b;border:2px solid #0d1a1a;padding:8px 10px;border-radius:2px;transition:all 0.4s;min-height:52px}
+.cache-slot.filled{border-color:#06b6d4;background:#040f12}
+.cache-slot.expired{border-color:#e85050;background:#0f0408;animation:expirePulse 0.5s ease}
+@keyframes expirePulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.slot-key{font-size:7px;color:#555}
+.slot-val{font-size:9px;margin-top:4px}
+.slot-ttl{font-size:6px;color:#555;margin-top:3px}
+.ttl-bar-wrap{background:#0a0a0f;height:6px;border-radius:3px;margin-top:4px;overflow:hidden}
+.ttl-bar{height:100%;border-radius:3px;transition:width linear}
+
+/* ── DB METER ── */
+.db-meter{background:#040a0b;border:2px solid;border-radius:2px;padding:8px 10px;text-align:center}
+.db-count{font-size:26px;transition:all 0.3s}
+@keyframes dbHit{0%{transform:scale(1.2);color:#e85050}100%{transform:scale(1)}}
+.db-hit-anim{animation:dbHit 0.4s ease}
+
+/* ── FLOW STAGES ── */
+.flow-stage{display:flex;align-items:center;gap:0;margin-bottom:5px;opacity:0;transition:opacity 0.5s}
+.flow-stage.show{opacity:1}
+.f-box{padding:5px 6px;border-radius:2px;border:1px solid;font-size:6px;text-align:center;line-height:1.6;flex-shrink:0}
+.f-arr{font-size:8px;flex-shrink:0;padding:0 3px;color:#555}
+.f-tag{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid;margin-left:4px;flex-shrink:0}
+
+/* ── TTL WARNING ── */
+.ttl-warn{opacity:0;transition:opacity 0.5s;background:#14080a;border:2px solid #e85050;padding:10px;border-radius:2px}
+.ttl-warn.show{opacity:1}
+
+/* comparison */
+.cmp-col{flex:1;padding:8px;border-radius:2px;border:2px solid;display:flex;flex-direction:column;gap:5px}
+.cmp-req{font-size:7px;padding:5px 6px;border-radius:2px;border:1px solid;text-align:center;opacity:0;transition:opacity 0.3s}
+.cmp-req.show{opacity:1}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — THE PROBLEM: REPEATED DB MISSES
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060c0d">
+  <div class="hdr" style="background:#060c0d">
+    <div class="hdr-title">NEGATIVE CACHING</div>
+    <div class="hdr-sub">CACHE THE NULL. PROTECT THE DB.</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DB HAMMERED</span>
+  </div>
+
+  <div class="anim" style="background:#060c0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ 5 requests for user:9999 (doesn't exist)</div>
+
+      <!-- Request timeline rows -->
+      <div id="s1-timeline" style="background:#040a0b;border:1px solid #0d1a1a;padding:8px;border-radius:2px">
+        <!-- header -->
+        <div style="display:flex;gap:0;margin-bottom:6px;font-size:6px;color:#1a3a3a">
+          <div style="width:26px"></div>
+          <div style="min-width:60px;text-align:center">REQUEST</div>
+          <div style="flex:1;text-align:center">CACHE</div>
+          <div style="width:14px"></div>
+          <div style="min-width:44px;text-align:center">DB</div>
+          <div style="width:14px"></div>
+          <div style="min-width:48px;text-align:center">RESULT</div>
+        </div>
+        <div id="s1-rows"></div>
+      </div>
+
+      <!-- DB hit counter -->
+      <div style="display:flex;gap:8px">
+        <div class="db-meter" style="flex:1;border-color:#e85050">
+          <div style="font-size:6px;color:#555;margin-bottom:4px">DB QUERIES</div>
+          <div class="db-count" id="s1-db-count" style="color:#e85050">0</div>
+        </div>
+        <div class="db-meter" style="flex:1;border-color:#0d1a1a">
+          <div style="font-size:6px;color:#555;margin-bottom:4px">CACHE HITS</div>
+          <div class="db-count" id="s1-cache-hits" style="color:#1a3a3a">0</div>
+        </div>
+      </div>
+
+      <!-- Problem label -->
+      <div id="s1-problem" style="opacity:0;transition:opacity 0.5s;background:#0f0408;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">THE PROBLEM</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          every request for a missing key hits the DB.<br>
+          null result is never cached → DB queried again.<br>
+          attacker sends 1000 req/s for fake IDs → DB dies.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">cache miss → DB query → null → cache nothing</div>
+    <div class="ih rd">next request: cache miss again → DB again.<br>5 requests = 5 DB queries. scales terribly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s1-stat-db">0</div><div class="sl">DB QUERIES<br>FOR 5 REQS</div></div>
+    <div class="sc"><div class="sv" id="s1-stat-cache">0</div><div class="sl">CACHE<br>HITS</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">DB HIT<br>RATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — THE FIX: CACHE THE NULL
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060c0d">
+  <div class="hdr" style="background:#060c0d">
+    <div class="hdr-title">NEGATIVE CACHING</div>
+    <div class="hdr-sub">CACHE NULL · SHORT TTL · DB SAVED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DB PROTECTED</span>
+  </div>
+
+  <div class="anim" style="background:#060c0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-str">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- Cache slot -->
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ REDIS cache slot — storing NULL sentinel</div>
+      <div class="cache-slot" id="s2-cache-slot">
+        <div class="slot-key" id="s2-slot-key">key: user:9999 · EMPTY</div>
+        <div class="slot-val" id="s2-slot-val" style="color:#1a3a3a">—</div>
+        <div class="slot-ttl" id="s2-slot-ttl"></div>
+        <div class="ttl-bar-wrap" id="s2-ttl-bar-wrap" style="display:none">
+          <div class="ttl-bar" id="s2-ttl-bar" style="width:100%;background:#06b6d4"></div>
+        </div>
+      </div>
+
+      <!-- Request timeline with fix -->
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ same 5 requests — very different result</div>
+      <div id="s2-timeline" style="background:#040a0b;border:1px solid #0d1a1a;padding:8px;border-radius:2px">
+        <div style="display:flex;gap:0;margin-bottom:6px;font-size:6px;color:#1a3a3a">
+          <div style="width:26px"></div>
+          <div style="min-width:60px;text-align:center">REQUEST</div>
+          <div style="flex:1;text-align:center">CACHE</div>
+          <div style="width:14px"></div>
+          <div style="min-width:44px;text-align:center">DB</div>
+          <div style="width:14px"></div>
+          <div style="min-width:48px;text-align:center">RESULT</div>
+        </div>
+        <div id="s2-rows"></div>
+      </div>
+
+      <!-- DB meters -->
+      <div style="display:flex;gap:8px">
+        <div class="db-meter" style="flex:1;border-color:#e85050">
+          <div style="font-size:6px;color:#555;margin-bottom:4px">DB QUERIES</div>
+          <div class="db-count" id="s2-db-count" style="color:#e85050">0</div>
+        </div>
+        <div class="db-meter" style="flex:1;border-color:#4eff9a">
+          <div style="font-size:6px;color:#555;margin-bottom:4px">CACHE HITS</div>
+          <div class="db-count" id="s2-cache-hits" style="color:#4eff9a">0</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">SET user:9999 "NULL" EX 60</div>
+    <div class="ih gn">DB returns null → cache it with 60s TTL.<br>requests 2–N: cache hit → instant null. DB silent.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s2-stat-db">0</div><div class="sl">DB QUERIES<br>FOR 5 REQS</div></div>
+    <div class="sc"><div class="sv gn" id="s2-stat-cache">0</div><div class="sl">CACHE<br>HITS</div></div>
+    <div class="sc"><div class="sv gn" id="s2-stat-saved">80%</div><div class="sl">DB CALLS<br>SAVED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — TTL, TRADEOFFS & LAYERS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060c0d">
+  <div class="hdr" style="background:#060c0d">
+    <div class="hdr-title">NEGATIVE CACHING</div>
+    <div class="hdr-sub">TTL · TRADEOFFS · LAYERED DEFENCE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#06b6d4">DESIGN</span>
+    <span class="sbadge" style="color:#06b6d4;border-color:#06b6d4">KNOW THE LIMITS</span>
+  </div>
+
+  <div class="anim" style="background:#060c0d">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- TTL expiry demo -->
+      <div style="font-size:7px;color:#0d2a2a;margin-bottom:-2px">▸ SHORT TTL is critical — null ≠ never exists</div>
+
+      <div id="s3-ttl-demo" style="opacity:0;transition:opacity 0.5s;background:#040a0b;border:1px solid #0d1a1a;padding:9px;border-radius:2px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <div style="font-size:7px;color:#06b6d4">user:9999 → "NULL"</div>
+          <div style="font-size:7px;color:#e8a020" id="s3-ttl-label">TTL: 60s</div>
+        </div>
+        <div class="ttl-bar-wrap" style="height:10px;border-radius:4px">
+          <div class="ttl-bar" id="s3-ttl-bar" style="background:linear-gradient(90deg,#4eff9a,#e8a020,#e85050);width:100%;transition:width 4s linear"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-top:3px">
+          <span>cached now</span><span>TTL expires → evicted</span>
+        </div>
+        <div id="s3-expired-msg" style="opacity:0;transition:opacity 0.5s;font-size:7px;color:#4eff9a;margin-top:6px;text-align:center">
+          ✓ TTL expired · next request checks DB again · picks up newly created user
+        </div>
+      </div>
+
+      <!-- TTL choice -->
+      <div id="s3-ttl-choice" style="opacity:0;transition:opacity 0.5s;display:flex;gap:6px">
+        <div style="flex:1;background:#140a04;border:2px solid #e85050;padding:8px;border-radius:2px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:5px">TOO LONG</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">TTL = 24h<br>user signs up →<br>still gets null for<br>23h 59m 😱</div>
+        </div>
+        <div style="flex:1;background:#04100a;border:2px solid #4eff9a;padding:8px;border-radius:2px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">JUST RIGHT</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">TTL = 30–60s<br>protects burst traffic<br>stale window is<br>acceptable ✓</div>
+        </div>
+        <div style="flex:1;background:#0c0900;border:2px solid #e8a020;padding:8px;border-radius:2px">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">TOO SHORT</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">TTL = 1s<br>barely any<br>protection against<br>bursts at all</div>
+        </div>
+      </div>
+
+      <!-- Layered defence -->
+      <div id="s3-layers" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#0d2a2a;margin-bottom:5px">▸ LAYERED DEFENCE — bloom + negative cache</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 9px;background:#0c0900;border:1px solid #e8a020;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🔶</div>
+            <div>
+              <div style="font-size:7px;color:#e8a020;margin-bottom:2px">LAYER 1 — BLOOM FILTER</div>
+              <div style="font-size:6px;color:#555;line-height:1.6">known-bad IDs rejected in O(k) · zero DB cost · no false negatives</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#1a3a3a;text-align:center">↓ slips through bloom?</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 9px;background:#060c0d;border:1px solid #06b6d4;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🔷</div>
+            <div>
+              <div style="font-size:7px;color:#06b6d4;margin-bottom:2px">LAYER 2 — NEGATIVE CACHE</div>
+              <div style="font-size:6px;color:#555;line-height:1.6">null result cached 60s · repeated misses absorbed · low overhead</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#1a3a3a;text-align:center">↓ TTL expired?</div>
+          <div style="display:flex;align-items:center;gap:6px;padding:7px 9px;background:#040a0b;border:1px solid #1a3a3a;border-radius:2px">
+            <div style="font-size:14px;flex-shrink:0">🗄️</div>
+            <div>
+              <div style="font-size:7px;color:#888;margin-bottom:2px">LAYER 3 — DATABASE</div>
+              <div style="font-size:6px;color:#555;line-height:1.6">only reached occasionally · protected · can actually breathe</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">null cached = "not found right now, not forever"</div>
+    <div class="ih">short TTL (30–60s) stops burst traffic from<br>hammering DB. stale window is the tradeoff.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">60s</div><div class="sl">IDEAL<br>NULL TTL</div></div>
+    <div class="sc"><div class="sv gn">80%</div><div class="sl">DB CALLS<br>SAVED</div></div>
+    <div class="sc"><div class="sv">2</div><div class="sl">DEFENCE<br>LAYERS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+// ── helpers ───────────────────────────────────
+function makeRow(num, reqColor, reqLabel, cacheText, cacheColor, hasDB, dbColor, resultText, resultColor){
+  return `<div class="req-row" id="rr-${num}">
+    <div class="req-num" style="color:#555">${num}</div>
+    <div class="req-label" style="border-color:${reqColor};color:${reqColor}">${reqLabel}</div>
+    <div class="req-arrow">
+      <div class="req-arrow-line" id="ra1-${num}" style="background:${cacheColor}"></div>
+    </div>
+    <div class="req-node" id="rn-${num}" style="border-color:${cacheColor};color:${cacheColor}">${cacheText}</div>
+    <div class="req-arrow2" style="color:${hasDB?dbColor:'#1a3a3a'}">${hasDB?'→':'⊘'}</div>
+    <div class="req-node" style="border-color:${hasDB?dbColor:'#1a1a1a'};color:${hasDB?dbColor:'#1a1a1a'};background:${hasDB?dbColor+'10':'transparent'}">${hasDB?'DB':'·'}</div>
+    <div class="req-arrow2" style="color:${resultColor}">→</div>
+    <div class="req-result" style="border-color:${resultColor};color:${resultColor};background:${resultColor}15">${resultText}</div>
+  </div>`;
+}
+
+function showRow(id, delay){
+  T(()=>{
+    const el=document.getElementById('rr-'+id);
+    if(!el)return;
+    el.classList.add('show');
+    setTimeout(()=>{
+      const arrow=document.getElementById('ra1-'+id);
+      if(arrow)arrow.style.width='100%';
+    },150);
+  },delay);
+}
+
+function hitDB(counterId, delay){
+  T(()=>{
+    const el=document.getElementById(counterId);
+    if(!el)return;
+    const v=parseInt(el.textContent||'0')+1;
+    el.textContent=v;
+    el.classList.remove('db-hit-anim');
+    void el.offsetWidth;
+    el.classList.add('db-hit-anim');
+  },delay);
+}
+
+function hitCache(counterId, delay){
+  T(()=>{
+    const el=document.getElementById(counterId);
+    if(!el)return;
+    const v=parseInt(el.textContent||'0')+1;
+    el.textContent=v;
+  },delay);
+}
+
+// ── SCENE 1: PROBLEM ─────────────────────────
+function playS1(){
+  clearT();
+  document.getElementById('s1-db-count').textContent='0';
+  document.getElementById('s1-cache-hits').textContent='0';
+  document.getElementById('s1-stat-db').textContent='0';
+  document.getElementById('s1-stat-cache').textContent='0';
+  document.getElementById('s1-problem').style.opacity='0';
+
+  const rows=document.getElementById('s1-rows');
+  rows.innerHTML=[
+    makeRow(1,'#06b6d4','REQ #1','MISS','#e85050',true,'#e85050','NULL','#e85050'),
+    makeRow(2,'#06b6d4','REQ #2','MISS','#e85050',true,'#e85050','NULL','#e85050'),
+    makeRow(3,'#06b6d4','REQ #3','MISS','#e85050',true,'#e85050','NULL','#e85050'),
+    makeRow(4,'#06b6d4','REQ #4','MISS','#e85050',true,'#e85050','NULL','#e85050'),
+    makeRow(5,'#06b6d4','REQ #5','MISS','#e85050',true,'#e85050','NULL','#e85050'),
+  ].join('');
+
+  for(let i=1;i<=5;i++){
+    showRow(i, i*900);
+    hitDB('s1-db-count', i*900+600);
+    T(()=>{ document.getElementById('s1-stat-db').textContent=i; }, i*900+700);
+  }
+  T(()=>{ document.getElementById('s1-problem').style.opacity='1'; },5800);
+}
+
+// ── SCENE 2: FIX ─────────────────────────────
+function playS2(){
+  clearT();
+  document.getElementById('s2-db-count').textContent='0';
+  document.getElementById('s2-cache-hits').textContent='0';
+  document.getElementById('s2-stat-db').textContent='0';
+  document.getElementById('s2-stat-cache').textContent='0';
+  document.getElementById('s2-stat-saved').textContent='—';
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+
+  // reset cache slot
+  const slot=document.getElementById('s2-cache-slot');
+  slot.className='cache-slot';
+  document.getElementById('s2-slot-key').textContent='key: user:9999 · EMPTY';
+  document.getElementById('s2-slot-val').style.color='#1a3a3a';
+  document.getElementById('s2-slot-val').textContent='—';
+  document.getElementById('s2-slot-ttl').textContent='';
+  document.getElementById('s2-ttl-bar-wrap').style.display='none';
+  document.getElementById('s2-ttl-bar').style.width='100%';
+  document.getElementById('s2-ttl-bar').style.transition='none';
+
+  const rows=document.getElementById('s2-rows');
+  rows.innerHTML=[
+    makeRow('a','#06b6d4','REQ #1','MISS','#e85050',true,'#e85050','NULL→SET','#06b6d4'),
+    makeRow('b','#06b6d4','REQ #2','HIT✓','#4eff9a',false,'#1a1a1a','NULL','#4eff9a'),
+    makeRow('c','#06b6d4','REQ #3','HIT✓','#4eff9a',false,'#1a1a1a','NULL','#4eff9a'),
+    makeRow('d','#06b6d4','REQ #4','HIT✓','#4eff9a',false,'#1a1a1a','NULL','#4eff9a'),
+    makeRow('e','#06b6d4','REQ #5','HIT✓','#4eff9a',false,'#1a1a1a','NULL','#4eff9a'),
+  ].join('');
+
+  // REQ 1: miss → DB → cache null
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">GET</span> <span class="cmd-str">user:9999</span>';
+    document.getElementById('s2-cmd-comment').textContent='# check cache first';
+  },300);
+
+  showRow('a',500);
+  hitDB('s2-db-count',1100);
+  T(()=>{ document.getElementById('s2-stat-db').textContent='1'; },1200);
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">SET</span> <span class="cmd-str">user:9999</span> <span class="cmd-arg">"NULL"</span> <span class="cmd-key">EX</span> <span class="cmd-arg">60</span>';
+    document.getElementById('s2-cmd-comment').textContent='# DB returned null → cache it with 60s TTL';
+    // fill cache slot
+    slot.className='cache-slot filled';
+    document.getElementById('s2-slot-key').textContent='key: user:9999';
+    document.getElementById('s2-slot-val').style.color='#06b6d4';
+    document.getElementById('s2-slot-val').textContent='"NULL" sentinel';
+    document.getElementById('s2-slot-ttl').textContent='TTL: 60s';
+    document.getElementById('s2-ttl-bar-wrap').style.display='block';
+    setTimeout(()=>{
+      document.getElementById('s2-ttl-bar').style.transition='width 8s linear';
+      document.getElementById('s2-ttl-bar').style.width='0%';
+    },100);
+  },1500);
+
+  // REQs 2–5: cache hits
+  ['b','c','d','e'].forEach((id,i)=>{
+    const delay=2400+i*800;
+    showRow(id, delay);
+    hitCache('s2-cache-hits', delay+500);
+    T(()=>{
+      document.getElementById('s2-stat-cache').textContent=(i+1).toString();
+      document.getElementById('s2-stat-saved').textContent=Math.round((i+1)/5*100)+'%';
+      document.getElementById('s2-cmd-text').innerHTML=
+        '<span class="cmd-key">GET</span> <span class="cmd-str">user:9999</span>';
+      document.getElementById('s2-cmd-comment').textContent=`# cache HIT → "NULL" returned instantly · DB spared`;
+    }, delay+600);
+  });
+}
+
+// ── SCENE 3: DESIGN ───────────────────────────
+function playS3(){
+  clearT();
+  document.getElementById('s3-ttl-demo').style.opacity='0';
+  document.getElementById('s3-ttl-choice').style.opacity='0';
+  document.getElementById('s3-layers').style.opacity='0';
+  document.getElementById('s3-expired-msg').style.opacity='0';
+
+  const bar=document.getElementById('s3-ttl-bar');
+  bar.style.transition='none';
+  bar.style.width='100%';
+  document.getElementById('s3-ttl-label').textContent='TTL: 60s';
+
+  T(()=>{ document.getElementById('s3-ttl-demo').style.opacity='1'; },400);
+
+  T(()=>{
+    bar.style.transition='width 4s linear';
+    bar.style.width='0%';
+    // count down label
+    let t=60;
+    const iv=setInterval(()=>{
+      t-=4;
+      if(t<=0){ clearInterval(iv); document.getElementById('s3-ttl-label').textContent='EXPIRED'; return; }
+      document.getElementById('s3-ttl-label').textContent='TTL: '+t+'s';
+    },267);
+  },900);
+
+  T(()=>{
+    document.getElementById('s3-expired-msg').style.opacity='1';
+  },5100);
+
+  T(()=>{ document.getElementById('s3-ttl-choice').style.opacity='1'; },5800);
+  T(()=>{ document.getElementById('s3-layers').style.opacity='1'; },6800);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

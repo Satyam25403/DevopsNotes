@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Pub/Sub Cache Invalidation</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  color:#fff;
+  overflow-x:hidden;
+}
+.scene{
+  width:390px;
+  min-height:100vh;
+  display:none;
+  flex-direction:column;
+}
+.scene.active{display:flex}
+.hdr{
+  height:90px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{
+  height:28px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 14px;
+}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.anim::-webkit-scrollbar{display:none}
+.info{
+  height:110px;
+  flex-shrink:0;
+  margin:0 12px;
+  border:2px solid #4ec9e1;
+  padding:10px 14px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:7px;
+  font-size:9px;
+  line-height:1.9;
+}
+.info.am{border-color:#e8a020}
+.info.rd{border-color:#e85050}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.ih.rd{color:#e85050}
+.srow{
+  height:70px;
+  flex-shrink:0;
+  display:flex;
+  gap:8px;
+  padding:8px 12px;
+}
+.sc{
+  flex:1;
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{
+  height:68px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:0 12px;
+  background:inherit;
+}
+.btn{
+  font-family:'Press Start 2P',monospace;
+  font-size:9px;
+  padding:10px 14px;
+  border:2px solid #4ec9e1;
+  background:transparent;
+  color:#4ec9e1;
+  cursor:pointer;
+  transition:all .15s;
+  white-space:nowrap;
+}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* server grid */
+.srv-grid{
+  display:grid;
+  grid-template-columns:repeat(5,1fr);
+  gap:6px;
+}
+.srv-box{
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  border-radius:3px;
+  padding:5px 4px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  transition:border-color .2s,background .2s;
+}
+.srv-box.stale{border-color:#e8a020;background:#e8a02010}
+.srv-box.fresh{border-color:#e85050;background:#e8505015}
+.srv-box.synced{border-color:#4eff9a;background:#4eff9a10}
+.srv-lbl{font-size:6px;color:#666;text-align:center;line-height:1.4}
+.srv-icon{font-size:10px;line-height:1}
+.cache-pill{
+  font-size:5px;
+  padding:1px 4px;
+  border-radius:1px;
+  border:1px solid currentColor;
+  line-height:1.5;
+  white-space:nowrap;
+  max-width:52px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.cache-pill.stale{color:#e8a020;border-color:#e8a020}
+.cache-pill.empty{color:#555;border-color:#333}
+.cache-pill.hot{color:#4eff9a;border-color:#4eff9a}
+
+/* redis channel box */
+.redis-ch{
+  border:2px solid #4ec9e1;
+  border-radius:3px;
+  padding:8px 10px;
+  background:#0d1a2e;
+}
+.redis-ch-title{font-size:7px;color:#4ec9e1;margin-bottom:5px;letter-spacing:1px}
+.redis-msg{
+  font-size:7px;
+  padding:4px 8px;
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  border-radius:2px;
+  color:#aaa;
+  opacity:0;
+  transition:opacity .3s;
+  line-height:1.7;
+}
+.redis-msg .mk{color:#4ec9e1}
+.redis-msg .mv{color:#4eff9a}
+
+/* wave pulse rings - drawn with CSS on a relative div */
+.pulse-wrap{
+  position:relative;
+  height:60px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.pulse-center{
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  background:#4ec9e1;
+  position:relative;
+  z-index:2;
+  flex-shrink:0;
+}
+.pulse-ring{
+  position:absolute;
+  border-radius:50%;
+  border:2px solid #4ec9e1;
+  opacity:0;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%) scale(0);
+}
+
+/* db box */
+.db-box{
+  background:#130d1e;
+  border:2px solid #888;
+  border-radius:3px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transition:border-color .3s;
+}
+.db-box.writing{border-color:#e8a020}
+
+/* cmd lines */
+.cmd-line{
+  font-size:8px;
+  padding:6px 8px;
+  background:#0d1a2e;
+  border-left:3px solid #4ec9e1;
+  margin-bottom:5px;
+  opacity:0;
+  transition:opacity .3s;
+  line-height:1.8;
+  color:#aaa;
+  border-radius:0 2px 2px 0;
+}
+.cmd-k{color:#4ec9e1}
+.cmd-v{color:#4eff9a}
+.cmd-r{color:#e8a020}
+
+/* flow arrow */
+.flow-arrow{
+  font-size:9px;
+  color:#4ec9e1;
+  text-align:center;
+  opacity:0;
+  transition:opacity .3s;
+}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: The Problem ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">PUB/SUB CACHE INVALIDATION</div>
+    <div class="hdr-sub">10 SERVERS, 10 CACHES — ONE STALE KEY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">STALE DATA</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Each app server holds its own in-process cache. No shared memory.</div>
+
+      <!-- 10 server boxes -->
+      <div class="srv-grid" id="s1_grid">
+        <!-- filled by JS -->
+      </div>
+
+      <!-- DB write event -->
+      <div style="font-size:8px;color:#ccc;line-height:1.8" id="s1_write_label" style="opacity:0">User 123 updated in DB:</div>
+
+      <div class="db-box" id="s1_db">
+        <div style="font-size:14px">🗄</div>
+        <div>
+          <div style="font-size:7px;color:#888;margin-bottom:2px">POSTGRES</div>
+          <div style="font-size:7px;color:#ccc" id="s1_db_txt">users.name = "Alice" → "Bob"</div>
+        </div>
+        <div id="s1_write_flash" style="margin-left:auto;font-size:7px;color:#e8a020;opacity:0;transition:opacity .3s">WRITE!</div>
+      </div>
+
+      <!-- Problem callout -->
+      <div id="s1_problem" style="background:#e8505015;border:2px solid #e85050;padding:10px 12px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">SERVER 1 updated its cache.</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          Servers 2–10 still serve<br>
+          <span style="color:#e8a020">user:123 → "Alice"</span> ← stale!<br>
+          No mechanism to notify them.
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:flex;gap:12px;font-size:7px;flex-wrap:wrap">
+        <span style="color:#e8a020">▪ stale cache</span>
+        <span style="color:#e85050">▪ updated (server 1 only)</span>
+        <span style="color:#555">▪ no cache</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">In-process caches live in each server's RAM — no shared state.</div>
+    <div class="ih am">A DB write on server 1 is invisible to servers 2–10.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">10</div><div class="sl">SERVERS<br>STALE</div></div>
+    <div class="sc"><div class="sv am">9</div><div class="sl">OUT OF<br>SYNC</div></div>
+    <div class="sc"><div class="sv rd">∞</div><div class="sl">STALE<br>WINDOW</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: The Broadcast Wave ══════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">PUB/SUB CACHE INVALIDATION</div>
+    <div class="hdr-sub">REDIS BROADCASTS THE INVALIDATION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PUB/SUB</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">On DB write → publish to Redis channel → all subscribers delete the key.</div>
+
+      <!-- Step 1: DB write + publish -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="db-box" style="flex:1;border-color:#e8a020" id="s2_db">
+          <div style="font-size:11px">🗄</div>
+          <div>
+            <div style="font-size:7px;color:#888">DB WRITE</div>
+            <div style="font-size:6px;color:#e8a020">user:123 updated</div>
+          </div>
+        </div>
+        <div class="flow-arrow" id="fa1">→</div>
+        <div style="background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:6px 8px;flex:1;opacity:0;transition:opacity .3s" id="s2_pub">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">REDIS PUBLISH</div>
+          <div style="font-size:6px;color:#4eff9a">invalidate:user:123</div>
+        </div>
+      </div>
+
+      <!-- Pulse / broadcast visual -->
+      <div class="pulse-wrap" id="s2_pulse">
+        <div style="position:absolute;font-size:6px;color:#4ec9e1;top:4px;width:100%;text-align:center;font-family:'Press Start 2P',monospace">REDIS PUB/SUB BROADCAST</div>
+        <div class="pulse-center" id="pulse_dot"></div>
+        <div class="pulse-ring" id="ring1" style="width:40px;height:40px"></div>
+        <div class="pulse-ring" id="ring2" style="width:80px;height:80px"></div>
+        <div class="pulse-ring" id="ring3" style="width:130px;height:130px"></div>
+        <div class="pulse-ring" id="ring4" style="width:180px;height:180px"></div>
+      </div>
+
+      <!-- Channel message -->
+      <div class="redis-ch" id="s2_ch">
+        <div class="redis-ch-title">CHANNEL: invalidate:user:123</div>
+        <div class="redis-msg" id="s2_msg1">
+          <span class="mk">PUBLISH</span> invalidate:user:123 <span class="mv">"user:123"</span>
+        </div>
+        <div style="font-size:7px;color:#555;margin-top:5px" id="s2_sub_count" style="opacity:0">→ <span id="s2_sub_num" style="color:#4eff9a">0</span> subscribers received</div>
+      </div>
+
+      <!-- 10 server boxes post-invalidation -->
+      <div style="font-size:7px;color:#ccc">All subscribers delete the key:</div>
+      <div class="srv-grid" id="s2_grid"></div>
+
+      <div style="font-size:7px;color:#888;line-height:2">Each server: <span style="color:#e85050">DELETE</span> user:123 from local cache.<br>Next request → cache miss → re-fetch from DB. ✓</div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Server 1 publishes to Redis. All 10 servers subscribe and delete.</div>
+    <div class="ih">No stale reads. Propagation delay: ~1–5ms.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">10/10</div><div class="sl">SERVERS<br>NOTIFIED</div></div>
+    <div class="sc"><div class="sv gn">~3ms</div><div class="sl">PROP<br>DELAY</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">PUBLISH<br>CALL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: Trade-offs & Pattern ══════════════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">PUB/SUB CACHE INVALIDATION</div>
+    <div class="hdr-sub">TRADE-OFFS & PRODUCTION PATTERN</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">TRADE-OFFS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DEPTH</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">The full production flow in one pipeline:</div>
+
+      <!-- Full flow commands -->
+      <div class="cmd-line" id="cmd1" style="border-color:#e8a020">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">① APP SERVER — on DB write</div>
+        <span class="cmd-k">BEGIN</span> transaction<br>
+        &nbsp;&nbsp;<span class="cmd-r">UPDATE</span> users SET name=<span class="cmd-v">'Bob'</span> WHERE id=<span class="cmd-v">123</span><br>
+        <span class="cmd-k">COMMIT</span>
+      </div>
+
+      <div class="cmd-line" id="cmd2" style="border-color:#4ec9e1">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">② PUBLISH invalidation event</div>
+        <span class="cmd-k">PUBLISH</span> invalidate:user:123 <span class="cmd-v">"user:123"</span>
+      </div>
+
+      <div class="cmd-line" id="cmd3" style="border-color:#4eff9a">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">③ EACH SUBSCRIBER receives &amp; deletes</div>
+        <span class="cmd-k">SUBSCRIBE</span> invalidate:*<br>
+        &nbsp;&nbsp;on message → <span class="cmd-r">localCache.delete</span>(<span class="cmd-v">"user:123"</span>)
+      </div>
+
+      <!-- Trade-off cards -->
+      <div id="tradeoff_box" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:8px;color:#4ec9e1;margin-top:2px">KEY TRADE-OFFS</div>
+
+        <div style="background:#130d1e;border:1px solid #4eff9a40;padding:8px 10px;border-radius:3px;border-left:3px solid #4eff9a">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">✓ PROS</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Zero shared memory — each cache is local (fast)<br>
+            One PUBLISH fans out to all N servers<br>
+            Redis pub/sub is fire-and-forget: ~1–5ms
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border:1px solid #e8505040;padding:8px 10px;border-radius:3px;border-left:3px solid #e85050">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">⚠ CONS</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Eventual consistency: ~1–5ms stale window<br>
+            Sub disconnect = missed invalidations<br>
+            Redis goes down = cache never cleared
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border:1px solid #4ec9e140;padding:8px 10px;border-radius:3px;border-left:3px solid #4ec9e1">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">↑ MITIGATION</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Short TTL as safety net (e.g. 60s)<br>
+            On reconnect: flush entire local cache<br>
+            Pattern-subscribe: <span style="color:#4eff9a">PSUBSCRIBE invalidate:*</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Pub/sub gives broadcast invalidation in a single PUBLISH call.</div>
+    <div class="ih">Always pair with a short TTL as a safety net for missed messages.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1–5ms</div><div class="sl">EVENTUAL<br>WINDOW</div></div>
+    <div class="sc"><div class="sv gn">O(1)</div><div class="sl">PUBLISH<br>COST</div></div>
+    <div class="sc"><div class="sv gn">TTL</div><div class="sl">SAFETY<br>NET</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);return t;}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─────────── BUILD SERVER GRIDS ─────────── */
+function buildGrid(containerId, mode){
+  // mode: 'problem' | 'solution'
+  var g=document.getElementById(containerId);
+  g.innerHTML='';
+  for(var i=0;i<10;i++){
+    var box=document.createElement('div');
+    box.className='srv-box';
+    box.id=containerId+'_srv'+i;
+
+    var icon=document.createElement('div');
+    icon.className='srv-icon';
+    icon.textContent='🖥';
+
+    var lbl=document.createElement('div');
+    lbl.className='srv-lbl';
+    lbl.textContent='SRV '+(i+1);
+
+    var pill=document.createElement('div');
+    pill.id=containerId+'_pill'+i;
+
+    if(mode==='problem'){
+      pill.className='cache-pill stale';
+      pill.textContent='user:123';
+    } else {
+      pill.className='cache-pill empty';
+      pill.textContent='empty';
+    }
+
+    box.appendChild(icon);
+    box.appendChild(lbl);
+    box.appendChild(pill);
+    g.appendChild(box);
+  }
+}
+
+/* ─────────── SCENE 1 ─────────── */
+function playS1(){
+  clearAll();
+  buildGrid('s1_grid','problem');
+  document.getElementById('s1_db').classList.remove('writing');
+  document.getElementById('s1_write_flash').style.opacity='0';
+  document.getElementById('s1_problem').style.opacity='0';
+
+  // step 1: all servers show stale cache
+  for(var i=0;i<10;i++){
+    (function(idx){
+      delay(function(){
+        var pill=document.getElementById('s1_grid_pill'+idx);
+        pill.className='cache-pill stale';
+        pill.textContent='user:123';
+        document.getElementById('s1_grid_srv'+idx).classList.add('stale');
+      }, 300+idx*120);
+    })(i);
+  }
+
+  // step 2: DB write on server 1
+  delay(function(){
+    document.getElementById('s1_db').classList.add('writing');
+    document.getElementById('s1_write_flash').style.opacity='1';
+    // server 1 gets fresh data
+    var pill0=document.getElementById('s1_grid_pill0');
+    pill0.className='cache-pill hot';
+    pill0.textContent='user:Bob';
+    document.getElementById('s1_grid_srv0').classList.remove('stale');
+    document.getElementById('s1_grid_srv0').classList.add('fresh');
+  }, 300+10*120+400);
+
+  // step 3: show problem box
+  delay(function(){
+    document.getElementById('s1_problem').style.opacity='1';
+  }, 300+10*120+1200);
+}
+
+/* ─────────── SCENE 2 ─────────── */
+function playS2(){
+  clearAll();
+  buildGrid('s2_grid','solution');
+  document.getElementById('fa1').style.opacity='0';
+  document.getElementById('s2_pub').style.opacity='0';
+  document.getElementById('s2_msg1').style.opacity='0';
+  document.getElementById('s2_sub_count').style.opacity='0';
+  document.getElementById('s2_sub_num').textContent='0';
+
+  // reset rings
+  ['ring1','ring2','ring3','ring4'].forEach(function(id){
+    var r=document.getElementById(id);
+    r.style.opacity='0';
+    r.style.transform='translate(-50%,-50%) scale(0)';
+    r.style.transition='none';
+  });
+
+  // step 1: show publish flow
+  delay(function(){
+    document.getElementById('fa1').style.opacity='1';
+  },400);
+  delay(function(){
+    document.getElementById('s2_pub').style.opacity='1';
+  },700);
+  delay(function(){
+    document.getElementById('s2_msg1').style.opacity='1';
+  },1100);
+
+  // step 2: fire pulse rings
+  delay(function(){
+    fireRings();
+  },1600);
+
+  // step 3: servers clear one by one
+  var subCount=0;
+  for(var i=0;i<10;i++){
+    (function(idx){
+      delay(function(){
+        var pill=document.getElementById('s2_grid_pill'+idx);
+        pill.className='cache-pill empty';
+        pill.textContent='cleared';
+        document.getElementById('s2_grid_srv'+idx).classList.add('synced');
+        subCount++;
+        document.getElementById('s2_sub_num').textContent=subCount;
+        document.getElementById('s2_sub_count').style.opacity='1';
+      }, 2100+idx*150);
+    })(i);
+  }
+}
+
+function fireRings(){
+  var rings=['ring1','ring2','ring3','ring4'];
+  var delays=[0,200,400,600];
+  rings.forEach(function(id,i){
+    delay(function(){
+      var r=document.getElementById(id);
+      r.style.transition='opacity 0.8s ease-out, transform 1s ease-out';
+      r.style.opacity='0.7';
+      r.style.transform='translate(-50%,-50%) scale(1)';
+      delay(function(){
+        r.style.opacity='0';
+      }, 600);
+    }, delays[i]);
+  });
+}
+
+/* ─────────── SCENE 3 ─────────── */
+function playS3(){
+  clearAll();
+  ['cmd1','cmd2','cmd3'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('tradeoff_box').style.opacity='0';
+
+  delay(function(){document.getElementById('cmd1').style.opacity='1';},400);
+  delay(function(){document.getElementById('cmd2').style.opacity='1';},1100);
+  delay(function(){document.getElementById('cmd3').style.opacity='1';},1800);
+  delay(function(){document.getElementById('tradeoff_box').style.opacity='1';},2600);
+}
+
+// auto-play on load
+buildGrid('s1_grid','problem');
+buildGrid('s2_grid','solution');
+playS1();
+</script>
+</body>
+</html>

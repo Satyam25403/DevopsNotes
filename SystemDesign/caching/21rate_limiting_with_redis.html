@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Rate Limiting with Redis</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  color:#fff;
+  overflow-x:hidden;
+}
+.scene{
+  width:390px;
+  min-height:100vh;
+  display:none;
+  flex-direction:column;
+}
+.scene.active{display:flex}
+.hdr{
+  height:90px;
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:0 14px;
+  border-bottom:1px solid #2a1f3d;
+}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{
+  height:28px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 14px;
+}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scrollbar-width:none;
+  -ms-overflow-style:none;
+}
+.anim::-webkit-scrollbar{display:none}
+.info{
+  height:110px;
+  flex-shrink:0;
+  margin:0 12px;
+  border:2px solid #4ec9e1;
+  padding:10px 14px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  gap:7px;
+  font-size:9px;
+  line-height:1.9;
+}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.srow{
+  height:70px;
+  flex-shrink:0;
+  display:flex;
+  gap:8px;
+  padding:8px 12px;
+}
+.sc{
+  flex:1;
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{
+  height:68px;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  padding:0 12px;
+  background:inherit;
+}
+.btn{
+  font-family:'Press Start 2P',monospace;
+  font-size:9px;
+  padding:10px 14px;
+  border:2px solid #4ec9e1;
+  background:transparent;
+  color:#4ec9e1;
+  cursor:pointer;
+  transition:all .15s;
+  white-space:nowrap;
+}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.timeline-wrap{
+  position:relative;
+  height:72px;
+  background:#130d1e;
+  border:1px solid #2a1f3d;
+  border-radius:3px;
+  overflow:hidden;
+}
+.tl-label{
+  position:absolute;
+  bottom:4px;
+  font-size:7px;
+  color:#555;
+  font-family:'Press Start 2P',monospace;
+}
+.window-box{
+  position:absolute;
+  top:0;
+  height:100%;
+  background:rgba(78,201,225,0.12);
+  border-left:2px solid #4ec9e1;
+  border-right:2px solid #4ec9e1;
+  transition:left .6s linear,width .6s linear;
+}
+.zset-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:5px;
+  opacity:0;
+  transition:opacity .3s;
+}
+.zset-score{font-size:7px;color:#888;min-width:50px}
+.zset-val{
+  font-size:7px;
+  color:#fff;
+  background:#1a1025;
+  padding:2px 6px;
+  border:1px solid #2a1f3d;
+  border-radius:2px;
+  flex:1;
+}
+.zset-val.old{color:#e85050;border-color:#e8505050;text-decoration:line-through}
+.zset-val.new{color:#4eff9a;border-color:#4eff9a50}
+
+.cmd-line{
+  font-size:8px;
+  padding:6px 8px;
+  background:#0d1a2e;
+  border-left:3px solid #4ec9e1;
+  margin-bottom:5px;
+  opacity:0;
+  transition:opacity .3s;
+  line-height:1.7;
+  color:#aaa;
+}
+.cmd-k{color:#4ec9e1}
+.cmd-v{color:#4eff9a}
+.cmd-r{color:#e8a020}
+
+.fixed-win{
+  position:absolute;
+  top:0;
+  height:100%;
+  border:2px dashed;
+}
+.fixed-win.win1{border-color:#e8a020;background:rgba(232,160,32,0.07)}
+.fixed-win.win2{border-color:#555;background:rgba(100,100,100,0.05)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: Fixed Window ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">REDIS RATE LIMITING</div>
+    <div class="hdr-sub">HOW TO STOP API ABUSE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">FIXED WINDOW</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">EXPLOITABLE</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Counter resets hard at :00 every minute. Limit: 5 req/min.</div>
+
+      <!-- Timeline with fixed windows -->
+      <div class="timeline-wrap">
+        <div class="fixed-win win1" style="left:0%;width:50%"></div>
+        <div class="fixed-win win2" style="left:50%;width:50%"></div>
+        <div class="tl-label" style="left:4px">:00</div>
+        <div class="tl-label" style="left:50%;transform:translateX(-50%)">:30</div>
+        <div class="tl-label" style="right:4px">1:00</div>
+        <!-- request dots injected by JS -->
+        <div id="fw_dots_container"></div>
+      </div>
+      <div style="display:flex;gap:10px;font-size:7px">
+        <span style="color:#e8a020">▪ Window 1 (0:00–0:30)</span>
+        <span style="color:#555">▪ Window 2 (0:30–1:00)</span>
+      </div>
+
+      <!-- Boundary exploit visual -->
+      <div style="font-size:8px;color:#ccc;line-height:1.8">The boundary exploit:</div>
+      <div style="background:#130d1e;border:1px solid #2a1f3d;padding:10px;border-radius:3px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+          <div style="font-size:7px;color:#e8a020">END of WIN 1 →</div>
+          <div style="font-size:7px;color:#555">← START of WIN 2</div>
+        </div>
+        <div style="display:flex;height:36px">
+          <div style="flex:1;background:#e8a02018;border:1px solid #e8a02040;display:flex;align-items:center;justify-content:flex-end;padding-right:8px">
+            <span style="font-size:8px;color:#e8a020" id="fw_c1">0 reqs</span>
+          </div>
+          <div style="width:2px;background:#555"></div>
+          <div style="flex:1;background:#55555510;border:1px solid #55555540;display:flex;align-items:center;justify-content:flex-start;padding-left:8px">
+            <span style="font-size:8px;color:#888" id="fw_c2">0 reqs</span>
+          </div>
+        </div>
+        <div id="fw_exploit_label" style="text-align:center;margin-top:8px;font-size:7px;color:#e85050;opacity:0;transition:opacity .5s">
+          ⚠ 10 requests in ~2 sec! Limit bypassed.
+        </div>
+      </div>
+
+      <!-- Counter display -->
+      <div style="background:#130d1e;border:1px solid #2a1f3d;padding:10px;border-radius:3px">
+        <div style="font-size:7px;color:#555;margin-bottom:6px">REDIS COUNTER STATE</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div style="font-size:7px;color:#888">key: rate:<span style="color:#4ec9e1">user123</span></div>
+          <div style="font-size:22px;margin-left:auto" id="fw_counter" style="color:#4eff9a">0</div>
+          <div style="font-size:8px;color:#555">/ 5</div>
+        </div>
+        <div style="height:8px;background:#0a0a0f;border-radius:2px;overflow:hidden">
+          <div id="fw_bar" style="height:100%;width:0%;background:#4eff9a;transition:width .35s,background .3s;border-radius:2px"></div>
+        </div>
+        <div style="font-size:7px;color:#555;margin-top:4px" id="fw_reset_text">Resets at :30 →</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Problem: counter resets blind at window boundary.</div>
+    <div class="ih am">User fires 5 req at :29, 5 more at :31 → 10 req in 2s!</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">10</div><div class="sl">REQS IN<br>2 SEC</div></div>
+    <div class="sc"><div class="sv am">5</div><div class="sl">LIMIT<br>PER WIN</div></div>
+    <div class="sc"><div class="sv rd">BROKEN</div><div class="sl">EXPLOIT<br>STATUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: Sliding Window ZSET ══════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">REDIS RATE LIMITING</div>
+    <div class="hdr-sub">SORTED SET SLIDING WINDOW</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">ZSET INTERNALS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRECISE</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Each request = 1 member. Score = Unix timestamp ms.</div>
+
+      <!-- Sliding timeline -->
+      <div class="timeline-wrap" id="sw_timeline">
+        <div class="window-box" id="sw_win" style="left:5%;width:60%"></div>
+        <div class="tl-label" style="left:4px">older</div>
+        <div class="tl-label" style="right:4px">now</div>
+        <!-- dots -->
+        <div id="sw_dot_a" style="position:absolute;width:10px;height:10px;border-radius:50%;background:#e85050;top:50%;transform:translateY(-50%);left:8%;transition:left .6s,opacity .4s"></div>
+        <div id="sw_dot_b" style="position:absolute;width:10px;height:10px;border-radius:50%;background:#4eff9a;top:50%;transform:translateY(-50%);left:30%;opacity:0;transition:left .6s,opacity .4s"></div>
+        <div id="sw_dot_c" style="position:absolute;width:10px;height:10px;border-radius:50%;background:#4eff9a;top:50%;transform:translateY(-50%);left:48%;opacity:0;transition:left .6s,opacity .4s"></div>
+        <div id="sw_dot_d" style="position:absolute;width:10px;height:10px;border-radius:50%;background:#4eff9a;top:50%;transform:translateY(-50%);left:60%;opacity:0;transition:left .6s,opacity .4s"></div>
+        <div id="sw_dot_e" style="position:absolute;width:10px;height:10px;border-radius:50%;background:#4ec9e1;top:50%;transform:translateY(-50%);left:75%;opacity:0;transition:left .6s,opacity .4s"></div>
+      </div>
+      <div style="display:flex;gap:10px;font-size:7px">
+        <span style="color:#e85050">▪ expired (pruned)</span>
+        <span style="color:#4eff9a">▪ counted</span>
+        <span style="color:#4ec9e1">▪ new request</span>
+      </div>
+
+      <!-- ZSET display -->
+      <div style="background:#130d1e;border:2px solid #4ec9e1;padding:10px 12px;border-radius:3px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px;letter-spacing:1px">ZSET: rate:user123</div>
+        <div class="zset-row" id="zr0"><div class="zset-score">…000001</div><div class="zset-val old">req_a (expired)</div></div>
+        <div class="zset-row" id="zr1"><div class="zset-score">…000048</div><div class="zset-val">req_b</div></div>
+        <div class="zset-row" id="zr2"><div class="zset-score">…000052</div><div class="zset-val">req_c</div></div>
+        <div class="zset-row" id="zr3"><div class="zset-score">…000055</div><div class="zset-val">req_d</div></div>
+        <div class="zset-row" id="zr4"><div class="zset-score">…000060</div><div class="zset-val new">req_e (new!)</div></div>
+      </div>
+
+      <!-- ZCARD count -->
+      <div style="display:flex;align-items:center;gap:10px;background:#130d1e;border:1px solid #2a1f3d;padding:10px 12px;border-radius:3px">
+        <div>
+          <div style="font-size:7px;color:#555;margin-bottom:4px">ZCARD (live count)</div>
+          <div style="font-size:7px;color:#888">after ZREMRANGEBYSCORE prunes old</div>
+        </div>
+        <div style="margin-left:auto;font-size:26px;color:#4eff9a" id="sw_count">0</div>
+        <div style="font-size:8px;color:#555">/ 5</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Score = timestamp. ZREMRANGEBYSCORE drops entries older than now−60s.</div>
+    <div class="ih">ZCARD gives exact rolling count. No gaps, no boundary tricks.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">O(log N)</div><div class="sl">ZADD<br>COST</div></div>
+    <div class="sc"><div class="sv gn">EXACT</div><div class="sl">COUNT<br>ACCURACY</div></div>
+    <div class="sc"><div class="sv gn">ATOMIC</div><div class="sl">PIPELINE<br>SAFE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: 4-Command Pipeline ══════════════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">REDIS RATE LIMITING</div>
+    <div class="hdr-sub">THE 4-COMMAND PIPELINE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">ATOMIC PIPELINE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Run all 4 in one pipeline() — one network round-trip.</div>
+
+      <div class="cmd-line" id="cmd1">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">① REMOVE expired entries</div>
+        <span class="cmd-k">ZREMRANGEBYSCORE</span> rate:user123<br>
+        &nbsp;&nbsp;<span class="cmd-v">0</span> <span class="cmd-r">(now − 60000)</span>
+      </div>
+
+      <div class="cmd-line" id="cmd2" style="border-color:#4eff9a">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">② ADD this request</div>
+        <span class="cmd-k">ZADD</span> rate:user123 <span class="cmd-r">NX</span><br>
+        &nbsp;&nbsp;<span class="cmd-v">now</span> <span class="cmd-v">"req_{uuid}"</span>
+      </div>
+
+      <div class="cmd-line" id="cmd3" style="border-color:#e8a020">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">③ COUNT live requests</div>
+        <span class="cmd-k">ZCARD</span> rate:user123
+        <span style="float:right;color:#4eff9a">→ <span id="cmd3_result">?</span></span>
+      </div>
+
+      <div class="cmd-line" id="cmd4" style="border-color:#666">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">④ SET TTL (auto-cleanup)</div>
+        <span class="cmd-k">EXPIRE</span> rate:user123 <span class="cmd-v">60</span>
+      </div>
+
+      <div id="decision_box" style="background:#130d1e;border:2px solid #4eff9a;padding:10px 12px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:8px;color:#4eff9a;margin-bottom:8px">DECISION LOGIC</div>
+        <div style="font-size:8px;color:#ccc;line-height:2">
+          if ZCARD ≤ LIMIT:<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">→ 200 OK</span><br>
+          else:<br>
+          &nbsp;&nbsp;<span style="color:#e85050">→ 429 Too Many Requests</span>
+        </div>
+      </div>
+
+      <div id="pipeline_note" style="background:#0d1a2e;border:1px solid #2a1f3d;padding:10px;border-radius:3px;opacity:0;transition:opacity .4s">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHY PIPELINE?</div>
+        <div style="font-size:7px;color:#888;line-height:2">
+          Without pipeline → 4 round-trips → race conditions.<br>
+          With pipeline → 1 round-trip → atomic + correct.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">4 commands sent as one atomic pipeline to Redis.</div>
+    <div class="ih">No race conditions. Works across distributed API servers.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">ROUND<br>TRIP</div></div>
+    <div class="sc"><div class="sv gn">4</div><div class="sl">REDIS<br>CMDS</div></div>
+    <div class="sc"><div class="sv gn">~1ms</div><div class="sl">TYPICAL<br>LATENCY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var t1=null,t2=null,t3=null;
+
+function clearAll(){
+  [t1,t2,t3].forEach(function(t){if(t)clearTimeout(t);});
+}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ── SCENE 1 ── */
+function playS1(){
+  clearAll();
+  document.getElementById('fw_c1').textContent='0 reqs';
+  document.getElementById('fw_c2').textContent='0 reqs';
+  document.getElementById('fw_counter').textContent='0';
+  document.getElementById('fw_counter').style.color='#4eff9a';
+  document.getElementById('fw_bar').style.width='0%';
+  document.getElementById('fw_bar').style.background='#4eff9a';
+  document.getElementById('fw_reset_text').textContent='Resets at :30 →';
+  document.getElementById('fw_exploit_label').style.opacity='0';
+
+  var c1=0,c2=0;
+
+  function fillWin1(){
+    if(c1<5){
+      c1++;
+      document.getElementById('fw_c1').textContent=c1+' reqs';
+      document.getElementById('fw_counter').textContent=c1;
+      document.getElementById('fw_bar').style.width=(c1/5*100)+'%';
+      t1=setTimeout(fillWin1,350);
+    } else {
+      t1=setTimeout(function(){
+        document.getElementById('fw_counter').textContent='0';
+        document.getElementById('fw_bar').style.width='0%';
+        document.getElementById('fw_bar').style.background='#e8a020';
+        document.getElementById('fw_reset_text').textContent='↩ Window reset! Counter = 0';
+        t1=setTimeout(fillWin2,500);
+      },700);
+    }
+  }
+
+  function fillWin2(){
+    if(c2<5){
+      c2++;
+      document.getElementById('fw_c2').textContent=c2+' reqs';
+      document.getElementById('fw_counter').textContent=c2;
+      document.getElementById('fw_bar').style.width=(c2/5*100)+'%';
+      t1=setTimeout(fillWin2,350);
+    } else {
+      t1=setTimeout(function(){
+        document.getElementById('fw_exploit_label').style.opacity='1';
+        document.getElementById('fw_bar').style.background='#e85050';
+        document.getElementById('fw_counter').style.color='#e85050';
+      },400);
+    }
+  }
+
+  t1=setTimeout(fillWin1,500);
+}
+
+/* ── SCENE 2 ── */
+function playS2(){
+  clearAll();
+  ['zr0','zr1','zr2','zr3','zr4'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('sw_count').textContent='0';
+  document.getElementById('sw_win').style.left='5%';
+  document.getElementById('sw_win').style.width='60%';
+  ['sw_dot_a','sw_dot_b','sw_dot_c','sw_dot_d','sw_dot_e'].forEach(function(id){
+    document.getElementById(id).style.opacity= id==='sw_dot_a'?'1':'0';
+  });
+
+  // reveal rows
+  var rows=['zr0','zr1','zr2','zr3'];
+  rows.forEach(function(id,i){
+    t2=setTimeout(function(){
+      document.getElementById(id).style.opacity='1';
+      if(id!=='zr0'){
+        var n=parseInt(document.getElementById('sw_count').textContent);
+        document.getElementById('sw_count').textContent=(n+1);
+      }
+      // show matching dot
+      var dotIds=['sw_dot_a','sw_dot_b','sw_dot_c','sw_dot_d'];
+      document.getElementById(dotIds[i]).style.opacity='1';
+    }, 400+i*400);
+  });
+
+  // slide window right, drop old entry
+  t2=setTimeout(function(){
+    document.getElementById('sw_win').style.left='22%';
+    document.getElementById('sw_dot_a').style.opacity='0.2';
+    document.querySelector('#zr0 .zset-val').classList.add('old');
+    t2=setTimeout(function(){
+      document.getElementById('zr0').style.opacity='0.25';
+      document.getElementById('sw_count').textContent='3';
+      // add new request
+      t2=setTimeout(function(){
+        document.getElementById('zr4').style.opacity='1';
+        document.getElementById('sw_dot_e').style.opacity='1';
+        document.getElementById('sw_count').textContent='4';
+      },600);
+    },600);
+  }, 400+4*400+200);
+}
+
+/* ── SCENE 3 ── */
+function playS3(){
+  clearAll();
+  ['cmd1','cmd2','cmd3','cmd4'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('decision_box').style.opacity='0';
+  document.getElementById('pipeline_note').style.opacity='0';
+  document.getElementById('cmd3_result').textContent='?';
+
+  var steps=[
+    function(){document.getElementById('cmd1').style.opacity='1';},
+    function(){document.getElementById('cmd2').style.opacity='1';},
+    function(){
+      document.getElementById('cmd3').style.opacity='1';
+      t3=setTimeout(function(){document.getElementById('cmd3_result').textContent='4';},350);
+    },
+    function(){document.getElementById('cmd4').style.opacity='1';},
+    function(){document.getElementById('decision_box').style.opacity='1';},
+    function(){document.getElementById('pipeline_note').style.opacity='1';}
+  ];
+
+  steps.forEach(function(fn,i){
+    t3=setTimeout(fn, 500+i*700);
+  });
+}
+
+// auto-play on load
+playS1();
+</script>
+</body>
+</html>

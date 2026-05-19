@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Your First Dockerfile</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1025}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1025;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#08080f;border:1px solid #1a1025;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sl2{font-size:7px;color:#444;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.pu{border-color:#9060d0;color:#9060d0}.btn.pu:hover{background:#9060d020}
+
+/* ── DOCKERFILE VIEWER ── */
+.df-wrap{border:2px solid #1a1025;background:#06060e;overflow:hidden}
+.df-bar{padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a1025}
+.df-dot{width:8px;height:8px;border-radius:50%}
+.df-title{font-size:7px;color:#333;flex:1;text-align:center;letter-spacing:.5px}
+.df-body{padding:8px 0}
+.df-line{display:flex;align-items:stretch;min-height:24px;opacity:0;transition:opacity .4s,background .3s}
+.df-line.vis{opacity:1}
+.df-line.highlight{background:#ffffff08}
+.df-ln{width:26px;text-align:right;padding:0 6px;font-size:7px;color:#2a2040;flex-shrink:0;line-height:2.4}
+.df-code{flex:1;padding:0 8px;font-size:8px;line-height:2.2;white-space:pre}
+.df-kw{color:#4ec9e1}     /* FROM WORKDIR COPY RUN CMD etc */
+.df-arg{color:#e8a020}    /* node:alpine, /app, etc */
+.df-str{color:#4eff9a}    /* strings / values */
+.df-cmt{color:#2a4030}    /* comments */
+.df-arr{color:#9060d0}    /* array items */
+
+/* callout bubble */
+.callout{display:flex;gap:8px;align-items:flex-start;opacity:0;transition:opacity .45s;padding:0 10px}
+.callout.vis{opacity:1}
+.callout-line{width:2px;flex-shrink:0;margin-top:4px;border-radius:1px}
+.callout-body{flex:1;border:1px solid #1a1025;padding:6px 8px}
+.callout-title{font-size:8px;margin-bottom:3px;letter-spacing:.3px}
+.callout-text{font-size:6px;color:#555;line-height:1.9}
+.callout-tag{display:inline-block;font-size:5px;padding:1px 5px;border:1px solid currentColor;margin-top:3px}
+
+/* ── TERMINAL ── */
+.term{background:#06060e;border:2px solid #1a1025;font-size:8px;line-height:1}
+.term-bar{padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a1025}
+.term-title{font-size:7px;color:#333;flex:1;text-align:center;letter-spacing:.5px}
+.term-body{padding:8px 10px}
+.tline{display:flex;align-items:baseline;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.tline.vis{opacity:1}
+.prompt{color:#4eff9a;margin-right:6px;flex-shrink:0}
+.tcmd{color:#ddd;letter-spacing:.3px;line-height:1.6}
+.tcmd .flag{color:#4ec9e1}
+.tcmd .arg{color:#e8a020}
+.tcmd .str{color:#9060d0}
+.tline.out .tcmd{color:#555;font-size:7px}
+.tline.ok  .tcmd{color:#4eff9a;font-size:7px}
+.tline.step .tcmd{color:#4ec9e1;font-size:7px}
+.tline.warn .tcmd{color:#e8a020;font-size:7px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cur{display:inline-block;width:6px;height:10px;background:#4eff9a;vertical-align:middle;margin-left:2px;animation:blink .7s infinite}
+
+/* ── LAYER BUILD VISUALISER ── */
+.layer-build{display:flex;flex-direction:column;gap:0;padding:0 10px}
+.lb-row{display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s}
+.lb-row.vis{opacity:1}
+.lb-step{font-size:6px;color:#333;width:36px;flex-shrink:0;text-align:right}
+.lb-bar{flex:1;height:20px;border:1px solid #1a1025;overflow:hidden;position:relative}
+.lb-fill{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .7s ease-out;display:flex;align-items:center;padding-left:5px}
+.lb-fill-label{font-size:6px;white-space:nowrap;color:#06060e;opacity:0;transition:opacity .3s .5s}
+.lb-fill-label.vis{opacity:1}
+.lb-size{font-size:6px;width:38px;text-align:right;flex-shrink:0}
+.lb-arrow{height:8px;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .4s}
+.lb-arrow.vis{opacity:1}
+
+/* ── FILE TREE ── */
+.ftree{border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s}
+.ftree.vis{opacity:1}
+.ftree-title{font-size:7px;color:#333;margin-bottom:5px;letter-spacing:.5px}
+.ftree-line{font-size:7px;line-height:2;opacity:0;transition:opacity .4s}
+.ftree-line.vis{opacity:1}
+.ft-dir{color:#4ec9e1}
+.ft-file{color:#aaa}
+.ft-new{color:#4eff9a}
+.ft-copy{color:#9060d0}
+
+/* ── COMPARE TABLE ── */
+.cmp-grid{display:flex;flex-direction:column;gap:4px;padding:0 2px}
+.cg-hdr{display:flex;gap:6px;padding:4px 0}
+.cg-col1{font-size:7px;color:#333;width:70px;flex-shrink:0;letter-spacing:.3px}
+.cg-col2{font-size:7px;color:#4ec9e1;flex:1;letter-spacing:.3px}
+.cg-col3{font-size:7px;color:#4eff9a;flex:1;letter-spacing:.3px}
+.cg-row{display:flex;gap:6px;border:1px solid #1a1025;padding:5px 6px;opacity:0;transition:opacity .4s;background:#06060e}
+.cg-row.vis{opacity:1}
+.cg-kw{font-size:7px;color:#4ec9e1;width:70px;flex-shrink:0}
+.cg-what{font-size:6px;color:#555;flex:1;line-height:1.8}
+.cg-ex{font-size:6px;color:#e8a020;flex:1;line-height:1.8}
+
+/* section label */
+.sec-label{font-size:7px;color:#222;text-align:center;letter-spacing:.5px;padding:2px 0}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     S1 — THE DOCKERFILE ANNOTATED
+════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">YOUR FIRST DOCKERFILE</div>
+    <div class="hdr-sub">TURN ANY APP INTO A DOCKER IMAGE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE FILE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ANNOTATED</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="sec-label">A MINIMAL NODE.JS DOCKERFILE — LINE BY LINE</div>
+
+      <div class="df-wrap">
+        <div class="df-bar">
+          <div class="df-dot" style="background:#e85050"></div>
+          <div class="df-dot" style="background:#e8a020"></div>
+          <div class="df-dot" style="background:#4eff9a"></div>
+          <div class="df-title">Dockerfile</div>
+        </div>
+        <div class="df-body">
+          <div class="df-line" id="dfl1">
+            <div class="df-ln">1</div>
+            <div class="df-code"><span class="df-cmt"># ── base image ──────────</span></div>
+          </div>
+          <div class="df-line" id="dfl2">
+            <div class="df-ln">2</div>
+            <div class="df-code"><span class="df-kw">FROM</span> <span class="df-arg">node:20-alpine</span></div>
+          </div>
+          <div class="df-line" id="dfl3">
+            <div class="df-ln">3</div>
+            <div class="df-code"></div>
+          </div>
+          <div class="df-line" id="dfl4">
+            <div class="df-ln">4</div>
+            <div class="df-code"><span class="df-cmt"># ── working directory ───</span></div>
+          </div>
+          <div class="df-line" id="dfl5">
+            <div class="df-ln">5</div>
+            <div class="df-code"><span class="df-kw">WORKDIR</span> <span class="df-str">/app</span></div>
+          </div>
+          <div class="df-line" id="dfl6">
+            <div class="df-ln">6</div>
+            <div class="df-code"></div>
+          </div>
+          <div class="df-line" id="dfl7">
+            <div class="df-ln">7</div>
+            <div class="df-code"><span class="df-cmt"># ── dependencies first ──</span></div>
+          </div>
+          <div class="df-line" id="dfl8">
+            <div class="df-ln">8</div>
+            <div class="df-code"><span class="df-kw">COPY</span> <span class="df-arg">package*.json</span> <span class="df-str">./</span></div>
+          </div>
+          <div class="df-line" id="dfl9">
+            <div class="df-ln">9</div>
+            <div class="df-code"><span class="df-kw">RUN</span> <span class="df-str">npm install</span></div>
+          </div>
+          <div class="df-line" id="dfl10">
+            <div class="df-ln">10</div>
+            <div class="df-code"></div>
+          </div>
+          <div class="df-line" id="dfl11">
+            <div class="df-ln">11</div>
+            <div class="df-code"><span class="df-cmt"># ── app source ──────────</span></div>
+          </div>
+          <div class="df-line" id="dfl12">
+            <div class="df-ln">12</div>
+            <div class="df-code"><span class="df-kw">COPY</span> <span class="df-arg">. .</span></div>
+          </div>
+          <div class="df-line" id="dfl13">
+            <div class="df-ln">13</div>
+            <div class="df-code"></div>
+          </div>
+          <div class="df-line" id="dfl14">
+            <div class="df-ln">14</div>
+            <div class="df-code"><span class="df-cmt"># ── start command ───────</span></div>
+          </div>
+          <div class="df-line" id="dfl15">
+            <div class="df-ln">15</div>
+            <div class="df-code"><span class="df-kw">CMD</span> <span class="df-arr">["node",</span> <span class="df-str">"index.js"</span><span class="df-arr">]</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- callouts -->
+      <div class="callout" id="co1">
+        <div class="callout-line" style="background:#4ec9e1;align-self:stretch"></div>
+        <div class="callout-body" style="border-color:#4ec9e1;background:#040e1a">
+          <div class="callout-title" style="color:#4ec9e1">FROM — the base image</div>
+          <div class="callout-text">Every image starts from another image. <span style="color:#4ec9e1">node:20-alpine</span> gives you Node.js 20 on top of Alpine Linux (~50 MB). You build on top of this.</div>
+          <span class="callout-tag" style="color:#4ec9e1;border-color:#4ec9e1">required — must be first</span>
+        </div>
+      </div>
+
+      <div class="callout" id="co2">
+        <div class="callout-line" style="background:#9060d0;align-self:stretch"></div>
+        <div class="callout-body" style="border-color:#9060d0;background:#100828">
+          <div class="callout-title" style="color:#9060d0">WORKDIR — your working dir</div>
+          <div class="callout-text">Sets the default directory for all following commands. Created if it doesn't exist. Like <span style="color:#9060d0">cd /app && mkdir -p</span> in one step.</div>
+          <span class="callout-tag" style="color:#9060d0;border-color:#9060d0">all COPY/RUN happen here</span>
+        </div>
+      </div>
+
+      <div class="callout" id="co3">
+        <div class="callout-line" style="background:#e8a020;align-self:stretch"></div>
+        <div class="callout-body" style="border-color:#e8a020;background:#140a00">
+          <div class="callout-title" style="color:#e8a020">COPY + RUN — install deps first</div>
+          <div class="callout-text">Copy <span style="color:#e8a020">package.json</span> first (not all code). Run npm install. This layer is cached — rebuild only if package.json changes.</div>
+          <span class="callout-tag" style="color:#e8a020;border-color:#e8a020">cache trick — critical</span>
+        </div>
+      </div>
+
+      <div class="callout" id="co4">
+        <div class="callout-line" style="background:#4eff9a;align-self:stretch"></div>
+        <div class="callout-body" style="border-color:#4eff9a;background:#041808">
+          <div class="callout-title" style="color:#4eff9a">COPY . .  — your app code</div>
+          <div class="callout-text">Copy everything else (your source files). This is separate from deps so editing your code doesn't re-run npm install. <span style="color:#4eff9a">Fast rebuilds.</span></div>
+          <span class="callout-tag" style="color:#4eff9a;border-color:#4eff9a">host → container /app</span>
+        </div>
+      </div>
+
+      <div class="callout" id="co5">
+        <div class="callout-line" style="background:#e85050;align-self:stretch"></div>
+        <div class="callout-body" style="border-color:#e85050;background:#1a0505">
+          <div class="callout-title" style="color:#e85050">CMD — runs when container starts</div>
+          <div class="callout-text">Not run during build. Executes when you do <span style="color:#4eff9a">docker run</span>. Array form is preferred — avoids shell wrapper overhead.</div>
+          <span class="callout-tag" style="color:#e85050;border-color:#e85050">only one CMD per Dockerfile</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Dockerfile = <span style="color:#4ec9e1">recipe for your image</span></div>
+    <div class="il">Each instruction creates a layer. Docker caches layers — unchanged layers aren't rebuilt. Order matters: <span style="color:#4eff9a">slow-changing stuff first.</span></div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">FROM</div><div class="sl2">base image</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:9px">RUN</div><div class="sl2">build time</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:9px">CMD</div><div class="sl2">start time</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S2 — INSTRUCTION REFERENCE
+════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">YOUR FIRST DOCKERFILE</div>
+    <div class="hdr-sub">WHAT EACH INSTRUCTION ACTUALLY DOES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#9060d0">INSTRUCTIONS</span>
+    <span class="sbadge" style="color:#9060d0;border-color:#9060d0">REFERENCE</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div class="sec-label">5 INSTRUCTIONS YOU'LL USE IN EVERY DOCKERFILE</div>
+
+      <div class="cmp-grid">
+        <div class="cg-row" id="cr1" style="border-color:#4ec9e1;background:#040e1a">
+          <div class="cg-kw">FROM</div>
+          <div class="cg-what">Set the base image. First instruction always.</div>
+          <div class="cg-ex">FROM node:20-alpine<br>FROM python:3.12<br>FROM ubuntu:22.04</div>
+        </div>
+        <div class="cg-row" id="cr2" style="border-color:#9060d0;background:#100828">
+          <div class="cg-kw" style="color:#9060d0">WORKDIR</div>
+          <div class="cg-what">Set + create working directory for all subsequent commands.</div>
+          <div class="cg-ex">WORKDIR /app<br>WORKDIR /home/node</div>
+        </div>
+        <div class="cg-row" id="cr3" style="border-color:#e8a020;background:#140a00">
+          <div class="cg-kw" style="color:#e8a020">COPY</div>
+          <div class="cg-what">Copy files from host into the image at build time.</div>
+          <div class="cg-ex">COPY . .<br>COPY src/ /app/src<br>COPY pkg*.json ./</div>
+        </div>
+        <div class="cg-row" id="cr4" style="border-color:#e85050;background:#1a0505">
+          <div class="cg-kw" style="color:#e85050">RUN</div>
+          <div class="cg-what">Execute a command during build. Creates a new layer.</div>
+          <div class="cg-ex">RUN npm install<br>RUN apt-get update<br>RUN pip install -r req</div>
+        </div>
+        <div class="cg-row" id="cr5" style="border-color:#4eff9a;background:#041808">
+          <div class="cg-kw" style="color:#4eff9a">CMD</div>
+          <div class="cg-what">Default command when container starts. NOT run at build time.</div>
+          <div class="cg-ex">CMD ["node","index.js"]<br>CMD ["python","app.py"]<br>CMD ["nginx","-g","..."]</div>
+        </div>
+      </div>
+
+      <!-- RUN vs CMD clarification -->
+      <div style="border:2px solid #e8a020;background:#140a00;padding:8px 10px;opacity:0;transition:opacity .5s" id="runvscmd">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:5px;letter-spacing:.3px">⚠ RUN vs CMD — most common confusion</div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:7px;color:#e85050;margin-bottom:3px">RUN</div>
+            <div style="font-size:6px;color:#555;line-height:1.8">Runs during<br><span style="color:#e85050">docker build</span><br>Creates a layer<br>Sets up the image</div>
+          </div>
+          <div style="width:1px;background:#2a1a00"></div>
+          <div style="flex:1">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">CMD</div>
+            <div style="font-size:6px;color:#555;line-height:1.8">Runs during<br><span style="color:#4eff9a">docker run</span><br>Not a layer<br>Starts your app</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- EXPOSE / ENV bonus -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s" id="bonusinst">
+        <div style="font-size:7px;color:#333;margin-bottom:5px;letter-spacing:.5px">BONUS INSTRUCTIONS YOU'LL MEET SOON</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:8px">
+            <span style="font-size:7px;color:#4ec9e1;width:60px;flex-shrink:0">EXPOSE</span>
+            <span style="font-size:6px;color:#444;line-height:1.7">Documents which port the container listens on (hint only)</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="font-size:7px;color:#4ec9e1;width:60px;flex-shrink:0">ENV</span>
+            <span style="font-size:6px;color:#444;line-height:1.7">Set environment variables available at build AND runtime</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="font-size:7px;color:#4ec9e1;width:60px;flex-shrink:0">ARG</span>
+            <span style="font-size:6px;color:#444;line-height:1.7">Build-time variables only — not available after build</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="font-size:7px;color:#4ec9e1;width:60px;flex-shrink:0">ENTRYPOINT</span>
+            <span style="font-size:6px;color:#444;line-height:1.7">Like CMD but harder to override — for container executables</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#9060d0">
+    <div class="il"><span style="color:#9060d0">RUN</span> = build time. <span style="color:#4eff9a">CMD</span> = run time.</div>
+    <div class="il">Every <span style="color:#e85050">RUN</span> creates a new cached layer. Chain commands with <span style="color:#e8a020">&amp;&amp;</span> to keep layers thin: <span style="color:#4eff9a">RUN apt update &amp;&amp; apt install -y curl</span></div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:7px">WORKDIR</div><div class="sl2">sets cwd</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:9px">RUN</div><div class="sl2">build layer</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">CMD</div><div class="sl2">on start</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn pu" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S3 — docker build + layer viz
+════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">YOUR FIRST DOCKERFILE</div>
+    <div class="hdr-sub">docker build — WHAT ACTUALLY HAPPENS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">BUILD</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">LAYER BY LAYER</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="sec-label">EACH INSTRUCTION = ONE CACHED LAYER</div>
+
+      <!-- terminal: docker build -->
+      <div class="term">
+        <div class="term-bar" style="background:#111128">
+          <div class="df-dot" style="background:#e85050"></div>
+          <div class="df-dot" style="background:#e8a020"></div>
+          <div class="df-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — docker build</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="b1a"><span class="prompt">$</span><span class="tcmd">docker build <span class="flag">-t</span> <span class="arg">myapp:1.0</span> <span class="str">.</span></span></div>
+          <div class="tline step" id="b1b"><span class="tcmd">[1/4] FROM node:20-alpine</span></div>
+          <div class="tline out"  id="b1c"><span class="tcmd">  ✓ Cached  (already pulled)</span></div>
+          <div class="tline step" id="b1d"><span class="tcmd">[2/4] WORKDIR /app</span></div>
+          <div class="tline out"  id="b1e"><span class="tcmd">  ✓ Done  0.1s</span></div>
+          <div class="tline step" id="b1f"><span class="tcmd">[3/4] COPY + RUN npm install</span></div>
+          <div class="tline out"  id="b1g"><span class="tcmd">  → added 142 packages  4.2s</span></div>
+          <div class="tline step" id="b1h"><span class="tcmd">[4/4] COPY . .</span></div>
+          <div class="tline out"  id="b1i"><span class="tcmd">  ✓ Done  0.3s</span></div>
+          <div class="tline ok"   id="b1j"><span class="tcmd">Successfully tagged myapp:1.0</span></div>
+          <div class="tline" id="b1k"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+      <!-- layer build viz -->
+      <div style="font-size:7px;color:#222;letter-spacing:.5px;text-align:center">IMAGE LAYERS STACKED BOTTOM → TOP</div>
+      <div class="layer-build" id="lbuild">
+        <div class="lb-row" id="lb1">
+          <div class="lb-step">FROM</div>
+          <div class="lb-bar">
+            <div class="lb-fill" id="lf1" style="background:#4ec9e1">
+              <div class="lb-fill-label" id="lfl1">node:20-alpine base</div>
+            </div>
+          </div>
+          <div class="lb-size" style="color:#4ec9e1">~50 MB</div>
+        </div>
+        <div class="lb-arrow" id="la1"><div style="font-size:7px;color:#333">▼</div></div>
+        <div class="lb-row" id="lb2">
+          <div class="lb-step">WORKDIR</div>
+          <div class="lb-bar">
+            <div class="lb-fill" id="lf2" style="background:#9060d0">
+              <div class="lb-fill-label" id="lfl2">mkdir /app</div>
+            </div>
+          </div>
+          <div class="lb-size" style="color:#9060d0">&lt; 1 KB</div>
+        </div>
+        <div class="lb-arrow" id="la2"><div style="font-size:7px;color:#333">▼</div></div>
+        <div class="lb-row" id="lb3">
+          <div class="lb-step">COPY+RUN</div>
+          <div class="lb-bar">
+            <div class="lb-fill" id="lf3" style="background:#e8a020">
+              <div class="lb-fill-label" id="lfl3">node_modules/</div>
+            </div>
+          </div>
+          <div class="lb-size" style="color:#e8a020">~30 MB</div>
+        </div>
+        <div class="lb-arrow" id="la3"><div style="font-size:7px;color:#333">▼</div></div>
+        <div class="lb-row" id="lb4">
+          <div class="lb-step">COPY . .</div>
+          <div class="lb-bar">
+            <div class="lb-fill" id="lf4" style="background:#4eff9a">
+              <div class="lb-fill-label" id="lfl4">your source code</div>
+            </div>
+          </div>
+          <div class="lb-size" style="color:#4eff9a">~5 KB</div>
+        </div>
+      </div>
+
+      <!-- cache callout -->
+      <div style="border:1px solid #e8a020;background:#140a00;padding:8px 10px;opacity:0;transition:opacity .5s" id="cachecall">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px;letter-spacing:.3px">💡 THE CACHE TRICK — WHY ORDER MATTERS</div>
+        <div style="font-size:6px;color:#555;line-height:1.9">
+          Edit <span style="color:#4eff9a">index.js</span> → only layer 4 rebuilds (0.3s total)<br>
+          Edit <span style="color:#e8a020">package.json</span> → layers 3+4 rebuild (4s+ total)<br>
+          Rule: <span style="color:#e8a020">change less often = higher in the stack</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e8a020">
+    <div class="il"><span style="color:#e8a020">-t myapp:1.0</span> = tag the image with a name</div>
+    <div class="il">The <span style="color:#4eff9a">.</span> at the end is the build context — the folder Docker sends to the daemon. Everything in that folder can be COPYed in.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:7px">4 layers</div><div class="sl2">stacked</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:7px">cached</div><div class="sl2">if unchanged</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:7px">~80 MB</div><div class="sl2">total image</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S4 — RUN IT + FILE TREE + FULL FLOW
+════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">YOUR FIRST DOCKERFILE</div>
+    <div class="hdr-sub">BUILD → RUN — THE FULL WORKFLOW</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL FLOW</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BUILD → RUN</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="sec-label">YOUR PROJECT FOLDER → RUNNING CONTAINER</div>
+
+      <!-- file tree -->
+      <div class="ftree" id="ftree">
+        <div class="ftree-title">PROJECT FILES ON YOUR HOST</div>
+        <div class="ftree-line vis"><span class="ft-dir">my-app/</span></div>
+        <div class="ftree-line" id="ft1"><span style="color:#555">├─ </span><span class="ft-new">Dockerfile</span><span style="color:#333;font-size:6px">  ← the recipe</span></div>
+        <div class="ftree-line" id="ft2"><span style="color:#555">├─ </span><span class="ft-file">package.json</span></div>
+        <div class="ftree-line" id="ft3"><span style="color:#555">├─ </span><span class="ft-file">package-lock.json</span></div>
+        <div class="ftree-line" id="ft4"><span style="color:#555">├─ </span><span class="ft-file">index.js</span><span style="color:#333;font-size:6px">  ← your app</span></div>
+        <div class="ftree-line" id="ft5"><span style="color:#555">└─ </span><span class="ft-file">.dockerignore</span><span style="color:#333;font-size:6px">  ← excludes node_modules</span></div>
+      </div>
+
+      <!-- dockerignore note -->
+      <div style="border:1px solid #1a1025;background:#06060e;padding:7px 10px;opacity:0;transition:opacity .5s" id="dignore">
+        <div style="font-size:7px;color:#333;margin-bottom:4px;letter-spacing:.5px">.dockerignore — don't send these to the daemon</div>
+        <div style="font-size:7px;background:#08080f;padding:5px 8px;border:1px solid #1a1025;color:#2a5030;line-height:2">
+          node_modules<br>
+          <span style="color:#2a3050">.git</span><br>
+          <span style="color:#2a3050">*.log</span>
+        </div>
+        <div style="font-size:6px;color:#444;margin-top:4px;line-height:1.7">Without this, node_modules (50k+ files) gets sent to the daemon on every build — <span style="color:#e8a020">very slow</span>.</div>
+      </div>
+
+      <!-- full build + run terminal -->
+      <div class="term">
+        <div class="term-bar" style="background:#0a1a08">
+          <div class="df-dot" style="background:#e85050"></div>
+          <div class="df-dot" style="background:#e8a020"></div>
+          <div class="df-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — full workflow</div>
+        </div>
+        <div class="term-body">
+          <div class="tline out" id="f1a"><span class="tcmd"># 1. build the image</span></div>
+          <div class="tline" id="f1b"><span class="prompt">$</span><span class="tcmd">docker build <span class="flag">-t</span> <span class="arg">myapp:1.0</span> <span class="str">.</span></span></div>
+          <div class="tline ok"  id="f1c"><span class="tcmd">Successfully tagged myapp:1.0 ✓</span></div>
+          <div class="tline out" id="f1d"><span class="tcmd"># 2. verify it exists</span></div>
+          <div class="tline" id="f1e"><span class="prompt">$</span><span class="tcmd">docker images myapp</span></div>
+          <div class="tline ok"  id="f1f"><span class="tcmd">myapp  1.0  3f6bc054  81MB</span></div>
+          <div class="tline out" id="f1g"><span class="tcmd"># 3. run a container from it</span></div>
+          <div class="tline" id="f1h"><span class="prompt">$</span><span class="tcmd">docker run <span class="flag">-d</span> <span class="flag">-p</span> <span class="arg">3000:3000</span> myapp:1.0</span></div>
+          <div class="tline ok"  id="f1i"><span class="tcmd">a4b2c9e1... server on :3000 ✓</span></div>
+          <div class="tline out" id="f1j"><span class="tcmd"># 4. rebuild after code change</span></div>
+          <div class="tline" id="f1k"><span class="prompt">$</span><span class="tcmd">docker build <span class="flag">-t</span> <span class="arg">myapp:1.1</span> <span class="str">.</span></span></div>
+          <div class="tline ok"  id="f1l"><span class="tcmd">CACHED CACHED CACHED → 0.4s ✓</span></div>
+          <div class="tline" id="f1m"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il">Build once. Run anywhere. <span style="color:#4eff9a">That's the point.</span></div>
+    <div class="il">Same image runs on your laptop, your colleague's machine, and prod. No "works on my machine." The <span style="color:#4eff9a">Dockerfile</span> is the source of truth.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:7px">build -t</div><div class="sl2">name image</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:7px">images</div><div class="sl2">list images</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:7px">.dockerignore</div><div class="sl2">keep it fast</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn gn" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn" style="border-color:#4eff9a;color:#4eff9a" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+function vis(id){let e=document.getElementById(id);if(e){e.classList.add('vis');e.style.opacity='1';}}
+function hide(id){let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}}
+function so(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v;}
+
+function growBar(fillId, labelId, pct, delay){
+  t(()=>{
+    let f=document.getElementById(fillId);
+    if(!f)return;
+    f.style.transition='none'; f.style.width='0';
+    setTimeout(()=>{f.style.transition='width .7s ease-out'; f.style.width=pct+'%';},30);
+    t(()=>{let l=document.getElementById(labelId);if(l)l.classList.add('vis');},700);
+  },delay);
+}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+// ── S1 — Annotated Dockerfile ──
+function playS1(){
+  clearT();
+  let lines=['dfl1','dfl2','dfl3','dfl4','dfl5','dfl6','dfl7','dfl8','dfl9','dfl10','dfl11','dfl12','dfl13','dfl14','dfl15'];
+  let callouts=['co1','co2','co3','co4','co5'];
+  [...lines,...callouts].forEach(hide);
+
+  // lines appear fast
+  lines.forEach((id,i)=>t(()=>vis(id),i*80));
+
+  // callouts staggered after lines done
+  let base=lines.length*80+200;
+  callouts.forEach((id,i)=>t(()=>vis(id),base+i*500));
+}
+
+// ── S2 — Instruction reference ──
+function playS2(){
+  clearT();
+  ['cr1','cr2','cr3','cr4','cr5','runvscmd','bonusinst'].forEach(hide);
+  t(()=>vis('cr1'),200);
+  t(()=>vis('cr2'),700);
+  t(()=>vis('cr3'),1200);
+  t(()=>vis('cr4'),1700);
+  t(()=>vis('cr5'),2200);
+  t(()=>so('runvscmd','1'),2900);
+  t(()=>so('bonusinst','1'),3600);
+}
+
+// ── S3 — docker build + layers ──
+function playS3(){
+  clearT();
+  let tlines=['b1a','b1b','b1c','b1d','b1e','b1f','b1g','b1h','b1i','b1j','b1k'];
+  let lrows=['lb1','la1','lb2','la2','lb3','la3','lb4'];
+  [...tlines,'cachecall'].forEach(hide);
+  lrows.forEach(id=>hide(id));
+  ['lf1','lf2','lf3','lf4'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  ['lfl1','lfl2','lfl3','lfl4'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+
+  let tdelays=[200,700,1100,1500,1900,2300,2800,3300,3700,4100,4500];
+  tlines.forEach((id,i)=>t(()=>vis(id),tdelays[i]));
+
+  // layer build after terminal
+  t(()=>{
+    vis('lb1'); growBar('lf1','lfl1',100,0);
+    t(()=>{vis('la1');},700);
+    t(()=>{vis('lb2'); growBar('lf2','lfl2',8,0);},800);
+    t(()=>{vis('la2');},1500);
+    t(()=>{vis('lb3'); growBar('lf3','lfl3',65,0);},1600);
+    t(()=>{vis('la3');},2300);
+    t(()=>{vis('lb4'); growBar('lf4','lfl4',12,0);},2400);
+    t(()=>so('cachecall','1'),3300);
+  },4800);
+}
+
+// ── S4 — Full workflow ──
+function playS4(){
+  clearT();
+  ['dignore'].forEach(id=>so(id,'0'));
+  ['ft1','ft2','ft3','ft4','ft5'].forEach(hide);
+  let tlines=['f1a','f1b','f1c','f1d','f1e','f1f','f1g','f1h','f1i','f1j','f1k','f1l','f1m'];
+  tlines.forEach(hide);
+
+  // file tree
+  t(()=>vis('ft1'),200);
+  t(()=>vis('ft2'),500);
+  t(()=>vis('ft3'),800);
+  t(()=>vis('ft4'),1100);
+  t(()=>vis('ft5'),1400);
+  t(()=>so('dignore','1'),1900);
+
+  // terminal
+  let tdelays=[2500,2800,3300,3700,4000,4500,4900,5200,5700,6100,6400,6900,7300];
+  tlines.forEach((id,i)=>t(()=>vis(id),tdelays[i]));
+}
+
+playS1();
+</script>
+</body>
+</html>

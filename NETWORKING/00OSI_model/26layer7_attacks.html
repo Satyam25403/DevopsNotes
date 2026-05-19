@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>SQL Injection & XSS — Layer 7 Attack Classics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a0808}
+.hdr-title{font-size:9px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#200808;transition:background .2s}
+.dot.active{background:#e85050}.dot.done{background:#e8a020}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#e85050}.ih.am{color:#e8a020}.ih.gn{color:#4eff9a}.ih.cy{color:#4ec9e1}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0f0606;border:1px solid #200808;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#e85050;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.cy{color:#4ec9e1}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #e85050;background:transparent;color:#e85050;cursor:pointer;transition:all .15s}
+.btn:hover{background:#e8505020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#e8a020;color:#e8a020}.btn.play:hover{background:#e8a02020}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #2a0808;border-radius:2px;border-left:3px solid #e85050;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.am{border-left-color:#e8a020}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.cy{border-left-color:#4ec9e1}
+.step-block.pu{border-left-color:#a060c0}
+.step-num{font-size:9px;color:#e85050;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.am{color:#e8a020}.step-num.gn{color:#4eff9a}.step-num.cy{color:#4ec9e1}.step-num.pu{color:#a060c0}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.rd{color:#e85050}.am{color:#e8a020}.gn{color:#4eff9a}.cy{color:#4ec9e1}.pu{color:#a060c0}
+
+.detail-hero{border:2px solid;border-radius:3px;padding:10px;opacity:0;transition:opacity .5s}
+.detail-hero.visible{opacity:1}
+
+.qline{opacity:0;transition:opacity .3s ease;}
+.qline.visible{opacity:1}
+
+.data-row{
+  opacity:0;transform:translateX(8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.data-row.visible{opacity:1;transform:translateX(0)}
+
+@keyframes typeIn{from{width:0}to{width:100%}}
+.type-anim{overflow:hidden;white-space:nowrap;animation:typeIn .8s steps(30) forwards;}
+
+@keyframes scriptGlow{
+  0%,100%{color:#e85050}
+  50%{color:#ff8080;text-shadow:0 0 6px #e85050}
+}
+.script-glow{animation:scriptGlow 1s ease-in-out infinite}
+
+@keyframes alertPop{
+  0%{transform:scale(0) translate(-50%,-50%);opacity:0}
+  60%{transform:scale(1.1) translate(-50%,-50%)}
+  100%{transform:scale(1) translate(-50%,-50%);opacity:1}
+}
+.alert-pop{animation:alertPop .5s ease forwards}
+
+.def-card{
+  opacity:0;transform:translateY(8px);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.def-card.visible{opacity:1;transform:translateY(0)}
+
+.inc-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.inc-row.visible{opacity:1;transform:translateX(0)}
+
+.tok-kw{color:#4ec9e1}
+.tok-str{color:#e8a020}
+.tok-inj{color:#e85050;font-weight:bold}
+.tok-ok{color:#4eff9a}
+.tok-com{color:#555}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+@keyframes rowSlide{
+  0%{transform:translateY(-6px);opacity:0}
+  100%{transform:translateY(0);opacity:1}
+}
+.row-slide{animation:rowSlide .3s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SCENE 1: HOOK ═══════════════ -->
+<div class="scene active" id="s1" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">SQL INJECTION & XSS</div>
+    <div class="hdr-sub">LAYER 7 ATTACK CLASSICS · OWASP TOP 10</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">HOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ REAL BREACH</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s1-hero" style="border:2px solid #e85050;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:2px;margin-bottom:10px">JULY 2012 · YAHOO VOICES</div>
+        <div style="font-size:9px;color:#ffcccc;line-height:1.9;margin-bottom:8px">450,000 PASSWORDS<br>STOLEN WITH<br>4 CHARACTERS:</div>
+        <div style="font-size:16px;color:#e85050;border:2px solid #e85050;display:inline-block;padding:6px 14px;border-radius:3px;margin-bottom:8px;letter-spacing:2px">' OR 1=1</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Plaintext passwords. No encryption.<br>Classic SQLi + developer negligence.</div>
+      </div>
+
+      <div id="s1-query" style="opacity:0;transition:opacity .5s;border:1px solid #2a0808;border-radius:3px;padding:10px;background:#0a0404">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:8px">WHAT THE ATTACK LOOKS LIKE</div>
+        <div style="background:#060404;border:1px solid #1a0808;border-radius:2px;padding:8px;font-size:7px;line-height:2">
+          <div style="color:#555;margin-bottom:4px">// Intended query</div>
+          <div><span class="tok-kw">SELECT</span> * <span class="tok-kw">FROM</span> users <span class="tok-kw">WHERE</span> name = <span class="tok-str">'alice'</span></div>
+          <div style="color:#555;margin:4px 0">// What attacker sends as input</div>
+          <div><span class="tok-str">'</span> <span class="tok-kw">OR</span> <span class="tok-inj">1=1</span> <span style="color:#e85050">--</span></div>
+          <div style="color:#555;margin:4px 0">// Resulting query (BROKEN)</div>
+          <div style="word-break:break-all"><span class="tok-kw">SELECT</span> * <span class="tok-kw">FROM</span> users <span class="tok-kw">WHERE</span> name = <span class="tok-str">''</span> <span class="tok-kw">OR</span> <span class="tok-inj">1=1</span> <span style="color:#555">--</span> <span style="color:#333">←dumps EVERYTHING</span></div>
+        </div>
+      </div>
+
+      <div id="s1-stats" style="opacity:0;transition:opacity .5s;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">#1</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">OWASP Top 10<br>injection rank</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e8a020;margin-bottom:3px">33%</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">of web apps<br>vulnerable to SQLi</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#4eff9a;margin-bottom:3px">XSS</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">found in 68% of<br>bug bounties</div>
+        </div>
+        <div style="border:1px solid #2a0808;border-radius:2px;padding:8px;text-align:center;background:#0d0404">
+          <div style="font-size:11px;color:#e85050;margin-bottom:3px">2003</div>
+          <div style="font-size:6px;color:#666;line-height:1.5">SQLi in OWASP<br>Top 10 every year</div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE HOW SQLi WORKS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LAYER 7 ATTACKS</div>
+    <div class="ih">Application layer — exploits the app, not the network</div>
+    <div class="il" style="font-size:7px">SQLi and XSS bypass firewalls, TLS, and all network-layer defenses. They exploit trust in user input. The protocol is fine. The app is broken.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">SQLi</div><div class="sl">database<br>dump attack</div></div>
+    <div class="sc"><div class="sv am">XSS</div><div class="sl">browser<br>script inject</div></div>
+    <div class="sc"><div class="sv gn">L7</div><div class="sl">application<br>layer</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 2: SQL INJECTION ANATOMY ═══════════════ -->
+<div class="scene" id="s2" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title" style="color:#e85050">SQL INJECTION</div>
+    <div class="hdr-sub">BREAK THE QUERY · CONTROL THE DATABASE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK #1</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SQLi</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="detail-hero" id="s2-hero" style="border-color:#e85050;background:#0d0404">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px;text-align:center">NORMAL vs INJECTED REQUEST</div>
+
+        <div style="background:#0a0404;border:1px solid #2a0808;border-radius:3px;padding:8px;margin-bottom:8px">
+          <div style="font-size:6px;color:#888;margin-bottom:5px">🌐 bank.example.com/login</div>
+          <div style="display:flex;gap:6px;align-items:center;margin-bottom:4px">
+            <div style="font-size:6px;color:#888;width:60px;flex-shrink:0">username:</div>
+            <div id="s2-input1" style="flex:1;background:#060404;border:1px solid #1a0808;border-radius:2px;padding:3px 6px;font-size:7px;color:#4eff9a;min-height:18px"></div>
+          </div>
+          <div id="s2-query-show" style="background:#030202;border:1px solid #3a0808;border-radius:2px;padding:6px 8px;margin-top:5px;opacity:0;transition:opacity .3s">
+            <div style="font-size:5px;color:#555;margin-bottom:3px">GENERATED SQL:</div>
+            <div id="s2-query-text" style="font-size:6px;line-height:1.9;word-break:break-all"></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <div id="s2-normal-tab" style="flex:1;border:1px solid #4eff9a;border-radius:2px;padding:4px;text-align:center;font-size:6px;color:#4eff9a;background:#040c04;cursor:pointer" onclick="showNormal()">NORMAL</div>
+          <div id="s2-inject-tab" style="flex:1;border:1px solid #2a0808;border-radius:2px;padding:4px;text-align:center;font-size:6px;color:#555;cursor:pointer" onclick="showInjected()">INJECTED</div>
+        </div>
+
+        <div id="s2-db-dump" style="opacity:0;transition:opacity .4s;background:#030202;border:1px solid #3a0808;border-radius:2px;padding:6px">
+          <div style="font-size:5px;color:#e85050;margin-bottom:4px">DATABASE DUMP — ALL USERS RETURNED:</div>
+          <div id="s2-row1" class="data-row" style="font-size:6px;line-height:1.8;padding:2px 4px;border-radius:1px">
+            <span style="color:#e85050">admin</span> | <span style="color:#e8a020">p@ssw0rd123</span> | <span style="color:#888">admin@bank.com</span>
+          </div>
+          <div id="s2-row2" class="data-row" style="font-size:6px;line-height:1.8;padding:2px 4px">
+            <span style="color:#e85050">alice</span> | <span style="color:#e8a020">hunter2</span> | <span style="color:#888">alice@example.com</span>
+          </div>
+          <div id="s2-row3" class="data-row" style="font-size:6px;line-height:1.8;padding:2px 4px">
+            <span style="color:#e85050">bob</span> | <span style="color:#e8a020">123456</span> | <span style="color:#888">bob@corp.com</span>
+          </div>
+          <div id="s2-row4" class="data-row" style="font-size:6px;line-height:1.8;padding:2px 4px">
+            <span style="color:#555">... 449,997 more rows ...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">01</div>
+        <div class="step-text">The app builds a SQL query by <span class="rd">concatenating user input directly into the string</span>. The database can't distinguish "data" from "SQL code" — they're both just text arriving from the app.</div>
+      </div>
+      <div class="step-block" id="s2-s2">
+        <div class="step-num">02</div>
+        <div class="step-text">The <span class="rd">apostrophe (') closes the string literal</span>. Then <span class="rd">OR 1=1</span> makes the WHERE clause always true. Then <span class="rd">--</span> comments out the rest. Every row returns. All users dumped.</div>
+      </div>
+      <div class="step-block" id="s2-s3">
+        <div class="step-num">03</div>
+        <div class="step-text">Beyond data dump: <span class="am">UNION-based SQLi</span> extracts other tables. <span class="am">Blind SQLi</span> infers data from true/false responses. <span class="am">Error-based</span> leaks schema. <span class="rd">SQLMap</span> automates all of these.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">WHY IT WORKS</div>
+    <div class="ih">The database trusts whatever the app sends it</div>
+    <div class="il" style="font-size:7px">The app and DB have an implicit trust relationship. If the app sends "SELECT * WHERE 1=1", the DB executes it — no questions asked. The fix is simple: stop building queries from strings.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">'</div><div class="sl">breaks out<br>of string</div></div>
+    <div class="sc"><div class="sv am">OR 1=1</div><div class="sl">always-true<br>condition</div></div>
+    <div class="sc"><div class="sv">--</div><div class="sl">comments<br>rest of query</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 3: XSS ═══════════════ -->
+<div class="scene" id="s3" style="background:#0a0810">
+  <div class="hdr" style="background:#0a0810">
+    <div class="hdr-title" style="color:#e8a020">CROSS-SITE SCRIPTING (XSS)</div>
+    <div class="hdr-sub">INJECT SCRIPT INTO PAGE · RUNS IN VICTIM BROWSER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ATTACK #2</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">XSS</span>
+  </div>
+
+  <div class="anim" style="background:#0a0810">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div class="detail-hero" id="s3-hero" style="border-color:#e8a020;background:#080610">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">XSS — SCRIPT INJECTED INTO PAGE HTML</div>
+
+        <!-- SVG: extended height to 240 to fit skull below exfil arrow -->
+        <svg width="358" height="240" viewBox="0 0 358 240">
+
+          <!-- ── ATTACKER INPUT box ── -->
+          <rect x="2" y="4" width="106" height="80" rx="4" fill="#0d0818" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="55" y="17" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6">ATTACKER</text>
+          <text x="55" y="27" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="5">comment field:</text>
+          <rect x="8" y="32" width="94" height="46" rx="2" fill="#060408" stroke="#2a1040" stroke-width="1"/>
+          <text x="55" y="46" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="7" class="script-glow">&lt;script&gt;</text>
+          <text x="55" y="58" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6" class="script-glow">stealCookies()</text>
+          <text x="55" y="70" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="7" class="script-glow">&lt;/script&gt;</text>
+
+          <!-- ── arrow ATTACKER → SERVER ── -->
+          <path id="s3-a1" d="M108,44 L160,44" stroke="#e8a020" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <polygon id="s3-a1tip" points="160,40 168,44 160,48" fill="#e8a020" opacity="0"/>
+          <text id="s3-a1t" x="134" y="38" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5" opacity="0">stored in DB</text>
+
+          <!-- ── SERVER box ── -->
+          <rect x="168" y="20" width="80" height="48" rx="3" fill="#080610" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="208" y="38" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="7">SERVER</text>
+          <text x="208" y="52" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="6">saves script</text>
+
+          <!-- ── arrow SERVER → VICTIM ── -->
+          <path id="s3-a2" d="M248,44 L298,44" stroke="#e8a020" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <polygon id="s3-a2tip" points="298,40 306,44 298,48" fill="#e8a020" opacity="0"/>
+          <text id="s3-a2t" x="272" y="38" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="5" opacity="0">page loads</text>
+
+          <!-- ── VICTIM BROWSER box ── -->
+          <rect x="306" y="4" width="50" height="80" rx="3" fill="#080610" stroke="#e85050" stroke-width="1.5"/>
+          <text x="331" y="22" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5">VICTIM</text>
+          <text x="331" y="34" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5">BROWSER</text>
+          <text x="331" y="52" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6">runs</text>
+          <text x="331" y="64" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6">script!</text>
+
+          <!-- ── alert(1) popup ── -->
+          <rect id="s3-alert-box" x="230" y="96" width="90" height="28" rx="3" fill="#0d0818" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="s3-alert-t" x="275" y="115" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="7" opacity="0">alert(1) !</text>
+
+          <!-- ── arrow VICTIM → stolen data ── -->
+          <path id="s3-a3" d="M331,84 L331,128" stroke="#e85050" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <polygon id="s3-a3tip" points="327,128 331,136 335,128" fill="#e85050" opacity="0"/>
+
+          <!-- ── STOLEN DATA box ── -->
+          <rect id="s3-stolen" x="244" y="136" width="114" height="74" rx="3" fill="#200808" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s3-st1" x="301" y="152" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="6" opacity="0">STOLEN DATA:</text>
+          <text id="s3-st2" x="301" y="166" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6" opacity="0">session cookies</text>
+          <text id="s3-st3" x="301" y="179" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6" opacity="0">keystrokes</text>
+          <text id="s3-st4" x="301" y="192" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="6" opacity="0">page content</text>
+
+          <!-- ── arrow stolen → attacker skull (exfil) ── -->
+          <path id="s3-a4" d="M244,172 L110,172" stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="4,3" stroke-dashoffset="0" opacity="0"/>
+          <polygon id="s3-a4tip" points="110,168 102,172 110,176" fill="#e85050" opacity="0"/>
+          <text id="s3-a4t" x="178" y="186" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">sent to attacker.com</text>
+
+          <!-- ── SKULL / ATTACKER destination ── -->
+          <!-- skull box background -->
+          <rect id="s3-skull-bg" x="4" y="156" width="96" height="72" rx="4" fill="#200808" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <!-- skull emoji rendered via foreignObject for crisp emoji rendering -->
+          <text id="s3-skull-emoji" x="52" y="198" text-anchor="middle" font-size="28" opacity="0">💀</text>
+          <text id="s3-skull-label" x="52" y="218" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="5" opacity="0">attacker.com</text>
+
+        </svg>
+      </div>
+
+      <!-- reflected vs stored -->
+      <div id="s3-types" style="border:1px solid #1a1040;border-radius:3px;padding:10px;background:#080610;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px">REFLECTED vs STORED XSS</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #3a1a00;border-radius:2px;padding:8px;background:#0d0800">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:5px">REFLECTED</div>
+            <div style="font-size:6px;color:#888;line-height:1.8">Script in URL param. Victim clicks link. Script reflects off server, runs once. Must trick victim into clicking.</div>
+            <div style="font-size:6px;color:#e8a020;margin-top:5px">?q=&lt;script&gt;...</div>
+          </div>
+          <div style="flex:1;border:1px solid #3a0808;border-radius:2px;padding:8px;background:#0d0404">
+            <div style="font-size:7px;color:#e85050;margin-bottom:5px">STORED ⚠</div>
+            <div style="font-size:6px;color:#888;line-height:1.8">Script saved in database. Runs for EVERY visitor who views the infected page. Much more dangerous.</div>
+            <div style="font-size:6px;color:#e85050;margin-top:5px">forum post / comment</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block am" id="s3-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text">XSS injects malicious JavaScript into a web page that <span class="am">other users load in their browser</span>. The browser trusts the page's domain — so the injected script runs with full site permissions.</div>
+      </div>
+      <div class="step-block am" id="s3-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">A stored XSS in a comment field runs for <span class="am">every single visitor</span> who views that comment. Script can steal session cookies (<span class="rd">document.cookie</span>), redirect to phishing pages, log keystrokes, or hijack form submissions.</div>
+      </div>
+      <div class="step-block am" id="s3-s3">
+        <div class="step-num am">03</div>
+        <div class="step-text">The Samy worm (2005): stored XSS on MySpace spread to <span class="am">1 million users in 20 hours</span>. Self-replicating. Added attacker as "friend" on every visit. Largest XSS outbreak ever.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">XSS IMPACT</div>
+    <div class="ih am">Script runs with victim's session, on victim's machine</div>
+    <div class="il" style="font-size:7px">Attacker doesn't need your password if they have your session cookie. document.cookie sent to attacker.com = full account access. No login needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">STORED</div><div class="sl">every visitor<br>infected</div></div>
+    <div class="sc"><div class="sv rd">cookie</div><div class="sl">session<br>hijacking</div></div>
+    <div class="sc"><div class="sv gn">1M</div><div class="sl">Samy worm<br>in 20hrs</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 4: REAL INCIDENTS ═══════════════ -->
+<div class="scene" id="s4" style="background:#0f0606">
+  <div class="hdr" style="background:#0f0606">
+    <div class="hdr-title">REAL-WORLD INCIDENTS</div>
+    <div class="hdr-sub">YAHOO · SONY · EQUIFAX · BRITISH AIRWAYS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">HALL OF SHAME</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">REAL</span>
+  </div>
+
+  <div class="anim" style="background:#0f0606">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s4-intro" style="text-align:center;font-size:7px;color:#444;letter-spacing:1px;opacity:0;transition:opacity .4s">NOTABLE SQLI & XSS BREACHES</div>
+
+      <div class="inc-row" id="in1" style="border:2px solid #e85050;border-radius:3px;padding:10px;background:#0d0404">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:8px;color:#e85050">YAHOO 2012</div>
+          <div style="font-size:7px;color:#e8a020">SQLi</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">450,000 plaintext passwords dumped by LulzSec. Union-based SQLi on Yahoo Voices. Passwords stored in plaintext — negligence doubled the damage.</div>
+      </div>
+
+      <div class="inc-row" id="in2" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0d0800">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:8px;color:#e8a020">SONY PSN 2011</div>
+          <div style="font-size:7px;color:#e85050">SQLi</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">77 million accounts, credit card data. SQLi on PlayStation Network API. PlayStation Network offline for 23 days. $171M in damages. Sued for negligence.</div>
+      </div>
+
+      <div class="inc-row" id="in3" style="border:2px solid #e85050;border-radius:3px;padding:10px;background:#0d0404">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:8px;color:#e85050">BRITISH AIRWAYS 2018</div>
+          <div style="font-size:7px;color:#e8a020">XSS + skimmer</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">500,000 customers' payment data stolen. Stored XSS allowed Magecart group to inject card-skimming script into payment page. GDPR fine: £20M.</div>
+      </div>
+
+      <div class="inc-row" id="in4" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0d0800">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:8px;color:#e8a020">EQUIFAX 2017</div>
+          <div style="font-size:7px;color:#e85050">SQLi + RCE</div>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:1.8">147 million SSNs. Apache Struts vuln (CVE-2017-5638) combined with SQLi. Data exfiltrated over 76 days undetected. $575M FTC settlement.</div>
+      </div>
+
+      <div id="s4-pattern" style="border:1px solid #1a0808;border-radius:3px;padding:10px;background:#080404;opacity:0;transition:opacity .5s;text-align:center">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">THE PATTERN</div>
+        <div style="font-size:7px;color:#ccc;line-height:2;text-align:left">
+          <span style="color:#e85050">① </span>App trusts user input<br>
+          <span style="color:#e85050">② </span>No parameterized queries / sanitization<br>
+          <span style="color:#e85050">③ </span>Data leaked / script executes<br>
+          <span style="color:#e85050">④ </span>Breach discovered months later<br>
+          <span style="color:#4eff9a">⑤ </span>Developer blamed. $XM fine.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">EVERY BREACH</div>
+    <div class="ih">Started with unvalidated input. Every single one.</div>
+    <div class="il" style="font-size:7px">These aren't exotic zero-days. They're "we put user input directly in a SQL query" and "we printed user input in HTML without escaping." Problems solved in 1998. Still happening in 2024.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">77M</div><div class="sl">Sony PSN<br>accounts</div></div>
+    <div class="sc"><div class="sv am">$575M</div><div class="sl">Equifax<br>settlement</div></div>
+    <div class="sc"><div class="sv gn">£20M</div><div class="sl">BA GDPR<br>fine</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 5: DEFENSES ═══════════════ -->
+<div class="scene" id="s5" style="background:#060f06">
+  <div class="hdr" style="background:#060f06">
+    <div class="hdr-title" style="color:#4eff9a">HOW TO DEFEND</div>
+    <div class="hdr-sub">PARAMETERIZED QUERIES · CSP · ESCAPING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">DEFENSES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIX IT</span>
+  </div>
+
+  <div class="anim" style="background:#060f06">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-title" style="text-align:center;font-size:7px;color:#444;letter-spacing:2px;opacity:0;transition:opacity .4s">DEFENSE: PARAMETERIZED QUERIES</div>
+
+      <div id="s5-code" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#040c04;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">❌ VULNERABLE (string concat)</div>
+        <div style="background:#020802;border:1px solid #0d2010;border-radius:2px;padding:7px;font-size:6px;line-height:2;margin-bottom:8px;word-break:break-all">
+          <span style="color:#4ec9e1">query</span> = <span style="color:#e8a020">"SELECT * FROM users WHERE name = '"</span> + <span style="color:#e85050">userInput</span> + <span style="color:#e8a020">"'"</span>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">✓ SAFE (parameterized)</div>
+        <div style="background:#020802;border:1px solid #0d2010;border-radius:2px;padding:7px;font-size:6px;line-height:2;word-break:break-all">
+          <div><span style="color:#4ec9e1">query</span> = <span style="color:#e8a020">"SELECT * FROM users WHERE name = ?"</span></div>
+          <div><span style="color:#4ec9e1">db.execute</span>(<span style="color:#e8a020">query</span>, [<span style="color:#4eff9a">userInput</span>])</div>
+          <div style="color:#555"># DB treats userInput as PURE DATA</div>
+          <div style="color:#555"># ' OR 1=1 -- is just a username, not code</div>
+        </div>
+      </div>
+
+      <div class="def-card" id="d1" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#040c04">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🛡</span>
+          <div style="font-size:8px;color:#4eff9a">PARAMETERIZED QUERIES</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Separate SQL code from data. Use <span style="color:#4eff9a">PreparedStatement</span> (Java), <span style="color:#4eff9a">?</span>/<span style="color:#4eff9a">%s</span> placeholders (Python), ORM frameworks. <span style="color:#4eff9a">The single most important SQLi fix.</span></div>
+      </div>
+
+      <div class="def-card" id="d2" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🔒</span>
+          <div style="font-size:8px;color:#4ec9e1">OUTPUT ENCODING (XSS fix)</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">Always HTML-encode before rendering user content. <span style="color:#4ec9e1">&lt;</span> → &amp;lt; makes &lt;script&gt; display as text, not execute. Use template engines that auto-escape by default (Jinja2, React JSX).</div>
+      </div>
+
+      <div class="def-card" id="d3" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0c0800">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">📋</span>
+          <div style="font-size:8px;color:#e8a020">CONTENT SECURITY POLICY (CSP)</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8">HTTP header that tells browser which scripts to trust. <span style="color:#e8a020">Content-Security-Policy: script-src 'self'</span> blocks all inline scripts and third-party sources. Stops most XSS execution even if injection succeeds.</div>
+      </div>
+
+      <div class="def-card" id="d4" style="border:2px solid #a060c0;border-radius:3px;padding:10px;background:#0d0818">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:14px">🍪</span>
+          <div style="font-size:8px;color:#a060c0">HttpOnly + SameSite COOKIES</div>
+        </div>
+        <div style="font-size:7px;color:#aaa;line-height:1.8"><span style="color:#a060c0">HttpOnly</span> flag: JS can't read session cookie — stops XSS cookie theft. <span style="color:#a060c0">SameSite=Strict</span>: cookie not sent cross-site. Together: XSS impact dramatically reduced even if script runs.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">THE RULE</div>
+    <div class="ih gn">Never trust user input. Validate, escape, parameterize.</div>
+    <div class="il" style="font-size:7px">For SQLi: parameterized queries. For XSS: output encoding + CSP. For both: input validation + WAF. Test with OWASP ZAP or Burp Suite. Ship nothing without it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">param</div><div class="sl">queries fix<br>SQLi</div></div>
+    <div class="sc"><div class="sv cy">CSP</div><div class="sl">header stops<br>XSS exec</div></div>
+    <div class="sc"><div class="sv pu">encode</div><div class="sl">HTML escape<br>all output</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn gn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+let s2Mode='normal';
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-query','s1-stats','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    document.getElementById('s2-hero').classList.remove('visible');
+    ['s2-s1','s2-s2','s2-s3'].forEach(id=>rmV(id));
+    setOp('s2-query-show','0'); setOp('s2-db-dump','0');
+    ['s2-row1','s2-row2','s2-row3','s2-row4'].forEach(id=>rmV(id));
+    const inp=document.getElementById('s2-input1');
+    if(inp) inp.textContent='';
+    const qt=document.getElementById('s2-query-text');
+    if(qt) qt.innerHTML='';
+    s2Mode='normal';
+    showNormalTab();
+  }
+  if(n===3){
+    document.getElementById('s3-hero').classList.remove('visible');
+    setOp('s3-types','0');
+    ['s3-s1','s3-s2','s3-s3'].forEach(id=>rmV(id));
+    ['s3-a1','s3-a2','s3-a3'].forEach(id=>resetBeam(id));
+    ['s3-a1t','s3-a2t','s3-a1tip','s3-a2tip','s3-a3tip',
+     's3-stolen','s3-st1','s3-st2','s3-st3','s3-st4',
+     's3-a4','s3-a4tip','s3-a4t','s3-alert-box','s3-alert-t',
+     's3-skull-bg','s3-skull-emoji','s3-skull-label'].forEach(id=>svgOp(id,'0'));
+  }
+  if(n===4){
+    setOp('s4-intro','0'); setOp('s4-pattern','0');
+    ['in1','in2','in3','in4'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-title','0'); setOp('s5-code','0');
+    ['d1','d2','d3','d4'].forEach(id=>rmV(id));
+  }
+}
+
+function showNormalTab(){
+  const nt=document.getElementById('s2-normal-tab');
+  const it=document.getElementById('s2-inject-tab');
+  if(nt){nt.style.borderColor='#4eff9a';nt.style.color='#4eff9a';nt.style.background='#040c04';}
+  if(it){it.style.borderColor='#2a0808';it.style.color='#555';it.style.background='transparent';}
+}
+function showNormal(){
+  s2Mode='normal';
+  showNormalTab();
+  const inp=document.getElementById('s2-input1');
+  const qt=document.getElementById('s2-query-text');
+  const dump=document.getElementById('s2-db-dump');
+  if(inp) inp.textContent='alice';
+  if(qt) qt.innerHTML=`<span style="color:#4ec9e1">SELECT</span> * <span style="color:#4ec9e1">FROM</span> users <span style="color:#4ec9e1">WHERE</span> name = <span style="color:#4eff9a">'alice'</span>`;
+  setOp('s2-query-show','1');
+  if(dump) dump.style.opacity='0';
+}
+function showInjected(){
+  s2Mode='injected';
+  const nt=document.getElementById('s2-normal-tab');
+  const it=document.getElementById('s2-inject-tab');
+  if(nt){nt.style.borderColor='#2a0808';nt.style.color='#555';nt.style.background='transparent';}
+  if(it){it.style.borderColor='#e85050';it.style.color='#e85050';it.style.background='#200808';}
+  const inp=document.getElementById('s2-input1');
+  const qt=document.getElementById('s2-query-text');
+  if(inp) inp.innerHTML=`<span style="color:#e85050">' OR 1=1 --</span>`;
+  if(qt) qt.innerHTML=`<span style="color:#4ec9e1">SELECT</span> * <span style="color:#4ec9e1">FROM</span> users <span style="color:#4ec9e1">WHERE</span> name = <span style="color:#e8a020">''</span> <span style="color:#e85050">OR 1=1</span> <span style="color:#555">--'</span>`;
+  setOp('s2-query-show','1');
+  setOp('s2-db-dump','1');
+  ['s2-row1','s2-row2','s2-row3','s2-row4'].forEach((id,i)=>delay(()=>addV(id),i*200));
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-query','1'),900);
+    delay(()=>setOp('s1-stats','1'),1700);
+    delay(()=>setOp('s1-cta','1'),2400);
+  }
+
+  if(n===2){
+    delay(()=>document.getElementById('s2-hero').classList.add('visible'),200);
+    delay(()=>{
+      const inp=document.getElementById('s2-input1');
+      if(inp) inp.textContent='alice';
+      const qt=document.getElementById('s2-query-text');
+      if(qt) qt.innerHTML=`<span style="color:#4ec9e1">SELECT</span> * <span style="color:#4ec9e1">FROM</span> users <span style="color:#4ec9e1">WHERE</span> name = <span style="color:#4eff9a">'alice'</span>`;
+      setOp('s2-query-show','1');
+    },700);
+    delay(()=>showInjected(),1800);
+    delay(()=>addV('s2-s1'),600);
+    delay(()=>addV('s2-s2'),1400);
+    delay(()=>addV('s2-s3'),2600);
+  }
+
+  if(n===3){
+    delay(()=>document.getElementById('s3-hero').classList.add('visible'),200);
+    // beam: attacker → server
+    delay(()=>{ goBeam('s3-a1',500); svgOp('s3-a1t','1'); svgOp('s3-a1tip','1'); },600);
+    // beam: server → victim
+    delay(()=>{ goBeam('s3-a2',500); svgOp('s3-a2t','1'); svgOp('s3-a2tip','1'); },1200);
+    // alert pop + beam down
+    delay(()=>{ goBeam('s3-a3',400); svgOp('s3-alert-box','1'); svgOp('s3-alert-t','1'); svgOp('s3-a3tip','1'); },1800);
+    // stolen data box
+    delay(()=>{ svgOp('s3-stolen','1'); svgOp('s3-st1','1'); svgOp('s3-st2','1'); svgOp('s3-st3','1'); svgOp('s3-st4','1'); },2300);
+    // exfil arrow + skull reveal
+    delay(()=>{ svgOp('s3-a4','1'); svgOp('s3-a4tip','1'); svgOp('s3-a4t','1'); },2700);
+    delay(()=>{ svgOp('s3-skull-bg','1'); svgOp('s3-skull-emoji','1'); svgOp('s3-skull-label','1'); },3100);
+
+    delay(()=>setOp('s3-types','1'),1600);
+    delay(()=>addV('s3-s1'),500);
+    delay(()=>addV('s3-s2'),1300);
+    delay(()=>addV('s3-s3'),2400);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-intro','1'),200);
+    ['in1','in2','in3','in4'].forEach((id,i)=>delay(()=>addV(id),400+i*400));
+    delay(()=>setOp('s4-pattern','1'),2200);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-title','1'),200);
+    delay(()=>setOp('s5-code','1'),400);
+    delay(()=>addV('d1'),900);
+    delay(()=>addV('d2'),1400);
+    delay(()=>addV('d3'),1900);
+    delay(()=>addV('d4'),2400);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

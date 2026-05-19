@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Container Lifecycle</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1025}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1025;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0a0a14;border:1px solid #1a1025;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sl{font-size:7px;color:#444;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+
+/* ── TERMINAL ── */
+.term{background:#08080f;border:2px solid #1a1025;font-size:8px;line-height:1}
+.term-bar{background:#111128;padding:5px 10px;display:flex;align-items:center;gap:6px}
+.term-dot{width:8px;height:8px;border-radius:50%}
+.term-title{font-size:7px;color:#333;flex:1;text-align:center;letter-spacing:.5px}
+.term-body{padding:8px 10px}
+.tline{display:flex;align-items:baseline;gap:0;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.tline.vis{opacity:1}
+.prompt{color:#4eff9a;margin-right:6px;flex-shrink:0}
+.tcmd{color:#ddd;letter-spacing:.3px}
+.tcmd .flag{color:#4ec9e1}
+.tcmd .arg{color:#e8a020}
+.tcmd .str{color:#9060d0}
+.tline.out .tcmd{color:#666;font-size:7px}
+.tline.ok  .tcmd{color:#4eff9a;font-size:7px}
+.tline.warn .tcmd{color:#e8a020;font-size:7px}
+.tline.err  .tcmd{color:#e85050;font-size:7px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor-inline{display:inline-block;width:6px;height:10px;background:#4eff9a;vertical-align:middle;margin-left:2px;animation:blink .7s infinite}
+
+/* ── STATE MACHINE ── */
+.sm-wrap{padding:6px 10px;display:flex;flex-direction:column;gap:0;align-items:center}
+
+.state-node{width:100%;border:2px solid #333;padding:9px 12px;display:flex;align-items:center;gap:10px;opacity:0;transition:opacity .4s,border-color .4s,background .4s}
+.state-node.vis{opacity:1}
+.state-node.active-state{animation:statePulse .8s ease-in-out}
+@keyframes statePulse{0%{transform:scale(1)}40%{transform:scale(1.02)}100%{transform:scale(1)}}
+
+.sn-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center}
+.sn-body{flex:1}
+.sn-name{font-size:9px;margin-bottom:3px;letter-spacing:.5px}
+.sn-desc{font-size:6px;color:#555;line-height:1.8}
+.sn-badge{font-size:6px;padding:2px 6px;border:1px solid currentColor;flex-shrink:0}
+
+/* transition arrow */
+.trans-row{width:100%;display:flex;align-items:center;gap:6px;padding:2px 10px;opacity:0;transition:opacity .4s}
+.trans-row.vis{opacity:1}
+.trans-shaft{flex:1;height:2px;background:#333;position:relative;overflow:visible}
+.trans-fill{position:absolute;left:0;top:0;height:2px;width:0;transition:width .5s ease-out}
+.trans-cmd{font-size:6px;color:#555;text-align:center;min-width:110px;flex-shrink:0;letter-spacing:.3px}
+.trans-arrow{font-size:9px;flex-shrink:0}
+
+/* highlight flash */
+@keyframes flash{0%{opacity:1}30%{opacity:.2}60%{opacity:1}100%{opacity:1}}
+.flash{animation:flash .6s ease-out}
+
+/* data layer bar */
+.data-bar{border:1px solid #1a1025;background:#08080f;padding:6px 8px;margin:4px 10px;opacity:0;transition:opacity .5s}
+.data-bar.vis{opacity:1}
+.data-title{font-size:7px;color:#333;margin-bottom:5px;letter-spacing:.5px}
+.data-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.data-label{font-size:6px;width:80px;flex-shrink:0}
+.data-status{font-size:6px;padding:2px 6px;border:1px solid #1a1025}
+
+/* ps -a table */
+.psa-wrap{margin:4px 10px;opacity:0;transition:opacity .5s}
+.psa-wrap.vis{opacity:1}
+.psa-hdr{display:flex;gap:0;padding:4px 0;border-bottom:1px solid #1a1025;margin-bottom:3px}
+.psa-col{font-size:5px;color:#333;letter-spacing:.3px;flex:1;padding:0 2px}
+.psa-row{display:flex;gap:0;padding:3px 0;border-bottom:1px solid #08080f;opacity:0;transition:opacity .4s}
+.psa-row.vis{opacity:1}
+.psa-val{font-size:5px;flex:1;padding:0 2px;line-height:1.5}
+
+/* rm warning box */
+.rm-box{border:2px solid #e85050;background:#1a0505;padding:8px 10px;margin:4px 10px;opacity:0;transition:opacity .5s}
+.rm-box.vis{opacity:1}
+.rm-title{font-size:8px;color:#e85050;margin-bottom:5px}
+.rm-body{font-size:7px;color:#888;line-height:1.9}
+
+/* diff table */
+.diff-grid{display:flex;gap:8px;margin:4px 10px;opacity:0;transition:opacity .5s}
+.diff-grid.vis{opacity:1}
+.diff-col{flex:1;display:flex;flex-direction:column;gap:4px}
+.diff-hd{font-size:7px;text-align:center;padding:4px;border:1px solid currentColor}
+.diff-item{font-size:6px;color:#555;padding:4px 6px;border:1px solid #1a1025;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     S1 — CREATED → RUNNING
+════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">CONTAINER LIFECYCLE</div>
+    <div class="hdr-sub">YOUR CONTAINER ISN'T DEAD — IT'S JUST STOPPED</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#9060d0">PHASE 1</span>
+    <span class="sbadge" style="color:#9060d0;border-color:#9060d0">CREATED → RUNNING</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#2a2040;text-align:center;letter-spacing:.5px">STATE MACHINE — EACH BOX IS A CONTAINER STATE</div>
+
+      <div class="sm-wrap">
+
+        <!-- CREATED -->
+        <div class="state-node" id="sn-created" style="border-color:#9060d0;background:#100828">
+          <div class="sn-icon">📦</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#9060d0">CREATED</div>
+            <div class="sn-desc">Container object exists on disk. Writable layer allocated. <br>No process running yet. No CPU used.</div>
+          </div>
+          <div class="sn-badge" style="color:#9060d0;border-color:#9060d0">STATE 1</div>
+        </div>
+
+        <!-- arrow: docker start -->
+        <div class="trans-row" id="tr1">
+          <div style="width:10px"></div>
+          <div class="trans-shaft">
+            <div class="trans-fill" id="tf1" style="background:#4eff9a"></div>
+          </div>
+          <div class="trans-cmd" style="color:#4eff9a">docker start web</div>
+          <div class="trans-arrow" style="color:#4eff9a">▼</div>
+        </div>
+
+        <!-- RUNNING -->
+        <div class="state-node" id="sn-running" style="border-color:#4eff9a;background:#041808">
+          <div class="sn-icon">🟢</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#4eff9a">RUNNING</div>
+            <div class="sn-desc">PID 1 is alive. CPU + RAM in use.<br>Ports mapped. Network active.<br>Writable layer accumulating changes.</div>
+          </div>
+          <div class="sn-badge" style="color:#4eff9a;border-color:#4eff9a">STATE 2</div>
+        </div>
+
+      </div>
+
+      <!-- terminal -->
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="t1a"><span class="prompt">$</span><span class="tcmd">docker run <span class="flag">-d</span> <span class="flag">--name</span> <span class="arg">web</span> nginx:alpine</span></div>
+          <div class="tline ok" id="t1b"><span class="tcmd">3a9f1e2c8b7d ← container ID</span></div>
+          <div class="tline" id="t1c"><span class="prompt">$</span><span class="tcmd">docker ps</span></div>
+          <div class="tline ok" id="t1d"><span class="tcmd">3a9f1e2c  nginx:alpine  Up 3s  web</span></div>
+          <div class="tline" id="t1e"><span class="prompt">$</span><span class="cursor-inline"></span></div>
+        </div>
+      </div>
+
+      <!-- data status -->
+      <div class="data-bar" id="db1">
+        <div class="data-title">CONTAINER STATE AT THIS POINT</div>
+        <div class="data-row">
+          <div class="data-label" style="color:#9060d0">writable layer</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">EXISTS ON DISK ✓</div>
+        </div>
+        <div class="data-row">
+          <div class="data-label" style="color:#4ec9e1">your data / logs</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">ACCUMULATING ✓</div>
+        </div>
+        <div class="data-row">
+          <div class="data-label" style="color:#e8a020">PID 1 (nginx)</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">RUNNING ✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#9060d0">
+    <div class="il"><span style="color:#9060d0">docker run</span> = create + start in one shot</div>
+    <div class="il">Behind the scenes: daemon creates the container object first (<span style="color:#9060d0">CREATED</span> state), then immediately starts it (<span style="color:#4eff9a">RUNNING</span>). You can also do these separately.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:9px">created</div><div class="sl">STEP 1</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:9px">running</div><div class="sl">STEP 2</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">data</div><div class="sl">SAFE SO FAR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn gn" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S2 — RUNNING → STOPPED (stop vs kill)
+════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">CONTAINER LIFECYCLE</div>
+    <div class="hdr-sub">STOP vs KILL — NOT THE SAME THING</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">PHASE 2</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">RUNNING → STOPPED</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#2a2040;text-align:center;letter-spacing:.5px">TWO WAYS TO STOP — VERY DIFFERENT BEHAVIOUR</div>
+
+      <!-- stop vs kill diff -->
+      <div class="diff-grid" id="dg1" style="margin:0 0">
+        <div class="diff-col">
+          <div class="diff-hd" style="color:#4eff9a;border-color:#4eff9a">docker stop</div>
+          <div class="diff-item" style="border-color:#1a2a1a">Sends <span style="color:#4eff9a">SIGTERM</span> first</div>
+          <div class="diff-item" style="border-color:#1a2a1a">App gets 10s to<br>clean up gracefully</div>
+          <div class="diff-item" style="border-color:#1a2a1a">Then SIGKILL<br>if still running</div>
+          <div class="diff-item" style="color:#4eff9a;border-color:#1a2a1a">✓ DATA SAFE</div>
+        </div>
+        <div class="diff-col">
+          <div class="diff-hd" style="color:#e85050;border-color:#e85050">docker kill</div>
+          <div class="diff-item" style="border-color:#2a1a1a">Sends <span style="color:#e85050">SIGKILL</span> immediately</div>
+          <div class="diff-item" style="border-color:#2a1a1a">No warning.<br>Process dies now.</div>
+          <div class="diff-item" style="border-color:#2a1a1a">Good for hung<br>containers</div>
+          <div class="diff-item" style="color:#e8a020;border-color:#2a1a1a">⚠ RISK OF CORRUPTION</div>
+        </div>
+      </div>
+
+      <div class="sm-wrap" style="gap:3px">
+        <div class="state-node" id="sn-run2" style="border-color:#4eff9a;background:#041808">
+          <div class="sn-icon">🟢</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#4eff9a">RUNNING</div>
+            <div class="sn-desc">PID 1 alive. CPU active. Data accumulating.</div>
+          </div>
+          <div class="sn-badge" style="color:#4eff9a;border-color:#4eff9a">NOW</div>
+        </div>
+        <div class="trans-row" id="tr2">
+          <div style="width:10px"></div>
+          <div class="trans-shaft">
+            <div class="trans-fill" id="tf2" style="background:#e8a020"></div>
+          </div>
+          <div class="trans-cmd" style="color:#e8a020">docker stop web<br><span style="color:#e85050">docker kill web</span></div>
+          <div class="trans-arrow" style="color:#e8a020">▼</div>
+        </div>
+        <div class="state-node" id="sn-stopped" style="border-color:#e8a020;background:#140a00">
+          <div class="sn-icon">🟡</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#e8a020">STOPPED (exited)</div>
+            <div class="sn-desc">Process dead. No CPU used.<br>Container object still exists.<br>Writable layer + data STILL ON DISK.</div>
+          </div>
+          <div class="sn-badge" style="color:#e8a020;border-color:#e8a020">STATE 3</div>
+        </div>
+      </div>
+
+      <!-- terminal -->
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="t2a"><span class="prompt">$</span><span class="tcmd">docker stop web</span></div>
+          <div class="tline out" id="t2b"><span class="tcmd">web</span></div>
+          <div class="tline" id="t2c"><span class="prompt">$</span><span class="tcmd">docker ps</span></div>
+          <div class="tline out" id="t2d"><span class="tcmd">(empty — nothing running)</span></div>
+          <div class="tline" id="t2e"><span class="prompt">$</span><span class="tcmd">docker ps <span class="flag">-a</span></span></div>
+          <div class="tline warn" id="t2f"><span class="tcmd">3a9f1e2c  nginx:alpine  Exited(0) 5s  web</span></div>
+          <div class="tline" id="t2g"><span class="prompt">$</span><span class="cursor-inline"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e8a020">
+    <div class="il"><span style="color:#4eff9a">docker ps</span> shows only running containers</div>
+    <div class="il">Add <span style="color:#e8a020">-a</span> to see ALL including stopped ones. "Exited(0)" = clean stop. "Exited(1)" = crash. <span style="color:#4eff9a">Data is still there.</span></div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">SIGTERM</div><div class="sl">stop (graceful)</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:8px">SIGKILL</div><div class="sl">kill (instant)</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:8px">ps -a</div><div class="sl">see stopped</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S3 — restart + ps -a full picture
+════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">CONTAINER LIFECYCLE</div>
+    <div class="hdr-sub">STOPPED ≠ GONE — RESTART ANYTIME</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PHASE 3</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">STOPPED → RUNNING</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#2a2040;text-align:center;letter-spacing:.5px">A STOPPED CONTAINER CAN COME BACK</div>
+
+      <div class="sm-wrap" style="gap:3px">
+        <div class="state-node" id="sn-stop3" style="border-color:#e8a020;background:#140a00">
+          <div class="sn-icon">🟡</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#e8a020">STOPPED</div>
+            <div class="sn-desc">Container still exists. All data preserved in writable layer. Just no process running.</div>
+          </div>
+          <div class="sn-badge" style="color:#e8a020;border-color:#e8a020">PAUSED</div>
+        </div>
+        <div class="trans-row" id="tr3a">
+          <div style="width:10px"></div>
+          <div class="trans-shaft"><div class="trans-fill" id="tf3a" style="background:#4eff9a"></div></div>
+          <div class="trans-cmd" style="color:#4eff9a">docker start web<br>docker restart web</div>
+          <div class="trans-arrow" style="color:#4eff9a">▼</div>
+        </div>
+        <div class="state-node" id="sn-run3" style="border-color:#4eff9a;background:#041808">
+          <div class="sn-icon">🟢</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#4eff9a">RUNNING AGAIN</div>
+            <div class="sn-desc">Same container. Same data. Same writable layer. PID 1 restarted fresh.</div>
+          </div>
+          <div class="sn-badge" style="color:#4eff9a;border-color:#4eff9a">BACK ✓</div>
+        </div>
+      </div>
+
+      <!-- data state callout -->
+      <div class="data-bar" id="db3" style="margin:0 0">
+        <div class="data-title">WHAT SURVIVED THE STOP?</div>
+        <div class="data-row">
+          <div class="data-label" style="color:#4eff9a">files written</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">STILL THERE ✓</div>
+        </div>
+        <div class="data-row">
+          <div class="data-label" style="color:#4eff9a">logs</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">STILL THERE ✓</div>
+        </div>
+        <div class="data-row">
+          <div class="data-label" style="color:#e8a020">in-memory state</div>
+          <div class="data-status" style="color:#e85050;border-color:#e85050">GONE (RAM) ✗</div>
+        </div>
+        <div class="data-row">
+          <div class="data-label" style="color:#4ec9e1">env variables</div>
+          <div class="data-status" style="color:#4eff9a;border-color:#4eff9a">STILL THERE ✓</div>
+        </div>
+      </div>
+
+      <!-- ps -a showing both -->
+      <div style="font-size:7px;color:#2a2040;letter-spacing:.5px;padding:2px 0">docker ps -a — SEE ALL CONTAINERS</div>
+      <div class="psa-wrap" id="psawrap" style="margin:0 0">
+        <div class="psa-hdr">
+          <span class="psa-col" style="flex:0 0 55px">ID</span>
+          <span class="psa-col" style="flex:0 0 70px">IMAGE</span>
+          <span class="psa-col" style="flex:0 0 80px">STATUS</span>
+          <span class="psa-col">NAMES</span>
+        </div>
+        <div class="psa-row" id="psa1">
+          <span class="psa-val" style="flex:0 0 55px;color:#4eff9a">3a9f1e2c</span>
+          <span class="psa-val" style="flex:0 0 70px;color:#ddd">nginx:alpine</span>
+          <span class="psa-val" style="flex:0 0 80px;color:#4eff9a">Up 2s</span>
+          <span class="psa-val" style="color:#ddd">web</span>
+        </div>
+        <div class="psa-row" id="psa2">
+          <span class="psa-val" style="flex:0 0 55px;color:#888">b72c4f9a</span>
+          <span class="psa-val" style="flex:0 0 70px;color:#555">nginx:alpine</span>
+          <span class="psa-val" style="flex:0 0 80px;color:#e8a020">Exited(0) 1h</span>
+          <span class="psa-val" style="color:#555">old-web</span>
+        </div>
+        <div class="psa-row" id="psa3">
+          <span class="psa-val" style="flex:0 0 55px;color:#888">11af2b30</span>
+          <span class="psa-val" style="flex:0 0 70px;color:#555">postgres:16</span>
+          <span class="psa-val" style="flex:0 0 80px;color:#e85050">Exited(1) 3h</span>
+          <span class="psa-val" style="color:#555">db</span>
+        </div>
+      </div>
+
+      <!-- terminal -->
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="t3a"><span class="prompt">$</span><span class="tcmd">docker start web</span></div>
+          <div class="tline ok" id="t3b"><span class="tcmd">web ← same data, back online</span></div>
+          <div class="tline" id="t3c"><span class="prompt">$</span><span class="tcmd">docker restart web</span></div>
+          <div class="tline ok" id="t3d"><span class="tcmd">web ← stop + start in one command</span></div>
+          <div class="tline" id="t3e"><span class="prompt">$</span><span class="cursor-inline"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">stopped ≠ removed. <span style="color:#4ec9e1">Data lives in the writable layer.</span></div>
+    <div class="il">Only <span style="color:#e85050">docker rm</span> deletes the container and its writable layer. Until then, <span style="color:#4eff9a">docker start</span> brings it back with all its files intact.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:8px">start</div><div class="sl">bring back</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:8px">restart</div><div class="sl">stop + start</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">data ✓</div><div class="sl">still intact</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn cyan" onclick="playS3()" style="border-color:#4ec9e1;color:#4ec9e1">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S4 — REMOVE (rm / rm -f)
+════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">CONTAINER LIFECYCLE</div>
+    <div class="hdr-sub">rm IS THE POINT OF NO RETURN</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">PHASE 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">→ REMOVED</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:6px">
+
+      <div style="font-size:7px;color:#2a2040;text-align:center;letter-spacing:.5px">FULL STATE MACHINE — ALL TRANSITIONS</div>
+
+      <!-- full state machine -->
+      <div class="sm-wrap" style="gap:2px">
+
+        <div class="state-node" id="snf1" style="border-color:#9060d0;background:#100828">
+          <div class="sn-icon">📦</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#9060d0">CREATED</div>
+            <div class="sn-desc">Object exists, not started.</div>
+          </div>
+        </div>
+
+        <div class="trans-row" id="trf1">
+          <div style="width:10px"></div>
+          <div class="trans-shaft"><div class="trans-fill" id="tff1" style="background:#4eff9a"></div></div>
+          <div class="trans-cmd" style="color:#4eff9a">docker start</div>
+          <div class="trans-arrow" style="color:#4eff9a">▼</div>
+        </div>
+
+        <div class="state-node" id="snf2" style="border-color:#4eff9a;background:#041808">
+          <div class="sn-icon">🟢</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#4eff9a">RUNNING</div>
+            <div class="sn-desc">PID 1 alive. CPU + RAM active.</div>
+          </div>
+        </div>
+
+        <div class="trans-row" id="trf2">
+          <div style="width:10px"></div>
+          <div class="trans-shaft"><div class="trans-fill" id="tff2" style="background:#e8a020"></div></div>
+          <div class="trans-cmd" style="color:#e8a020">docker stop / kill</div>
+          <div class="trans-arrow" style="color:#e8a020">▼</div>
+        </div>
+
+        <div class="state-node" id="snf3" style="border-color:#e8a020;background:#140a00">
+          <div class="sn-icon">🟡</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#e8a020">STOPPED (exited)</div>
+            <div class="sn-desc">No process. Data still on disk.</div>
+          </div>
+        </div>
+
+        <div class="trans-row" id="trf3">
+          <div style="width:10px"></div>
+          <div class="trans-shaft"><div class="trans-fill" id="tff3" style="background:#e85050"></div></div>
+          <div class="trans-cmd" style="color:#e85050">docker rm web<br><span style="color:#e85050">docker rm -f web</span></div>
+          <div class="trans-arrow" style="color:#e85050">▼</div>
+        </div>
+
+        <div class="state-node" id="snf4" style="border-color:#e85050;background:#1a0505">
+          <div class="sn-icon">💀</div>
+          <div class="sn-body">
+            <div class="sn-name" style="color:#e85050">REMOVED</div>
+            <div class="sn-desc">Container object deleted. Writable layer gone. Data is gone forever.</div>
+          </div>
+          <div class="sn-badge" style="color:#e85050;border-color:#e85050">FINAL</div>
+        </div>
+
+      </div>
+
+      <!-- rm warning -->
+      <div class="rm-box" id="rmbox">
+        <div class="rm-title">⚠ docker rm vs docker rm -f</div>
+        <div class="rm-body">
+          <span style="color:#e8a020">docker rm web</span> — only works if stopped<br>
+          <span style="color:#e85050">docker rm -f web</span> — force stops then removes<br>
+          <span style="color:#4eff9a">docker container prune</span> — remove ALL stopped<br>
+          <span style="color:#888;font-size:6px">Image is NOT deleted. Only the container + its writable layer.</span>
+        </div>
+      </div>
+
+      <!-- terminal -->
+      <div class="term">
+        <div class="term-bar">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — 80×24</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="t4a"><span class="prompt">$</span><span class="tcmd">docker rm web</span></div>
+          <div class="tline ok" id="t4b"><span class="tcmd">web</span></div>
+          <div class="tline" id="t4c"><span class="prompt">$</span><span class="tcmd">docker ps <span class="flag">-a</span></span></div>
+          <div class="tline out" id="t4d"><span class="tcmd">(empty — container gone forever)</span></div>
+          <div class="tline" id="t4e"><span class="prompt">$</span><span class="tcmd">docker images</span></div>
+          <div class="tline ok" id="t4f"><span class="tcmd">nginx:alpine  17MB  ← image still here!</span></div>
+          <div class="tline" id="t4g"><span class="prompt">$</span><span class="cursor-inline"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e85050">
+    <div class="il"><span style="color:#e85050">docker rm</span> = container gone. <span style="color:#4eff9a">Image stays.</span></div>
+    <div class="il">The image is the blueprint — it survives. Only the running instance (writable layer + data) is deleted. Use <span style="color:#4eff9a">volumes</span> to persist data across rm.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:8px">rm</div><div class="sl">stopped only</div></div>
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:8px">rm -f</div><div class="sl">force remove</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">image ✓</div><div class="sl">survives rm</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn rd" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn gn" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function vis(id){let e=document.getElementById(id);if(e){e.classList.add('vis');e.style.opacity='1';}}
+function hide(id){let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}}
+
+function growPipe(id,delay){
+  t(()=>{
+    let e=document.getElementById(id);if(!e)return;
+    e.style.transition='none';e.style.width='0';
+    setTimeout(()=>{e.style.transition='width .55s ease-out';e.style.width='100%';},30);
+  },delay);
+}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+// ── S1 ──
+function playS1(){
+  clearT();
+  ['sn-created','tr1','sn-running','t1a','t1b','t1c','t1d','t1e','db1'].forEach(hide);
+  let tf=document.getElementById('tf1');if(tf){tf.style.transition='none';tf.style.width='0';}
+
+  t(()=>vis('sn-created'),300);
+  t(()=>{vis('tr1');growPipe('tf1',80);},900);
+  t(()=>vis('sn-running'),1600);
+  t(()=>vis('t1a'),2100);
+  t(()=>vis('t1b'),2700);
+  t(()=>vis('t1c'),3100);
+  t(()=>vis('t1d'),3600);
+  t(()=>vis('t1e'),4000);
+  t(()=>vis('db1'),4400);
+}
+
+// ── S2 ──
+function playS2(){
+  clearT();
+  ['dg1','sn-run2','tr2','sn-stopped','t2a','t2b','t2c','t2d','t2e','t2f','t2g'].forEach(hide);
+  let tf=document.getElementById('tf2');if(tf){tf.style.transition='none';tf.style.width='0';}
+
+  t(()=>vis('dg1'),300);
+  t(()=>vis('sn-run2'),900);
+  t(()=>{vis('tr2');growPipe('tf2',80);},1500);
+  t(()=>vis('sn-stopped'),2200);
+  t(()=>vis('t2a'),2800);
+  t(()=>vis('t2b'),3300);
+  t(()=>vis('t2c'),3700);
+  t(()=>vis('t2d'),4100);
+  t(()=>vis('t2e'),4500);
+  t(()=>vis('t2f'),5000);
+  t(()=>vis('t2g'),5400);
+}
+
+// ── S3 ──
+function playS3(){
+  clearT();
+  ['sn-stop3','tr3a','sn-run3','db3','psawrap','psa1','psa2','psa3','t3a','t3b','t3c','t3d','t3e'].forEach(hide);
+  let tf=document.getElementById('tf3a');if(tf){tf.style.transition='none';tf.style.width='0';}
+
+  t(()=>vis('sn-stop3'),300);
+  t(()=>{vis('tr3a');growPipe('tf3a',80);},900);
+  t(()=>vis('sn-run3'),1600);
+  t(()=>vis('db3'),2100);
+  t(()=>vis('psawrap'),2700);
+  t(()=>vis('psa1'),2900);
+  t(()=>vis('psa2'),3300);
+  t(()=>vis('psa3'),3700);
+  t(()=>vis('t3a'),4200);
+  t(()=>vis('t3b'),4700);
+  t(()=>vis('t3c'),5100);
+  t(()=>vis('t3d'),5600);
+  t(()=>vis('t3e'),6000);
+}
+
+// ── S4 ──
+function playS4(){
+  clearT();
+  ['snf1','trf1','snf2','trf2','snf3','trf3','snf4','rmbox','t4a','t4b','t4c','t4d','t4e','t4f','t4g'].forEach(hide);
+  ['tff1','tff2','tff3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+
+  t(()=>vis('snf1'),200);
+  t(()=>{vis('trf1');growPipe('tff1',80);},700);
+  t(()=>vis('snf2'),1400);
+  t(()=>{vis('trf2');growPipe('tff2',80);},2000);
+  t(()=>vis('snf3'),2700);
+  t(()=>{vis('trf3');growPipe('tff3',80);},3300);
+  t(()=>vis('snf4'),4000);
+  t(()=>vis('rmbox'),4600);
+  t(()=>vis('t4a'),5100);
+  t(()=>vis('t4b'),5600);
+  t(()=>vis('t4c'),6000);
+  t(()=>vis('t4d'),6400);
+  t(()=>vis('t4e'),6800);
+  t(()=>vis('t4f'),7200);
+  t(()=>vis('t4g'),7600);
+}
+
+playS1();
+</script>
+</body>
+</html>

@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Tag-Based Cache Invalidation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a0d2e}
+.hdr-title{font-size:13px;color:#a78bfa;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a0d2e;transition:background .2s}
+.dot.active{background:#a78bfa}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #a78bfa;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.am{border-color:#e8a020}
+.il{color:#888}.ih{color:#a78bfa}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#08050f;border:1px solid #1a0d2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#a78bfa;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #a78bfa;background:transparent;color:#a78bfa;cursor:pointer;transition:all .15s}
+.btn:hover{background:#a78bfa20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#05030b;border:2px solid #1a0d2e;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#a78bfa}
+.cmd-key{color:#4eff9a}
+.cmd-arg{color:#e8a020}
+.cmd-str{color:#fff}
+.cmd-comment{color:#1a0d2e;font-size:7px}
+.cmd-result{color:#4eff9a;font-size:7px}
+
+/* ── graph nodes ── */
+.tag-node{
+  display:inline-flex;align-items:center;justify-content:center;
+  border:2px solid #a78bfa;background:#0f0820;
+  border-radius:4px;padding:6px 8px;font-size:7px;color:#a78bfa;
+  text-align:center;line-height:1.5;transition:all 0.3s;
+  position:relative;cursor:default;
+}
+.tag-node.cache-key{border-color:#4ec9e1;color:#4ec9e1;background:#05101a;font-size:6px}
+.tag-node.invalidating{border-color:#e85050!important;color:#e85050!important;background:#1a0508!important;animation:invalidate 0.4s ease}
+.tag-node.gone{opacity:0;transform:scale(0.7);pointer-events:none}
+.tag-node.highlight{border-color:#4eff9a;color:#4eff9a;background:#041a0a;animation:nodePop 0.4s ease}
+@keyframes invalidate{0%{transform:scale(1.05);box-shadow:0 0 12px #e85050}50%{background:#2a0508}100%{transform:scale(1)}}
+@keyframes nodePop{0%{transform:scale(0.9)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+@keyframes lineGrow{from{stroke-dashoffset:200}to{stroke-dashoffset:0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+
+/* ── graph SVG container ── */
+.graph-wrap{position:relative;background:#05030b;border:2px solid #1a0d2e;border-radius:2px;overflow:hidden}
+
+/* ── tag set rows ── */
+.tag-set-row{display:flex;align-items:center;gap:6px;padding:6px 8px;background:#05030b;border:1px solid #1a0d2e;border-radius:2px;opacity:0;transition:opacity 0.4s}
+.tag-set-row.show{opacity:1}
+.ts-tag{font-size:7px;padding:3px 6px;border-radius:2px;border:1px solid #a78bfa;color:#a78bfa;background:#0f0820;flex-shrink:0}
+.ts-arrow{font-size:8px;color:#2a1a4a;flex-shrink:0}
+.ts-members{display:flex;gap:3px;flex-wrap:wrap;flex:1}
+.ts-member{font-size:6px;padding:2px 4px;border-radius:2px;border:1px solid #1a2a3a;color:#4ec9e1;background:#050f15;transition:all 0.3s}
+.ts-member.del{border-color:#e85050;color:#e85050;background:#150508;text-decoration:line-through;opacity:0.5}
+
+/* ── before/after comparison ── */
+.cmp-panel{opacity:0;transition:opacity 0.5s;background:#05030b;border:1px solid #1a0d2e;padding:8px 10px;border-radius:2px}
+.cmp-panel.show{opacity:1}
+.cmp-title{font-size:7px;margin-bottom:6px}
+.cmp-step{font-size:6px;color:#888;line-height:1.8;padding:4px 0;border-bottom:1px solid #0f0820}
+.cmp-step:last-child{border-bottom:none}
+.cmp-step.bad{color:#e85050}
+.cmp-step.good{color:#4eff9a}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — THE PROBLEM: 1-BY-1 DELETION
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#08050f">
+  <div class="hdr" style="background:#08050f">
+    <div class="hdr-title">TAG INVALIDATION</div>
+    <div class="hdr-sub">ONE UPDATE · MANY CACHE KEYS</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">UNMAINTAINABLE</span>
+  </div>
+
+  <div class="anim" style="background:#08050f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ product:42 updated — which cache keys need clearing?</div>
+
+      <!-- Naive code block -->
+      <div class="cmd-box" id="s1-code" style="min-height:auto">
+        <div style="font-size:6px;color:#e85050;margin-bottom:4px"># naive approach — delete each key manually</div>
+        <div id="s1-lines" style="display:flex;flex-direction:column;gap:2px"></div>
+      </div>
+
+      <!-- Keys being deleted one by one -->
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ keys deleted one by one (painful)</div>
+      <div id="s1-keys-grid" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+
+      <!-- Delete counter -->
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:#05030b;border:2px solid #e85050;padding:8px;border-radius:2px;text-align:center">
+          <div style="font-size:6px;color:#555;margin-bottom:3px">DEL COMMANDS SENT</div>
+          <div style="font-size:22px;color:#e85050" id="s1-del-count">0</div>
+        </div>
+        <div style="flex:1;background:#05030b;border:2px solid #1a0d2e;padding:8px;border-radius:2px;text-align:center">
+          <div style="font-size:6px;color:#555;margin-bottom:3px">KEYS STILL STALE?</div>
+          <div style="font-size:14px;color:#e8a020;margin-top:3px" id="s1-stale">how would<br>you know?</div>
+        </div>
+      </div>
+
+      <!-- Problem callout -->
+      <div id="s1-problem" style="opacity:0;transition:opacity 0.5s;background:#150508;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px">THE PROBLEM</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          new cache key added? → update invalidation code.<br>
+          forgot one key? → stale data served silently.<br>
+          different team writes the cache? → you're already lost.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">one product update → N manual DEL commands</div>
+    <div class="ih rd">you have to know every cache key upfront.<br>hard to maintain. easy to miss one.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s1-stat1">0</div><div class="sl">DEL CALLS<br>NEEDED</div></div>
+    <div class="sc"><div class="sv am">N</div><div class="sl">KEYS TO<br>TRACK</div></div>
+    <div class="sc"><div class="sv rd">HIGH</div><div class="sl">STALE<br>RISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — THE STRUCTURE: TAG SETS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#08050f">
+  <div class="hdr" style="background:#08050f">
+    <div class="hdr-title">TAG INVALIDATION</div>
+    <div class="hdr-sub">GROUP KEYS UNDER LOGICAL TAGS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a78bfa">STRUCTURE</span>
+    <span class="sbadge" style="color:#a78bfa;border-color:#a78bfa">REDIS SETS</span>
+  </div>
+
+  <div class="anim" style="background:#08050f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-str">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- Tag → keys mapping -->
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ one Redis SET per tag → members = cache keys</div>
+
+      <div id="s2-tag-sets" style="display:flex;flex-direction:column;gap:5px">
+        <div class="tag-set-row" id="ts1">
+          <div class="ts-tag">tag:product:42</div>
+          <div class="ts-arrow">→</div>
+          <div class="ts-members">
+            <div class="ts-member" id="tm1">product:42:detail</div>
+            <div class="ts-member" id="tm2">product:42:reviews</div>
+            <div class="ts-member" id="tm3">product:42:related</div>
+            <div class="ts-member" id="tm4">product:42:pricing</div>
+            <div class="ts-member" id="tm5">search:q=widget</div>
+          </div>
+        </div>
+        <div class="tag-set-row" id="ts2">
+          <div class="ts-tag" style="border-color:#e8a020;color:#e8a020;background:#150e05">tag:category:elec</div>
+          <div class="ts-arrow">→</div>
+          <div class="ts-members">
+            <div class="ts-member">cat:elec:listing</div>
+            <div class="ts-member">cat:elec:featured</div>
+            <div class="ts-member">product:42:detail</div>
+          </div>
+        </div>
+        <div class="tag-set-row" id="ts3">
+          <div class="ts-tag" style="border-color:#4eff9a;color:#4eff9a;background:#041005">tag:user:888</div>
+          <div class="ts-arrow">→</div>
+          <div class="ts-members">
+            <div class="ts-member">user:888:cart</div>
+            <div class="ts-member">user:888:wishlist</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- How to register a cache write -->
+      <div id="s2-write-box" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#1a0d2e;margin-bottom:4px">▸ when writing a cache key, register its tags</div>
+        <div class="cmd-box" style="font-size:7px">
+          <div><span class="cmd-comment"># cache the value</span></div>
+          <div><span class="cmd-key">SET</span> <span class="cmd-str">product:42:detail</span> <span class="cmd-arg">{...}</span> <span class="cmd-key">EX</span> <span class="cmd-arg">3600</span></div>
+          <div style="margin-top:2px"><span class="cmd-comment"># register key under tags</span></div>
+          <div><span class="cmd-key">SADD</span> <span class="cmd-str">tag:product:42</span> <span class="cmd-arg">"product:42:detail"</span></div>
+          <div><span class="cmd-key">SADD</span> <span class="cmd-str">tag:category:elec</span> <span class="cmd-arg">"product:42:detail"</span></div>
+        </div>
+      </div>
+
+      <!-- Key insight -->
+      <div id="s2-insight" style="opacity:0;transition:opacity 0.5s;background:#0f0820;border:2px solid #a78bfa;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#a78bfa;margin-bottom:5px">KEY INSIGHT</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          one key can belong to MULTIPLE tags.<br>
+          invalidating any tag clears all its members.<br>
+          you never hardcode key names at delete time.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">SADD tag:product:42 "cache-key-name"</div>
+    <div class="ih">at write time, register the key under each tag.<br>at invalidation time, just name the tag.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">3</div><div class="sl">TAGS<br>SHOWN</div></div>
+    <div class="sc"><div class="sv am">N keys</div><div class="sl">PER<br>TAG</div></div>
+    <div class="sc"><div class="sv gn">1 key</div><div class="sl">MULTI<br>TAG OK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — THE GRAPH: VISUAL INVALIDATION
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#08050f">
+  <div class="hdr" style="background:#08050f">
+    <div class="hdr-title">TAG INVALIDATION</div>
+    <div class="hdr-sub">ONE COMMAND · ALL KEYS GONE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">INVALIDATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ATOMIC</span>
+  </div>
+
+  <div class="anim" style="background:#08050f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s3-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s3-cmd-text" class="cmd-str">_</span>
+        <div id="s3-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- SVG Graph -->
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ tag node → connected cache key nodes</div>
+      <div class="graph-wrap" style="height:210px">
+        <svg id="s3-svg" width="366" height="210" style="position:absolute;top:0;left:0;pointer-events:none">
+          <!-- lines drawn by JS -->
+        </svg>
+        <!-- Tag node (centre left) -->
+        <div id="gn-tag" class="tag-node" style="position:absolute;top:85px;left:12px;width:80px;opacity:0;transition:opacity 0.4s">
+          tag:<br>product:42
+        </div>
+        <!-- Cache key nodes (right side) -->
+        <div id="gn-k1" class="tag-node cache-key" style="position:absolute;top:10px;left:120px;width:110px;opacity:0;transition:all 0.4s">product:42:detail</div>
+        <div id="gn-k2" class="tag-node cache-key" style="position:absolute;top:52px;left:120px;width:110px;opacity:0;transition:all 0.4s">product:42:reviews</div>
+        <div id="gn-k3" class="tag-node cache-key" style="position:absolute;top:94px;left:120px;width:110px;opacity:0;transition:all 0.4t">product:42:related</div>
+        <div id="gn-k4" class="tag-node cache-key" style="position:absolute;top:136px;left:120px;width:110px;opacity:0;transition:all 0.4s">product:42:pricing</div>
+        <div id="gn-k5" class="tag-node cache-key" style="position:absolute;top:178px;left:120px;width:110px;opacity:0;transition:all 0.4s">search:q=widget</div>
+        <!-- Value previews -->
+        <div id="gn-v1" class="tag-node" style="position:absolute;top:10px;left:242px;width:112px;font-size:5px;color:#1a3a4a;border-color:#0d1a2e;opacity:0;transition:all 0.4s">CACHED ✓<br>name,price,img…</div>
+        <div id="gn-v2" class="tag-node" style="position:absolute;top:52px;left:242px;width:112px;font-size:5px;color:#1a3a4a;border-color:#0d1a2e;opacity:0;transition:all 0.4s">CACHED ✓<br>4.2★ 128 reviews</div>
+        <div id="gn-v3" class="tag-node" style="position:absolute;top:94px;left:242px;width:112px;font-size:5px;color:#1a3a4a;border-color:#0d1a2e;opacity:0;transition:all 0.4s">CACHED ✓<br>[id:7,id:19,id:33]</div>
+        <div id="gn-v4" class="tag-node" style="position:absolute;top:136px;left:242px;width:112px;font-size:5px;color:#1a3a4a;border-color:#0d1a2e;opacity:0;transition:all 0.4s">CACHED ✓<br>$29.99, on sale</div>
+        <div id="gn-v5" class="tag-node" style="position:absolute;top:178px;left:242px;width:112px;font-size:5px;color:#1a3a4a;border-color:#0d1a2e;opacity:0;transition:all 0.4s">CACHED ✓<br>[42,7,99,204…]</div>
+      </div>
+
+      <!-- Result -->
+      <div id="s3-result" style="opacity:0;transition:opacity 0.5s;background:#041a0a;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div class="cmd-result" id="s3-result-text"></div>
+      </div>
+
+      <!-- Lua script hint -->
+      <div id="s3-lua" style="opacity:0;transition:opacity 0.5s;background:#05030b;border:1px solid #1a0d2e;padding:9px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#a78bfa;margin-bottom:5px">ATOMIC INVALIDATION (Lua script)</div>
+        <div class="cmd-box" style="background:#030208;font-size:7px;padding:6px 8px">
+          <div style="color:#2a1a4a"># get all members of tag set</div>
+          <div><span style="color:#e8a020">local</span> <span style="color:#fff">keys</span> = <span class="cmd-key">redis.call</span>(<span style="color:#4eff9a">'SMEMBERS'</span>, KEYS[1])</div>
+          <div><span style="color:#e8a020">for</span> _, k <span style="color:#e8a020">in</span> ipairs(keys) <span style="color:#e8a020">do</span></div>
+          <div>&nbsp;&nbsp;<span class="cmd-key">redis.call</span>(<span style="color:#4eff9a">'DEL'</span>, k)</div>
+          <div><span style="color:#e8a020">end</span></div>
+          <div><span class="cmd-key">redis.call</span>(<span style="color:#4eff9a">'DEL'</span>, KEYS[1]) <span style="color:#1a0d2e">-- drop tag set too</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">SMEMBERS tag:product:42 → DEL each member</div>
+    <div class="ih gn">one Lua script: fetch tag set → delete all keys.<br>atomic. no race conditions. O(N) where N=keys.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" id="s3-stat1">5</div><div class="sl">KEYS<br>CLEARED</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">COMMANDS<br>SENT</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">STALE<br>ENTRIES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — USE CASES + BEFORE / AFTER
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#08050f">
+  <div class="hdr" style="background:#08050f">
+    <div class="hdr-title">TAG INVALIDATION</div>
+    <div class="hdr-sub">USE CASES · BEFORE VS AFTER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a78bfa">PATTERNS</span>
+    <span class="sbadge" style="color:#a78bfa;border-color:#a78bfa">REAL WORLD</span>
+  </div>
+
+  <div class="anim" style="background:#08050f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- Before / after -->
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ product update: before vs after</div>
+      <div style="display:flex;gap:6px">
+        <div class="cmp-panel" id="cp-bad" style="flex:1;border-color:#e85050;background:#0f0508">
+          <div class="cmp-title" style="color:#e85050">WITHOUT TAGS</div>
+          <div class="cmp-step bad">DEL product:42:detail</div>
+          <div class="cmp-step bad">DEL product:42:reviews</div>
+          <div class="cmp-step bad">DEL product:42:related</div>
+          <div class="cmp-step bad">DEL product:42:pricing</div>
+          <div class="cmp-step bad">DEL search:q=widget</div>
+          <div class="cmp-step bad">… forgot 3 more? 💀</div>
+        </div>
+        <div class="cmp-panel" id="cp-good" style="flex:1;border-color:#4eff9a;background:#041005">
+          <div class="cmp-title" style="color:#4eff9a">WITH TAGS</div>
+          <div class="cmp-step good">EVALSHA invalidate_tag</div>
+          <div class="cmp-step good">tag:product:42</div>
+          <div class="cmp-step" style="color:#555">↑ that's it.</div>
+          <div class="cmp-step" style="color:#555">all 8 keys gone.</div>
+          <div class="cmp-step" style="color:#555">atomically.</div>
+          <div class="cmp-step" style="color:#4eff9a">zero stale risk ✓</div>
+        </div>
+      </div>
+
+      <!-- Use case cards -->
+      <div style="font-size:7px;color:#1a0d2e;margin-bottom:-2px">▸ where tag invalidation shines</div>
+
+      <div id="uc1" style="opacity:0;transition:opacity 0.5s;background:#05030b;border:1px solid #1a0d2e;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#a78bfa;margin-bottom:4px">🛒 E-COMMERCE PRODUCT CATALOG</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">price change → tag:product:42 → clears detail,<br>category listings, search results, recommendations</div>
+      </div>
+
+      <div id="uc2" style="opacity:0;transition:opacity 0.5s;background:#05030b;border:1px solid #1a0d2e;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">📰 CMS / BLOG</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">article edit → tag:article:99 → clears article page,<br>author feed, tag pages, RSS feed, sitemap cache</div>
+      </div>
+
+      <div id="uc3" style="opacity:0;transition:opacity 0.5s;background:#05030b;border:1px solid #1a0d2e;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">🏢 MULTI-TENANT SAAS</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">tenant settings change → tag:tenant:acme → all<br>tenant-scoped cached responses cleared instantly</div>
+      </div>
+
+      <div id="uc-warn" style="opacity:0;transition:opacity 0.5s;background:#100e04;border:1px solid #2a2000;padding:8px 10px;border-radius:2px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">⚠ WATCH OUT</div>
+        <div style="font-size:6px;color:#666;line-height:1.8">tag sets grow if keys expire without cleanup.<br>use Lua to delete the tag set itself on invalidation.<br>or: expire tag sets with a TTL slightly longer than members.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">write = SET key + SADD tag key</div>
+    <div class="ih am">invalidate = SMEMBERS tag → DEL all + DEL tag.<br>one Lua script. works for any number of keys.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">1</div><div class="sl">COMMANDS<br>TO INVALIDATE</div></div>
+    <div class="sc"><div class="sv gn">∞</div><div class="sl">KEYS PER<br>TAG</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">STALE<br>RISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();if(n===2)playS2();if(n===3)playS3();if(n===4)playS4();
+}
+
+// ── SCENE 1 ───────────────────────────────────
+const s1Keys=[
+  'product:42:detail','product:42:reviews','product:42:related',
+  'product:42:pricing','search:q=widget','category:elec:listing',
+  'home:featured','search:q=gadget'
+];
+function playS1(){
+  clearT();
+  document.getElementById('s1-del-count').textContent='0';
+  document.getElementById('s1-stat1').textContent='0';
+  document.getElementById('s1-problem').style.opacity='0';
+  document.getElementById('s1-stale').textContent='how would\nyou know?';
+  document.getElementById('s1-lines').innerHTML='';
+  document.getElementById('s1-keys-grid').innerHTML='';
+
+  const linesEl=document.getElementById('s1-lines');
+  const gridEl=document.getElementById('s1-keys-grid');
+
+  // build key chips
+  s1Keys.forEach(k=>{
+    const d=document.createElement('div');
+    d.className='tag-node cache-key';
+    d.style.cssText='position:static;display:inline-flex;font-size:6px;opacity:0;transition:all 0.3s';
+    d.id='s1k-'+k.replace(/[^a-z0-9]/g,'');
+    d.textContent=k;
+    gridEl.appendChild(d);
+  });
+
+  s1Keys.forEach((k,i)=>{
+    T(()=>{
+      // show DEL line
+      const ln=document.createElement('div');
+      ln.innerHTML=`<span class="cmd-key">DEL</span> <span class="cmd-str">${k}</span>`;
+      ln.style.cssText='font-size:7px;animation:fadeUp 0.3s ease;color:#ccc';
+      linesEl.appendChild(ln);
+
+      // flash key chip
+      const chip=document.getElementById('s1k-'+k.replace(/[^a-z0-9]/g,''));
+      if(chip){
+        chip.style.opacity='1';
+        setTimeout(()=>{
+          chip.classList.add('invalidating');
+          setTimeout(()=>chip.classList.add('gone'),400);
+        },300);
+      }
+
+      const v=i+1;
+      document.getElementById('s1-del-count').textContent=v;
+      document.getElementById('s1-stat1').textContent=v;
+    },i*600);
+  });
+
+  T(()=>{ document.getElementById('s1-problem').style.opacity='1'; },s1Keys.length*600+400);
+}
+
+// ── SCENE 2 ───────────────────────────────────
+function playS2(){
+  clearT();
+  ['ts1','ts2','ts3'].forEach(id=>document.getElementById(id).classList.remove('show'));
+  document.getElementById('s2-write-box').style.opacity='0';
+  document.getElementById('s2-insight').style.opacity='0';
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">SADD</span> <span class="cmd-str">tag:product:42</span> <span class="cmd-arg">"product:42:detail"</span> …';
+    document.getElementById('s2-cmd-comment').textContent='# register 5 cache keys under this tag';
+    document.getElementById('ts1').classList.add('show');
+  },400);
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">SADD</span> <span class="cmd-str">tag:category:elec</span> <span class="cmd-arg">"cat:elec:listing"</span> …';
+    document.getElementById('s2-cmd-comment').textContent='# separate tag for category keys';
+    document.getElementById('ts2').classList.add('show');
+  },1400);
+
+  T(()=>{
+    document.getElementById('s2-cmd-text').innerHTML=
+      '<span class="cmd-key">SADD</span> <span class="cmd-str">tag:user:888</span> <span class="cmd-arg">"user:888:cart"</span> …';
+    document.getElementById('s2-cmd-comment').textContent='# per-user tags for personalisation cache';
+    document.getElementById('ts3').classList.add('show');
+  },2400);
+
+  T(()=>{ document.getElementById('s2-write-box').style.opacity='1'; },3400);
+  T(()=>{ document.getElementById('s2-insight').style.opacity='1'; },4400);
+}
+
+// ── SCENE 3 ───────────────────────────────────
+const keyNodes=['gn-k1','gn-k2','gn-k3','gn-k4','gn-k5'];
+const valNodes=['gn-v1','gn-v2','gn-v3','gn-v4','gn-v5'];
+
+// positions (centre of each element) for SVG lines
+const tagCX=92, tagCY=107; // tag node centre
+const keyCX=175;            // left edge of key nodes (centre of connection)
+const keyCYs=[21,63,105,147,189];
+const valCX=242;
+const valCYs=[21,63,105,147,189];
+
+function drawLines(svg, phase){
+  svg.innerHTML='';
+  if(phase==='keys'||phase==='vals'||phase==='invalidate'){
+    keyCYs.forEach((cy,i)=>{
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',tagCX);line.setAttribute('y1',tagCY);
+      line.setAttribute('x2',keyCX);line.setAttribute('y2',cy);
+      line.setAttribute('stroke',phase==='invalidate'?'#e85050':'#a78bfa');
+      line.setAttribute('stroke-width','1.5');
+      line.setAttribute('stroke-dasharray','200');
+      line.setAttribute('stroke-dashoffset', phase==='invalidate'?'0':'200');
+      line.style.transition='stroke-dashoffset 0.4s ease, stroke 0.3s';
+      svg.appendChild(line);
+      if(phase!=='invalidate') setTimeout(()=>line.setAttribute('stroke-dashoffset','0'),i*120+50);
+    });
+  }
+  if(phase==='vals'){
+    keyCYs.forEach((cy,i)=>{
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',keyCX+110);line.setAttribute('y1',cy);
+      line.setAttribute('x2',valCX);line.setAttribute('y2',valCYs[i]);
+      line.setAttribute('stroke','#1a3a4a');line.setAttribute('stroke-width','1');
+      line.setAttribute('stroke-dasharray','200');line.setAttribute('stroke-dashoffset','200');
+      svg.appendChild(line);
+      setTimeout(()=>line.setAttribute('stroke-dashoffset','0'),i*100+600);
+    });
+  }
+}
+
+function playS3(){
+  clearT();
+  const svg=document.getElementById('s3-svg');
+  svg.innerHTML='';
+  document.getElementById('s3-result').style.opacity='0';
+  document.getElementById('s3-lua').style.opacity='0';
+  document.getElementById('s3-cmd-text').textContent='_';
+  document.getElementById('s3-cmd-comment').textContent='';
+
+  // hide all nodes
+  document.getElementById('gn-tag').style.opacity='0';
+  [...keyNodes,...valNodes].forEach(id=>{
+    const el=document.getElementById(id);
+    el.style.opacity='0';
+    el.style.transform='';
+    el.className=id.startsWith('gn-k')?'tag-node cache-key':'tag-node';
+  });
+
+  // Step 1: show tag node
+  T(()=>{
+    document.getElementById('s3-cmd-text').innerHTML=
+      '<span class="cmd-key">SMEMBERS</span> <span class="cmd-str">tag:product:42</span>';
+    document.getElementById('s3-cmd-comment').textContent='# fetch all cache keys registered under this tag';
+    document.getElementById('gn-tag').style.opacity='1';
+    document.getElementById('gn-tag').classList.add('highlight');
+  },400);
+
+  // Step 2: reveal key nodes + draw lines
+  T(()=>{
+    keyNodes.forEach((id,i)=>{
+      setTimeout(()=>{ document.getElementById(id).style.opacity='1'; },i*150);
+    });
+    drawLines(svg,'keys');
+  },1200);
+
+  // Step 3: reveal value previews
+  T(()=>{
+    valNodes.forEach((id,i)=>{
+      setTimeout(()=>{ document.getElementById(id).style.opacity='1'; },i*100);
+    });
+    drawLines(svg,'vals');
+  },2400);
+
+  // Step 4: product update fires
+  T(()=>{
+    document.getElementById('s3-cmd-text').innerHTML=
+      '<span class="cmd-key">EVALSHA</span> <span class="cmd-arg">invalidate_tag</span> <span class="cmd-str">1</span> <span class="cmd-str">tag:product:42</span>';
+    document.getElementById('s3-cmd-comment').textContent='# product:42 updated → invalidate all tagged keys';
+    document.getElementById('gn-tag').className='tag-node invalidating';
+  },3800);
+
+  // Step 5: keys flash red and vanish
+  T(()=>{
+    drawLines(svg,'invalidate');
+    keyNodes.forEach((id,i)=>{
+      setTimeout(()=>{
+        const el=document.getElementById(id);
+        el.classList.remove('cache-key');
+        el.classList.add('invalidating');
+        setTimeout(()=>{ el.classList.add('gone'); },350);
+      },i*120);
+    });
+    valNodes.forEach((id,i)=>{
+      setTimeout(()=>{
+        const el=document.getElementById(id);
+        el.classList.add('invalidating');
+        setTimeout(()=>{ el.classList.add('gone'); },350);
+      },i*120+100);
+    });
+  },4600);
+
+  T(()=>{
+    svg.innerHTML='';
+    document.getElementById('gn-tag').className='tag-node gone';
+    document.getElementById('s3-result').style.opacity='1';
+    document.getElementById('s3-result-text').textContent='(integer) 5   ← 5 keys deleted + tag set removed';
+  },5800);
+
+  T(()=>{ document.getElementById('s3-lua').style.opacity='1'; },6400);
+}
+
+// ── SCENE 4 ───────────────────────────────────
+function playS4(){
+  clearT();
+  document.getElementById('cp-bad').classList.remove('show');
+  document.getElementById('cp-good').classList.remove('show');
+  ['uc1','uc2','uc3','uc-warn'].forEach(id=>{ document.getElementById(id).style.opacity='0'; });
+
+  T(()=>{ document.getElementById('cp-bad').classList.add('show'); },400);
+  T(()=>{ document.getElementById('cp-good').classList.add('show'); },900);
+  T(()=>{ document.getElementById('uc1').style.opacity='1'; },1700);
+  T(()=>{ document.getElementById('uc2').style.opacity='1'; },2400);
+  T(()=>{ document.getElementById('uc3').style.opacity='1'; },3100);
+  T(()=>{ document.getElementById('uc-warn').style.opacity='1'; },3900);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

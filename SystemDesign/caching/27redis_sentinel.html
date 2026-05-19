@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Redis Sentinel — High Availability</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── node boxes ── */
+.node-box{
+  border:2px solid #2a1f3d;
+  border-radius:3px;
+  padding:7px 8px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:3px;
+  transition:border-color .3s,background .3s,opacity .3s;
+}
+.node-box .n-icon{font-size:16px;line-height:1}
+.node-box .n-label{font-size:6px;color:#888;text-align:center;line-height:1.5}
+.node-box .n-role{font-size:7px;text-align:center;font-weight:bold}
+.node-box.master{border-color:#e8a020;background:#e8a02010}
+.node-box.master .n-role{color:#e8a020}
+.node-box.replica{border-color:#4ec9e1;background:#4ec9e110}
+.node-box.replica .n-role{color:#4ec9e1}
+.node-box.dead{border-color:#e85050;background:#e8505015;opacity:.55}
+.node-box.dead .n-role{color:#e85050}
+.node-box.promoted{border-color:#4eff9a;background:#4eff9a10;animation:glow 1s ease-in-out 3}
+.node-box.promoted .n-role{color:#4eff9a}
+.node-box.sentinel-box{border-color:#888;background:#88888808}
+.node-box.sentinel-box .n-role{color:#aaa}
+.node-box.sentinel-voting{border-color:#e8a020;background:#e8a02015;animation:pulse-am 0.5s ease-in-out 4}
+.node-box.sentinel-voting .n-role{color:#e8a020}
+.node-box.sentinel-done{border-color:#4eff9a;background:#4eff9a0d}
+.node-box.sentinel-done .n-role{color:#4eff9a}
+
+@keyframes glow{
+  0%{box-shadow:0 0 0 0 #4eff9a40}
+  50%{box-shadow:0 0 12px 3px #4eff9a40}
+  100%{box-shadow:0 0 0 0 #4eff9a40}
+}
+@keyframes pulse-am{
+  0%{box-shadow:0 0 0 0 #e8a02040}
+  50%{box-shadow:0 0 8px 2px #e8a02040}
+  100%{box-shadow:0 0 0 0 #e8a02040}
+}
+
+/* ── replication arrows canvas ── */
+.topology-wrap{position:relative;width:100%}
+
+/* ── timeline step strip ── */
+.step-strip{display:flex;flex-direction:column;gap:5px}
+.step-row{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:3px;border-left:3px solid #2a1f3d;background:#130d1e;opacity:0;transition:opacity .35s}
+.step-row.active-step{border-color:#4ec9e1}
+.step-row.warn-step{border-color:#e85050}
+.step-row.ok-step{border-color:#4eff9a}
+.step-num{font-size:8px;color:#555;flex-shrink:0;min-width:14px}
+.step-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── cmd lines ── */
+.cmd-line{font-size:8px;padding:6px 8px;background:#0d1a2e;border-left:3px solid #4ec9e1;margin-bottom:5px;opacity:0;transition:opacity .3s;line-height:1.8;color:#aaa;border-radius:0 2px 2px 0}
+.cmd-k{color:#4ec9e1}
+.cmd-v{color:#4eff9a}
+.cmd-r{color:#e8a020}
+
+/* ── heartbeat dot ── */
+.hb{width:7px;height:7px;border-radius:50%;background:#4eff9a;display:inline-block;margin-right:4px;animation:hbpulse 1s infinite}
+@keyframes hbpulse{0%,100%{opacity:1}50%{opacity:.2}}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: The Problem — SPOF ══════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">REDIS SENTINEL</div>
+    <div class="hdr-sub">HIGH AVAILABILITY WITHOUT A CLUSTER</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SINGLE POINT OF FAILURE</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">One Redis node. Everything depends on it.</div>
+
+      <!-- Single node topology -->
+      <div style="display:flex;justify-content:center">
+        <div class="node-box master" id="s1_master" style="width:110px">
+          <div class="n-icon">🗄</div>
+          <div class="n-role">MASTER</div>
+          <div class="n-label">redis:6379<br><span class="hb" id="s1_hb"></span><span style="font-size:6px;color:#4eff9a">online</span></div>
+        </div>
+      </div>
+
+      <!-- clients pointing to master -->
+      <div style="display:flex;justify-content:space-between;gap:6px" id="s1_clients">
+        <div class="node-box" style="flex:1;border-color:#555" id="s1_c1">
+          <div class="n-icon">💻</div>
+          <div class="n-role" style="color:#888;font-size:6px">APP SERVER 1</div>
+          <div class="n-label" id="s1_c1_status">connected ✓</div>
+        </div>
+        <div class="node-box" style="flex:1;border-color:#555" id="s1_c2">
+          <div class="n-icon">💻</div>
+          <div class="n-role" style="color:#888;font-size:6px">APP SERVER 2</div>
+          <div class="n-label" id="s1_c2_status">connected ✓</div>
+        </div>
+        <div class="node-box" style="flex:1;border-color:#555" id="s1_c3">
+          <div class="n-icon">💻</div>
+          <div class="n-role" style="color:#888;font-size:6px">APP SERVER 3</div>
+          <div class="n-label" id="s1_c3_status">connected ✓</div>
+        </div>
+      </div>
+
+      <!-- crash event -->
+      <div style="background:#e8505018;border:2px solid #e85050;padding:10px 12px;border-radius:3px;opacity:0;transition:opacity .4s" id="s1_crash_box">
+        <div style="font-size:8px;color:#e85050;margin-bottom:6px">💥 MASTER CRASHES</div>
+        <div style="font-size:7px;color:#ccc;line-height:2">
+          OOM / hardware fault / network partition.<br>
+          Every app server: <span style="color:#e85050">ECONNREFUSED</span>.<br>
+          No reads. No writes. <span style="color:#e85050">Full outage.</span>
+        </div>
+      </div>
+
+      <!-- downtime meter -->
+      <div style="background:#130d1e;border:1px solid #2a1f3d;padding:8px 10px;border-radius:3px;opacity:0;transition:opacity .4s" id="s1_meter">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:7px;color:#888">OUTAGE DURATION</div>
+          <div style="font-size:7px;color:#e85050" id="s1_elapsed">0s</div>
+        </div>
+        <div style="height:8px;background:#0a0a0f;border-radius:2px;overflow:hidden">
+          <div id="s1_meter_bar" style="height:100%;width:0%;background:#e85050;transition:width 2.5s linear;border-radius:2px"></div>
+        </div>
+        <div style="font-size:7px;color:#555;margin-top:4px">until you manually intervene</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Single Redis = single point of failure. No replica, no recovery.</div>
+    <div class="ih am">Manual restart = minutes of downtime. Unacceptable in production.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">∞</div><div class="sl">OUTAGE<br>DURATION</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">REPLICAS<br>AVAILABLE</div></div>
+    <div class="sc"><div class="sv am">MANUAL</div><div class="sl">RECOVERY<br>PROCESS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: Sentinel Failover ══════════════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">REDIS SENTINEL</div>
+    <div class="hdr-sub">AUTOMATIC FAILOVER IN SECONDS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SENTINEL FAILOVER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">AUTO-RECOVER</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">3 Sentinel processes watch the cluster. Quorum = 2.</div>
+
+      <!-- Topology: master + 2 replicas -->
+      <div style="display:flex;justify-content:space-between;gap:5px">
+        <div class="node-box master" id="s2_master" style="flex:1">
+          <div class="n-icon">🗄</div>
+          <div class="n-role" id="s2_master_role">MASTER</div>
+          <div class="n-label">:6379</div>
+        </div>
+        <div class="node-box replica" id="s2_r1" style="flex:1">
+          <div class="n-icon">🗄</div>
+          <div class="n-role" id="s2_r1_role">REPLICA 1</div>
+          <div class="n-label">:6380</div>
+        </div>
+        <div class="node-box replica" id="s2_r2" style="flex:1">
+          <div class="n-icon">🗄</div>
+          <div class="n-role" id="s2_r2_role">REPLICA 2</div>
+          <div class="n-label">:6381</div>
+        </div>
+      </div>
+
+      <!-- Replica sync indicator -->
+      <div style="display:flex;gap:5px;opacity:0;transition:opacity .3s" id="s2_sync_row">
+        <div style="flex:1;font-size:6px;color:#555;text-align:center">▲ replicates</div>
+        <div style="flex:1;font-size:6px;color:#4ec9e1;text-align:center">← async replication</div>
+        <div style="flex:1;font-size:6px;color:#4ec9e1;text-align:center">← async replication</div>
+      </div>
+
+      <!-- Sentinels row -->
+      <div style="font-size:7px;color:#888;text-align:center" id="s2_sent_label" style="opacity:0">SENTINEL NODES (quorum: 2 of 3)</div>
+      <div style="display:flex;gap:5px" id="s2_sentinels">
+        <div class="node-box sentinel-box" id="ss0" style="flex:1">
+          <div class="n-icon" style="font-size:13px">👁</div>
+          <div class="n-role" id="ss0_role">SENTINEL 1</div>
+          <div class="n-label" id="ss0_status">watching</div>
+        </div>
+        <div class="node-box sentinel-box" id="ss1" style="flex:1">
+          <div class="n-icon" style="font-size:13px">👁</div>
+          <div class="n-role" id="ss1_role">SENTINEL 2</div>
+          <div class="n-label" id="ss1_status">watching</div>
+        </div>
+        <div class="node-box sentinel-box" id="ss2" style="flex:1">
+          <div class="n-icon" style="font-size:13px">👁</div>
+          <div class="n-role" id="ss2_role">SENTINEL 3</div>
+          <div class="n-label" id="ss2_status">watching</div>
+        </div>
+      </div>
+
+      <!-- Step-by-step failover timeline -->
+      <div class="step-strip" id="s2_steps">
+        <div class="step-row warn-step" id="st0">
+          <div class="step-num">1</div>
+          <div class="step-txt">💥 Master :6379 stops responding. Sentinels detect missed heartbeat.</div>
+        </div>
+        <div class="step-row warn-step" id="st1">
+          <div class="step-num">2</div>
+          <div class="step-txt">🗳 Sentinels vote. 2 of 3 agree → <span style="color:#e85050">SDOWN → ODOWN</span> (objectively down).</div>
+        </div>
+        <div class="step-row active-step" id="st2">
+          <div class="step-num">3</div>
+          <div class="step-txt">⚡ Leader Sentinel elected. Picks replica with lowest replication lag.</div>
+        </div>
+        <div class="step-row ok-step" id="st3">
+          <div class="step-num">4</div>
+          <div class="step-txt">🟢 Replica 1 promoted to MASTER. Other replica repoints to it.</div>
+        </div>
+        <div class="step-row ok-step" id="st4">
+          <div class="step-num">5</div>
+          <div class="step-txt">🔗 Clients query Sentinel for new master address. Auto-reconnect.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Sentinels ping master every 1s. On failure, quorum votes → failover.</div>
+    <div class="ih">Replica promoted in ~10–30s. Clients redirect automatically.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~30s</div><div class="sl">FAILOVER<br>TIME</div></div>
+    <div class="sc"><div class="sv gn">2 of 3</div><div class="sl">QUORUM<br>NEEDED</div></div>
+    <div class="sc"><div class="sv gn">AUTO</div><div class="sl">CLIENT<br>REDIRECT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: Config + Sentinel vs Cluster ══════════════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">REDIS SENTINEL</div>
+    <div class="hdr-sub">CONFIG & SENTINEL VS CLUSTER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PRODUCTION CONFIG</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WHEN TO USE</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Sentinel config is minimal. Client does one extra lookup.</div>
+
+      <!-- sentinel.conf -->
+      <div class="cmd-line" id="cmd1" style="border-color:#e8a020">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">sentinel.conf</div>
+        <span class="cmd-r">sentinel</span> monitor mymaster <span class="cmd-v">127.0.0.1</span> <span class="cmd-v">6379</span> <span class="cmd-r">2</span><br>
+        <span class="cmd-r">sentinel</span> down-after-milliseconds mymaster <span class="cmd-v">5000</span><br>
+        <span class="cmd-r">sentinel</span> failover-timeout mymaster <span class="cmd-v">60000</span>
+      </div>
+
+      <!-- client lookup -->
+      <div class="cmd-line" id="cmd2" style="border-color:#4ec9e1">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">client: discover master via Sentinel</div>
+        <span class="cmd-k">SENTINEL</span> get-master-addr-by-name <span class="cmd-v">mymaster</span><br>
+        <span style="color:#555">→ </span><span class="cmd-v">"127.0.0.1"</span> <span class="cmd-v">"6379"</span> &nbsp;<span style="color:#555;font-size:7px">(or new addr)</span>
+      </div>
+
+      <!-- Sentinel vs Cluster comparison -->
+      <div id="compare_box" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:8px;color:#4ec9e1">SENTINEL vs CLUSTER</div>
+
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:8px">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px;text-align:center">SENTINEL</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              ✓ 1 master (all data)<br>
+              ✓ Simple to operate<br>
+              ✓ HA without sharding<br>
+              ✓ Use when: &lt;25GB data<br>
+              ✗ No horizontal scale<br>
+              ✗ All reads/writes: master
+            </div>
+          </div>
+          <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:8px">
+            <div style="font-size:7px;color:#888;margin-bottom:6px;text-align:center">CLUSTER</div>
+            <div style="font-size:6px;color:#ccc;line-height:2.1">
+              ✓ 16384 hash slots<br>
+              ✓ Horizontal scale-out<br>
+              ✓ Built-in HA per shard<br>
+              ✓ Use when: &gt;25GB data<br>
+              ✗ Complex config<br>
+              ✗ No cross-slot MGET
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">INTERVIEW ANSWER</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            "For HA without needing to shard data, Sentinel is the right answer — simpler ops, fewer failure modes. Reach for Cluster only when a single node can't hold the dataset."
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Sentinel = HA. Cluster = HA + horizontal scale. Pick the simpler one first.</div>
+    <div class="ih">Most apps never outgrow a single well-tuned Redis node with Sentinel.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3+</div><div class="sl">SENTINEL<br>NODES MIN</div></div>
+    <div class="sc"><div class="sv gn">5000ms</div><div class="sl">DOWN-AFTER<br>DEFAULT</div></div>
+    <div class="sc"><div class="sv gn">ODD</div><div class="sl">QUORUM<br>RULE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  var master=document.getElementById('s1_master');
+  master.className='node-box master';
+  var hb=document.getElementById('s1_hb');
+  hb.style.display='inline-block';
+
+  document.getElementById('s1_c1').style.borderColor='#555';
+  document.getElementById('s1_c2').style.borderColor='#555';
+  document.getElementById('s1_c3').style.borderColor='#555';
+  document.getElementById('s1_c1_status').textContent='connected ✓';
+  document.getElementById('s1_c2_status').textContent='connected ✓';
+  document.getElementById('s1_c3_status').textContent='connected ✓';
+  document.getElementById('s1_c1_status').style.color='';
+  document.getElementById('s1_c2_status').style.color='';
+  document.getElementById('s1_c3_status').style.color='';
+  document.getElementById('s1_crash_box').style.opacity='0';
+  document.getElementById('s1_meter').style.opacity='0';
+  document.getElementById('s1_meter_bar').style.width='0%';
+  document.getElementById('s1_elapsed').textContent='0s';
+
+  // crash at 2.5s
+  delay(function(){
+    master.className='node-box dead';
+    master.querySelector('.n-role').textContent='💥 DEAD';
+    hb.style.display='none';
+    document.getElementById('s1_crash_box').style.opacity='1';
+  },2500);
+
+  delay(function(){
+    document.getElementById('s1_meter').style.opacity='1';
+    delay(function(){document.getElementById('s1_meter_bar').style.width='95%';},50);
+
+    var sec=0;
+    var iv=setInterval(function(){
+      sec++;
+      document.getElementById('s1_elapsed').textContent=sec+'s';
+    },1000);
+    timers.push(iv);
+
+    // clients go red
+    ['c1','c2','c3'].forEach(function(id,i){
+      delay(function(){
+        document.getElementById('s1_'+id).style.borderColor='#e85050';
+        document.getElementById('s1_'+id+'_status').textContent='ECONNREFUSED';
+        document.getElementById('s1_'+id+'_status').style.color='#e85050';
+      }, i*200);
+    });
+  },3200);
+}
+
+/* ─── SCENE 2 ─── */
+function resetS2(){
+  document.getElementById('s2_master').className='node-box master';
+  document.getElementById('s2_master_role').textContent='MASTER';
+  document.getElementById('s2_r1').className='node-box replica';
+  document.getElementById('s2_r1_role').textContent='REPLICA 1';
+  document.getElementById('s2_r2').className='node-box replica';
+  document.getElementById('s2_r2_role').textContent='REPLICA 2';
+  document.getElementById('s2_sync_row').style.opacity='0';
+  document.getElementById('s2_sent_label').style.opacity='0';
+
+  ['ss0','ss1','ss2'].forEach(function(id,i){
+    document.getElementById(id).className='node-box sentinel-box';
+    document.getElementById(id+'_role').textContent='SENTINEL '+(i+1);
+    document.getElementById(id+'_status').textContent='watching';
+  });
+
+  ['st0','st1','st2','st3','st4'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+}
+
+function playS2(){
+  clearAll();
+  resetS2();
+
+  // show replication arrows
+  delay(function(){document.getElementById('s2_sync_row').style.opacity='1';},300);
+  delay(function(){document.getElementById('s2_sent_label').style.opacity='1';},600);
+
+  // sentinels appear as active watchers
+  delay(function(){
+    ['ss0','ss1','ss2'].forEach(function(id){
+      document.getElementById(id).className='node-box sentinel-box';
+    });
+  },700);
+
+  // STEP 1 — master crashes
+  delay(function(){
+    document.getElementById('st0').style.opacity='1';
+    document.getElementById('s2_master').className='node-box dead';
+    document.getElementById('s2_master_role').textContent='💥 DEAD';
+  },1300);
+
+  // STEP 2 — sentinels vote
+  delay(function(){
+    document.getElementById('st1').style.opacity='1';
+    ['ss0','ss1','ss2'].forEach(function(id){
+      document.getElementById(id).className='node-box sentinel-voting';
+      document.getElementById(id+'_status').textContent='voting...';
+    });
+  },2400);
+
+  // STEP 3 — leader elected, picks replica
+  delay(function(){
+    document.getElementById('st2').style.opacity='1';
+    document.getElementById('ss0').className='node-box sentinel-done';
+    document.getElementById('ss0_status').textContent='LEADER';
+    document.getElementById('ss1').className='node-box sentinel-done';
+    document.getElementById('ss1_status').textContent='agreed';
+    document.getElementById('ss2').className='node-box sentinel-done';
+    document.getElementById('ss2_status').textContent='agreed';
+  },3400);
+
+  // STEP 4 — replica 1 promoted
+  delay(function(){
+    document.getElementById('st3').style.opacity='1';
+    document.getElementById('s2_r1').className='node-box promoted';
+    document.getElementById('s2_r1_role').textContent='NEW MASTER';
+    document.getElementById('s2_r2_role').textContent='REPLICA→R1';
+  },4400);
+
+  // STEP 5 — clients redirect
+  delay(function(){
+    document.getElementById('st4').style.opacity='1';
+  },5300);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['cmd1','cmd2'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('compare_box').style.opacity='0';
+
+  delay(function(){document.getElementById('cmd1').style.opacity='1';},400);
+  delay(function(){document.getElementById('cmd2').style.opacity='1';},1200);
+  delay(function(){document.getElementById('compare_box').style.opacity='1';},2100);
+}
+
+// boot
+playS1();
+</script>
+</body>
+</html>

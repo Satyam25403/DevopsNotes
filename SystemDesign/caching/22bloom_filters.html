@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Bloom Filters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1400}
+.hdr-title{font-size:13px;color:#f59e0b;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1400;transition:background .2s}
+.dot.active{background:#f59e0b}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #f59e0b;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}.info.cy{border-color:#4ec9e1}
+.il{color:#888}.ih{color:#f59e0b}.ih.gn{color:#4eff9a}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0c0900;border:1px solid #1a1400;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#f59e0b;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#f59e0b}.sv.rd{color:#e85050}.sv.cy{color:#4ec9e1}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #f59e0b;background:transparent;color:#f59e0b;cursor:pointer;transition:all .15s}
+.btn:hover{background:#f59e0b20}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.cy{border-color:#4ec9e1;color:#4ec9e1}.btn.cy:hover{background:#4ec9e120}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.cmd-box{background:#080600;border:2px solid #1a1400;padding:8px 10px;border-radius:2px;font-size:8px;line-height:1.9;min-height:38px}
+.cmd-prompt{color:#f59e0b}
+.cmd-key{color:#4eff9a}
+.cmd-arg{color:#4ec9e1}
+.cmd-str{color:#fff}
+.cmd-comment{color:#2a2000;font-size:7px}
+.cmd-result-gn{color:#4eff9a;font-size:7px}
+.cmd-result-rd{color:#e85050;font-size:7px}
+
+/* ── BIT ARRAY ── */
+.bit-array-wrap{background:#080600;border:2px solid #1a1400;padding:8px;border-radius:2px}
+.bit-array{display:flex;gap:2px;flex-wrap:wrap}
+.ba-cell{width:18px;height:18px;border:1px solid #1a1400;border-radius:1px;display:flex;align-items:center;justify-content:center;font-size:7px;color:#1a1400;background:#0c0900;transition:all 0.25s;flex-shrink:0;position:relative}
+.ba-cell.on{background:#f59e0b20;border-color:#f59e0b;color:#f59e0b}
+.ba-cell.hit{background:#4eff9a30;border-color:#4eff9a;color:#4eff9a;animation:cellPop 0.3s ease}
+.ba-cell.miss{background:#e8505030;border-color:#e85050;color:#e85050;animation:cellShake 0.3s ease}
+.ba-cell.probe{background:#4ec9e130;border-color:#4ec9e1;color:#4ec9e1;animation:cellPop 0.3s ease}
+@keyframes cellPop{0%{transform:scale(1.3)}100%{transform:scale(1)}}
+@keyframes cellShake{0%,100%{transform:translateX(0)}33%{transform:translateX(-3px)}66%{transform:translateX(3px)}}
+
+/* ── HASH ARROW ── */
+.hash-vis{display:flex;flex-direction:column;gap:5px;background:#080600;border:1px solid #1a1400;padding:8px;border-radius:2px}
+.hash-fn-row{display:flex;align-items:center;gap:6px;font-size:7px}
+.hash-fn-box{padding:3px 6px;border-radius:2px;border:1px solid;font-size:6px;flex-shrink:0;min-width:40px;text-align:center}
+.hash-arrow{flex:1;height:1px;position:relative}
+.hash-arrow::after{content:'';position:absolute;right:0;top:-3px;border:3px solid transparent}
+.arrow-line{height:1px;width:0;transition:width 0.4s ease-out;border-radius:1px}
+.hash-idx{min-width:32px;text-align:right;font-size:7px}
+.hash-result{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid;min-width:28px;text-align:center;flex-shrink:0}
+
+/* ── REQUEST FLOW ── */
+.flow-box{display:flex;flex-direction:column;gap:5px;padding:8px 10px;border-radius:2px;border:2px solid;opacity:0;transition:all 0.4s}
+.flow-box.show{opacity:1}
+.flow-step{font-size:7px;line-height:1.8;display:flex;align-items:flex-start;gap:6px}
+.flow-icon{flex-shrink:0;margin-top:1px}
+
+/* ── PIPELINE DIAGRAM ── */
+.pipe-stage{display:flex;align-items:center;gap:0;font-size:6px}
+.pipe-box{padding:5px 7px;border-radius:2px;border:1px solid;text-align:center;line-height:1.6;flex-shrink:0}
+.pipe-arrow{width:12px;height:1px;flex-shrink:0;position:relative}
+.pipe-arrow::after{content:'▶';position:absolute;right:-4px;top:-5px;font-size:6px}
+
+/* ── FP DEMO ── */
+.fp-row{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:2px;border:1px solid #1a1400;font-size:7px;opacity:0;transition:opacity 0.4s}
+.fp-row.show{opacity:1}
+.verdict{font-size:6px;padding:2px 5px;border-radius:2px;min-width:52px;text-align:center;flex-shrink:0}
+
+/* ── COMPARISON BARS ── */
+.cmp-bar-wrap{background:#080600;border:1px solid #1a1400;height:16px;border-radius:2px;overflow:hidden;position:relative}
+.cmp-bar-fill{height:100%;width:0;transition:width 1.2s ease-out;border-radius:2px}
+.cmp-bar-label{position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:6px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — WHAT IS A BLOOM FILTER + SETUP
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">BLOOM FILTERS</div>
+    <div class="hdr-sub">STOP FAKE IDs BEFORE THEY HIT YOUR DB</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f59e0b">BF.ADD</span>
+    <span class="sbadge" style="color:#f59e0b;border-color:#f59e0b">INSERT</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s1-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s1-cmd-text" class="cmd-str">_</span>
+        <div id="s1-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <!-- bit array — 32 cells (0–31) -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ bit array of m=32 bits (real filters use millions)</div>
+      <div class="bit-array-wrap">
+        <div class="bit-array" id="s1-bits"></div>
+        <div style="display:flex;gap:2px;flex-wrap:wrap;margin-top:3px" id="s1-bit-indices"></div>
+      </div>
+
+      <!-- hash function viz -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ 3 hash functions map key → 3 bit positions</div>
+      <div class="hash-vis" id="s1-hash-vis">
+        <div style="font-size:6px;color:#2a2000">adding keys — watch bits light up ↓</div>
+        <div id="s1-hash-rows"></div>
+      </div>
+
+      <!-- key being added display -->
+      <div id="s1-key-chip" style="opacity:0;transition:opacity 0.3s;display:flex;align-items:center;gap:8px">
+        <div style="font-size:7px;color:#555">ADDING:</div>
+        <div style="font-size:8px;color:#f59e0b;background:#0c0900;border:1px solid #f59e0b;padding:4px 8px;border-radius:2px" id="s1-key-label">—</div>
+        <div style="font-size:6px;color:#2a2000" id="s1-key-count">0 keys added</div>
+      </div>
+
+      <!-- saturation bar -->
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:6px;color:#555;margin-bottom:3px">
+          <span>FILTER SATURATION</span><span id="s1-sat-pct">0 / 32 bits set</span>
+        </div>
+        <div class="cmp-bar-wrap">
+          <div class="cmp-bar-fill" id="s1-sat-bar" style="background:linear-gradient(90deg,#4eff9a,#f59e0b,#e85050)"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">BF.ADD key element</div>
+    <div class="ih">3 hash functions → 3 bit positions → set to 1.<br>element never stored. only its bit positions.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" id="s1-keys-added">0</div><div class="sl">KEYS<br>ADDED</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">HASH<br>FUNCTIONS</div></div>
+    <div class="sc"><div class="sv gn" id="s1-bits-set">0</div><div class="sl">BITS<br>SET</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — LOOKUP: MISS VS HIT
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">BLOOM FILTERS</div>
+    <div class="hdr-sub">DEFINITELY NO · PROBABLY YES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f59e0b">BF.EXISTS</span>
+    <span class="sbadge" style="color:#f59e0b;border-color:#f59e0b">LOOKUP</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div class="cmd-box" id="s2-cmd">
+        <span class="cmd-prompt">127.0.0.1:6379&gt; </span>
+        <span id="s2-cmd-text" class="cmd-str">_</span>
+        <div id="s2-cmd-comment" class="cmd-comment" style="margin-top:2px"></div>
+      </div>
+
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ same bit array — probing 3 positions per lookup</div>
+      <div class="bit-array-wrap">
+        <div class="bit-array" id="s2-bits"></div>
+      </div>
+
+      <div class="hash-vis">
+        <div id="s2-hash-rows"></div>
+      </div>
+
+      <!-- result verdict -->
+      <div id="s2-verdict" style="opacity:0;transition:opacity 0.4s;padding:12px;border-radius:2px;border:2px solid;text-align:center">
+        <div style="font-size:9px" id="s2-verdict-title">—</div>
+        <div style="font-size:7px;color:#888;margin-top:5px;line-height:1.8" id="s2-verdict-desc">—</div>
+      </div>
+
+      <!-- two-case explanation -->
+      <div id="s2-cases" style="display:flex;gap:6px;opacity:0;transition:opacity 0.5s">
+        <div style="flex:1;background:#060e06;border:1px solid #1a3a1a;padding:7px;border-radius:2px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">MISS → REJECT</div>
+          <div style="font-size:6px;color:#555;line-height:1.8">any bit = 0?<br>DEFINITELY not in set.<br>zero false negatives.</div>
+        </div>
+        <div style="flex:1;background:#140e00;border:1px solid #3a2a00;padding:7px;border-radius:2px">
+          <div style="font-size:7px;color:#f59e0b;margin-bottom:4px">HIT → PASS</div>
+          <div style="font-size:6px;color:#555;line-height:1.8">all bits = 1?<br>PROBABLY in set.<br>~1% false positives.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">BF.EXISTS key element → 0 or 1</div>
+    <div class="ih" id="s2-info-text">0 = definitely not in set → skip DB entirely.<br>1 = probably in set → proceed to cache/DB.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn" id="s2-stat1">0</div><div class="sl" id="s2-lab1">BLOCKED<br>COLD</div></div>
+    <div class="sc"><div class="sv am" id="s2-stat2">0</div><div class="sl" id="s2-lab2">PASSED<br>THROUGH</div></div>
+    <div class="sc"><div class="sv rd" id="s2-stat3">0%</div><div class="sl">DB CALLS<br>SAVED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — CACHE PENETRATION GUARD
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">BLOOM FILTERS</div>
+    <div class="hdr-sub">GUARDING CACHE PENETRATION ATTACKS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">ATTACK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BLOCKED</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ WITHOUT bloom filter — every fake ID hits DB</div>
+
+      <!-- pipeline: without -->
+      <div id="s3-pipe-bad" style="opacity:0;transition:opacity 0.5s;background:#140608;border:2px solid #e85050;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px">WITHOUT BLOOM FILTER</div>
+        <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;overflow:hidden">
+          <div class="pipe-box" style="border-color:#e85050;color:#e85050;font-size:6px">FAKE<br>ID<br>REQ</div>
+          <div style="font-size:8px;color:#e85050;margin:0 2px">→</div>
+          <div class="pipe-box" style="border-color:#555;color:#888;font-size:6px">CACHE<br>MISS</div>
+          <div style="font-size:8px;color:#e85050;margin:0 2px">→</div>
+          <div class="pipe-box" style="border-color:#e85050;color:#e85050;font-size:6px">DB<br>HIT<br>💀</div>
+          <div style="font-size:8px;color:#e85050;margin:0 2px">→</div>
+          <div class="pipe-box" style="border-color:#e85050;color:#e85050;font-size:6px">NULL<br>→<br>CACHE</div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:6px;line-height:1.8">attacker sends IDs that don't exist.<br>each one: cache miss → DB query → NULL.<br>1000 req/s = DB gets hammered.</div>
+      </div>
+
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ WITH bloom filter — invalid IDs rejected instantly</div>
+
+      <!-- pipeline: with -->
+      <div id="s3-pipe-good" style="opacity:0;transition:opacity 0.5s;background:#060e06;border:2px solid #4eff9a;padding:10px;border-radius:2px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px">WITH BLOOM FILTER</div>
+        <div style="display:flex;align-items:center;gap:3px;flex-wrap:nowrap;overflow:hidden">
+          <div class="pipe-box" style="border-color:#e85050;color:#e85050;font-size:6px">FAKE<br>ID<br>REQ</div>
+          <div style="font-size:8px;color:#f59e0b;margin:0 2px">→</div>
+          <div class="pipe-box" style="border-color:#f59e0b;color:#f59e0b;font-size:6px;background:#14100020">BLOOM<br>CHECK<br>⚡</div>
+          <div style="font-size:8px;color:#e85050;margin:0 2px">→</div>
+          <div class="pipe-box" style="border-color:#4eff9a;color:#4eff9a;font-size:6px">404<br>NO<br>DB ✓</div>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:6px;line-height:1.8">bloom filter: bit check in memory only.<br>invalid ID → DEFINITELY NOT in set → 404.<br>DB is never touched. cache is never touched.</div>
+      </div>
+
+      <!-- live attack sim -->
+      <div id="s3-attack-sim" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#2a1e00;margin-bottom:5px">▸ LIVE SIMULATION — 1000 requests/sec</div>
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#140608;border:1px solid #3a1010;padding:7px;border-radius:2px;text-align:center">
+            <div style="font-size:7px;color:#e85050;margin-bottom:3px">w/o filter</div>
+            <div style="font-size:18px;color:#e85050" id="s3-db-hits">0</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">DB queries</div>
+          </div>
+          <div style="flex:1;background:#060e06;border:1px solid #1a3a1a;padding:7px;border-radius:2px;text-align:center">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">w/ filter</div>
+            <div style="font-size:18px;color:#4eff9a">0</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">DB queries</div>
+          </div>
+          <div style="flex:1;background:#0c0900;border:1px solid #2a1e00;padding:7px;border-radius:2px;text-align:center">
+            <div style="font-size:7px;color:#f59e0b;margin-bottom:3px">saved</div>
+            <div style="font-size:18px;color:#f59e0b" id="s3-saved">0</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">DB queries</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">cache penetration = fake IDs bypass cache → DB</div>
+    <div class="ih rd">bloom filter: O(k) bit checks in RAM.<br>false negatives impossible → DB always safe.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd" id="s3-bad-n">1000</div><div class="sl">DB HITS<br>W/O FILTER</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">DB HITS<br>W/ FILTER</div></div>
+    <div class="sc"><div class="sv gn">100%</div><div class="sl">ATTACKS<br>STOPPED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — FALSE POSITIVES + TRADEOFFS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0c0900">
+  <div class="hdr" style="background:#0c0900">
+    <div class="hdr-title">BLOOM FILTERS</div>
+    <div class="hdr-sub">FALSE POSITIVES · TRADEOFFS · USE CASES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f59e0b">TRADEOFFS</span>
+    <span class="sbadge" style="color:#f59e0b;border-color:#f59e0b">KNOW THE LIMITS</span>
+  </div>
+
+  <div class="anim" style="background:#0c0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- false positive demo -->
+      <div style="font-size:7px;color:#2a1e00;margin-bottom:-2px">▸ false positive — all bits 1, but key was never added</div>
+      <div id="s4-fp-demo" style="opacity:0;transition:opacity 0.5s;background:#080600;border:2px solid #f59e0b;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#f59e0b;margin-bottom:6px">HOW FALSE POSITIVES HAPPEN</div>
+        <div style="font-size:6px;color:#888;line-height:1.9;margin-bottom:6px">
+          key A set bits: 2, 9, 17<br>
+          key B set bits: 9, 14, 23<br>
+          key C set bits: 2, 14, 17<br>
+          <span style="color:#f59e0b">key X never added — but probes 2, 14, 17 → all 1!</span>
+        </div>
+        <div style="display:flex;gap:3px;justify-content:center;flex-wrap:wrap" id="s4-fp-bits"></div>
+        <div style="font-size:6px;color:#f59e0b;margin-top:6px;text-align:center">BF.EXISTS returns 1 — but X was never added!</div>
+      </div>
+
+      <!-- tuning -->
+      <div id="s4-tune" style="opacity:0;transition:opacity 0.5s;display:flex;flex-direction:column;gap:4px">
+        <div style="font-size:7px;color:#2a1e00;margin-bottom:1px">▸ tuning: more bits = less false positives</div>
+        <div style="display:flex;gap:6px;padding:7px 9px;background:#080600;border:1px solid #1a1400;border-radius:2px;align-items:center">
+          <span style="font-size:6px;color:#555;min-width:70px">m=100K bits</span>
+          <div style="flex:1"><div class="cmp-bar-wrap"><div class="cmp-bar-fill" id="tb1" style="background:#e85050;width:0"></div></div></div>
+          <span style="font-size:7px;color:#e85050;min-width:28px">10%</span>
+        </div>
+        <div style="display:flex;gap:6px;padding:7px 9px;background:#080600;border:1px solid #1a1400;border-radius:2px;align-items:center">
+          <span style="font-size:6px;color:#555;min-width:70px">m=500K bits</span>
+          <div style="flex:1"><div class="cmp-bar-wrap"><div class="cmp-bar-fill" id="tb2" style="background:#f59e0b;width:0"></div></div></div>
+          <span style="font-size:7px;color:#f59e0b;min-width:28px">2%</span>
+        </div>
+        <div style="display:flex;gap:6px;padding:7px 9px;background:#080600;border:1px solid #1a1400;border-radius:2px;align-items:center">
+          <span style="font-size:6px;color:#555;min-width:70px">m=1M bits</span>
+          <div style="flex:1"><div class="cmp-bar-wrap"><div class="cmp-bar-fill" id="tb3" style="background:#4eff9a;width:0"></div></div></div>
+          <span style="font-size:7px;color:#4eff9a;min-width:28px">0.8%</span>
+        </div>
+        <div style="font-size:6px;color:#2a2000;text-align:center;padding:3px">tradeoff: more bits = more memory, less FP rate</div>
+      </div>
+
+      <!-- what bloom filters cannot do -->
+      <div id="s4-limits" style="opacity:0;transition:opacity 0.5s;background:#080600;border:1px solid #e85050;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">✗ CANNOT DO</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:6px;color:#888;line-height:1.8">
+          <div>• delete elements (bits shared — can't unset safely)</div>
+          <div>• enumerate what's in the set</div>
+          <div>• give exact counts</div>
+          <div>• guarantee zero false positives</div>
+        </div>
+      </div>
+
+      <!-- use cases -->
+      <div id="s4-uses" style="opacity:0;transition:opacity 0.5s;display:flex;gap:5px">
+        <div style="flex:1;background:#080600;border:1px solid #1a1400;padding:7px;border-radius:2px;text-align:center;font-size:6px;color:#777;line-height:1.9">
+          <div style="color:#4eff9a;font-size:7px;margin-bottom:3px">🛡 CACHE<br>GUARD</div>
+          block invalid IDs<br>before cache/DB
+        </div>
+        <div style="flex:1;background:#080600;border:1px solid #1a1400;padding:7px;border-radius:2px;text-align:center;font-size:6px;color:#777;line-height:1.9">
+          <div style="color:#4ec9e1;font-size:7px;margin-bottom:3px">🔗 URL<br>DEDUP</div>
+          web crawlers skip<br>seen URLs
+        </div>
+        <div style="flex:1;background:#080600;border:1px solid #1a1400;padding:7px;border-radius:2px;text-align:center;font-size:6px;color:#777;line-height:1.9">
+          <div style="color:#f59e0b;font-size:7px;margin-bottom:3px">💊 DRUG<br>INTERACT</div>
+          fast pre-screen<br>before full check
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">no false negatives · small false positive rate</div>
+    <div class="ih cy">if bloom says NO → guaranteed not in set.<br>if bloom says YES → check cache/DB to confirm.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">0%</div><div class="sl">FALSE<br>NEGATIVE</div></div>
+    <div class="sc"><div class="sv am">~1%</div><div class="sl">FALSE<br>POSITIVE</div></div>
+    <div class="sc"><div class="sv">O(k)</div><div class="sl">LOOKUP<br>SPEED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+// ── constants ─────────────────────────────────
+const M = 32; // bit array size
+
+// hash functions (deterministic for demo)
+function h1(s){ let v=0x811c9dc5; for(let i=0;i<s.length;i++) v=(v^s.charCodeAt(i))*0x01000193>>>0; return v%M; }
+function h2(s){ let v=0x9e3779b1; for(let i=0;i<s.length;i++) v=((v<<5)^s.charCodeAt(i))*0xbf58476d>>>0; return v%M; }
+function h3(s){ let v=0x517cc1b7; for(let i=0;i<s.length;i++) v=(v*31^s.charCodeAt(i))>>>0; return v%M; }
+function hashes(s){ return [h1(s), h2(s), h3(s)]; }
+
+// ── scene management ──────────────────────────
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();if(n===2)playS2();if(n===3)playS3();if(n===4)playS4();
+}
+
+// ── shared bit array state ────────────────────
+let globalBits = new Array(M).fill(0);
+
+function buildBitArray(containerId, bits, extraClass=''){
+  const c=document.getElementById(containerId);
+  c.innerHTML='';
+  bits.forEach((b,i)=>{
+    const d=document.createElement('div');
+    d.className='ba-cell'+(b?' on':'');
+    d.textContent=b?'1':'0';
+    d.id=containerId+'-b'+i;
+    c.appendChild(d);
+  });
+}
+
+function buildIndices(containerId){
+  const c=document.getElementById(containerId);
+  if(!c)return;
+  c.innerHTML='';
+  for(let i=0;i<M;i++){
+    const d=document.createElement('div');
+    d.style.cssText='width:18px;text-align:center;font-size:5px;color:#2a1e00;flex-shrink:0';
+    d.textContent=i;
+    c.appendChild(d);
+  }
+}
+
+function setCell(containerId, idx, cls){
+  const el=document.getElementById(containerId+'-b'+idx);
+  if(!el)return;
+  el.className='ba-cell '+cls;
+  el.textContent=cls==='miss'?'0':'1';
+}
+
+// ── SCENE 1: ADD ──────────────────────────────
+const keysToAdd=[
+  {key:'user:1001', label:'"user:1001"'},
+  {key:'user:2847', label:'"user:2847"'},
+  {key:'user:5530', label:'"user:5530"'},
+  {key:'user:9912', label:'"user:9912"'},
+  {key:'user:3376', label:'"user:3376"'},
+];
+
+function renderHashRows(containerId, key, hs, bits, mode){
+  // mode: 'add'|'hit'|'miss'
+  const c=document.getElementById(containerId);
+  const colors=['#f59e0b','#4ec9e1','#c084fc'];
+  const fnNames=['h1','h2','h3'];
+  const results=hs.map((pos,i)=>{
+    const bitVal=bits[pos];
+    let resClass, resText;
+    if(mode==='add'){ resClass='color:#f59e0b;background:#140e0020;border-color:#f59e0b'; resText='→1'; }
+    else if(bitVal===1){ resClass='color:#4eff9a;background:#06140620;border-color:#4eff9a'; resText='=1✓'; }
+    else { resClass='color:#e85050;background:#14060820;border-color:#e85050'; resText='=0✗'; }
+    return `<div class="hash-fn-row">
+      <div class="hash-fn-box" style="border-color:${colors[i]};color:${colors[i]}">${fnNames[i]}(${key.split(':')[1]||key.slice(0,6)})</div>
+      <div style="flex:1;position:relative;height:12px">
+        <div class="arrow-line" id="arr-${i}" style="background:${colors[i]};margin-top:5px"></div>
+      </div>
+      <div class="hash-idx" style="color:${colors[i]}">pos ${pos}</div>
+      <div class="hash-result" style="${resClass}">${resText}</div>
+    </div>`;
+  });
+  c.innerHTML=results.join('');
+  // animate arrows
+  setTimeout(()=>{
+    for(let i=0;i<3;i++){
+      const a=document.getElementById('arr-'+i);
+      if(a)a.style.width='100%';
+    }
+  },50);
+}
+
+function playS1(){
+  clearT();
+  globalBits=new Array(M).fill(0);
+  buildBitArray('s1-bits', globalBits);
+  buildIndices('s1-bit-indices');
+  document.getElementById('s1-hash-rows').innerHTML='<div style="font-size:6px;color:#2a2000">adding keys — watch bits light up ↓</div>';
+  document.getElementById('s1-key-chip').style.opacity='0';
+  document.getElementById('s1-keys-added').textContent='0';
+  document.getElementById('s1-bits-set').textContent='0';
+  document.getElementById('s1-sat-bar').style.width='0';
+  document.getElementById('s1-sat-pct').textContent='0 / 32 bits set';
+  document.getElementById('s1-cmd-text').textContent='_';
+  document.getElementById('s1-cmd-comment').textContent='';
+
+  keysToAdd.forEach(({key, label}, ki)=>{
+    T(()=>{
+      const hs=hashes(key);
+      document.getElementById('s1-cmd-text').innerHTML=
+        `<span class="cmd-key">BF.ADD</span> <span class="cmd-str">users:bloom</span> <span class="cmd-arg">${label}</span>`;
+      document.getElementById('s1-cmd-comment').textContent=`# hash positions: ${hs.join(', ')}`;
+      document.getElementById('s1-key-chip').style.opacity='1';
+      document.getElementById('s1-key-label').textContent=label;
+
+      // render hash rows
+      renderHashRows('s1-hash-rows', key, hs, globalBits, 'add');
+
+      // set bits
+      hs.forEach((pos,i)=>{
+        setTimeout(()=>{
+          globalBits[pos]=1;
+          setCell('s1-bits', pos, 'on');
+          const bitsSet=globalBits.filter(b=>b).length;
+          document.getElementById('s1-bits-set').textContent=bitsSet;
+          const pct=Math.round(bitsSet/M*100);
+          document.getElementById('s1-sat-bar').style.width=pct+'%';
+          document.getElementById('s1-sat-pct').textContent=`${bitsSet} / 32 bits set`;
+        }, i*300+200);
+      });
+
+      document.getElementById('s1-keys-added').textContent=ki+1;
+      document.getElementById('s1-key-count').textContent=(ki+1)+' key'+(ki>0?'s':'')+' added';
+    }, ki*1200);
+  });
+}
+
+// ── SCENE 2: LOOKUP ───────────────────────────
+const lookups=[
+  {key:'user:9999',  exists:false, label:'"user:9999" (never added)'},
+  {key:'user:2847',  exists:true,  label:'"user:2847" (was added)'},
+  {key:'user:0000',  exists:false, label:'"user:0000" (never added)'},
+  {key:'user:1001',  exists:true,  label:'"user:1001" (was added)'},
+];
+
+let blocked=0, passed=0;
+
+function playS2(){
+  clearT();
+  blocked=0; passed=0;
+  // rebuild from global state
+  buildBitArray('s2-bits', globalBits);
+  document.getElementById('s2-hash-rows').innerHTML='';
+  document.getElementById('s2-verdict').style.opacity='0';
+  document.getElementById('s2-cases').style.opacity='0';
+  document.getElementById('s2-cmd-text').textContent='_';
+  document.getElementById('s2-cmd-comment').textContent='';
+  document.getElementById('s2-stat1').textContent='0';
+  document.getElementById('s2-stat2').textContent='0';
+  document.getElementById('s2-stat3').textContent='0%';
+
+  lookups.forEach(({key, exists, label}, li)=>{
+    T(()=>{
+      const hs=hashes(key);
+      const actualBits=hs.map(pos=>globalBits[pos]);
+      const bloomSaysYes=actualBits.every(b=>b===1);
+
+      document.getElementById('s2-cmd-text').innerHTML=
+        `<span class="cmd-key">BF.EXISTS</span> <span class="cmd-str">users:bloom</span> <span class="cmd-arg">${label.split(' ')[0]}</span>`;
+      document.getElementById('s2-cmd-comment').textContent=`# probing positions: ${hs.join(', ')}`;
+
+      // reset bit array
+      buildBitArray('s2-bits', globalBits);
+
+      // animate probing each bit
+      hs.forEach((pos,i)=>{
+        setTimeout(()=>{
+          const bitVal=globalBits[pos];
+          setCell('s2-bits', pos, bitVal?'probe':'miss');
+        },i*350+100);
+      });
+
+      // show verdict after probing
+      setTimeout(()=>{
+        const vbox=document.getElementById('s2-verdict');
+        const vtitle=document.getElementById('s2-verdict-title');
+        const vdesc=document.getElementById('s2-verdict-desc');
+
+        if(!bloomSaysYes){
+          // MISS — definitely not
+          hs.forEach(pos=>setCell('s2-bits', pos, 'miss'));
+          vbox.style.cssText='opacity:1;transition:opacity 0.4s;padding:12px;border-radius:2px;border:2px solid #4eff9a;background:#060e06;text-align:center';
+          vtitle.style.color='#4eff9a';
+          vtitle.textContent='✓ DEFINITELY NOT IN SET';
+          vdesc.textContent='a 0 bit found → cannot be in set → 404 immediately. DB never touched.';
+          blocked++;
+          document.getElementById('s2-stat1').textContent=blocked;
+        } else {
+          // HIT — probably yes
+          hs.forEach(pos=>setCell('s2-bits', pos, 'hit'));
+          vbox.style.cssText='opacity:1;transition:opacity 0.4s;padding:12px;border-radius:2px;border:2px solid #f59e0b;background:#140e00;text-align:center';
+          vtitle.style.color='#f59e0b';
+          vtitle.textContent='~ PROBABLY IN SET';
+          vdesc.textContent=exists?'all bits=1 · was added · proceed to cache → found!':'all bits=1 · false positive! proceed to cache → not found.';
+          passed++;
+          document.getElementById('s2-stat2').textContent=passed;
+        }
+        const total=blocked+passed;
+        document.getElementById('s2-stat3').textContent=Math.round(blocked/Math.max(1,total)*100)+'%';
+      },1200);
+
+    }, li*2200);
+  });
+
+  T(()=>{ document.getElementById('s2-cases').style.opacity='1'; }, lookups.length*2200+200);
+}
+
+// ── SCENE 3: CACHE PENETRATION ────────────────
+function playS3(){
+  clearT();
+  document.getElementById('s3-pipe-bad').style.opacity='0';
+  document.getElementById('s3-pipe-good').style.opacity='0';
+  document.getElementById('s3-attack-sim').style.opacity='0';
+  document.getElementById('s3-db-hits').textContent='0';
+  document.getElementById('s3-saved').textContent='0';
+
+  T(()=>{ document.getElementById('s3-pipe-bad').style.opacity='1'; },400);
+  T(()=>{ document.getElementById('s3-pipe-good').style.opacity='1'; },1400);
+  T(()=>{ document.getElementById('s3-attack-sim').style.opacity='1'; },2400);
+
+  // animate counter
+  T(()=>{
+    let v=0;
+    const t=setInterval(()=>{
+      v+=23;
+      document.getElementById('s3-db-hits').textContent=v.toLocaleString();
+      document.getElementById('s3-saved').textContent=v.toLocaleString();
+      if(v>=1000){ clearInterval(t);
+        document.getElementById('s3-db-hits').textContent='1,000';
+        document.getElementById('s3-saved').textContent='1,000';
+      }
+    },40);
+  },2800);
+}
+
+// ── SCENE 4: TRADEOFFS ────────────────────────
+function playS4(){
+  clearT();
+  document.getElementById('s4-fp-demo').style.opacity='0';
+  document.getElementById('s4-tune').style.opacity='0';
+  document.getElementById('s4-limits').style.opacity='0';
+  document.getElementById('s4-uses').style.opacity='0';
+  document.getElementById('tb1').style.width='0';
+  document.getElementById('tb2').style.width='0';
+  document.getElementById('tb3').style.width='0';
+
+  // build FP bit array illustration
+  const fpBits=document.getElementById('s4-fp-bits');
+  fpBits.innerHTML='';
+  // show 20 bits, positions 2,9,14,17,23 set
+  const fpSet=new Set([2,9,14,17,23]);
+  const fpProbe=new Set([2,14,17]); // X's positions
+  for(let i=0;i<20;i++){
+    const d=document.createElement('div');
+    if(fpProbe.has(i)) d.className='ba-cell on';
+    else if(fpSet.has(i)) d.className='ba-cell on';
+    else d.className='ba-cell';
+    d.textContent=fpSet.has(i)?'1':'0';
+    d.style.cssText+='border-color:'+(fpProbe.has(i)?'#f59e0b':fpSet.has(i)?'#f59e0b55':'#1a1400');
+    if(fpProbe.has(i)){d.style.background='#f59e0b30';d.style.color='#f59e0b';}
+    fpBits.appendChild(d);
+  }
+
+  T(()=>{ document.getElementById('s4-fp-demo').style.opacity='1'; },400);
+  T(()=>{
+    document.getElementById('s4-tune').style.opacity='1';
+    setTimeout(()=>{ document.getElementById('tb1').style.width='70%'; },200);
+    setTimeout(()=>{ document.getElementById('tb2').style.width='20%'; },400);
+    setTimeout(()=>{ document.getElementById('tb3').style.width='8%'; },600);
+  },1400);
+  T(()=>{ document.getElementById('s4-limits').style.opacity='1'; },2600);
+  T(()=>{ document.getElementById('s4-uses').style.opacity='1'; },3500);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

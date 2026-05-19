@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Detached vs Interactive Mode</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #1a1025}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a1025;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.il{color:#ccc}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#08080f;border:1px solid #1a1025;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sl{font-size:7px;color:#444;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.gn{border-color:#4eff9a;color:#4eff9a}.btn.gn:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+
+/* ── TERMINAL ── */
+.term{background:#06060e;border:2px solid #1a1025;font-size:8px;line-height:1}
+.term-bar{padding:5px 10px;display:flex;align-items:center;gap:6px}
+.term-dot{width:8px;height:8px;border-radius:50%}
+.term-title{font-size:7px;color:#333;flex:1;text-align:center;letter-spacing:.5px}
+.term-body{padding:8px 10px;min-height:36px}
+.tline{display:flex;align-items:baseline;margin-bottom:5px;opacity:0;transition:opacity .35s}
+.tline.vis{opacity:1}
+.prompt{color:#4eff9a;margin-right:6px;flex-shrink:0}
+.tcmd{color:#ddd;letter-spacing:.3px;line-height:1.6}
+.tcmd .flag{color:#4ec9e1}
+.tcmd .arg{color:#e8a020}
+.tcmd .str{color:#9060d0}
+.tline.out .tcmd{color:#555;font-size:7px}
+.tline.ok  .tcmd{color:#4eff9a;font-size:7px}
+.tline.warn .tcmd{color:#e8a020;font-size:7px}
+.tline.dim  .tcmd{color:#333;font-size:7px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cur{display:inline-block;width:6px;height:10px;background:#4eff9a;vertical-align:middle;margin-left:2px;animation:blink .7s infinite}
+.cur.root{background:#e85050}
+
+/* ── CONCEPT CARDS ── */
+.ccard{border:2px solid #1a1025;padding:9px 11px;opacity:0;transition:opacity .45s}
+.ccard.vis{opacity:1}
+.ccard-title{font-size:8px;margin-bottom:5px;letter-spacing:.5px}
+.ccard-body{font-size:7px;color:#555;line-height:1.9}
+.ccard-tags{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}
+.ctag{font-size:6px;padding:2px 6px;border:1px solid #1a1025}
+
+/* ── FLOW / IO DIAGRAM ── */
+.io-wrap{padding:4px 10px;display:flex;flex-direction:column;gap:5px}
+.io-row{display:flex;align-items:center;gap:8px;opacity:0;transition:opacity .4s}
+.io-row.vis{opacity:1}
+.io-label{font-size:7px;width:60px;flex-shrink:0;text-align:right}
+.io-pipe{flex:1;height:16px;border:1px solid #1a1025;display:flex;align-items:center;overflow:hidden;position:relative}
+.io-fill{position:absolute;left:0;top:0;bottom:0;width:0;transition:width .8s ease-out;display:flex;align-items:center;justify-content:center}
+.io-fill-text{font-size:5px;color:#08080f;white-space:nowrap;padding-left:4px;opacity:0;transition:opacity .3s .5s}
+.io-fill-text.vis{opacity:1}
+.io-dest{font-size:7px;width:70px;flex-shrink:0}
+
+/* ── STDIN/STDOUT visual ── */
+.stream-box{border:1px solid #1a1025;background:#06060e;padding:7px 10px;opacity:0;transition:opacity .5s}
+.stream-box.vis{opacity:1}
+.stream-title{font-size:7px;color:#333;margin-bottom:5px;letter-spacing:.5px}
+.stream-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.stream-name{font-size:7px;width:55px;flex-shrink:0}
+.stream-arrow{font-size:8px;flex-shrink:0}
+.stream-desc{font-size:6px;color:#555;flex:1;line-height:1.7}
+.stream-state{font-size:6px;padding:2px 5px;border:1px solid;flex-shrink:0}
+
+/* ── SIDE BY SIDE TERMINALS ── */
+.twin-wrap{display:flex;gap:8px;padding:0 2px}
+.twin-term{flex:1;background:#06060e;border:2px solid #1a1025;font-size:7px}
+.twin-bar{padding:4px 6px;display:flex;align-items:center;gap:4px}
+.twin-dot{width:6px;height:6px;border-radius:50%}
+.twin-title{font-size:5px;color:#333;flex:1;text-align:center;letter-spacing:.3px}
+.twin-body{padding:6px 8px;min-height:90px}
+.tl2{display:flex;flex-direction:column;margin-bottom:4px;opacity:0;transition:opacity .35s}
+.tl2.vis{opacity:1}
+.tl2 .p2{color:#4eff9a;font-size:6px;margin-bottom:2px}
+.tl2 .c2{color:#ddd;font-size:6px;line-height:1.6}
+.tl2 .o2{color:#555;font-size:6px;line-height:1.6}
+.tl2 .g2{color:#4eff9a;font-size:6px;line-height:1.6}
+.tl2 .r2{color:#e85050;font-size:6px;line-height:1.6}
+.tl2 .w2{color:#e8a020;font-size:6px;line-height:1.6}
+
+/* badge row */
+.mode-badge{padding:6px 10px;display:flex;align-items:center;gap:8px;border:2px solid;opacity:0;transition:opacity .4s}
+.mode-badge.vis{opacity:1}
+.mb-icon{font-size:18px;flex-shrink:0}
+.mb-body{flex:1}
+.mb-title{font-size:9px;margin-bottom:3px}
+.mb-sub{font-size:6px;color:#555;line-height:1.7}
+.mb-cmd{font-size:7px;margin-top:3px}
+
+/* exec section */
+.exec-box{border:1px solid #1a1025;background:#06060e;padding:8px 10px;opacity:0;transition:opacity .5s}
+.exec-box.vis{opacity:1}
+.exec-title{font-size:7px;color:#4ec9e1;margin-bottom:6px;letter-spacing:.5px}
+.exec-step{display:flex;align-items:baseline;gap:6px;margin-bottom:5px;opacity:0;transition:opacity .4s}
+.exec-step.vis{opacity:1}
+.exec-num{font-size:7px;color:#333;width:14px;flex-shrink:0}
+.exec-cmd{font-size:7px;color:#4eff9a;flex:0 0 130px}
+.exec-desc{font-size:6px;color:#444;line-height:1.7;flex:1}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════
+     S1 — WHAT ARE THESE MODES?
+════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">-d vs -it MODES</div>
+    <div class="hdr-sub">BACKGROUND vs TERMINAL TAKEOVER</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">THE FLAGS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OVERVIEW</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#222;text-align:center;letter-spacing:.5px">TWO WAYS TO RUN A CONTAINER</div>
+
+      <!-- -d card -->
+      <div class="mode-badge" id="mb1" style="border-color:#4ec9e1;background:#040e1a">
+        <div class="mb-icon">🔕</div>
+        <div class="mb-body">
+          <div class="mb-title" style="color:#4ec9e1">-d  DETACHED</div>
+          <div class="mb-sub">Container runs in background. Terminal is immediately returned to you. No output shown. Daemon babysits the process.</div>
+          <div class="mb-cmd" style="color:#4ec9e1">docker run <span style="color:#e8a020">-d</span> nginx:alpine</div>
+        </div>
+      </div>
+
+      <!-- -it card -->
+      <div class="mode-badge" id="mb2" style="border-color:#4eff9a;background:#041808">
+        <div class="mb-icon">⌨️</div>
+        <div class="mb-body">
+          <div class="mb-title" style="color:#4eff9a">-it  INTERACTIVE</div>
+          <div class="mb-sub">Container attaches to your terminal. stdin open. You get a live shell or REPL. Ctrl+D or exit to leave.</div>
+          <div class="mb-cmd" style="color:#4eff9a">docker run <span style="color:#e8a020">-it</span> ubuntu bash</div>
+        </div>
+      </div>
+
+      <!-- what -i and -t mean individually -->
+      <div class="ccard" id="cc1" style="border-color:#9060d0;background:#100828">
+        <div class="ccard-title" style="color:#9060d0">WHAT -i AND -t ACTUALLY MEAN</div>
+        <div class="ccard-body">
+          <span style="color:#9060d0">-i</span> = keep stdin open even if not attached<br>
+          <span style="color:#9060d0">-t</span> = allocate a pseudo-TTY (fake terminal)<br>
+          Together they wire your keyboard → container process.<br>
+          Without both, typing does nothing.
+        </div>
+        <div class="ccard-tags">
+          <span class="ctag" style="color:#9060d0;border-color:#9060d0">-i = stdin</span>
+          <span class="ctag" style="color:#9060d0;border-color:#9060d0">-t = tty</span>
+          <span class="ctag" style="color:#555">always pair them</span>
+        </div>
+      </div>
+
+      <!-- quick decision -->
+      <div class="ccard" id="cc2" style="border-color:#e8a020;background:#140a00">
+        <div class="ccard-title" style="color:#e8a020">QUICK DECISION RULE</div>
+        <div class="ccard-body">
+          Running a <span style="color:#4ec9e1">server / daemon</span>? → use <span style="color:#4ec9e1">-d</span><br>
+          Need a <span style="color:#4eff9a">shell / REPL / debug</span>? → use <span style="color:#4eff9a">-it</span><br>
+          Ran with -d but need in? → <span style="color:#e8a020">docker exec -it</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il"><span style="color:#4ec9e1">-d</span> = fire and forget. <span style="color:#4eff9a">-it</span> = I'm going in.</div>
+    <div class="il">Most production containers run <span style="color:#4ec9e1">-d</span>. You use <span style="color:#4eff9a">-it</span> for debugging, one-off scripts, or interactive tools like a Python REPL.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:10px">-d</div><div class="sl">background</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:10px">-it</div><div class="sl">interactive</div></div>
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:8px">exec -it</div><div class="sl">get in later</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="next(1)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S2 — DETACHED MODE DEEP DIVE
+════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#040e1a">
+  <div class="hdr" style="background:#040e1a">
+    <div class="hdr-title">-d vs -it MODES</div>
+    <div class="hdr-sub">DETACHED — RUN IN BACKGROUND</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">-d FLAG</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">DETACHED</span>
+  </div>
+  <div class="anim" style="background:#040e1a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#0d2030;text-align:center;letter-spacing:.5px">STDIN / STDOUT ARE DISCONNECTED FROM YOUR TERMINAL</div>
+
+      <!-- IO flow diagram -->
+      <div class="io-wrap">
+        <div class="io-row" id="io1">
+          <div class="io-label" style="color:#555">YOUR<br>KEYBOARD</div>
+          <div class="io-pipe" style="border-color:#e85050">
+            <div class="io-fill" id="iof1" style="background:#e8505040">
+              <div class="io-fill-text" id="ift1">STDIN CLOSED</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#e85050;width:16px">✗</div>
+          <div class="io-dest" style="color:#4ec9e1;font-size:6px">container<br>process</div>
+        </div>
+        <div class="io-row" id="io2">
+          <div class="io-label" style="color:#4ec9e1">CONTAINER<br>STDOUT</div>
+          <div class="io-pipe" style="border-color:#e8a020">
+            <div class="io-fill" id="iof2" style="background:#e8a02040">
+              <div class="io-fill-text" id="ift2">→ DAEMON LOG BUFFER</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#e8a020;width:16px">→</div>
+          <div class="io-dest" style="color:#e8a020;font-size:6px">docker<br>logs web</div>
+        </div>
+        <div class="io-row" id="io3">
+          <div class="io-label" style="color:#4ec9e1">CONTAINER<br>STDERR</div>
+          <div class="io-pipe" style="border-color:#e8a020">
+            <div class="io-fill" id="iof3" style="background:#e8a02040">
+              <div class="io-fill-text" id="ift3">→ DAEMON LOG BUFFER</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#e8a020;width:16px">→</div>
+          <div class="io-dest" style="color:#e8a020;font-size:6px">docker<br>logs web</div>
+        </div>
+      </div>
+
+      <!-- terminal: detached run -->
+      <div class="term">
+        <div class="term-bar" style="background:#0a1a28">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash — terminal yours instantly</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="d1a"><span class="prompt">$</span><span class="tcmd">docker run <span class="flag">-d</span> <span class="flag">--name</span> <span class="arg">web</span> nginx:alpine</span></div>
+          <div class="tline ok" id="d1b"><span class="tcmd">3a9f1e2c8b7d ← container ID, that's it</span></div>
+          <div class="tline" id="d1c"><span class="prompt">$</span><span class="tcmd"># terminal is back immediately ↑</span></div>
+          <div class="tline" id="d1d"><span class="prompt">$</span><span class="tcmd">docker ps</span></div>
+          <div class="tline ok" id="d1e"><span class="tcmd">web  Up 2s  0.0.0.0:80→80</span></div>
+          <div class="tline" id="d1f"><span class="prompt">$</span><span class="tcmd">docker logs web</span></div>
+          <div class="tline out" id="d1g"><span class="tcmd">172.17.0.1 - GET / 200</span></div>
+          <div class="tline out" id="d1h"><span class="tcmd">172.17.0.1 - GET /favicon 404</span></div>
+          <div class="tline" id="d1i"><span class="prompt">$</span><span class="tcmd">docker logs <span class="flag">-f</span> web  <span style="color:#333"># -f = follow live</span></span></div>
+          <div class="tline" id="d1j"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+      <!-- when to use -d -->
+      <div class="stream-box" id="sb1">
+        <div class="stream-title">USE -d WHEN RUNNING…</div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4ec9e1">web servers</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">nginx, apache, node — long-lived, no interaction</div>
+        </div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4ec9e1">databases</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">postgres, redis, mongo — always on</div>
+        </div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4ec9e1">queues</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">rabbitmq, kafka — background services</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il"><span style="color:#4ec9e1">-d</span> severs stdout from your terminal</div>
+    <div class="il">Output goes to Docker's log buffer. Read it with <span style="color:#4eff9a">docker logs web</span> or stream it live with <span style="color:#4eff9a">docker logs -f web</span>. Nothing is lost.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#e85050;font-size:8px">stdin ✗</div><div class="sl">closed</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:8px">stdout</div><div class="sl">buffered</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">logs -f</div><div class="sl">stream it</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="prev(2)">◀ PREV</button>
+    <button class="btn" onclick="next(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S3 — INTERACTIVE MODE DEEP DIVE
+════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#041808">
+  <div class="hdr" style="background:#041808">
+    <div class="hdr-title">-d vs -it MODES</div>
+    <div class="hdr-sub">INTERACTIVE — TAKE OVER THE TERMINAL</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">-it FLAG</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">INTERACTIVE</span>
+  </div>
+  <div class="anim" style="background:#041808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#0d2010;text-align:center;letter-spacing:.5px">STDIN OPEN — YOUR KEYBOARD WIRED TO THE CONTAINER</div>
+
+      <!-- IO flow interactive -->
+      <div class="io-wrap">
+        <div class="io-row" id="it1">
+          <div class="io-label" style="color:#4eff9a">YOUR<br>KEYBOARD</div>
+          <div class="io-pipe" style="border-color:#4eff9a">
+            <div class="io-fill" id="itf1" style="background:#4eff9a40">
+              <div class="io-fill-text" id="itft1" style="color:#4eff9a">STDIN OPEN (-i)</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#4eff9a;width:16px">→</div>
+          <div class="io-dest" style="color:#4eff9a;font-size:6px">container<br>bash / sh</div>
+        </div>
+        <div class="io-row" id="it2">
+          <div class="io-label" style="color:#4eff9a">CONTAINER<br>OUTPUT</div>
+          <div class="io-pipe" style="border-color:#4eff9a">
+            <div class="io-fill" id="itf2" style="background:#4eff9a40">
+              <div class="io-fill-text" id="itft2" style="color:#4eff9a">STDOUT → YOUR TERMINAL</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#4eff9a;width:16px">→</div>
+          <div class="io-dest" style="color:#4eff9a;font-size:6px">screen<br>live</div>
+        </div>
+        <div class="io-row" id="it3">
+          <div class="io-label" style="color:#9060d0">PSEUDO<br>TTY</div>
+          <div class="io-pipe" style="border-color:#9060d0">
+            <div class="io-fill" id="itf3" style="background:#9060d040">
+              <div class="io-fill-text" id="itft3" style="color:#9060d0">FAKE TERMINAL (-t) ENABLES COLOURS</div>
+            </div>
+          </div>
+          <div style="font-size:8px;color:#9060d0;width:16px">✓</div>
+          <div class="io-dest" style="color:#9060d0;font-size:6px">shell<br>works</div>
+        </div>
+      </div>
+
+      <!-- terminal: interactive session -->
+      <div class="term">
+        <div class="term-bar" style="background:#0a2010">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">bash → inside container</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="i1a"><span class="prompt">$</span><span class="tcmd">docker run <span class="flag">-it</span> <span class="flag">--name</span> <span class="arg">box</span> ubuntu bash</span></div>
+          <div class="tline ok" id="i1b"><span class="tcmd"># you are now INSIDE the container</span></div>
+          <div class="tline" id="i1c"><span class="prompt" style="color:#e85050">root@3a9f1e2c:/#</span><span class="tcmd">ls /</span></div>
+          <div class="tline out" id="i1d"><span class="tcmd">bin  boot  dev  etc  home  lib  usr  var</span></div>
+          <div class="tline" id="i1e"><span class="prompt" style="color:#e85050">root@3a9f1e2c:/#</span><span class="tcmd">cat /etc/os-release</span></div>
+          <div class="tline out" id="i1f"><span class="tcmd">NAME="Ubuntu" VERSION="22.04.3 LTS"</span></div>
+          <div class="tline" id="i1g"><span class="prompt" style="color:#e85050">root@3a9f1e2c:/#</span><span class="tcmd">exit</span></div>
+          <div class="tline ok" id="i1h"><span class="tcmd"># container stopped. back on host.</span></div>
+          <div class="tline" id="i1i"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+      <!-- when to use -it -->
+      <div class="stream-box" id="sb2">
+        <div class="stream-title">USE -it WHEN YOU NEED TO…</div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4eff9a">debug</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">poke around a container's filesystem live</div>
+        </div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4eff9a">run scripts</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">one-off python / node REPL sessions</div>
+        </div>
+        <div class="stream-row">
+          <div class="stream-name" style="color:#4eff9a">install / test</div>
+          <div class="stream-arrow" style="color:#4eff9a">✓</div>
+          <div class="stream-desc">try apt packages before adding to Dockerfile</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4eff9a">
+    <div class="il"><span style="color:#4eff9a">-it</span> = your keyboard → container stdin</div>
+    <div class="il"><span style="color:#4eff9a">-i</span> keeps stdin open. <span style="color:#9060d0">-t</span> creates a fake TTY so the shell renders correctly (colours, prompts). Always pair them — neither alone is useful.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">-i</div><div class="sl">stdin open</div></div>
+    <div class="sc"><div class="sv" style="color:#9060d0;font-size:8px">-t</div><div class="sl">fake TTY</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">exit</div><div class="sl">stops container</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn gn" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="prev(3)">◀ PREV</button>
+    <button class="btn" onclick="next(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     S4 — exec -it + SIDE BY SIDE
+════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#080810">
+  <div class="hdr" style="background:#080810">
+    <div class="hdr-title">-d vs -it MODES</div>
+    <div class="hdr-sub">GET IN LATER WITH docker exec -it</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">EXEC -it</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">BEST OF BOTH</span>
+  </div>
+  <div class="anim" style="background:#080810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#222;text-align:center;letter-spacing:.5px">STARTED WITH -d BUT NEED A SHELL? USE EXEC</div>
+
+      <!-- side by side terminals -->
+      <div class="twin-wrap" id="tww">
+        <div class="twin-term" style="border-color:#4ec9e1">
+          <div class="twin-bar" style="background:#040e1a">
+            <div class="twin-dot" style="background:#e85050"></div>
+            <div class="twin-dot" style="background:#e8a020"></div>
+            <div class="twin-dot" style="background:#4eff9a"></div>
+            <div class="twin-title">-d (background)</div>
+          </div>
+          <div class="twin-body">
+            <div class="tl2" id="tw1a"><span class="p2">$</span><span class="c2">docker run -d nginx</span></div>
+            <div class="tl2" id="tw1b"><span class="g2">3a9f1e2c ✓</span></div>
+            <div class="tl2" id="tw1c"><span class="p2">$</span><span class="c2"># prompt back!</span></div>
+            <div class="tl2" id="tw1d"><span class="p2">$</span><span class="c2">do other work...</span></div>
+            <div class="tl2" id="tw1e"><span class="p2">$</span><span class="cur"></span></div>
+          </div>
+        </div>
+        <div class="twin-term" style="border-color:#4eff9a">
+          <div class="twin-bar" style="background:#041808">
+            <div class="twin-dot" style="background:#e85050"></div>
+            <div class="twin-dot" style="background:#e8a020"></div>
+            <div class="twin-dot" style="background:#4eff9a"></div>
+            <div class="twin-title">-it (interactive)</div>
+          </div>
+          <div class="twin-body">
+            <div class="tl2" id="tw2a"><span class="p2">$</span><span class="c2">docker run -it ubuntu bash</span></div>
+            <div class="tl2" id="tw2b"><span class="g2"># inside now</span></div>
+            <div class="tl2" id="tw2c"><span class="p2" style="color:#e85050">root@box:/#</span><span class="c2">ls</span></div>
+            <div class="tl2" id="tw2d"><span class="o2">bin etc usr var</span></div>
+            <div class="tl2" id="tw2e"><span class="p2" style="color:#e85050">root@box:/#</span><span class="cur root"></span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- exec -it box -->
+      <div class="exec-box" id="exbox">
+        <div class="exec-title">docker exec -it — GET A SHELL INTO A RUNNING CONTAINER</div>
+        <div class="exec-step" id="es1">
+          <div class="exec-num">1.</div>
+          <div class="exec-cmd" style="color:#4ec9e1">docker run -d nginx</div>
+          <div class="exec-desc">start nginx detached — no shell</div>
+        </div>
+        <div class="exec-step" id="es2">
+          <div class="exec-num">2.</div>
+          <div class="exec-cmd" style="color:#e8a020">docker exec -it web sh</div>
+          <div class="exec-desc">open a shell into the RUNNING container</div>
+        </div>
+        <div class="exec-step" id="es3">
+          <div class="exec-num">3.</div>
+          <div class="exec-cmd" style="color:#4eff9a">ls / cat / curl …</div>
+          <div class="exec-desc">poke around. container keeps running when you exit.</div>
+        </div>
+        <div class="exec-step" id="es4">
+          <div class="exec-num">4.</div>
+          <div class="exec-cmd" style="color:#9060d0">exit</div>
+          <div class="exec-desc">shell closes. nginx still running. -d container unaffected.</div>
+        </div>
+      </div>
+
+      <!-- exec terminal -->
+      <div class="term" id="exterm">
+        <div class="term-bar" style="background:#111128">
+          <div class="term-dot" style="background:#e85050"></div>
+          <div class="term-dot" style="background:#e8a020"></div>
+          <div class="term-dot" style="background:#4eff9a"></div>
+          <div class="term-title">exec into running container</div>
+        </div>
+        <div class="term-body">
+          <div class="tline" id="e4a"><span class="prompt">$</span><span class="tcmd">docker exec <span class="flag">-it</span> <span class="arg">web</span> sh</span></div>
+          <div class="tline" id="e4b"><span class="prompt" style="color:#e85050">/ #</span><span class="tcmd">nginx -v</span></div>
+          <div class="tline out" id="e4c"><span class="tcmd">nginx version: nginx/1.25.3</span></div>
+          <div class="tline" id="e4d"><span class="prompt" style="color:#e85050">/ #</span><span class="tcmd">exit</span></div>
+          <div class="tline ok" id="e4e"><span class="tcmd"># back on host. nginx still running.</span></div>
+          <div class="tline" id="e4f"><span class="prompt">$</span><span class="tcmd">docker ps</span></div>
+          <div class="tline ok" id="e4g"><span class="tcmd">web  Up 43s  ← still alive ✓</span></div>
+          <div class="tline" id="e4h"><span class="prompt">$</span><span class="cur"></span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#e8a020">
+    <div class="il"><span style="color:#e8a020">exec -it</span> = shell in, container stays up</div>
+    <div class="il">Unlike <span style="color:#4eff9a">docker run -it</span> where exit stops the container, <span style="color:#e8a020">docker exec</span> just closes your shell session. The container keeps running.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:8px">exec -it</div><div class="sl">shell in</div></div>
+    <div class="sc"><div class="sv" style="color:#e8a020;font-size:8px">exit</div><div class="sl">shell only</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a;font-size:8px">stays up</div><div class="sl">container ok</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="prev(4)">◀ PREV</button>
+    <button class="btn gn" onclick="restart()">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function t(fn,ms){timers.push(setTimeout(fn,ms));}
+function vis(id){let e=document.getElementById(id);if(e){e.classList.add('vis');e.style.opacity='1';}}
+function hide(id){let e=document.getElementById(id);if(e){e.classList.remove('vis');e.style.opacity='0';}}
+function so(id,v){let e=document.getElementById(id);if(e)e.style.opacity=v;}
+
+function growPipe(fillId,labelId,delay){
+  t(()=>{
+    let f=document.getElementById(fillId);
+    if(f){f.style.transition='none';f.style.width='0';
+      setTimeout(()=>{f.style.transition='width .7s ease-out';f.style.width='100%';},30);}
+    t(()=>{let l=document.getElementById(labelId);if(l)l.classList.add('vis');},700);
+  },delay);
+}
+
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+  if(n===4)playS4();
+}
+function next(n){if(n<4)goScene(n+1);}
+function prev(n){if(n>1)goScene(n-1);}
+function restart(){goScene(1);}
+
+// ── S1 ──
+function playS1(){
+  clearT();
+  ['mb1','mb2','cc1','cc2'].forEach(hide);
+  t(()=>vis('mb1'),300);
+  t(()=>vis('mb2'),900);
+  t(()=>vis('cc1'),1600);
+  t(()=>vis('cc2'),2300);
+}
+
+// ── S2 ──
+function playS2(){
+  clearT();
+  ['io1','io2','io3','sb1'].forEach(hide);
+  ['d1a','d1b','d1c','d1d','d1e','d1f','d1g','d1h','d1i','d1j'].forEach(hide);
+  ['iof1','iof2','iof3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  ['ift1','ift2','ift3'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+
+  t(()=>vis('io1'),300);
+  growPipe('iof1','ift1',400);
+  t(()=>vis('io2'),1000);
+  growPipe('iof2','ift2',1100);
+  t(()=>vis('io3'),1700);
+  growPipe('iof3','ift3',1800);
+
+  let term=[['d1a',2600],['d1b',3200],['d1c',3600],['d1d',4000],['d1e',4500],['d1f',5000],['d1g',5500],['d1h',5900],['d1i',6300],['d1j',6700]];
+  term.forEach(([id,ms])=>t(()=>vis(id),ms));
+  t(()=>vis('sb1'),7200);
+}
+
+// ── S3 ──
+function playS3(){
+  clearT();
+  ['it1','it2','it3','sb2'].forEach(hide);
+  ['i1a','i1b','i1c','i1d','i1e','i1f','i1g','i1h','i1i'].forEach(hide);
+  ['itf1','itf2','itf3'].forEach(id=>{let e=document.getElementById(id);if(e){e.style.transition='none';e.style.width='0';}});
+  ['itft1','itft2','itft3'].forEach(id=>{let e=document.getElementById(id);if(e)e.classList.remove('vis');});
+
+  t(()=>vis('it1'),300);
+  growPipe('itf1','itft1',400);
+  t(()=>vis('it2'),1000);
+  growPipe('itf2','itft2',1100);
+  t(()=>vis('it3'),1700);
+  growPipe('itf3','itft3',1800);
+
+  let term=[['i1a',2600],['i1b',3100],['i1c',3600],['i1d',4100],['i1e',4600],['i1f',5100],['i1g',5700],['i1h',6100],['i1i',6500]];
+  term.forEach(([id,ms])=>t(()=>vis(id),ms));
+  t(()=>vis('sb2'),7000);
+}
+
+// ── S4 ──
+function playS4(){
+  clearT();
+  ['exbox','exterm'].forEach(hide);
+  ['tw1a','tw1b','tw1c','tw1d','tw1e','tw2a','tw2b','tw2c','tw2d','tw2e'].forEach(hide);
+  ['es1','es2','es3','es4'].forEach(hide);
+  ['e4a','e4b','e4c','e4d','e4e','e4f','e4g','e4h'].forEach(hide);
+
+  // twin terminals interleaved
+  let twins=[
+    ['tw1a',300],['tw2a',500],
+    ['tw1b',900],['tw2b',1100],
+    ['tw1c',1500],['tw2c',1700],
+    ['tw1d',2100],['tw2d',2300],
+    ['tw1e',2700],['tw2e',2900],
+  ];
+  twins.forEach(([id,ms])=>t(()=>vis(id),ms));
+
+  t(()=>vis('exbox'),3500);
+  let steps=[['es1',3700],['es2',4300],['es3',4900],['es4',5500]];
+  steps.forEach(([id,ms])=>t(()=>vis(id),ms));
+
+  t(()=>vis('exterm'),6100);
+  let term=[['e4a',6200],['e4b',6700],['e4c',7100],['e4d',7600],['e4e',8000],['e4f',8400],['e4g',8900],['e4h',9300]];
+  term.forEach(([id,ms])=>t(()=>vis(id),ms));
+}
+
+playS1();
+</script>
+</body>
+</html>

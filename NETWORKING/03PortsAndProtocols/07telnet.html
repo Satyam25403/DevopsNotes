@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Telnet Port 23</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;min-height:100vh;display:flex;flex-direction:column;align-items:center;color:#fff;overflow-x:hidden}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+.pkt{position:absolute;width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;transition:opacity .2s}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes typeCursor{0%,49%{opacity:1}50%,100%{opacity:0}}
+.cursor{display:inline-block;animation:typeCursor .7s step-end infinite}
+</style>
+</head>
+<body>
+
+<!-- ═══ SCENE 1: HOOK ═══ -->
+<div class="scene active" id="s1" style="background:#1a0505">
+  <div class="hdr" style="background:#1a0505;border-bottom:1px solid #3a1010">
+    <div class="hdr-title">TELNET: PORT 23</div>
+    <div class="hdr-sub">THE PASSWORD YOU CAN WATCH BEING TYPED</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CRITICAL</span>
+  </div>
+  <div class="anim" style="background:#1a0505">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- HOOK STATEMENT -->
+      <div class="panel" id="s1_hook" style="background:#110000;border:2px solid #e85050;padding:12px 14px;text-align:center">
+        <div style="font-size:8px;color:#e85050;margin-bottom:8px">💀 WIRESHARK SEES THIS:</div>
+        <div style="font-size:10px;color:#ff8080;line-height:2.2;letter-spacing:1px">
+          "s" → "e" → "c" → "r" → "e" → "t"
+        </div>
+        <div style="font-size:7px;color:#777;margin-top:7px">one keypress per TCP packet</div>
+      </div>
+
+      <!-- WIRE ANIMATION: packets flying -->
+      <div id="s1_wire" style="height:130px;position:relative;background:#0a0000;border:1px solid #2a0808;border-radius:2px;opacity:0;transition:opacity .4s">
+        <!-- network line -->
+        <div style="position:absolute;top:50%;left:0;right:0;height:2px;background:repeating-linear-gradient(90deg,#2a0808 0,#2a0808 12px,transparent 12px,transparent 20px)"></div>
+        <!-- attacker -->
+        <div style="position:absolute;right:14px;top:14px;text-align:center">
+          <div style="font-size:22px">🕵️</div>
+          <div style="font-size:5.5px;color:#e85050;font-family:'Press Start 2P',monospace;margin-top:2px">ATTACKER</div>
+        </div>
+        <!-- user -->
+        <div style="position:absolute;left:14px;top:14px;text-align:center">
+          <div style="font-size:22px">👤</div>
+          <div style="font-size:5.5px;color:#888;font-family:'Press Start 2P',monospace;margin-top:2px">YOU</div>
+        </div>
+        <!-- target server -->
+        <div style="position:absolute;right:14px;bottom:8px;text-align:center">
+          <div style="font-size:20px">🖥️</div>
+          <div style="font-size:5px;color:#4ec9e1;font-family:'Press Start 2P',monospace;margin-top:1px">ROUTER</div>
+        </div>
+        <!-- packet dots -->
+        <div class="pkt" id="p1a" style="background:#e85050;box-shadow:0 0 6px #e85050;top:50%"></div>
+        <div class="pkt" id="p1b" style="background:#e85050;box-shadow:0 0 6px #e85050;top:50%"></div>
+        <div class="pkt" id="p1c" style="background:#e85050;box-shadow:0 0 6px #e85050;top:50%"></div>
+        <!-- packet labels -->
+        <div class="pkt" id="p1a_lbl" style="background:transparent;box-shadow:none;top:30%;width:auto;font-size:6px;color:#ffaaaa;white-space:nowrap;font-family:'Press Start 2P',monospace">"s"</div>
+        <div class="pkt" id="p1b_lbl" style="background:transparent;box-shadow:none;top:30%;width:auto;font-size:6px;color:#ffaaaa;white-space:nowrap;font-family:'Press Start 2P',monospace">"e"</div>
+        <div class="pkt" id="p1c_lbl" style="background:transparent;box-shadow:none;top:30%;width:auto;font-size:6px;color:#ffaaaa;white-space:nowrap;font-family:'Press Start 2P',monospace">"c"</div>
+      </div>
+
+      <!-- WHY THIS IS UNIQUE -->
+      <div class="panel" id="s1_why" style="background:#100505;border:1px solid #3a1010">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:7px">WHY TELNET IS SPECIAL</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="font-size:7px;color:#aaa;line-height:2;padding:4px 7px;background:#0a0000;border-left:2px solid #e85050">
+            Each <span style="color:#e85050">keypress</span> = its own TCP packet — not buffered
+          </div>
+          <div style="font-size:7px;color:#aaa;line-height:2;padding:4px 7px;background:#0a0000;border-left:2px solid #e8a020">
+            Zero encryption — plaintext on the <span style="color:#e8a020">raw wire</span>
+          </div>
+          <div style="font-size:7px;color:#aaa;line-height:2;padding:4px 7px;background:#0a0000;border-left:2px solid #4ec9e1">
+            Password reconstruct = just <span style="color:#4ec9e1">read the packets</span> in order
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="ih rd">💀 TELNET — ZERO ENCRYPTION</div>
+    <div class="il">Every character you type flies across the network <span style="color:#e85050">in plain sight</span>. Any hop between you and the server can read it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1</div><div class="sl">BYTE PER<br>PACKET</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">ENCRYPTION<br>BITS</div></div>
+    <div class="sc"><div class="sv rd">:23</div><div class="sl">DEFAULT<br>PORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: WIRESHARK LIVE DEMO ═══ -->
+<div class="scene" id="s2" style="background:#0a0a00">
+  <div class="hdr" style="background:#0a0a00;border-bottom:1px solid #2a2800">
+    <div class="hdr-title">TELNET: PORT 23</div>
+    <div class="hdr-sub">WIRESHARK CAPTURES EVERY CHARACTER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">WIRESHARK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">LIVE CAPTURE</span>
+  </div>
+  <div class="anim" style="background:#0a0a00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- FILTER BAR -->
+      <div class="panel" id="s2_filter" style="background:#050500;border:1px solid #3a3000;padding:8px 10px">
+        <div style="font-size:6.5px;color:#888;margin-bottom:5px">WIRESHARK FILTER:</div>
+        <div style="background:#0a0a00;border:1px solid #e8a020;padding:6px 9px;font-size:8px;color:#e8a020;letter-spacing:.5px">
+          tcp.port == 23<span class="cursor" id="s2_cur" style="color:#e8a020">_</span>
+        </div>
+      </div>
+
+      <!-- PACKET TABLE -->
+      <div class="panel" id="s2_table" style="background:#050500;border:1px solid #2a2800;padding:0;overflow:hidden">
+        <div style="background:#1a1500;padding:5px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px">
+          <div style="font-size:5.5px;color:#666">#</div>
+          <div style="font-size:5.5px;color:#666">INFO</div>
+          <div style="font-size:5.5px;color:#666">LENGTH</div>
+          <div style="font-size:5.5px;color:#666">DATA</div>
+        </div>
+        <!-- rows animate in -->
+        <div id="s2_r1" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500;background:#070600">
+          <div style="font-size:6px;color:#666">42</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'s'</div>
+        </div>
+        <div id="s2_r2" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500">
+          <div style="font-size:6px;color:#666">43</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'e'</div>
+        </div>
+        <div id="s2_r3" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500;background:#070600">
+          <div style="font-size:6px;color:#666">44</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'c'</div>
+        </div>
+        <div id="s2_r4" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500">
+          <div style="font-size:6px;color:#666">45</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'r'</div>
+        </div>
+        <div id="s2_r5" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500;background:#070600">
+          <div style="font-size:6px;color:#666">46</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'e'</div>
+        </div>
+        <div id="s2_r6" style="opacity:0;transition:opacity .3s;padding:4px 8px;display:grid;grid-template-columns:28px 1fr 60px 40px;gap:4px;border-top:1px solid #1a1500">
+          <div style="font-size:6px;color:#666">47</div>
+          <div style="font-size:6px;color:#aaa">Telnet Data [TCP]</div>
+          <div style="font-size:6px;color:#888">41 bytes</div>
+          <div style="font-size:7px;color:#ff8080;font-weight:bold">'t'</div>
+        </div>
+      </div>
+
+      <!-- FOLLOW TCP STREAM RESULT -->
+      <div class="panel" id="s2_stream" style="background:#050500;border:2px solid #e85050">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">▶ FOLLOW TCP STREAM</div>
+        <div style="background:#020200;padding:8px;font-size:7px;line-height:2.1;border:1px solid #1a1500">
+          <div style="color:#aaa">login: <span id="s2_user" style="color:#ffff80"></span></div>
+          <div style="color:#aaa">Password: <span id="s2_pass" style="color:#ff6060"></span></div>
+          <div id="s2_prompt" style="color:#4eff9a;opacity:0;transition:opacity .4s">$ <span style="color:#aaa">welcome, admin!</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="ih am">🔍 FOLLOW TCP STREAM</div>
+    <div class="il">Wireshark reassembles all packets into the full session. Username + password <span style="color:#e85050">visible in plaintext</span>. No cracking needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">6</div><div class="sl">PACKETS FOR<br>"secret"</div></div>
+    <div class="sc"><div class="sv am">41B</div><div class="sl">PER PACKET<br>SIZE</div></div>
+    <div class="sc"><div class="sv rd">0ms</div><div class="sl">CRACK<br>TIME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: SSH VS TELNET SIDE BY SIDE ═══ -->
+<div class="scene" id="s3" style="background:#001018">
+  <div class="hdr" style="background:#001018;border-bottom:1px solid #0d2030">
+    <div class="hdr-title">TELNET VS SSH</div>
+    <div class="hdr-sub">SAME DATA — COMPLETELY DIFFERENT ON THE WIRE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">COMPARISON</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WIRE VIEW</span>
+  </div>
+  <div class="anim" style="background:#001018">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- TWO COLUMNS: TELNET vs SSH -->
+      <div class="panel" id="s3_compare" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+
+        <!-- TELNET SIDE -->
+        <div style="background:#100000;border:2px solid #e85050;padding:8px 7px;border-radius:2px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:6px;text-align:center">TELNET :23</div>
+          <div style="background:#050000;padding:6px;font-size:6px;color:#ff8080;line-height:2;border:1px solid #2a0808;border-radius:1px">
+            <div id="s3_t1" style="opacity:0;transition:opacity .35s">login: admin</div>
+            <div id="s3_t2" style="opacity:0;transition:opacity .35s">Pass: <span style="color:#ff4040;background:#200000">secret</span></div>
+            <div id="s3_t3" style="opacity:0;transition:opacity .35s">ls /etc</div>
+            <div id="s3_t4" style="opacity:0;transition:opacity .35s">passwd</div>
+            <div id="s3_t5" style="opacity:0;transition:opacity .35s;color:#888">shadow</div>
+            <div id="s3_t6" style="opacity:0;transition:opacity .35s;color:#888">hosts</div>
+          </div>
+          <div style="margin-top:6px;font-size:5.5px;color:#e85050;text-align:center">READABLE ✗</div>
+        </div>
+
+        <!-- SSH SIDE -->
+        <div style="background:#001508;border:2px solid #4eff9a;padding:8px 7px;border-radius:2px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:6px;text-align:center">SSH :22</div>
+          <div style="background:#000d04;padding:6px;font-size:6px;color:#2a5a40;line-height:2;border:1px solid #0d3018;border-radius:1px;word-break:break-all">
+            <div id="s3_s1" style="opacity:0;transition:opacity .35s">■■■■■■■■■■■</div>
+            <div id="s3_s2" style="opacity:0;transition:opacity .35s">■■■■■■■■■■■■■■</div>
+            <div id="s3_s3" style="opacity:0;transition:opacity .35s">■■■■■■■■■</div>
+            <div id="s3_s4" style="opacity:0;transition:opacity .35s">■■■■■■■■■■■■</div>
+            <div id="s3_s5" style="opacity:0;transition:opacity .35s">■■■■■■■■■■</div>
+            <div id="s3_s6" style="opacity:0;transition:opacity .35s">■■■■■■■■■■■■■</div>
+          </div>
+          <div style="margin-top:6px;font-size:5.5px;color:#4eff9a;text-align:center">ENCRYPTED ✓</div>
+        </div>
+
+      </div>
+
+      <!-- KEY DIFFERENCE BOX -->
+      <div class="panel" id="s3_diff" style="background:#050a0f;border:1px solid #0d2030">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:7px">KEY DIFFERENCE ON THE WIRE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 8px;background:#0a0000;border-left:2px solid #e85050">
+            <span style="font-size:13px;flex-shrink:0">📬</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">Telnet: payload = raw ASCII. Type 'p', network sees <span style="color:#ff8080">'p'</span>. That simple.</div>
+          </div>
+          <div style="display:flex;align-items:flex-start;gap:8px;padding:5px 8px;background:#000a05;border-left:2px solid #4eff9a">
+            <span style="font-size:13px;flex-shrink:0">🔒</span>
+            <div style="font-size:6.5px;color:#aaa;line-height:1.8">SSH: payload = AES-encrypted blob. Need the <span style="color:#4eff9a">private key</span> to decrypt. Nobody intercepts this.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WIRESHARK HEX VIEW -->
+      <div class="panel" id="s3_hex" style="background:#050a0f;border:1px solid #1a2030">
+        <div style="font-size:7px;color:#888;margin-bottom:6px">HEX DUMP — WHAT WIRESHARK SEES</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div>
+            <div style="font-size:6px;color:#e85050;margin-bottom:3px">TELNET</div>
+            <div style="background:#080000;padding:6px;font-size:6px;color:#ff8080;line-height:2;border:1px solid #2a0808;font-family:monospace">73 65 63<br>72 65 74<br><span style="color:#ffff40">↑ "secret"</span></div>
+          </div>
+          <div>
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SSH</div>
+            <div style="background:#000805;padding:6px;font-size:6px;color:#2a6040;line-height:2;border:1px solid #0d2818;font-family:monospace">8f a2 4e<br>c1 93 7b<br><span style="color:#4ec9e1">↑ ???</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="ih">✓ SSH — AES ENCRYPTED CHANNEL</div>
+    <div class="il">Identical session data. SSH is <span style="color:#4eff9a">completely opaque</span> to any observer on the wire. Telnet is a postcard. SSH is a sealed vault.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">CLEAR</div><div class="sl">TELNET<br>WIRE</div></div>
+    <div class="sc"><div class="sv gn">AES</div><div class="sl">SSH<br>WIRE</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">:22</div><div class="sl">SSH<br>PORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: WHERE TELNET STILL EXISTS + DETECTION ═══ -->
+<div class="scene" id="s4" style="background:#0a0500">
+  <div class="hdr" style="background:#0a0500;border-bottom:1px solid #2a1800">
+    <div class="hdr-title">TELNET: PORT 23</div>
+    <div class="hdr-sub">STILL ALIVE IN THE WILD — FIND IT WITH NMAP</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">WHERE IT HIDES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">DETECTION</span>
+  </div>
+  <div class="anim" style="background:#0a0500">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- WHERE IT LIVES -->
+      <div class="panel" id="s4_where" style="background:#060300;border:1px solid #2a1800">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:8px">TELNET STILL LIVES ON:</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:10px;padding:5px 8px;background:#050200;border:1px solid #1a1000">
+            <span style="font-size:18px;flex-shrink:0">📡</span>
+            <div>
+              <div style="font-size:7px;color:#e8a020">OLD ROUTERS &amp; SWITCHES</div>
+              <div style="font-size:6px;color:#666;line-height:1.8;margin-top:2px">Cisco IOS pre-2005, Linksys, Netgear legacy — telnetd enabled by default</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:5px 8px;background:#050200;border:1px solid #1a1000">
+            <span style="font-size:18px;flex-shrink:0">🏭</span>
+            <div>
+              <div style="font-size:7px;color:#e8a020">INDUSTRIAL ICS / SCADA</div>
+              <div style="font-size:6px;color:#666;line-height:1.8;margin-top:2px">PLCs, HMIs, RTUs — many ship with telnet, never patched</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;padding:5px 8px;background:#050200;border:1px solid #1a1000">
+            <span style="font-size:18px;flex-shrink:0">📱</span>
+            <div>
+              <div style="font-size:7px;color:#e8a020">IOT DEVICES</div>
+              <div style="font-size:6px;color:#666;line-height:1.8;margin-top:2px">IP cameras, smart TVs, printers — Mirai botnet scanned port 23 globally</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- NMAP DETECTION -->
+      <div class="panel" id="s4_nmap" style="background:#040300;border:1px solid #2a1800">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:7px">FIND IT → NMAP:</div>
+        <div style="background:#020100;padding:8px 9px;border:1px solid #1a1000;font-size:7px;color:#4eff9a;line-height:2.2;font-family:monospace">
+          <div id="s4_n1" style="opacity:0;transition:opacity .3s;color:#aaa">$ nmap -sV -p 23 192.168.1.0/24</div>
+          <div id="s4_n2" style="opacity:0;transition:opacity .3s"> </div>
+          <div id="s4_n3" style="opacity:0;transition:opacity .3s;color:#888">PORT   STATE  SERVICE  VERSION</div>
+          <div id="s4_n4" style="opacity:0;transition:opacity .3s;color:#e85050">23/tcp open   telnet   Linux telnetd</div>
+          <div id="s4_n5" style="opacity:0;transition:opacity .3s;color:#e8a020">192.168.1.1  ← router found!</div>
+        </div>
+      </div>
+
+      <!-- CONNECT WITH NETCAT -->
+      <div class="panel" id="s4_nc" style="background:#040300;border:1px solid #1a1000">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">CONNECT → NETCAT:</div>
+        <div style="background:#020100;padding:7px 9px;border:1px solid #0d1000;font-size:7px;line-height:2.2;font-family:monospace">
+          <div id="s4_c1" style="opacity:0;transition:opacity .3s;color:#aaa">$ nc -nv 192.168.1.1 23</div>
+          <div id="s4_c2" style="opacity:0;transition:opacity .3s;color:#4ec9e1">Connection to 192.168.1.1 23 port [tcp] succeeded!</div>
+          <div id="s4_c3" style="opacity:0;transition:opacity .3s;color:#888">Linksys BEFSR41 v4.3</div>
+          <div id="s4_c4" style="opacity:0;transition:opacity .3s;color:#aaa">login: <span style="color:#ffff80">admin</span></div>
+          <div id="s4_c5" style="opacity:0;transition:opacity .3s;color:#aaa">password: <span style="color:#ff8080">admin</span></div>
+          <div id="s4_c6" style="opacity:0;transition:opacity .3s;color:#e85050">&#35; (root shell — default creds)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="ih am">🎯 STILL IN THE WILD</div>
+    <div class="il">Mirai scanned the entire internet for port 23. Found <span style="color:#e85050">600,000+ devices</span> with default credentials. All via Telnet.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">600K</div><div class="sl">MIRAI<br>DEVICES</div></div>
+    <div class="sc"><div class="sv am">ICS</div><div class="sl">BIGGEST<br>RISK</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">-sV</div><div class="sl">NMAP<br>FLAG</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: FIX IT ═══ -->
+<div class="scene" id="s5" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title">TELNET: PORT 23</div>
+    <div class="hdr-sub">HOW TO KILL TELNET EVERYWHERE</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">THE FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REMEDIATION</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- STEP 1: DISABLE -->
+      <div class="panel" id="s5_s1" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">1</div>
+          <div style="font-size:7.5px;color:#4eff9a">DISABLE TELNETD</div>
+        </div>
+        <div style="background:#000805;padding:7px 8px;border:1px solid #0a2010;font-size:6.5px;color:#4eff9a;line-height:2.2;font-family:monospace">
+          <div style="color:#aaa"># Linux (systemd)</div>
+          <div>systemctl stop telnet.socket</div>
+          <div>systemctl disable telnet.socket</div>
+          <div style="color:#aaa;margin-top:4px"># Cisco IOS</div>
+          <div>line vty 0 4</div>
+          <div>transport input ssh</div>
+        </div>
+      </div>
+
+      <!-- STEP 2: FIREWALL -->
+      <div class="panel" id="s5_s2" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">2</div>
+          <div style="font-size:7.5px;color:#4eff9a">BLOCK PORT 23 AT FIREWALL</div>
+        </div>
+        <div style="background:#000805;padding:7px 8px;border:1px solid #0a2010;font-size:6.5px;color:#4eff9a;line-height:2.2;font-family:monospace">
+          <div style="color:#aaa"># iptables</div>
+          <div>iptables -A INPUT -p tcp --dport 23 -j DROP</div>
+          <div>iptables -A OUTPUT -p tcp --dport 23 -j DROP</div>
+          <div style="color:#888;font-size:6px;margin-top:3px"># Also block outbound — prevent exfil</div>
+        </div>
+      </div>
+
+      <!-- STEP 3: REPLACE WITH SSH -->
+      <div class="panel" id="s5_s3" style="background:#000d04;border:1px solid #0d3018">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:22px;height:22px;background:#4eff9a;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#000;flex-shrink:0;font-family:'Press Start 2P',monospace">3</div>
+          <div style="font-size:7.5px;color:#4eff9a">REPLACE WITH SSH</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="padding:5px 8px;background:#000805;border-left:2px solid #4eff9a;font-size:6.5px;color:#aaa;line-height:1.8">
+            Install: <span style="color:#4eff9a">openssh-server</span><br>
+            Enable key auth, disable password auth<br>
+            Use port 22 (or non-standard for obscurity)
+          </div>
+          <div style="padding:5px 8px;background:#000805;border-left:2px solid #4ec9e1;font-size:6.5px;color:#aaa;line-height:1.8">
+            For old gear that only supports telnet: <span style="color:#4ec9e1">replace hardware</span> or put it in an isolated VLAN with no internet path
+          </div>
+        </div>
+      </div>
+
+      <!-- VERIFY -->
+      <div class="panel" id="s5_s4" style="background:#040f08;border:1px solid #1a3020">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">VERIFY IT'S GONE:</div>
+        <div style="background:#020805;padding:7px 8px;border:1px solid #0a2010;font-size:7px;line-height:2.2;font-family:monospace">
+          <div id="s5_v1" style="opacity:0;transition:opacity .3s;color:#aaa">$ nmap -p 23 target</div>
+          <div id="s5_v2" style="opacity:0;transition:opacity .3s;color:#4eff9a">23/tcp  closed  telnet  ✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="ih">✓ DISABLE → BLOCK → REPLACE</div>
+    <div class="il">Three steps. Zero exceptions. <span style="color:#4eff9a">SSH is free</span>, runs on every OS, and takes 5 minutes to set up. No reason to leave Telnet running anywhere.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">OFF</div><div class="sl">TELNETD<br>STATUS</div></div>
+    <div class="sc"><div class="sv gn">DROP</div><div class="sl">FW RULE<br>PORT 23</div></div>
+    <div class="sc"><div class="sv gn">SSH</div><div class="sl">REPLACE<br>WITH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn rd" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+
+function movePkt(id,x1,x2,top,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.style.transition='none';d.style.left=x1+'px';d.style.top=top+'px';d.style.opacity='1';
+    af(40,()=>{
+      d.style.transition=`left ${durMs}ms linear`;
+      d.style.left=x2+'px';
+    });
+    af(durMs+50,()=>{d.style.opacity='0';});
+  });
+}
+
+function typeText(id,text,startMs,perChar){
+  af(startMs,()=>{
+    const e=document.getElementById(id);if(!e)return;
+    e.textContent='';
+    text.split('').forEach((ch,i)=>{
+      af(i*perChar,()=>{e.textContent+=ch;});
+    });
+  });
+}
+
+function reset(n){
+  if(n===1){
+    hide('s1_hook');hide('s1_wire');hide('s1_why');
+    ['p1a','p1b','p1c','p1a_lbl','p1b_lbl','p1c_lbl'].forEach(id=>{const d=document.getElementById(id);if(d)d.style.opacity='0';});
+  }
+  if(n===2){
+    hide('s2_filter');hide('s2_table');hide('s2_stream');
+    ['s2_r1','s2_r2','s2_r3','s2_r4','s2_r5','s2_r6'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+    const u=document.getElementById('s2_user'),p=document.getElementById('s2_pass'),pr=document.getElementById('s2_prompt');
+    if(u)u.textContent='';if(p)p.textContent='';if(pr)pr.style.opacity='0';
+  }
+  if(n===3){
+    hide('s3_compare');hide('s3_diff');hide('s3_hex');
+    ['s3_t1','s3_t2','s3_t3','s3_t4','s3_t5','s3_t6','s3_s1','s3_s2','s3_s3','s3_s4','s3_s5','s3_s6'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+  if(n===4){
+    hide('s4_where');hide('s4_nmap');hide('s4_nc');
+    ['s4_n1','s4_n2','s4_n3','s4_n4','s4_n5','s4_c1','s4_c2','s4_c3','s4_c4','s4_c5','s4_c6'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+  if(n===5){
+    hide('s5_s1');hide('s5_s2');hide('s5_s3');hide('s5_s4');
+    ['s5_v1','s5_v2'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});
+  }
+}
+
+function play(n){
+  clr();reset(n);
+
+  if(n===1){
+    show('s1_hook',200);
+    show('s1_wire',800);
+    /* packets wave across */
+    [0,350,700].forEach((offset,i)=>{
+      movePkt('p1a',60,320,50,900+offset,700);
+      movePkt('p1a_lbl',60,320,30,900+offset,700);
+    });
+    af(1000,()=>{
+      movePkt('p1b',60,320,50,0,700);
+      movePkt('p1b_lbl',60,320,30,0,700);
+    });
+    af(1400,()=>{
+      movePkt('p1c',60,320,50,0,700);
+      movePkt('p1c_lbl',60,320,30,0,700);
+    });
+    show('s1_why',2000);
+  }
+
+  if(n===2){
+    show('s2_filter',200);
+    /* rows appear one by one */
+    show('s2_table',700);
+    [1,2,3,4,5,6].forEach((i)=>{show('s2_r'+i,800+i*280);});
+    /* stream reveal */
+    show('s2_stream',2700);
+    typeText('s2_user','admin',3000,120);
+    typeText('s2_pass','secret',3800,120);
+    af(4700,()=>{const e=document.getElementById('s2_prompt');if(e)e.style.opacity='1';});
+  }
+
+  if(n===3){
+    show('s3_compare',200);
+    /* telnet lines appear: readable */
+    [1,2,3,4,5,6].forEach(i=>{show('s3_t'+i,400+i*250);});
+    /* ssh lines appear: gibberish */
+    [1,2,3,4,5,6].forEach(i=>{show('s3_s'+i,400+i*250);});
+    show('s3_diff',2200);
+    show('s3_hex',2900);
+  }
+
+  if(n===4){
+    show('s4_where',200);
+    show('s4_nmap',1200);
+    [1,2,3,4,5].forEach(i=>{show('s4_n'+i,1400+i*300);});
+    show('s4_nc',3100);
+    [1,2,3,4,5,6].forEach(i=>{show('s4_c'+i,3300+i*280);});
+  }
+
+  if(n===5){
+    show('s5_s1',200);
+    show('s5_s2',900);
+    show('s5_s3',1600);
+    show('s5_s4',2300);
+    show('s5_v1',2500);
+    show('s5_v2',3100);
+  }
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;
+  document.getElementById('s'+n).classList.add('active');
+  reset(n);
+  af(80,()=>play(n));
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

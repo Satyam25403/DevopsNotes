@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390,initial-scale=1,maximum-scale=1">
+<title>Defense in Depth — OSI Security Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.gn{border-color:#4eff9a}.info.rd{border-color:#e85050}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px;padding:9px 10px}
+.panel.vis{opacity:1}
+
+/* ── Castle / ring diagram ── */
+.castle-wrap{
+  position:relative;align-self:center;flex-shrink:0;
+  width:340px;height:340px;
+}
+.castle-ring{
+  position:absolute;border-radius:50%;border:2px solid;
+  opacity:0;transform:scale(.72);
+  transition:opacity .55s ease,transform .55s ease;
+  display:flex;align-items:center;justify-content:center;
+}
+.castle-ring.vis{opacity:1;transform:scale(1)}
+
+/* label on each ring */
+.ring-tag{
+  position:absolute;font-size:5.5px;font-family:'Press Start 2P',monospace;
+  text-align:center;line-height:1.4;pointer-events:none;
+  opacity:0;transition:opacity .3s .35s;white-space:nowrap;
+}
+.castle-ring.vis .ring-tag{opacity:1}
+
+/* attacker stopped badge */
+.atk-stop{
+  position:absolute;font-size:8px;opacity:0;
+  transition:opacity .3s;pointer-events:none;
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+}
+.atk-stop span{font-size:5px;font-family:'Press Start 2P',monospace;color:#e85050}
+.atk-stop.vis{opacity:1}
+
+/* attacker dot that moves inward */
+.atk-dot{
+  position:absolute;width:10px;height:10px;border-radius:50%;
+  background:#e85050;box-shadow:0 0 8px #e85050;
+  transform:translate(-50%,-50%);
+  opacity:0;transition:opacity .2s;
+  pointer-events:none;z-index:20;
+}
+
+/* pkt-dot for network scenes */
+.pkt-dot{
+  position:absolute;width:9px;height:9px;border-radius:50%;
+  transform:translate(-50%,-50%);pointer-events:none;z-index:10;opacity:0;
+  transition:opacity .2s;
+}
+
+/* map-node */
+.map-node{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;transform:translate(-50%,-50%);transition:filter .25s,transform .25s}
+.map-node .nicon{font-size:18px;line-height:1;filter:grayscale(1) brightness(.4);transition:filter .3s}
+.map-node.active .nicon,.map-node.pulse .nicon,.map-node.src .nicon,.map-node.dst .nicon,.map-node.blk .nicon{filter:none}
+.map-node .nlabel{font-size:5.5px;color:#2a4030;line-height:1.3;text-align:center;transition:color .3s;white-space:nowrap;font-family:'Press Start 2P',monospace}
+.map-node.active .nlabel{color:#4eff9a}
+.map-node.src .nlabel{color:#e8a020}
+.map-node.dst .nlabel{color:#4ec9e1}
+.map-node.blk .nlabel{color:#e85050}
+@keyframes nodePulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.35)}}
+.map-node.pulse{animation:nodePulse .5s ease 2}
+
+/* defense row card */
+.def-row{
+  display:flex;align-items:flex-start;gap:9px;padding:8px 10px;
+  border-radius:2px;
+  opacity:0;transform:translateX(-7px);
+  transition:opacity .35s,transform .35s;
+}
+.def-row.vis{opacity:1;transform:translateX(0)}
+.def-icon{font-size:20px;flex-shrink:0;width:28px;text-align:center;margin-top:2px}
+.def-body{flex:1}
+.def-title{font-size:8px;line-height:1.4;margin-bottom:4px}
+.def-desc{font-size:6.5px;color:#aaa;line-height:1.8}
+.def-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+.def-tag{font-size:6px;padding:2px 5px;border-radius:2px;border:1px solid currentColor;font-family:'Press Start 2P',monospace}
+
+/* Zero Trust principle cards */
+.zt-card{
+  border-radius:2px;padding:9px 10px;
+  opacity:0;transform:translateY(5px);
+  transition:opacity .38s,transform .38s;
+}
+.zt-card.vis{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- ══════════════ SCENE 1: HOOK — ZERO TRUST ══════════════ -->
+<div class="scene active" id="s1" style="background:#0d0818">
+  <div class="hdr" style="background:#0d0818">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">OSI-MAPPED SECURITY ARCHITECTURE</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a080c0">ZERO TRUST</span>
+    <span class="sbadge" style="color:#a080c0;border-color:#a080c0">INTRO</span>
+  </div>
+  <div class="anim" style="background:#0d0818">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="border:2px solid #a080c0;border-radius:2px;background:#130820;text-align:center;padding:14px 12px;opacity:0;transition:opacity .5s" id="s1hero">
+        <div style="font-size:8px;color:#555;letter-spacing:2px;margin-bottom:9px">THE PRINCIPLE</div>
+        <div style="font-size:22px;margin-bottom:9px">🏰</div>
+        <div style="font-size:10px;color:#a080c0;line-height:1.9;margin-bottom:8px">NEVER TRUST.<br>ALWAYS VERIFY.<br>AT EVERY LAYER.</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">Zero Trust is not a product you buy.<br>It's a principle applied at every<br>OSI layer, simultaneously.</div>
+      </div>
+
+      <!-- Why layers matter -->
+      <div style="display:flex;flex-direction:column;gap:5px;opacity:0;transition:opacity .5s" id="s1why">
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#1a0808;border:1px solid #e85050;border-radius:2px">
+          <div style="font-size:18px;flex-shrink:0">💥</div>
+          <div><div style="font-size:8px;color:#e85050;margin-bottom:3px">SINGLE-LAYER DEFENSE FAILS</div><div style="font-size:6.5px;color:#aaa;line-height:1.6">A great firewall (L3) doesn't stop XSS (L7). A TLS cert (L6) doesn't stop MAC spoofing (L2).</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:9px;padding:8px 10px;background:#071510;border:1px solid #4eff9a;border-radius:2px">
+          <div style="font-size:18px;flex-shrink:0">🏰</div>
+          <div><div style="font-size:8px;color:#4eff9a;margin-bottom:3px">CASTLE LAYERS STOP EVERYTHING</div><div style="font-size:6.5px;color:#aaa;line-height:1.6">Each OSI layer has its own wall. Attackers that bypass L1 hit L2. Bypass L3 — L4 catches them.</div></div>
+        </div>
+      </div>
+
+      <!-- Layer map preview -->
+      <div style="opacity:0;transition:opacity .5s" id="s1map">
+        <div style="font-size:7px;color:#555;margin-bottom:5px;letter-spacing:.5px;text-align:center">DEFENSES BY OSI LAYER</div>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1e1408;border:1px solid #e8a02050;border-radius:2px">
+            <span style="font-size:7px;color:#e8a020;width:18px;text-align:right">7</span>
+            <span style="font-size:6px;color:#e8a020;flex:1">WAF · SAST/DAST · Param Queries · HSTS</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1e1408;border:1px solid #e8a02040;border-radius:2px">
+            <span style="font-size:7px;color:#d47020;width:18px;text-align:right">6</span>
+            <span style="font-size:6px;color:#d47020;flex:1">TLS 1.3 · Certificate Pinning</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1a1208;border:1px solid #c0682040;border-radius:2px">
+            <span style="font-size:7px;color:#c06820;width:18px;text-align:right">5</span>
+            <span style="font-size:6px;color:#c06820;flex:1">Session tokens · Re-auth on sensitive ops</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#111808;border:1px solid #7a9e3050;border-radius:2px">
+            <span style="font-size:7px;color:#7a9e30;width:18px;text-align:right">4</span>
+            <span style="font-size:6px;color:#7a9e30;flex:1">SYN cookies · Stateful FW · IDS/IPS</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#0d1a12;border:1px solid #40b87050;border-radius:2px">
+            <span style="font-size:7px;color:#40b870;width:18px;text-align:right">3</span>
+            <span style="font-size:6px;color:#40b870;flex:1">RPKI · BCP38 · IPsec · ACLs</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#0c1b18;border:1px solid #30a89050;border-radius:2px">
+            <span style="font-size:7px;color:#30a890;width:18px;text-align:right">2</span>
+            <span style="font-size:6px;color:#30a890;flex:1">DAI · 802.1X · DHCP Snooping · Port Sec</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#0d1a2e;border:1px solid #4ec9e150;border-radius:2px">
+            <span style="font-size:7px;color:#4ec9e1;width:18px;text-align:right">1</span>
+            <span style="font-size:6px;color:#4ec9e1;flex:1">Physical locks · Disable USB · Fiber · CCTV</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#a080c0">
+    <div class="il">ZERO TRUST =</div>
+    <div class="ih" style="color:#a080c0">One defense per layer. All layers active.</div>
+    <div class="il">Attacker bypasses one wall, hits the next.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080c0">7</div><div class="sl">LAYERS<br>DEFENDED</div></div>
+    <div class="sc"><div class="sv gn">NEVER</div><div class="sl">TRUST<br>ALWAYS VERIFY</div></div>
+    <div class="sc"><div class="sv" style="font-size:18px">🏰</div><div class="sl">CASTLE<br>MODEL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2: CASTLE DIAGRAM — ALL 7 RINGS ══════════════ -->
+<div class="scene" id="s2" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">CASTLE RINGS — ONE WALL PER LAYER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">CASTLE MODEL</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ALL LAYERS</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s2intro">EACH RING IS ONE OSI LAYER — ATTACKER MUST BREACH ALL 7</div>
+
+      <!-- Castle ring diagram -->
+      <div class="castle-wrap" id="s2castle">
+        <!-- Ring 7 — outermost: L1 Physical -->
+        <div class="castle-ring" id="cr1" style="border-color:#4ec9e155;left:0;top:0;width:340px;height:340px">
+          <div class="ring-tag" style="color:#4ec9e1;top:6px;left:50%;transform:translateX(-50%)">L1 — PHYSICAL LOCKS</div>
+        </div>
+        <!-- Ring 6: L2 Data Link -->
+        <div class="castle-ring" id="cr2" style="border-color:#30a89055;left:24px;top:24px;width:292px;height:292px">
+          <div class="ring-tag" style="color:#30a890;top:5px;left:50%;transform:translateX(-50%)">L2 — 802.1X + DAI</div>
+        </div>
+        <!-- Ring 5: L3 Network -->
+        <div class="castle-ring" id="cr3" style="border-color:#40b87055;left:48px;top:48px;width:244px;height:244px">
+          <div class="ring-tag" style="color:#40b870;top:4px;left:50%;transform:translateX(-50%)">L3 — ACLs + IPsec</div>
+        </div>
+        <!-- Ring 4: L4 Transport -->
+        <div class="castle-ring" id="cr4" style="border-color:#7a9e3055;left:72px;top:72px;width:196px;height:196px">
+          <div class="ring-tag" style="color:#7a9e30;top:4px;left:50%;transform:translateX(-50%)">L4 — SYN COOKIES + FW</div>
+        </div>
+        <!-- Ring 3: L5 Session -->
+        <div class="castle-ring" id="cr5" style="border-color:#c0682055;left:96px;top:96px;width:148px;height:148px">
+          <div class="ring-tag" style="color:#c06820;top:3px;left:50%;transform:translateX(-50%)">L5 — SESSION TOKENS</div>
+        </div>
+        <!-- Ring 2: L6 Presentation -->
+        <div class="castle-ring" id="cr6" style="border-color:#d4702055;left:116px;top:116px;width:108px;height:108px">
+          <div class="ring-tag" style="color:#d47020;top:3px;left:50%;transform:translateX(-50%)">L6 — TLS 1.3</div>
+        </div>
+        <!-- Ring 1 — innermost: L7 Application -->
+        <div class="castle-ring" id="cr7" style="border-color:#e8a02066;left:136px;top:136px;width:68px;height:68px">
+          <div class="ring-tag" style="color:#e8a020;top:2px;left:50%;transform:translateX(-50%)">L7 WAF</div>
+        </div>
+
+        <!-- Core asset -->
+        <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;z-index:5">
+          <div style="font-size:22px;line-height:1;margin-bottom:3px">👑</div>
+          <div style="font-size:5.5px;color:#4eff9a;font-family:'Press Start 2P',monospace;line-height:1.4">PROTECTED<br>ASSET</div>
+        </div>
+
+        <!-- Attacker tries to enter from top-left -->
+        <div class="atk-dot" id="atk_d" style="left:20px;top:20px"></div>
+
+        <!-- Block signs on each ring -->
+        <div class="atk-stop" id="blk1" style="left:8px;top:152px"><div>🛑</div><span>PHYSICAL</span></div>
+        <div class="atk-stop" id="blk2" style="left:32px;top:138px"><div>🛑</div><span>L2</span></div>
+        <div class="atk-stop" id="blk3" style="left:56px;top:130px"><div>🛑</div><span>L3</span></div>
+        <div class="atk-stop" id="blk4" style="left:80px;top:122px"><div>🛑</div><span>L4</span></div>
+        <div class="atk-stop" id="blk5" style="left:104px;top:116px"><div>🛑</div><span>L5</span></div>
+        <div class="atk-stop" id="blk6" style="left:120px;top:110px"><div>🛑</div><span>L6</span></div>
+        <div class="atk-stop" id="blk7" style="left:140px;top:104px"><div>🛑</div><span>L7</span></div>
+      </div>
+
+      <!-- Legend -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;opacity:0;transition:opacity .4s" id="s2legend">
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#0d2018;border:1px solid #4ec9e130;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#4ec9e1;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#4ec9e1">L1 Physical</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#0c1b18;border:1px solid #30a89030;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#30a890;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#30a890">L2 Data Link</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#0d1a12;border:1px solid #40b87030;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#40b870;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#40b870">L3 Network</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#111808;border:1px solid #7a9e3030;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#7a9e30;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#7a9e30">L4 Transport</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#1a1208;border:1px solid #c0682030;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#c06820;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#c06820">L5 Session</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#1c1308;border:1px solid #d4702030;border-radius:2px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#d47020;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#d47020">L6 Presentation</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;padding:5px 7px;background:#1e1408;border:1px solid #e8a02030;border-radius:2px;grid-column:span 2">
+          <div style="width:8px;height:8px;border-radius:50%;background:#e8a020;flex-shrink:0"></div>
+          <div style="font-size:5.5px;color:#e8a020">L7 Application — WAF + SAST/DAST + Param Queries</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">CASTLE MODEL:</div>
+    <div class="ih">7 walls. Breach one, hit the next.</div>
+    <div class="il">Attacker cost rises at each layer crossed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">7</div><div class="sl">DEFENSIVE<br>RINGS</div></div>
+    <div class="sc"><div class="sv rd">💀</div><div class="sl">ATTACKER<br>STOPPED</div></div>
+    <div class="sc"><div class="sv" style="font-size:18px">👑</div><div class="sl">ASSET<br>PROTECTED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3: L1 + L2 DEFENSES ══════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">L1 PHYSICAL + L2 DATA LINK</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">L1 + L2</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HARDWARE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s3intro">IF YOU CAN TOUCH IT, YOU OWN IT — DEFEND THE PHYSICAL FIRST</div>
+
+      <div class="def-row" id="d3_1" style="background:#0d1a2e;border:2px solid #4ec9e1">
+        <div class="def-icon">🔒</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#4ec9e1">L1 — PHYSICAL ACCESS CONTROL</div>
+          <div class="def-desc">Server rooms behind keycards + biometrics. CCTV on all racks. Disable unused USB ports (prevent rubber-ducky attacks). Use <span style="color:#4ec9e1">fibre over copper</span> where possible — fibre can't be tapped by induction.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#4ec9e1;border-color:#4ec9e1">KEYCARD</span>
+            <span class="def-tag" style="color:#4ec9e1;border-color:#4ec9e1">USB DISABLED</span>
+            <span class="def-tag" style="color:#4ec9e1;border-color:#4ec9e1">FIBRE</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d3_2" style="background:#0c1b18;border:1px solid #30a890">
+        <div class="def-icon">🔐</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#30a890">L2 — 802.1X PORT AUTH</div>
+          <div class="def-desc">Every device must <span style="color:#30a890">authenticate before getting a port</span>. No auth → port stays in unauthenticated VLAN. Stops rogue devices plugging into a jack and getting LAN access.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">RADIUS SERVER</span>
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">EAP-TLS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d3_3" style="background:#0c1b18;border:1px solid #30a890">
+        <div class="def-icon">🛡️</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#30a890">L2 — DAI (DYNAMIC ARP INSPECTION)</div>
+          <div class="def-desc">Switch validates ARP packets against the <span style="color:#30a890">DHCP snooping binding table</span>. If ARP says "IP X is at MAC Y" but the table says otherwise → drop it. Stops ARP poisoning / MiTM at L2.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">ARP POISON KILL</span>
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">DHCP SNOOPING</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d3_4" style="background:#0c1b18;border:1px solid #30a890">
+        <div class="def-icon">🚪</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#30a890">L2 — PORT SECURITY</div>
+          <div class="def-desc">Limit the number of MAC addresses per switch port (e.g. max 2). Exceeding limit → <span style="color:#30a890">err-disabled</span>. Stops MAC flooding attacks that overflow the CAM table and turn the switch into a hub.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">MAX 2 MACs</span>
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">ERR-DISABLE</span>
+            <span class="def-tag" style="color:#30a890;border-color:#30a890">CAM FLOOD KILL</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">L1 + L2 PRINCIPLE:</div>
+    <div class="ih">Authenticate before you connect.</div>
+    <div class="il">Physical access + port auth = first two walls.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">USB</div><div class="sl">DISABLED<br>L1</div></div>
+    <div class="sc"><div class="sv" style="color:#30a890">802.1X</div><div class="sl">PORT AUTH<br>L2</div></div>
+    <div class="sc"><div class="sv" style="color:#30a890">DAI</div><div class="sl">ARP<br>INSPECT L2</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4: L3 + L4 DEFENSES ══════════════ -->
+<div class="scene" id="s4" style="background:#071510">
+  <div class="hdr" style="background:#071510">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">L3 NETWORK + L4 TRANSPORT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#40b870">L3 + L4</span>
+    <span class="sbadge" style="color:#40b870;border-color:#40b870">ROUTING + TRANSPORT</span>
+  </div>
+  <div class="anim" style="background:#071510">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s4intro">THE INTERNET'S CHOKEPOINTS — CONTROL WHAT ROUTES AND WHAT CONNECTS</div>
+
+      <div class="def-row" id="d4_1" style="background:#0d1a12;border:2px solid #40b870">
+        <div class="def-icon">🔏</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#40b870">L3 — RPKI + BCP38</div>
+          <div class="def-desc"><span style="color:#40b870">RPKI</span>: cryptographically signed ROAs prove which AS owns which prefix. Routers drop INVALID BGP routes → kills BGP hijacking.<br><span style="color:#40b870">BCP38</span>: ISP drops packets whose source IP can't have come from that port → kills IP spoofing + DDoS amplification.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#40b870;border-color:#40b870">BGP HIJACK KILL</span>
+            <span class="def-tag" style="color:#40b870;border-color:#40b870">IP SPOOF KILL</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d4_2" style="background:#0d1a12;border:1px solid #40b870">
+        <div class="def-icon">📋</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#40b870">L3 — ACLs + IPsec</div>
+          <div class="def-desc"><span style="color:#40b870">ACLs</span> deny RFC1918 addresses on public interfaces + rate-limit ICMP.<br><span style="color:#40b870">IPsec/ESP</span> encrypts and authenticates every L3 packet in transit — essential for VPN tunnels between sites.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#40b870;border-color:#40b870">RFC1918 DENY</span>
+            <span class="def-tag" style="color:#40b870;border-color:#40b870">ESP ENCRYPT</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d4_3" style="background:#111808;border:2px solid #7a9e30">
+        <div class="def-icon">🧱</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#7a9e30">L4 — STATEFUL FIREWALL</div>
+          <div class="def-desc">Tracks TCP/UDP connection state. Allows <span style="color:#7a9e30">ESTABLISHED, RELATED</span> packets back in. Drops unsolicited inbound TCP that never had a SYN. Unlike packet filters — knows context.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#7a9e30;border-color:#7a9e30">STATEFUL</span>
+            <span class="def-tag" style="color:#7a9e30;border-color:#7a9e30">CONNTRACK</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d4_4" style="background:#111808;border:1px solid #7a9e30">
+        <div class="def-icon">🍪</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#7a9e30">L4 — SYN COOKIES + IDS/IPS</div>
+          <div class="def-desc"><span style="color:#7a9e30">SYN cookies</span>: server doesn't allocate state until ACK arrives → SYN flood becomes harmless.<br><span style="color:#7a9e30">IDS/IPS</span>: signature-based + anomaly detection on flows. IDS alerts, IPS drops inline.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#7a9e30;border-color:#7a9e30">SYN FLOOD KILL</span>
+            <span class="def-tag" style="color:#7a9e30;border-color:#7a9e30">SNORT/SURICATA</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#40b870">
+    <div class="il">L3 + L4 PRINCIPLE:</div>
+    <div class="ih">Verify every route. Inspect every connection.</div>
+    <div class="il">Stateful context makes all the difference.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#40b870">RPKI</div><div class="sl">BGP<br>VERIFY L3</div></div>
+    <div class="sc"><div class="sv" style="color:#7a9e30">FW</div><div class="sl">STATEFUL<br>INSPECT L4</div></div>
+    <div class="sc"><div class="sv" style="color:#7a9e30">IPS</div><div class="sl">INLINE<br>BLOCK L4</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5: L5–L7 DEFENSES ══════════════ -->
+<div class="scene" id="s5" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">L5 SESSION · L6 PRESENTATION · L7 APPLICATION</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">L5 · L6 · L7</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">SOFTWARE LAYERS</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s5intro">THE INNER WALLS — WHERE MOST VULNS ARE EXPLOITED</div>
+
+      <div class="def-row" id="d5_1" style="background:#1a1208;border:2px solid #c06820">
+        <div class="def-icon">🔑</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#c06820">L5 — SECURE SESSION MANAGEMENT</div>
+          <div class="def-desc">128-bit CSPRNG tokens. <span style="color:#c06820">Regenerate on login</span> (kills fixation). Short idle timeout (15–30m). Server-side invalidation on logout. HttpOnly + Secure + SameSite=Strict cookie flags.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#c06820;border-color:#c06820">CSPRNG</span>
+            <span class="def-tag" style="color:#c06820;border-color:#c06820">REGEN ON AUTH</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d5_2" style="background:#1c1308;border:2px solid #d47020">
+        <div class="def-icon">🔐</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#d47020">L6 — TLS 1.3 + HSTS</div>
+          <div class="def-desc"><span style="color:#d47020">TLS 1.3</span> only — deprecate TLS 1.0/1.1/1.2 where possible. 0-RTT handshake, forward secrecy mandatory.<br><span style="color:#d47020">HSTS</span>: tell browsers to always use HTTPS for this domain (max-age 1yr + preload). Kills SSL stripping.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#d47020;border-color:#d47020">TLS 1.3</span>
+            <span class="def-tag" style="color:#d47020;border-color:#d47020">HSTS PRELOAD</span>
+            <span class="def-tag" style="color:#d47020;border-color:#d47020">CERT PINNING</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d5_3" style="background:#1e1408;border:2px solid #e8a020">
+        <div class="def-icon">🛡️</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#e8a020">L7 — WAF + PARAMETERIZED QUERIES</div>
+          <div class="def-desc"><span style="color:#e8a020">WAF</span> (Web App Firewall) inspects HTTP bodies — blocks SQLi, XSS, SSRF at the edge before hitting your app.<br><span style="color:#e8a020">Parameterised queries</span> (prepared statements) eliminate SQL injection at the code level entirely.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">SQLi KILL</span>
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">XSS KILL</span>
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">AWS WAF</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="def-row" id="d5_4" style="background:#1e1408;border:1px solid #e8a020">
+        <div class="def-icon">🔬</div>
+        <div class="def-body">
+          <div class="def-title" style="color:#e8a020">L7 — SAST + DAST IN CI/CD</div>
+          <div class="def-desc"><span style="color:#e8a020">SAST</span> (Static Application Security Testing) scans source code for vulns before build. <span style="color:#e8a020">DAST</span> (Dynamic) hits your running app like an attacker. Both run in the CI/CD pipeline — shift security left.</div>
+          <div class="def-tags">
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">SHIFT LEFT</span>
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">SEMGREP</span>
+            <span class="def-tag" style="color:#e8a020;border-color:#e8a020">OWASP ZAP</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">L5–L7 PRINCIPLE:</div>
+    <div class="ih am">Trust no input. Validate everything.</div>
+    <div class="il">TLS + WAF + SAST = three inner walls.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#d47020">TLS</div><div class="sl">1.3 ONLY<br>L6</div></div>
+    <div class="sc"><div class="sv am">WAF</div><div class="sl">HTTP<br>INSPECT L7</div></div>
+    <div class="sc"><div class="sv am">SAST</div><div class="sl">CODE<br>SCAN L7</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 6: ZERO TRUST PRINCIPLES ══════════════ -->
+<div class="scene" id="s6" style="background:#0d0818">
+  <div class="hdr" style="background:#0d0818">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">ZERO TRUST — THE 5 CORE PRINCIPLES</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a080c0">ZERO TRUST</span>
+    <span class="sbadge" style="color:#a080c0;border-color:#a080c0">PRINCIPLES</span>
+  </div>
+  <div class="anim" style="background:#0d0818">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s6intro">NEVER TRUST. ALWAYS VERIFY. ACROSS ALL LAYERS.</div>
+
+      <div class="zt-card" id="zt1" style="border:2px solid #a080c0;background:#130820">
+        <div style="font-size:9px;color:#a080c0;margin-bottom:5px">1. VERIFY EXPLICITLY</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Always authenticate and authorise based on all available data points: identity, location, device health, service/workload, data classification, and anomalies. Not just the network position.</div>
+        <div style="font-size:6px;color:#a080c0;margin-top:4px">→ 802.1X (L2) · TLS mutual auth (L6) · MFA (L7)</div>
+      </div>
+
+      <div class="zt-card" id="zt2" style="border:1px solid #4ec9e1;background:#0d1a2e">
+        <div style="font-size:9px;color:#4ec9e1;margin-bottom:5px">2. LEAST PRIVILEGE ACCESS</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Limit user access with just-in-time and just-enough-access. Segment the network so a compromised L2 segment can't reach the database directly — it hits a firewall (L3/L4) first.</div>
+        <div style="font-size:6px;color:#4ec9e1;margin-top:4px">→ VLAN segmentation (L2) · ACLs (L3) · RBAC (L7)</div>
+      </div>
+
+      <div class="zt-card" id="zt3" style="border:1px solid #4eff9a;background:#071510">
+        <div style="font-size:9px;color:#4eff9a;margin-bottom:5px">3. ASSUME BREACH</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Design as if the attacker is already inside. Encrypt all traffic — even internal (IPsec L3, TLS L6). Monitor all lateral movement with IDS (L4). Log everything at all layers.</div>
+        <div style="font-size:6px;color:#4eff9a;margin-top:4px">→ IPsec (L3) · IDS/IPS (L4) · SIEM logging</div>
+      </div>
+
+      <div class="zt-card" id="zt4" style="border:1px solid #7a9e30;background:#111808">
+        <div style="font-size:9px;color:#7a9e30;margin-bottom:5px">4. MICRO-SEGMENTATION</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Don't give flat network access. Each workload talks only to what it needs — enforced by stateful firewalls and ACLs at L3/L4. East-west traffic (server-to-server) is as controlled as north-south.</div>
+        <div style="font-size:6px;color:#7a9e30;margin-top:4px">→ VLANs (L2) · Firewall rules (L3/L4) · Service mesh</div>
+      </div>
+
+      <div class="zt-card" id="zt5" style="border:1px solid #e8a020;background:#1a1408">
+        <div style="font-size:9px;color:#e8a020;margin-bottom:5px">5. CONTINUOUS VALIDATION</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:1.8">Authentication isn't a one-time event. Re-authenticate for sensitive operations. Short session lifetimes (L5). Re-check device health on each connection. SAST/DAST in every CI/CD run (L7).</div>
+        <div style="font-size:6px;color:#e8a020;margin-top:4px">→ Session timeout (L5) · SAST/DAST (L7) · Cert rotation</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#a080c0">
+    <div class="il">ZERO TRUST AT ALL 7 LAYERS:</div>
+    <div class="ih" style="color:#a080c0">Verify. Least privilege. Assume breach.</div>
+    <div class="il">Each principle maps to specific OSI defenses.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080c0">ZT</div><div class="sl">ZERO<br>TRUST</div></div>
+    <div class="sc"><div class="sv gn">VERIFY</div><div class="sl">EVERY<br>REQUEST</div></div>
+    <div class="sc"><div class="sv am">BREACH</div><div class="sl">ASSUME<br>INSIDE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn" onclick="go(7)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 7: FULL CHEAT SHEET ══════════════ -->
+<div class="scene" id="s7" style="background:#050d0a">
+  <div class="hdr" style="background:#050d0a">
+    <div class="hdr-title">DEFENSE IN DEPTH</div>
+    <div class="hdr-sub">COMPLETE OSI SECURITY CHEAT SHEET</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">CHEAT SHEET</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+  <div class="anim" style="background:#050d0a">
+    <div style="padding:8px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div style="font-size:7px;color:#555;text-align:center;letter-spacing:1px;padding:2px 0;opacity:0;transition:opacity .3s" id="s7intro">FULL OSI → DEFENSE → ATTACK BLOCKED MAPPING</div>
+
+      <!-- Full table -->
+      <div style="opacity:0;transition:opacity .5s" id="s7table">
+        <!-- header -->
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:3px">
+          <div></div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d2018;border:1px solid #1a3028;color:#4eff9a;border-radius:2px">LAYER</div>
+          <div style="font-size:6px;padding:4px;text-align:center;background:#0d2018;border:1px solid #1a3028;color:#4eff9a;border-radius:2px">DEFENSES + BLOCKS</div>
+        </div>
+
+        <!-- rows -->
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#4ec9e1">1</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a2e;border:1px solid #4ec9e130;color:#4ec9e1;border-radius:2px">PHYSICAL</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a2e;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">Locks · USB disabled · Fibre · CCTV<br><span style="color:#e85050">→ blocks:</span> physical access, wiretap</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#30a890">2</div>
+          <div style="font-size:6px;padding:5px;background:#0c1b18;border:1px solid #30a89030;color:#30a890;border-radius:2px">DATA LINK</div>
+          <div style="font-size:6px;padding:5px;background:#0c1b18;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">802.1X · DAI · DHCP snoop · Port sec<br><span style="color:#e85050">→ blocks:</span> ARP poison, MAC flood, rogue device</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#40b870">3</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a12;border:1px solid #40b87030;color:#40b870;border-radius:2px">NETWORK</div>
+          <div style="font-size:6px;padding:5px;background:#0d1a12;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">RPKI · BCP38 · IPsec · ACLs<br><span style="color:#e85050">→ blocks:</span> BGP hijack, IP spoof, DDoS ampl</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#7a9e30">4</div>
+          <div style="font-size:6px;padding:5px;background:#111808;border:1px solid #7a9e3030;color:#7a9e30;border-radius:2px">TRANSPORT</div>
+          <div style="font-size:6px;padding:5px;background:#111808;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">Stateful FW · SYN cookies · IDS/IPS<br><span style="color:#e85050">→ blocks:</span> SYN flood, port scan, lateral move</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#c06820">5</div>
+          <div style="font-size:6px;padding:5px;background:#1a1208;border:1px solid #c0682030;color:#c06820;border-radius:2px">SESSION</div>
+          <div style="font-size:6px;padding:5px;background:#1a1208;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">CSPRNG tokens · Regen on login · Timeout<br><span style="color:#e85050">→ blocks:</span> session hijacking, fixation</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px;margin-bottom:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#d47020">6</div>
+          <div style="font-size:6px;padding:5px;background:#1c1308;border:1px solid #d4702030;color:#d47020;border-radius:2px">PRESENTATION</div>
+          <div style="font-size:6px;padding:5px;background:#1c1308;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">TLS 1.3 · HSTS · Cert pinning<br><span style="color:#e85050">→ blocks:</span> MiTM, SSL strip, eavesdrop</div>
+        </div>
+        <div style="display:grid;grid-template-columns:22px 72px 1fr;gap:2px">
+          <div style="display:flex;align-items:center;justify-content:center;font-size:8px;color:#e8a020">7</div>
+          <div style="font-size:6px;padding:5px;background:#1e1408;border:1px solid #e8a02030;color:#e8a020;border-radius:2px">APPLICATION</div>
+          <div style="font-size:6px;padding:5px;background:#1e1408;border:1px solid #1a3028;color:#ccc;border-radius:2px;line-height:1.7">WAF · Param queries · SAST/DAST · CSP<br><span style="color:#e85050">→ blocks:</span> SQLi, XSS, SSRF, CSRF</div>
+        </div>
+      </div>
+
+      <!-- Final callout -->
+      <div style="background:#0d0820;border:2px solid #a080c0;border-radius:2px;padding:10px 11px;opacity:0;transition:opacity .4s" id="s7final">
+        <div style="font-size:7px;color:#a080c0;margin-bottom:6px">🎓 THE CAPSTONE RULE</div>
+        <div style="font-size:6.5px;color:#ccc;line-height:2.1">
+          No single layer is enough. Ever.<br>
+          Each layer <span style="color:#4eff9a">assumes the outer walls have already been breached.</span><br>
+          The attacker's cost multiplies at each ring.<br>
+          Defense in depth is not paranoia — it's architecture.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">THE SERIES COMPLETE:</div>
+    <div class="ih">7 layers. 7 walls. One attacker surface.</div>
+    <div class="il">Now you can build it — and break it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">7</div><div class="sl">LAYERS<br>SECURED</div></div>
+    <div class="sc"><div class="sv" style="color:#a080c0">ZT</div><div class="sl">ZERO<br>TRUST</div></div>
+    <div class="sc"><div class="sv" style="font-size:16px">🏰👑</div><div class="sl">CASTLE<br>DEFENDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(6)">◀ PREV</button>
+    <button class="btn play" onclick="play(7)">▶ PLAY</button>
+    <button class="btn am" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function showSlide(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateX(0)';}});}
+function showUp(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');e.style.transform='translateY(0)';}});}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+
+function moveDot(id,x1,y1,x2,y2,startMs,dur){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.style.transition='none';d.style.left=x1+'px';d.style.top=y1+'px';d.style.opacity='1';
+    af(30,()=>{d.style.transition=`left ${dur}ms linear,top ${dur}ms linear`;d.style.left=x2+'px';d.style.top=y2+'px';});
+  });
+}
+
+function go(n){
+  clr();
+  document.getElementById('s'+cur).classList.remove('active');
+  cur=n;document.getElementById('s'+n).classList.add('active');
+  reset(n);af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){['s1hero','s1why','s1map'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.opacity='0';});}
+  if(n===2){
+    for(let i=1;i<=7;i++){const r=document.getElementById('cr'+i);if(r){r.style.opacity='0';r.classList.remove('vis');r.style.transform='scale(.72)';}}
+    for(let i=1;i<=7;i++){const b=document.getElementById('blk'+i);if(b){b.style.opacity='0';b.classList.remove('vis');}}
+    const atk=document.getElementById('atk_d');if(atk)atk.style.opacity='0';
+    const sl=document.getElementById('s2legend');if(sl)sl.style.opacity='0';
+    const ei=document.getElementById('s2intro');if(ei)ei.style.opacity='0';
+  }
+  if(n===3){
+    const ei=document.getElementById('s3intro');if(ei)ei.style.opacity='0';
+    ['d3_1','d3_2','d3_3','d3_4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-7px)';}});
+  }
+  if(n===4){
+    const ei=document.getElementById('s4intro');if(ei)ei.style.opacity='0';
+    ['d4_1','d4_2','d4_3','d4_4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-7px)';}});
+  }
+  if(n===5){
+    const ei=document.getElementById('s5intro');if(ei)ei.style.opacity='0';
+    ['d5_1','d5_2','d5_3','d5_4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateX(-7px)';}});
+  }
+  if(n===6){
+    const ei=document.getElementById('s6intro');if(ei)ei.style.opacity='0';
+    ['zt1','zt2','zt3','zt4','zt5'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');e.style.transform='translateY(5px)';}});
+  }
+  if(n===7){
+    const ei=document.getElementById('s7intro');if(ei)ei.style.opacity='0';
+    const st=document.getElementById('s7table');if(st)st.style.opacity='0';
+    const sf=document.getElementById('s7final');if(sf)sf.style.opacity='0';
+  }
+}
+
+function play(n){
+  clr();reset(n);
+
+  if(n===1){
+    showEl('s1hero',150);
+    af(800,()=>{const e=document.getElementById('s1why');if(e)e.style.opacity='1';});
+    af(1600,()=>{const e=document.getElementById('s1map');if(e)e.style.opacity='1';});
+  }
+
+  if(n===2){
+    af(100,()=>{const e=document.getElementById('s2intro');if(e)e.style.opacity='1';});
+    // rings expand outward → innermost last (L1 first, L7 last)
+    [[1,300],[2,600],[3,900],[4,1200],[5,1500],[6,1800],[7,2100]].forEach(([i,ms])=>{
+      af(ms,()=>{const r=document.getElementById('cr'+i);if(r){r.style.opacity='1';r.classList.add('vis');}});
+    });
+    // attacker dot moves inward and gets blocked at first ring
+    moveDot('atk_d',20,20,160,160,2400,700);
+    af(2600,()=>{const b=document.getElementById('blk1');if(b){b.style.opacity='1';b.classList.add('vis');}});
+    af(3100,()=>{const d=document.getElementById('atk_d');if(d)d.style.opacity='0';});
+    af(3200,()=>{const e=document.getElementById('s2legend');if(e)e.style.opacity='1';});
+  }
+
+  if(n===3){
+    af(100,()=>{const e=document.getElementById('s3intro');if(e)e.style.opacity='1';});
+    ['d3_1','d3_2','d3_3','d3_4'].forEach((id,i)=>{showSlide(id,300+i*420);});
+  }
+
+  if(n===4){
+    af(100,()=>{const e=document.getElementById('s4intro');if(e)e.style.opacity='1';});
+    ['d4_1','d4_2','d4_3','d4_4'].forEach((id,i)=>{showSlide(id,300+i*420);});
+  }
+
+  if(n===5){
+    af(100,()=>{const e=document.getElementById('s5intro');if(e)e.style.opacity='1';});
+    ['d5_1','d5_2','d5_3','d5_4'].forEach((id,i)=>{showSlide(id,300+i*420);});
+  }
+
+  if(n===6){
+    af(100,()=>{const e=document.getElementById('s6intro');if(e)e.style.opacity='1';});
+    ['zt1','zt2','zt3','zt4','zt5'].forEach((id,i)=>{showUp(id,300+i*420);});
+  }
+
+  if(n===7){
+    af(100,()=>{const e=document.getElementById('s7intro');if(e)e.style.opacity='1';});
+    af(300,()=>{const e=document.getElementById('s7table');if(e)e.style.opacity='1';});
+    af(1200,()=>{const e=document.getElementById('s7final');if(e)e.style.opacity='1';});
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

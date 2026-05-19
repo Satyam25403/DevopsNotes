@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Twitter Fanout Cache</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  color:#fff;
+  overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* tweet card */
+.tweet-card{background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:10px 12px}
+.tweet-handle{font-size:8px;color:#4ec9e1;margin-bottom:5px}
+.tweet-body{font-size:8px;color:#fff;line-height:1.8}
+.tweet-meta{font-size:7px;color:#555;margin-top:5px}
+
+/* followee row for fan-in scene */
+.followee-row{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid #1a1a2a;opacity:0;transition:opacity .3s}
+.followee-icon{font-size:10px;flex-shrink:0}
+.followee-name{font-size:7px;color:#888;flex:1}
+.followee-count{font-size:7px;color:#e8a020}
+
+/* redis list visual */
+.rlist{background:#0d1a2e;border:2px solid #4ec9e1;border-radius:3px;padding:8px 10px}
+.rlist-title{font-size:7px;color:#4ec9e1;margin-bottom:6px;letter-spacing:1px}
+.rlist-item{display:flex;align-items:center;gap:6px;margin-bottom:4px;opacity:0;transition:opacity .3s}
+.rlist-idx{font-size:7px;color:#555;min-width:20px;text-align:right}
+.rlist-val{font-size:7px;padding:2px 7px;border:1px solid #2a1f3d;border-radius:2px;color:#fff;background:#130d1e;flex:1}
+.rlist-val.fresh{border-color:#4eff9a50;color:#4eff9a}
+.rlist-val.old{color:#666;border-color:#1a1a2a}
+
+/* fanout follower grid */
+.fan-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:5px}
+.fan-box{background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:5px 3px;display:flex;flex-direction:column;align-items:center;gap:2px;transition:border-color .25s,background .25s}
+.fan-box.lit{border-color:#4eff9a;background:#4eff9a0d}
+.fan-box.done{border-color:#4ec9e1;background:#4ec9e10d}
+.fan-lbl{font-size:5px;color:#555;text-align:center;line-height:1.5}
+.fan-pill{font-size:5px;color:#555;border:1px solid #222;border-radius:1px;padding:1px 3px;line-height:1.5;white-space:nowrap}
+.fan-pill.pushed{color:#4eff9a;border-color:#4eff9a40}
+
+/* cmd lines */
+.cmd-line{font-size:8px;padding:6px 8px;background:#0d1a2e;border-left:3px solid #4ec9e1;margin-bottom:5px;opacity:0;transition:opacity .3s;line-height:1.8;color:#aaa;border-radius:0 2px 2px 0}
+.cmd-k{color:#4ec9e1}
+.cmd-v{color:#4eff9a}
+.cmd-r{color:#e8a020}
+
+/* cost meter */
+.cost-bar-wrap{height:10px;background:#0a0a0f;border-radius:2px;overflow:hidden;margin-top:4px}
+.cost-bar{height:100%;border-radius:2px;width:0%;transition:width 1.1s ease-out}
+
+/* flow arrow */
+.farr{font-size:9px;color:#4ec9e1;text-align:center;opacity:0;transition:opacity .3s;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: Naive Fan-In (read-time compute) ══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">TWITTER FANOUT CACHE</div>
+    <div class="hdr-sub">HOW YOUR TIMELINE LOADS IN MILLISECONDS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">NAIVE APPROACH</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FAN-IN / SLOW</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">You open Twitter. Server must compute your timeline RIGHT NOW.</div>
+
+      <!-- User reads timeline -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <div style="background:#130d1e;border:2px solid #e8a020;border-radius:3px;padding:8px 10px;flex:1">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:3px">YOU → @userB</div>
+          <div style="font-size:7px;color:#aaa">GET /timeline</div>
+        </div>
+        <div class="farr" id="s1_arr1">→</div>
+        <div style="background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px;flex:1;opacity:0;transition:opacity .3s" id="s1_server">
+          <div style="font-size:6px;color:#e85050;margin-bottom:2px">APP SERVER</div>
+          <div style="font-size:6px;color:#888">who do I follow?<br>query each one...</div>
+        </div>
+      </div>
+
+      <!-- followees list -->
+      <div style="font-size:8px;color:#ccc">You follow 1,200 accounts. Server queries each:</div>
+      <div style="background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px">
+        <div style="font-size:7px;color:#555;margin-bottom:6px">SELECT tweets FROM ... WHERE author_id IN (1,2,...1200) ORDER BY time LIMIT 100</div>
+        <div id="s1_followees">
+          <!-- injected by JS -->
+        </div>
+        <div style="font-size:7px;color:#555;padding-top:4px" id="s1_more">...+1192 more queries</div>
+      </div>
+
+      <!-- cost meter -->
+      <div style="background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+          <div style="font-size:7px;color:#888">QUERY COST</div>
+          <div style="font-size:7px;color:#e85050" id="s1_cost_val">0ms</div>
+        </div>
+        <div class="cost-bar-wrap">
+          <div class="cost-bar" id="s1_cost_bar" style="background:#e85050"></div>
+        </div>
+        <div style="font-size:7px;color:#555;margin-top:5px">fan-in: 1200 DB reads per timeline load</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Compute timeline on read: query every followee's tweets at request time.</div>
+    <div class="ih am">1,200 followees = 1,200+ DB queries. Cold on every load.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1,200</div><div class="sl">DB READS<br>PER LOAD</div></div>
+    <div class="sc"><div class="sv am">~800ms</div><div class="sl">P99<br>LATENCY</div></div>
+    <div class="sc"><div class="sv rd">COLD</div><div class="sl">EVERY<br>REQUEST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: Fan-Out on Write ══════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">TWITTER FANOUT CACHE</div>
+    <div class="hdr-sub">CELEBRITY TWEETS → 1M CACHES IN 100ms</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">FAN-OUT ON WRITE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAST</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">On POST tweet → fanout service pushes to every follower's Redis List.</div>
+
+      <!-- Celebrity tweet -->
+      <div class="tweet-card" id="s2_tweet" style="opacity:0;transition:opacity .4s">
+        <div class="tweet-handle">@elonmusk · just now</div>
+        <div class="tweet-body">Tweet ID: 99999</div>
+        <div class="tweet-meta">127M followers</div>
+      </div>
+
+      <!-- Fanout service box -->
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="flex:1;background:#130d1e;border:1px solid #2a1f3d;border-radius:3px;padding:7px 9px;opacity:0;transition:opacity .3s" id="s2_fanout">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">FANOUT SERVICE</div>
+          <div style="font-size:6px;color:#888">lookup followers → LPUSH to each</div>
+        </div>
+        <div style="font-size:9px;color:#4ec9e1;opacity:0;transition:opacity .3s;flex-shrink:0" id="s2_farr">→</div>
+        <div style="flex:1;background:#0a1a30;border:2px solid #4ec9e1;border-radius:3px;padding:7px 9px;opacity:0;transition:opacity .3s" id="s2_redis">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">REDIS CLUSTER</div>
+          <div style="font-size:6px;color:#888">timeline lists</div>
+        </div>
+      </div>
+
+      <!-- wave label -->
+      <div style="font-size:8px;color:#ccc;opacity:0;transition:opacity .3s" id="s2_wave_label">Pushing tweet ID 99999 to followers:</div>
+
+      <!-- follower grid — 15 boxes representing the mass -->
+      <div class="fan-grid" id="s2_grid"></div>
+
+      <!-- counter -->
+      <div style="display:flex;align-items:center;gap:8px;background:#130d1e;border:1px solid #2a1f3d;padding:8px 10px;border-radius:3px;opacity:0;transition:opacity .3s" id="s2_counter_box">
+        <div>
+          <div style="font-size:7px;color:#555;margin-bottom:3px">LPUSH calls fired</div>
+          <div style="font-size:7px;color:#888">tweet ID → timeline:followerN</div>
+        </div>
+        <div style="margin-left:auto;font-size:22px;color:#4eff9a" id="s2_counter">0</div>
+        <div style="font-size:7px;color:#555">/ 127M</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Fanout service: LPUSH tweet ID to timeline:userB for each follower.</div>
+    <div class="ih">Write is async. Read is a single LRANGE. Timeline always pre-built.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">LPUSH</div><div class="sl">O(1)<br>PER USER</div></div>
+    <div class="sc"><div class="sv gn">~100ms</div><div class="sl">FULL FAN<br>OUT TIME</div></div>
+    <div class="sc"><div class="sv gn">ASYNC</div><div class="sl">WRITE<br>PATH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Read Path + Trade-offs ══════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">TWITTER FANOUT CACHE</div>
+    <div class="hdr-sub">READ PATH + TRADE-OFFS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">LRANGE + HYDRATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MICROSECONDS</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Reading your timeline is now trivial:</div>
+
+      <!-- Read commands -->
+      <div class="cmd-line" id="cmd1" style="border-color:#4ec9e1">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">① FETCH top 100 tweet IDs</div>
+        <span class="cmd-k">LRANGE</span> timeline:userB <span class="cmd-v">0</span> <span class="cmd-v">99</span>
+        <span style="float:right;color:#4eff9a">→ [99999, 88210, ...]</span>
+      </div>
+
+      <div class="cmd-line" id="cmd2" style="border-color:#e8a020">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">② HYDRATE tweet content</div>
+        <span class="cmd-k">MGET</span> tweet:<span class="cmd-v">99999</span> tweet:<span class="cmd-v">88210</span> ...<br>
+        <span style="color:#888;font-size:7px">(tweet bodies cached separately)</span>
+      </div>
+
+      <div class="cmd-line" id="cmd3" style="border-color:#4eff9a">
+        <div style="font-size:7px;color:#555;margin-bottom:3px">③ SERVE to user</div>
+        <span class="cmd-r">200 OK</span> — full timeline in <span class="cmd-v">~2ms</span>
+      </div>
+
+      <!-- Redis list visual -->
+      <div class="rlist" id="s3_rlist" style="opacity:0;transition:opacity .4s">
+        <div class="rlist-title">timeline:userB (Redis List)</div>
+        <div class="rlist-item" id="ri0"><div class="rlist-idx">0</div><div class="rlist-val fresh">tweet:99999 ← newest</div></div>
+        <div class="rlist-item" id="ri1"><div class="rlist-idx">1</div><div class="rlist-val">tweet:88210</div></div>
+        <div class="rlist-item" id="ri2"><div class="rlist-idx">2</div><div class="rlist-val">tweet:77401</div></div>
+        <div class="rlist-item" id="ri3"><div class="rlist-idx">3</div><div class="rlist-val">tweet:65982</div></div>
+        <div class="rlist-item" id="ri4"><div class="rlist-idx">...</div><div class="rlist-val old">...up to 800 IDs stored</div></div>
+      </div>
+
+      <!-- trade-off cards -->
+      <div id="tradeoff_box" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:8px;color:#4ec9e1">TRADE-OFFS</div>
+
+        <div style="background:#130d1e;border-left:3px solid #e85050;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">⚠ CELEBRITY PROBLEM</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            127M followers × LPUSH = ~127M writes.<br>
+            Fix: skip fanout for mega-celebrities.<br>
+            Their tweets are fetched at read time instead.
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">✓ WHY IT WORKS</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Reads vastly outnumber writes (read-heavy).<br>
+            LRANGE is O(N) on a contiguous list — fast.<br>
+            Store IDs only; bodies cached in tweet:ID keys.
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4ec9e1;padding:8px 10px;border-radius:0 3px 3px 0">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:4px">↑ LIST CAP</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Twitter caps timeline list at ~800 IDs.<br>
+            LTRIM on each LPUSH keeps memory bounded.<br>
+            Older tweets fetched from DB on scroll.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LRANGE returns pre-built list of tweet IDs instantly.</div>
+    <div class="ih">Skip fanout for celebrities — merge their tweets at read time.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~2ms</div><div class="sl">TIMELINE<br>LOAD</div></div>
+    <div class="sc"><div class="sv gn">800</div><div class="sl">IDS PER<br>LIST CAP</div></div>
+    <div class="sc"><div class="sv gn">O(N)</div><div class="sl">LRANGE<br>COST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+var s1Names=['@taylorswift','@BillGates','@NASA','@elonmusk','@sundarpichai','@tim_cook','@BarackObama','@katyperry','@nytimes','@BBCBreaking','@cnnbrk','@rihanna'];
+
+function playS1(){
+  clearAll();
+  // reset
+  document.getElementById('s1_arr1').style.opacity='0';
+  document.getElementById('s1_server').style.opacity='0';
+  document.getElementById('s1_cost_bar').style.width='0%';
+  document.getElementById('s1_cost_val').textContent='0ms';
+  document.getElementById('s1_more').style.opacity='0';
+
+  var fc=document.getElementById('s1_followees');
+  fc.innerHTML='';
+  for(var i=0;i<8;i++){
+    var row=document.createElement('div');
+    row.className='followee-row';
+    row.id='fr'+i;
+    row.innerHTML='<div class="followee-icon">👤</div>'
+      +'<div class="followee-name">'+s1Names[i]+'</div>'
+      +'<div class="followee-count" id="fc'+i+'">querying...</div>';
+    fc.appendChild(row);
+  }
+
+  // animate request
+  delay(function(){document.getElementById('s1_arr1').style.opacity='1';},400);
+  delay(function(){document.getElementById('s1_server').style.opacity='1';},800);
+
+  // reveal followee rows
+  for(var j=0;j<8;j++){
+    (function(idx){
+      delay(function(){
+        document.getElementById('fr'+idx).style.opacity='1';
+        delay(function(){
+          document.getElementById('fc'+idx).textContent=(Math.floor(Math.random()*40)+8)+'ms';
+          document.getElementById('fc'+idx).style.color='#e85050';
+        },200);
+      },1200+idx*200);
+    })(j);
+  }
+
+  // show "...more"
+  delay(function(){document.getElementById('s1_more').style.opacity='1';},1200+8*200);
+
+  // cost bar animate
+  delay(function(){
+    document.getElementById('s1_cost_bar').style.width='92%';
+    var v=0;
+    var iv=setInterval(function(){
+      v+=20;
+      if(v>820){v=820;clearInterval(iv);}
+      document.getElementById('s1_cost_val').textContent=v+'ms';
+    },25);
+    timers.push(iv);
+  },1600);
+}
+
+/* ─── SCENE 2: fan-out grid ─── */
+function buildFanGrid(){
+  var g=document.getElementById('s2_grid');
+  g.innerHTML='';
+  for(var i=0;i<15;i++){
+    var b=document.createElement('div');
+    b.className='fan-box';
+    b.id='fb'+i;
+    b.innerHTML='<div style="font-size:9px">👤</div>'
+      +'<div class="fan-lbl">user'+(i+1001)+'</div>'
+      +'<div class="fan-pill" id="fp'+i+'">empty</div>';
+    g.appendChild(b);
+  }
+}
+
+function playS2(){
+  clearAll();
+  buildFanGrid();
+
+  document.getElementById('s2_tweet').style.opacity='0';
+  document.getElementById('s2_fanout').style.opacity='0';
+  document.getElementById('s2_farr').style.opacity='0';
+  document.getElementById('s2_redis').style.opacity='0';
+  document.getElementById('s2_wave_label').style.opacity='0';
+  document.getElementById('s2_counter_box').style.opacity='0';
+  document.getElementById('s2_counter').textContent='0';
+
+  // celebrity tweets
+  delay(function(){document.getElementById('s2_tweet').style.opacity='1';},300);
+  delay(function(){document.getElementById('s2_fanout').style.opacity='1';},800);
+  delay(function(){document.getElementById('s2_farr').style.opacity='1';},1100);
+  delay(function(){document.getElementById('s2_redis').style.opacity='1';},1400);
+  delay(function(){document.getElementById('s2_wave_label').style.opacity='1';},1700);
+  delay(function(){document.getElementById('s2_counter_box').style.opacity='1';},1900);
+
+  // light up follower boxes
+  var count=0;
+  var countVals=[12400,38700,75000,120000,250000,500000,800000,1000000,2000000,5000000,10000000,30000000,60000000,100000000,127000000];
+  for(var i=0;i<15;i++){
+    (function(idx){
+      delay(function(){
+        var box=document.getElementById('fb'+idx);
+        var pill=document.getElementById('fp'+idx);
+        box.classList.add('lit');
+        pill.className='fan-pill pushed';
+        pill.textContent='99999';
+        count++;
+        // show increasing count (scaled representation)
+        document.getElementById('s2_counter').textContent=countVals[idx].toLocaleString();
+        delay(function(){
+          box.classList.remove('lit');
+          box.classList.add('done');
+        },250);
+      },2100+idx*220);
+    })(i);
+  }
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['cmd1','cmd2','cmd3'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+  document.getElementById('s3_rlist').style.opacity='0';
+  document.getElementById('tradeoff_box').style.opacity='0';
+  ['ri0','ri1','ri2','ri3','ri4'].forEach(function(id){
+    document.getElementById(id).style.opacity='0';
+  });
+
+  delay(function(){document.getElementById('cmd1').style.opacity='1';},400);
+  delay(function(){document.getElementById('cmd2').style.opacity='1';},1100);
+  delay(function(){document.getElementById('cmd3').style.opacity='1';},1800);
+
+  delay(function(){
+    document.getElementById('s3_rlist').style.opacity='1';
+    ['ri0','ri1','ri2','ri3','ri4'].forEach(function(id,i){
+      delay(function(){document.getElementById(id).style.opacity='1';},i*200);
+    });
+  },2400);
+
+  delay(function(){document.getElementById('tradeoff_box').style.opacity='1';},3600);
+}
+
+// boot
+buildFanGrid();
+playS1();
+</script>
+</body>
+</html>
