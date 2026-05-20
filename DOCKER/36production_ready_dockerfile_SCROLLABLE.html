@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Production Dockerfile Checklist</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+
+/* checklist item */
+.chk-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:9px 11px;
+  border-radius:2px;
+  border:1px solid #1a1a2a;
+  background:#0d0d18;
+  opacity:0;
+  transform:translateX(18px);
+  transition:opacity .35s, transform .35s, border-color .25s, background .25s;
+}
+.chk-item.vis{opacity:1;transform:translateX(0)}
+.chk-item.ticked{border-color:#4eff9a;background:#001a08;}
+.chk-item.bad{border-color:#e85050;background:#120000;}
+.chk-box{
+  width:18px;height:18px;flex-shrink:0;
+  border:2px solid #333;border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;transition:border-color .2s,background .2s;
+  margin-top:1px;
+}
+.chk-item.ticked .chk-box{border-color:#4eff9a;background:#001a08;color:#4eff9a}
+.chk-item.bad .chk-box{border-color:#e85050;background:#1a0000;color:#e85050}
+.chk-body{flex:1}
+.chk-title{font-size:7px;color:#888;line-height:1.8;transition:color .2s}
+.chk-item.ticked .chk-title{color:#4eff9a}
+.chk-item.bad .chk-title{color:#e85050}
+.chk-sub{font-size:5.8px;color:#555;line-height:1.9;margin-top:3px;transition:color .2s}
+.chk-item.ticked .chk-sub{color:#7aaa88}
+.chk-item.bad .chk-sub{color:#aa7070}
+
+/* size bar */
+.szbar-wrap{height:22px;background:#0a0012;border-radius:2px;overflow:hidden;position:relative}
+.szbar{height:100%;border-radius:2px;transition:width 1.1s cubic-bezier(.4,0,.2,1)}
+.szbar-label{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:6.5px}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════ SCENE 1 — THE PROBLEM: NAIVE DOCKERFILE ══════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">THE NAIVE DOCKERFILE</div>
+    <div class="hdr-sub">WHAT MOST PEOPLE SHIP</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">BEFORE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">8 ISSUES</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- bad dockerfile terminal -->
+      <div id="bad_term" class="panel" style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#100004;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile  ← typical dev laptop</div>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.4">
+          <div id="b1" class="tline" style="color:#aaa">FROM <span style="color:#e85050">node:latest</span>   <span style="color:#3a0010">← ①</span></div>
+          <div id="b2" class="tline" style="color:#aaa">WORKDIR /app</div>
+          <div id="b3" class="tline" style="color:#aaa">COPY <span style="color:#e85050">. .</span>            <span style="color:#3a0010">← ②</span></div>
+          <div id="b4" class="tline" style="color:#aaa">RUN npm install</div>
+          <div id="b5" class="tline" style="color:#aaa">ENV <span style="color:#e85050">DB_PASS=s3cr3t</span> <span style="color:#3a0010">← ③</span></div>
+          <div id="b6" class="tline" style="color:#aaa">RUN npm run build</div>
+          <div id="b7" class="tline" style="color:#aaa">CMD ["node","index.js"]</div>
+        </div>
+      </div>
+
+      <!-- image size bar - before -->
+      <div id="size_before" class="panel">
+        <div style="font-size:6.5px;color:#888;margin-bottom:5px">IMAGE SIZE COMPARISON</div>
+        <div style="margin-bottom:4px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:6px;color:#e85050">THIS (node:latest, full copy)</span>
+            <span style="font-size:6px;color:#e85050">1.4 GB</span>
+          </div>
+          <div class="szbar-wrap">
+            <div id="bar_bad" class="szbar" style="width:0%;background:#e85050"></div>
+            <span class="szbar-label" style="color:#e85050">😬</span>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:6px;color:#4eff9a">OPTIMISED (we'll build this)</span>
+            <span style="font-size:6px;color:#4eff9a">~85 MB</span>
+          </div>
+          <div class="szbar-wrap">
+            <div id="bar_good" class="szbar" style="width:0%;background:#4eff9a"></div>
+            <span class="szbar-label" style="color:#4eff9a">🚀</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- issues list -->
+      <div id="issues_box" class="panel" style="background:#100004;border:2px solid #3a0010;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:8px">⚠ PROBLEMS IN THIS FILE</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div id="iss1" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">① <span style="color:#e85050">node:latest</span> — unpinned, huge (~950MB base)</div>
+          <div id="iss2" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">② <span style="color:#e85050">COPY . .</span> — copies node_modules, .git, secrets</div>
+          <div id="iss3" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">③ <span style="color:#e85050">ENV DB_PASS</span> — secret baked into image layer</div>
+          <div id="iss4" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">④ No <span style="color:#e85050">HEALTHCHECK</span> — orchestrators fly blind</div>
+          <div id="iss5" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">⑤ Running as <span style="color:#e85050">root</span> — full container breakout risk</div>
+          <div id="iss6" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.8">⑥ Single stage — build tools shipped to prod</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">This Dockerfile works. It also weighs 1.4GB, leaks secrets, and runs as root.</div>
+    <div class="ih rd">Let's fix all 8 issues. One by one.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1.4GB</div><div class="sl">IMAGE<br>SIZE</div></div>
+    <div class="sc"><div class="sv rd">ROOT</div><div class="sl">USER<br>RISK</div></div>
+    <div class="sc"><div class="sv am">8</div><div class="sl">ISSUES<br>TO FIX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 2 — CHECKS 1–3: BASE + IGNORE + COPY ══════════════ -->
+<div class="scene" id="s2" style="background:#00080f">
+  <div class="hdr" style="background:#00080f;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">CHECKS ①②③</div>
+    <div class="hdr-sub">BASE IMAGE · DOCKERIGNORE · COPY</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#00080f">
+    <span class="slabel" style="color:#4ec9e1">LAYER HYGIENE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">SHRINK IT</span>
+  </div>
+
+  <div class="anim" style="background:#00080f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- check 1 -->
+      <div id="c1" class="chk-item">
+        <div class="chk-box" id="cb1"></div>
+        <div class="chk-body">
+          <div class="chk-title">① PIN TO ALPINE + EXACT TAG</div>
+          <div class="chk-sub">FROM node:18.20-alpine3.19<br>alpine ≈ 5MB base vs 900MB debian. Pin tag so builds are reproducible.</div>
+        </div>
+      </div>
+
+      <!-- code snippet 1 -->
+      <div id="cs1" class="panel" style="background:#020810;border:1px solid #0d2030;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#555;margin-bottom:3px"># Before</div>
+        <div style="color:#e85050">FROM node:latest</div>
+        <div style="color:#555;margin-top:5px;margin-bottom:3px"># After</div>
+        <div style="color:#4eff9a">FROM node:18.20-alpine3.19</div>
+        <div style="color:#4ec9e1;margin-top:5px">→ base layer: 950MB → 5MB</div>
+      </div>
+
+      <!-- check 2 -->
+      <div id="c2" class="chk-item">
+        <div class="chk-box" id="cb2"></div>
+        <div class="chk-body">
+          <div class="chk-title">② ADD A .dockerignore</div>
+          <div class="chk-sub">Exclude node_modules, .git, .env, dist.<br>COPY . . only copies what prod needs.</div>
+        </div>
+      </div>
+
+      <!-- dockerignore terminal -->
+      <div id="cs2" class="panel" style="background:#020810;border:1px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:4px 10px;border-bottom:1px solid #0d2030;font-size:6px;color:#555;text-align:center">.dockerignore</div>
+        <div style="padding:8px 12px;font-size:7px;line-height:2.4">
+          <div style="color:#e85050">node_modules/</div>
+          <div style="color:#e85050">.git/</div>
+          <div style="color:#e85050">.env*</div>
+          <div style="color:#e85050">dist/</div>
+          <div style="color:#4eff9a">*.md</div>
+          <div style="color:#4eff9a">tests/</div>
+        </div>
+      </div>
+
+      <!-- check 3 -->
+      <div id="c3" class="chk-item">
+        <div class="chk-box" id="cb3"></div>
+        <div class="chk-body">
+          <div class="chk-title">③ COPY DEPS FIRST, CODE SECOND</div>
+          <div class="chk-sub">Copy package.json before source files.<br>Docker cache: deps only rebuild when lock file changes.</div>
+        </div>
+      </div>
+
+      <div id="cs3" class="panel" style="background:#020810;border:1px solid #0d2030;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e85050"># ✗ cache-busting every change</div>
+        <div style="color:#e85050">COPY . .</div>
+        <div style="color:#e85050">RUN npm ci</div>
+        <div style="height:6px"></div>
+        <div style="color:#4eff9a"># ✓ cache deps separately</div>
+        <div style="color:#4eff9a">COPY package*.json ./</div>
+        <div style="color:#4eff9a">RUN npm ci --omit=dev</div>
+        <div style="color:#4eff9a">COPY src/ ./src/</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">These three changes alone drop your image by ~94% and speed up rebuilds.</div>
+    <div class="ih" style="color:#4ec9e1">Layer order is a performance contract, not a style choice.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">5MB</div><div class="sl">ALPINE<br>BASE</div></div>
+    <div class="sc"><div class="sv am">0</div><div class="sl">SECRETS<br>COPIED</div></div>
+    <div class="sc"><div class="sv gn">⚡</div><div class="sl">LAYER<br>CACHE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 3 — CHECKS 4–5: MULTI-STAGE + NON-ROOT ══════════════ -->
+<div class="scene" id="s3" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0040">
+    <div class="hdr-title" style="color:#a080ff">CHECKS ④⑤</div>
+    <div class="hdr-sub">MULTI-STAGE · NON-ROOT USER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#a080ff">SECURITY LAYER</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">HARDEN</span>
+  </div>
+
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- check 4 multi-stage -->
+      <div id="c4" class="chk-item">
+        <div class="chk-box" id="cb4"></div>
+        <div class="chk-body">
+          <div class="chk-title">④ MULTI-STAGE BUILD</div>
+          <div class="chk-sub">Build tools (gcc, npm, git) never reach prod.<br>Final image only has the runtime artifact.</div>
+        </div>
+      </div>
+
+      <!-- multi-stage diagram -->
+      <div id="ms_diag" class="panel" style="background:#060010;border:2px solid #2a0040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:4px 10px;border-bottom:1px solid #2a0040;font-size:6px;color:#555;text-align:center">multi-stage build flow</div>
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <!-- builder stage -->
+          <rect x="10" y="15" width="140" height="80" rx="3" fill="#0a0018" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="80" y="34" text-anchor="middle" font-size="6.5" fill="#e8a020" font-family="'Press Start 2P',monospace">builder</text>
+          <text x="80" y="50" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace">node:18 (full)</text>
+          <text x="80" y="64" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">npm install</text>
+          <text x="80" y="78" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">npm run build</text>
+          <text x="80" y="90" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace">~950MB</text>
+
+          <!-- arrow: only copy /dist -->
+          <line x1="150" y1="55" x2="208" y2="55" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="3,2"/>
+          <polygon points="212,55 204,51 204,59" fill="#a080ff"/>
+          <text x="180" y="48" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace">COPY</text>
+          <text x="180" y="63" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace">--from=builder</text>
+          <text x="180" y="72" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace">/app/dist</text>
+
+          <!-- prod stage -->
+          <rect x="215" y="15" width="140" height="80" rx="3" fill="#001408" stroke="#4eff9a" stroke-width="2"/>
+          <text x="285" y="34" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">prod</text>
+          <text x="285" y="50" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace">node:18-alpine</text>
+          <text x="285" y="64" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">dist/ only</text>
+          <text x="285" y="78" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">no build tools</text>
+          <text x="285" y="90" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace">~85MB ✓</text>
+        </svg>
+      </div>
+
+      <!-- multi-stage code -->
+      <div id="ms_code" class="panel" style="background:#060010;border:1px solid #2a0040;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e8a020"># Stage 1: build</div>
+        <div style="color:#a080ff">FROM node:18.20-alpine AS builder</div>
+        <div style="color:#888">WORKDIR /app</div>
+        <div style="color:#888">COPY package*.json ./</div>
+        <div style="color:#888">RUN npm ci</div>
+        <div style="color:#888">COPY src/ ./src/</div>
+        <div style="color:#888">RUN npm run build</div>
+        <div style="height:5px"></div>
+        <div style="color:#4eff9a"># Stage 2: prod (only the output)</div>
+        <div style="color:#4eff9a">FROM node:18.20-alpine AS prod</div>
+        <div style="color:#4eff9a">COPY --from=builder /app/dist ./dist</div>
+      </div>
+
+      <!-- check 5 non-root -->
+      <div id="c5" class="chk-item">
+        <div class="chk-box" id="cb5"></div>
+        <div class="chk-body">
+          <div class="chk-title">⑤ RUN AS NON-ROOT USER</div>
+          <div class="chk-sub">Root in a container = root on host if escaped.<br>Create a dedicated user, drop privileges before CMD.</div>
+        </div>
+      </div>
+
+      <div id="nr_code" class="panel" style="background:#060010;border:1px solid #2a0040;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e85050"># ✗ implicit root — dangerous</div>
+        <div style="color:#e85050">CMD ["node", "server.js"]</div>
+        <div style="height:6px"></div>
+        <div style="color:#4eff9a"># ✓ dedicated user</div>
+        <div style="color:#4eff9a">RUN addgroup -S app &amp;&amp; adduser -S app -G app</div>
+        <div style="color:#4eff9a">USER app</div>
+        <div style="color:#4eff9a">CMD ["node", "server.js"]</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Multi-stage keeps build junk out. Non-root limits blast radius of exploits.</div>
+    <div class="ih pu">These two changes together are your biggest security wins.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">85MB</div><div class="sl">PROD<br>IMAGE</div></div>
+    <div class="sc"><div class="sv pu">0</div><div class="sl">BUILD<br>TOOLS</div></div>
+    <div class="sc"><div class="sv gn">app</div><div class="sl">NON-ROOT<br>USER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 4 — CHECKS 6–8: HEALTHCHECK + SECRETS + SIGNAL ══════════════ -->
+<div class="scene" id="s4" style="background:#001508">
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">CHECKS ⑥⑦⑧</div>
+    <div class="hdr-sub">HEALTHCHECK · SECRETS · SIGNALS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">RUNTIME OPS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PROD POLISH</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- check 6 healthcheck -->
+      <div id="c6" class="chk-item">
+        <div class="chk-box" id="cb6"></div>
+        <div class="chk-body">
+          <div class="chk-title">⑥ ADD A HEALTHCHECK</div>
+          <div class="chk-sub">Kubernetes &amp; Swarm restart unhealthy containers.<br>Without this — they just assume everything is fine.</div>
+        </div>
+      </div>
+
+      <div id="hc_code" class="panel" style="background:#021208;border:1px solid #0d3018;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e85050"># ✗ no healthcheck → orchestrator is blind</div>
+        <div style="height:5px"></div>
+        <div style="color:#4eff9a"># ✓ tell the platform you're alive</div>
+        <div style="color:#4eff9a">HEALTHCHECK --interval=30s \</div>
+        <div style="color:#4eff9a">  --timeout=5s --retries=3 \</div>
+        <div style="color:#4eff9a">  CMD wget -qO- localhost:3000/health || exit 1</div>
+      </div>
+
+      <!-- check 7 secrets -->
+      <div id="c7" class="chk-item">
+        <div class="chk-box" id="cb7"></div>
+        <div class="chk-body">
+          <div class="chk-title">⑦ NEVER BAKE SECRETS IN ENV</div>
+          <div class="chk-sub">ENV vars are visible in `docker inspect`.<br>Use --env-file, Docker Secrets, or runtime injection.</div>
+        </div>
+      </div>
+
+      <div id="sec_code" class="panel" style="background:#021208;border:1px solid #0d3018;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e85050"># ✗ baked in — visible in image history!</div>
+        <div style="color:#e85050">ENV DB_PASS=s3cr3t</div>
+        <div style="height:5px"></div>
+        <div style="color:#4eff9a"># ✓ inject at runtime</div>
+        <div style="color:#4eff9a">docker run --env-file .env myapp</div>
+        <div style="color:#888"># or via compose secrets:</div>
+        <div style="color:#4eff9a">secrets: [db_pass]</div>
+      </div>
+
+      <!-- check 8 signals -->
+      <div id="c8" class="chk-item">
+        <div class="chk-box" id="cb8"></div>
+        <div class="chk-body">
+          <div class="chk-title">⑧ HANDLE SIGNALS (EXEC FORM)</div>
+          <div class="chk-sub">Shell form spawns a shell that swallows SIGTERM.<br>Exec form sends signals directly to your process.</div>
+        </div>
+      </div>
+
+      <div id="sig_code" class="panel" style="background:#021208;border:1px solid #0d3018;border-radius:3px;padding:8px 12px;font-size:7px;line-height:2.3">
+        <div style="color:#e85050"># ✗ shell form — SIGTERM never arrives</div>
+        <div style="color:#e85050">CMD node server.js</div>
+        <div style="height:5px"></div>
+        <div style="color:#4eff9a"># ✓ exec form — process gets signal</div>
+        <div style="color:#4eff9a">CMD ["node", "server.js"]</div>
+        <div style="color:#888"># bonus: use tini for zombie cleanup</div>
+        <div style="color:#4eff9a">RUN apk add --no-cache tini</div>
+        <div style="color:#4eff9a">ENTRYPOINT ["/sbin/tini","--"]</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Healthcheck keeps orchestrators informed. Signal handling means clean shutdowns.</div>
+    <div class="ih">Secrets at runtime, never baked in. Rule of thumb: if it can rotate, don't bake it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">30s</div><div class="sl">HEALTH<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">BAKED<br>SECRETS</div></div>
+    <div class="sc"><div class="sv gn">SIGTERM</div><div class="sl">CLEAN<br>SHUTDOWN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════ SCENE 5 — THE FINAL DOCKERFILE ══════════════ -->
+<div class="scene" id="s5" style="background:#001008">
+  <div class="hdr" style="background:#001008;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">THE FINAL FILE</div>
+    <div class="hdr-sub">ALL 8 CHECKS APPLIED</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001008">
+    <span class="slabel" style="color:#4eff9a">AFTER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION READY</span>
+  </div>
+
+  <div class="anim" style="background:#001008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- complete final dockerfile -->
+      <div id="fin_term" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#031208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile  ← production ready</div>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.3">
+          <div id="f1"  class="tline" style="color:#555"># ① pinned alpine tag</div>
+          <div id="f2"  class="tline" style="color:#a080ff">FROM node:18.20-alpine3.19 AS builder</div>
+          <div id="f3"  class="tline" style="color:#4ec9e1">WORKDIR /app</div>
+          <div id="f4"  class="tline" style="color:#555"># ③ deps first → cache</div>
+          <div id="f5"  class="tline" style="color:#4ec9e1">COPY package*.json ./</div>
+          <div id="f6"  class="tline" style="color:#e8a020">RUN npm ci</div>
+          <div id="f7"  class="tline" style="color:#4ec9e1">COPY src/ ./src/</div>
+          <div id="f8"  class="tline" style="color:#e8a020">RUN npm run build</div>
+          <div id="f9"  class="tline" style="color:#555;margin-top:4px"># ④ multi-stage: prod gets only dist</div>
+          <div id="f10" class="tline" style="color:#4eff9a">FROM node:18.20-alpine3.19 AS prod</div>
+          <div id="f11" class="tline" style="color:#4ec9e1">WORKDIR /app</div>
+          <div id="f12" class="tline" style="color:#555"># ⑤ non-root user</div>
+          <div id="f13" class="tline" style="color:#4eff9a">RUN addgroup -S app &amp;&amp; adduser -S app -G app</div>
+          <div id="f14" class="tline" style="color:#4ec9e1">COPY --from=builder /app/dist ./dist</div>
+          <div id="f15" class="tline" style="color:#555"># ⑧ tini for signal handling</div>
+          <div id="f16" class="tline" style="color:#4eff9a">RUN apk add --no-cache tini</div>
+          <div id="f17" class="tline" style="color:#4eff9a">USER app</div>
+          <div id="f18" class="tline" style="color:#555"># ⑥ healthcheck</div>
+          <div id="f19" class="tline" style="color:#4eff9a">HEALTHCHECK --interval=30s --timeout=5s \</div>
+          <div id="f20" class="tline" style="color:#4eff9a">  CMD wget -qO- localhost:3000/health||exit 1</div>
+          <div id="f21" class="tline" style="color:#555"># ⑦ NO secrets here → --env-file at runtime</div>
+          <div id="f22" class="tline" style="color:#555"># ⑧ exec form CMD</div>
+          <div id="f23" class="tline" style="color:#4eff9a">ENTRYPOINT ["/sbin/tini","--"]</div>
+          <div id="f24" class="tline" style="color:#4eff9a">CMD ["node","dist/server.js"]</div>
+        </div>
+      </div>
+
+      <!-- final size comparison -->
+      <div id="fin_size" class="panel">
+        <div style="font-size:6.5px;color:#888;margin-bottom:6px">BEFORE vs AFTER</div>
+        <div style="margin-bottom:6px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:6px;color:#e85050">BEFORE (naive)</span>
+            <span style="font-size:6px;color:#e85050">1.4 GB</span>
+          </div>
+          <div class="szbar-wrap">
+            <div id="fin_bar_bad" class="szbar" style="width:0%;background:#e85050"></div>
+            <span class="szbar-label" style="color:#e85050">⚠</span>
+          </div>
+        </div>
+        <div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="font-size:6px;color:#4eff9a">AFTER (all 8 fixes)</span>
+            <span style="font-size:6px;color:#4eff9a">~85 MB</span>
+          </div>
+          <div class="szbar-wrap">
+            <div id="fin_bar_good" class="szbar" style="width:0%;background:#4eff9a"></div>
+            <span class="szbar-label" style="color:#4eff9a">✓</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8 checks summary -->
+      <div id="summary" class="panel" style="background:#001a08;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px">✓ ALL 8 CHECKS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div id="s_c1" class="tline" style="font-size:6px;color:#aaa">① Alpine + pin</div>
+          <div id="s_c2" class="tline" style="font-size:6px;color:#aaa">② .dockerignore</div>
+          <div id="s_c3" class="tline" style="font-size:6px;color:#aaa">③ Deps-first COPY</div>
+          <div id="s_c4" class="tline" style="font-size:6px;color:#aaa">④ Multi-stage</div>
+          <div id="s_c5" class="tline" style="font-size:6px;color:#aaa">⑤ Non-root user</div>
+          <div id="s_c6" class="tline" style="font-size:6px;color:#aaa">⑥ HEALTHCHECK</div>
+          <div id="s_c7" class="tline" style="font-size:6px;color:#aaa">⑦ No baked secrets</div>
+          <div id="s_c8" class="tline" style="font-size:6px;color:#aaa">⑧ Exec form + tini</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">1.4GB → 85MB. Root → app user. Blind → health-monitored.</div>
+    <div class="ih">8 changes. Every production container should have them.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">94%</div><div class="sl">SIZE<br>REDUCTION</div></div>
+    <div class="sc"><div class="sv gn">8/8</div><div class="sl">CHECKS<br>PASSED</div></div>
+    <div class="sc"><div class="sv pu">🚀</div><div class="sl">PROD<br>READY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+
+function showTline(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hideTline(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+
+function tickCheck(itemId, boxId, ms) {
+  af(ms, () => {
+    const item = document.getElementById(itemId);
+    const box = document.getElementById(boxId);
+    if (item) item.classList.add('ticked');
+    if (box) box.textContent = '✓';
+  });
+}
+
+function animBar(id, targetPct, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) e.style.width = targetPct + '%';
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('bad_term'); hide('size_before'); hide('issues_box');
+    ['b1','b2','b3','b4','b5','b6','b7'].forEach(id => hideTline(id));
+    ['iss1','iss2','iss3','iss4','iss5','iss6'].forEach(id => hideTline(id));
+    const bb = document.getElementById('bar_bad'); if(bb) bb.style.width='0%';
+    const bg = document.getElementById('bar_good'); if(bg) bg.style.width='0%';
+  }
+  if (n === 2) {
+    ['c1','c2','c3'].forEach(id => {
+      const e = document.getElementById(id);
+      if(e){ e.classList.remove('vis','ticked'); e.style.opacity='0'; e.style.transform='translateX(18px)'; }
+    });
+    ['cb1','cb2','cb3'].forEach(id => { const e=document.getElementById(id); if(e) e.textContent=''; });
+    hide('cs1'); hide('cs2'); hide('cs3');
+  }
+  if (n === 3) {
+    ['c4','c5'].forEach(id => {
+      const e = document.getElementById(id);
+      if(e){ e.classList.remove('vis','ticked'); e.style.opacity='0'; e.style.transform='translateX(18px)'; }
+    });
+    ['cb4','cb5'].forEach(id => { const e=document.getElementById(id); if(e) e.textContent=''; });
+    hide('ms_diag'); hide('ms_code'); hide('c5'); hide('nr_code');
+  }
+  if (n === 4) {
+    ['c6','c7','c8'].forEach(id => {
+      const e = document.getElementById(id);
+      if(e){ e.classList.remove('vis','ticked'); e.style.opacity='0'; e.style.transform='translateX(18px)'; }
+    });
+    ['cb6','cb7','cb8'].forEach(id => { const e=document.getElementById(id); if(e) e.textContent=''; });
+    hide('hc_code'); hide('sec_code'); hide('sig_code');
+  }
+  if (n === 5) {
+    hide('fin_term'); hide('fin_size'); hide('summary');
+    const fb = document.getElementById('fin_bar_bad'); if(fb) fb.style.width='0%';
+    const fg = document.getElementById('fin_bar_good'); if(fg) fg.style.width='0%';
+    ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12',
+     'f13','f14','f15','f16','f17','f18','f19','f20','f21','f22','f23','f24'].forEach(id => hideTline(id));
+    ['s_c1','s_c2','s_c3','s_c4','s_c5','s_c6','s_c7','s_c8'].forEach(id => hideTline(id));
+  }
+}
+
+function showChkItem(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if(e){ e.style.opacity='1'; e.classList.add('vis'); e.style.transform='translateX(0)'; }
+  });
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('bad_term', 200);
+    ['b1','b2','b3','b4','b5','b6','b7'].forEach((id,i) => showTline(id, 400 + i*220));
+    show('size_before', 1900);
+    animBar('bar_bad', 100, 2100);
+    animBar('bar_good', 6, 2200);
+    show('issues_box', 2600);
+    ['iss1','iss2','iss3','iss4','iss5','iss6'].forEach((id,i) => showTline(id, 2800 + i*280));
+  }
+
+  if (n === 2) {
+    showChkItem('c1', 200);
+    tickCheck('c1','cb1', 700);
+    show('cs1', 850);
+    showChkItem('c2', 1500);
+    tickCheck('c2','cb2', 2000);
+    show('cs2', 2150);
+    showChkItem('c3', 2900);
+    tickCheck('c3','cb3', 3400);
+    show('cs3', 3550);
+  }
+
+  if (n === 3) {
+    showChkItem('c4', 200);
+    tickCheck('c4','cb4', 700);
+    show('ms_diag', 900);
+    show('ms_code', 1600);
+    showChkItem('c5', 2400);
+    tickCheck('c5','cb5', 2900);
+    show('nr_code', 3050);
+  }
+
+  if (n === 4) {
+    showChkItem('c6', 200);
+    tickCheck('c6','cb6', 700);
+    show('hc_code', 850);
+    showChkItem('c7', 1700);
+    tickCheck('c7','cb7', 2200);
+    show('sec_code', 2350);
+    showChkItem('c8', 3200);
+    tickCheck('c8','cb8', 3700);
+    show('sig_code', 3850);
+  }
+
+  if (n === 5) {
+    show('fin_term', 200);
+    ['f1','f2','f3','f4','f5','f6','f7','f8','f9','f10','f11','f12',
+     'f13','f14','f15','f16','f17','f18','f19','f20','f21','f22','f23','f24']
+      .forEach((id,i) => showTline(id, 350 + i*140));
+    show('fin_size', 3700);
+    animBar('fin_bar_bad', 100, 3950);
+    animBar('fin_bar_good', 6, 4100);
+    show('summary', 4600);
+    ['s_c1','s_c2','s_c3','s_c4','s_c5','s_c6','s_c7','s_c8']
+      .forEach((id,i) => showTline(id, 4800 + i*180));
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

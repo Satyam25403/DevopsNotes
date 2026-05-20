@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The localhost Problem in Docker</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+@keyframes shake{0%{transform:translateX(0)}15%{transform:translateX(-5px)}30%{transform:translateX(5px)}45%{transform:translateX(-4px)}60%{transform:translateX(4px)}75%{transform:translateX(-2px)}90%{transform:translateX(2px)}100%{transform:translateX(0)}}
+.shake{animation:shake .5s ease-in-out}
+@keyframes pulse-glow{0%,100%{opacity:.7}50%{opacity:1}}
+.pglow{animation:pulse-glow 1.5s ease-in-out infinite}
+@keyframes dash-move{to{stroke-dashoffset:-20}}
+.dash-anim{animation:dash-move 1s linear infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — The Broken Mental Model
+═══════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050">LOCALHOST PROBLEM</div>
+    <div class="hdr-sub">WHY YOUR FETCH FAILS IN DOCKER</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE BUG</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BROKEN</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- dev says it works -->
+      <div id="s1-claim" class="panel" style="background:#180008;border-left:4px solid #e85050;border-top:1px solid #3a0015;border-right:1px solid #3a0015;border-bottom:1px solid #3a0015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">😤 "IT WORKS ON MY MACHINE"</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">You're running frontend on port 3000, backend on port 5000. This code works perfectly locally. Then you put it in Docker...</div>
+        <div style="margin-top:8px;background:#050002;border:1px solid #2a0010;padding:8px 10px;border-radius:2px">
+          <div style="font-size:6.5px;color:#888;line-height:2.2">fetch(<span style="color:#e85050">"http://localhost:5000/api"</span>)</div>
+          <div style="font-size:6px;color:#555">// works on your laptop 👍</div>
+        </div>
+      </div>
+
+      <!-- the broken diagram — two isolated containers, localhost loops back to self -->
+      <div id="s1-diag" class="panel" style="background:#080002;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120005;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#e85050">WHAT ACTUALLY HAPPENS IN DOCKER</div>
+        </div>
+        <div style="padding:6px 4px 8px">
+          <svg id="s1-svg" width="100%" height="190" viewBox="0 0 366 190" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <filter id="glow-red">
+                <feGaussianBlur stdDeviation="2.5" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <filter id="glow-cyan">
+                <feGaussianBlur stdDeviation="2" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <marker id="arr-red" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e85050"/>
+              </marker>
+              <marker id="arr-dim" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#333"/>
+              </marker>
+            </defs>
+
+            <!-- Docker host label -->
+            <rect x="6" y="6" width="354" height="178" rx="4" fill="none" stroke="#2a0010" stroke-width="1" stroke-dasharray="4,3"/>
+            <text x="183" y="17" text-anchor="middle" font-size="5.5" fill="#3a0015">DOCKER HOST</text>
+
+            <!-- Frontend container -->
+            <rect id="s1-fe-box" x="18" y="28" width="148" height="140" rx="3" fill="#180008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s1-fe-lbl" x="92" y="44" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">CONTAINER A</text>
+            <text id="s1-fe-sub" x="92" y="56" text-anchor="middle" font-size="5" fill="#666" opacity="0">frontend</text>
+            <!-- wall icon -->
+            <rect id="s1-fe-wall" x="28" y="64" width="128" height="28" rx="2" fill="#0d0005" stroke="#3a0015" stroke-width="1" opacity="0"/>
+            <text id="s1-fe-wall-t" x="92" y="75" text-anchor="middle" font-size="5" fill="#888" opacity="0">network</text>
+            <text id="s1-fe-wall-t2" x="92" y="86" text-anchor="middle" font-size="5" fill="#555" opacity="0">namespace</text>
+            <!-- localhost label in container -->
+            <text id="s1-fe-lh" x="92" y="115" text-anchor="middle" font-size="7" fill="#e85050" opacity="0">localhost</text>
+            <text id="s1-fe-lh2" x="92" y="128" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">= THIS container</text>
+            <!-- self-loop arrow -->
+            <path id="s1-fe-loop" d="M92,100 C130,100 145,140 145,152 C145,164 130,164 92,164 C54,164 38,158 38,148 C38,136 54,128 92,128" fill="none" stroke="#e85050" stroke-width="1.5" marker-end="url(#arr-red)" opacity="0"/>
+            <text id="s1-fe-loop-t" x="92" y="172" text-anchor="middle" font-size="5" fill="#e85050" opacity="0">loops back to itself!</text>
+
+            <!-- Backend container -->
+            <rect id="s1-be-box" x="200" y="28" width="148" height="140" rx="3" fill="#180008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s1-be-lbl" x="274" y="44" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">CONTAINER B</text>
+            <text id="s1-be-sub" x="274" y="56" text-anchor="middle" font-size="5" fill="#666" opacity="0">backend</text>
+            <!-- wall -->
+            <rect id="s1-be-wall" x="210" y="64" width="128" height="28" rx="2" fill="#0d0005" stroke="#3a0015" stroke-width="1" opacity="0"/>
+            <text id="s1-be-wall-t" x="274" y="75" text-anchor="middle" font-size="5" fill="#888" opacity="0">network</text>
+            <text id="s1-be-wall-t2" x="274" y="86" text-anchor="middle" font-size="5" fill="#555" opacity="0">namespace</text>
+            <!-- port 5000 -->
+            <text id="s1-be-port" x="274" y="115" text-anchor="middle" font-size="7" fill="#4eff9a" opacity="0">:5000</text>
+            <text id="s1-be-port2" x="274" y="128" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">waiting here</text>
+            <!-- unreachable X -->
+            <text id="s1-be-x" x="274" y="155" text-anchor="middle" font-size="18" fill="#e85050" opacity="0">✗</text>
+            <text id="s1-be-x2" x="274" y="172" text-anchor="middle" font-size="5" fill="#e85050" opacity="0">unreachable!</text>
+
+            <!-- wall between containers -->
+            <line id="s1-wall" x1="183" y1="28" x2="183" y2="168" stroke="#3a0015" stroke-width="2" stroke-dasharray="4,3" opacity="0"/>
+            <text id="s1-wall-t" x="183" y="178" text-anchor="middle" font-size="5" fill="#3a0015" opacity="0">ISOLATION</text>
+
+            <!-- attempted fetch arrow (crosses wall and dies) -->
+            <line id="s1-fetch" x1="152" y1="110" x2="195" y2="110" stroke="#e85050" stroke-width="1.5" opacity="0" stroke-dasharray="3,2"/>
+            <text id="s1-fetch-t" x="172" y="105" text-anchor="middle" font-size="5" fill="#e85050" opacity="0">fetch?</text>
+            <text id="s1-fetch-x" x="172" y="122" text-anchor="middle" font-size="10" fill="#e85050" opacity="0">✗</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- error card -->
+      <div id="s1-error" class="panel" style="background:#050002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120005;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#333"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#333"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">browser console</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s1-err1" class="tline" style="color:#e85050">❌ GET http://localhost:5000/api</div>
+          <div id="s1-err2" class="tline" style="color:#e85050">   net::ERR_CONNECTION_REFUSED</div>
+          <div id="s1-err3" class="tline" style="color:#888;margin-top:4px">// localhost inside the frontend</div>
+          <div id="s1-err4" class="tline" style="color:#888">// container means THE FRONTEND</div>
+          <div id="s1-err5" class="tline" style="color:#888">// CONTAINER ITSELF — not backend!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">localhost inside a container = that container itself.</div>
+    <div class="ih rd">Port 5000 lives in a different container. localhost can't reach it.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">✗</div><div class="sl">localhost:5000</div></div>
+    <div class="sc"><div class="sv am">2</div><div class="sl">ISOLATED NETS</div></div>
+    <div class="sc"><div class="sv rd">ERR</div><div class="sl">CONNECTION REFUSED</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — Why: Each Container Has Its Own Network
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#000a18">
+
+  <div class="hdr" style="background:#000a18;border-bottom:1px solid #0a1a35">
+    <div class="hdr-title" style="color:#4ec9e1">WHY IT HAPPENS</div>
+    <div class="hdr-sub">NETWORK NAMESPACES EXPLAINED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000a18">
+    <span class="slabel" style="color:#4ec9e1">THE CAUSE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ISOLATION</span>
+  </div>
+
+  <div class="anim" style="background:#000a18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- explanation card -->
+      <div id="s2-intro" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #0a2040;border-right:1px solid #0a2040;border-bottom:1px solid #0a2040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">🔬 NETWORK NAMESPACES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker gives each container its own isolated network namespace. Every container has its own loopback interface — its own private "localhost". They're completely separate.</div>
+      </div>
+
+      <!-- namespace diagram -->
+      <div id="s2-nsdiag" class="panel" style="background:#00070f;border:2px solid #0a2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4ec9e1">EACH CONTAINER HAS ITS OWN 127.0.0.1</div>
+        </div>
+        <div style="padding:6px 4px 8px">
+          <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-cyan" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4ec9e1"/>
+              </marker>
+              <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+            </defs>
+
+            <!-- Your laptop -->
+            <rect id="s2-laptop" x="130" y="8" width="106" height="36" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s2-laptop-t" x="183" y="22" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">YOUR LAPTOP</text>
+            <text id="s2-laptop-t2" x="183" y="34" text-anchor="middle" font-size="5" fill="#888" opacity="0">127.0.0.1</text>
+
+            <!-- Container A namespace bubble -->
+            <ellipse id="s2-a-bubble" cx="80" cy="118" rx="70" ry="42" fill="#0d0008" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s2-a-t" x="80" y="98" text-anchor="middle" font-size="5.5" fill="#e85050" opacity="0">CONTAINER A</text>
+            <text id="s2-a-lh" x="80" y="114" text-anchor="middle" font-size="7" fill="#e85050" opacity="0">127.0.0.1</text>
+            <text id="s2-a-desc" x="80" y="128" text-anchor="middle" font-size="5" fill="#888" opacity="0">frontend's</text>
+            <text id="s2-a-desc2" x="80" y="140" text-anchor="middle" font-size="5" fill="#888" opacity="0">localhost</text>
+
+            <!-- Container B namespace bubble -->
+            <ellipse id="s2-b-bubble" cx="286" cy="118" rx="70" ry="42" fill="#001508" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s2-b-t" x="286" y="98" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">CONTAINER B</text>
+            <text id="s2-b-lh" x="286" y="114" text-anchor="middle" font-size="7" fill="#4eff9a" opacity="0">127.0.0.1</text>
+            <text id="s2-b-desc" x="286" y="128" text-anchor="middle" font-size="5" fill="#888" opacity="0">backend's</text>
+            <text id="s2-b-desc2" x="286" y="140" text-anchor="middle" font-size="5" fill="#888" opacity="0">localhost</text>
+
+            <!-- arrows from laptop to each -->
+            <line id="s2-arr-a" x1="155" y1="44" x2="100" y2="82" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-cyan)" opacity="0"/>
+            <line id="s2-arr-b" x1="211" y1="44" x2="262" y2="82" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-cyan)" opacity="0"/>
+
+            <!-- barrier line between containers -->
+            <line id="s2-barrier" x1="183" y1="70" x2="183" y2="162" stroke="#1a2a3a" stroke-width="2" stroke-dasharray="4,3" opacity="0"/>
+            <text id="s2-barrier-t" x="183" y="167" text-anchor="middle" font-size="5" fill="#1a2a3a" opacity="0">WALL</text>
+
+            <!-- No crossing arrow -->
+            <line id="s2-nocross" x1="115" y1="118" x2="210" y2="118" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s2-nocross-t" x="163" y="113" text-anchor="middle" font-size="5" fill="#e85050" opacity="0">✗ can't cross</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- localhost table -->
+      <div id="s2-table" class="panel" style="background:#00070f;border:2px solid #0a2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 12px">
+          <div style="font-size:6px;color:#4ec9e1;text-align:center">WHAT "localhost" MEANS WHERE</div>
+        </div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div id="s2-t1" class="tline" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#001a08;border:1px solid #0a3015;border-radius:2px">
+            <span style="font-size:6.5px;color:#4eff9a;flex:1">Your laptop</span>
+            <span style="font-size:6px;color:#888;flex:2">→ your machine's :5000</span>
+          </div>
+          <div id="s2-t2" class="tline" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#180008;border:1px solid #3a0015;border-radius:2px">
+            <span style="font-size:6.5px;color:#e85050;flex:1">Frontend container</span>
+            <span style="font-size:6px;color:#888;flex:2">→ frontend container's :5000</span>
+          </div>
+          <div id="s2-t3" class="tline" style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#180008;border:1px solid #3a0015;border-radius:2px">
+            <span style="font-size:6.5px;color:#e85050;flex:1">Backend container</span>
+            <span style="font-size:6px;color:#888;flex:2">→ backend container's :5000</span>
+          </div>
+          <div id="s2-t4" class="tline" style="font-size:5.5px;color:#e8a020;padding:4px 8px;line-height:1.8">⚠ All three are DIFFERENT addresses!</div>
+        </div>
+      </div>
+
+      <!-- mental model card -->
+      <div id="s2-mental" class="panel" style="background:#001020;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">💡 MENTAL MODEL</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Think of each container as a separate machine. Would you use localhost to call a different machine? No — you'd use its hostname or IP. Same rule applies here.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Each container is like a separate machine with its own 127.0.0.1.</div>
+    <div class="ih">localhost only ever reaches the container you're already inside.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3x</div><div class="sl">DIFFERENT 127.0.0.1</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">net</div><div class="sl">NAMESPACE</div></div>
+    <div class="sc"><div class="sv am">wall</div><div class="sl">BETWEEN CTRS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — The Fix: Use Service Names
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#001508">
+
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0a2a10">
+    <div class="hdr-title" style="color:#4eff9a">THE FIX</div>
+    <div class="hdr-sub">USE SERVICE NAME AS HOSTNAME</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIXED ✓</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- before / after code -->
+      <div id="s3-compare" class="panel" style="display:flex;flex-direction:column;gap:7px">
+        <div style="background:#0f0003;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+          <div style="background:#180005;padding:5px 10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:9px">✗</span>
+            <span style="font-size:6.5px;color:#e85050">BEFORE (broken)</span>
+          </div>
+          <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+            <div id="s3-bad" class="tline" style="color:#e85050">fetch(<span style="color:#e85050">"http://localhost:5000/api"</span>)</div>
+            <div id="s3-bad2" class="tline" style="color:#555">// localhost = this container = ✗</div>
+          </div>
+        </div>
+        <div style="background:#000d04;border:2px solid #1a4a10;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:9px">✓</span>
+            <span style="font-size:6.5px;color:#4eff9a">AFTER (works)</span>
+          </div>
+          <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+            <div id="s3-good" class="tline" style="color:#4eff9a">fetch(<span style="color:#4eff9a">"http://backend:5000/api"</span>)</div>
+            <div id="s3-good2" class="tline" style="color:#555">// backend = service name = ✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- working diagram -->
+      <div id="s3-diag" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4eff9a">HOW COMPOSE NETWORKING WORKS</div>
+        </div>
+        <div style="padding:6px 4px 8px">
+          <svg id="s3-svg" width="100%" height="178" viewBox="0 0 366 178" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <filter id="glow-green">
+                <feGaussianBlur stdDeviation="2.5" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+              <marker id="arr-gn" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-pu" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#a080ff"/>
+              </marker>
+            </defs>
+
+            <!-- Compose network bubble (background) -->
+            <rect id="s3-netbg" x="8" y="16" width="350" height="152" rx="4" fill="#001508" stroke="#1a4a10" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
+            <text id="s3-net-t" x="183" y="28" text-anchor="middle" font-size="5.5" fill="#1a4a10" opacity="0">COMPOSE NETWORK (myapp_default)</text>
+
+            <!-- DNS resolver in middle -->
+            <rect id="s3-dns" x="140" y="52" width="86" height="50" rx="3" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s3-dns-t" x="183" y="70" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">COMPOSE</text>
+            <text id="s3-dns-t2" x="183" y="82" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">DNS</text>
+            <text id="s3-dns-t3" x="183" y="94" text-anchor="middle" font-size="5" fill="#555" opacity="0">auto-resolves</text>
+
+            <!-- Frontend container -->
+            <rect id="s3-fe" x="18" y="90" width="110" height="68" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s3-fe-t" x="73" y="108" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">frontend</text>
+            <text id="s3-fe-code" x="73" y="122" text-anchor="middle" font-size="5" fill="#aaa" opacity="0">fetch(</text>
+            <text id="s3-fe-code2" x="73" y="134" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">"backend:5000"</text>
+            <text id="s3-fe-code3" x="73" y="146" text-anchor="middle" font-size="5" fill="#aaa" opacity="0">)</text>
+
+            <!-- Backend container -->
+            <rect id="s3-be" x="238" y="90" width="110" height="68" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s3-be-t" x="293" y="108" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">backend</text>
+            <text id="s3-be-port" x="293" y="124" text-anchor="middle" font-size="9" fill="#4eff9a" opacity="0">:5000</text>
+            <text id="s3-be-ok" x="293" y="142" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">✓ listening</text>
+
+            <!-- arrow: frontend asks DNS -->
+            <line id="s3-arr1" x1="128" y1="100" x2="138" y2="85" stroke="#a080ff" stroke-width="1.5" marker-end="url(#arr-pu)" opacity="0"/>
+            <text id="s3-arr1-t" x="110" y="92" text-anchor="middle" font-size="5" fill="#a080ff" opacity="0">"backend"?</text>
+
+            <!-- arrow: DNS resolves to backend IP -->
+            <line id="s3-arr2" x1="228" y1="85" x2="240" y2="100" stroke="#a080ff" stroke-width="1.5" marker-end="url(#arr-pu)" opacity="0"/>
+            <text id="s3-arr2-t" x="258" y="92" text-anchor="middle" font-size="5" fill="#a080ff" opacity="0">→ 172.x.x.x</text>
+
+            <!-- main success arrow -->
+            <line id="s3-main-arr" x1="130" y1="124" x2="236" y2="124" stroke="#4eff9a" stroke-width="2" marker-end="url(#arr-gn)" opacity="0"/>
+            <text id="s3-main-t" x="183" y="118" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">✓ connected!</text>
+
+            <!-- animated packet -->
+            <circle id="s3-pkt" cx="130" cy="124" r="4" fill="#4eff9a" opacity="0" filter="url(#glow-green)"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- docker-compose.yaml reference -->
+      <div id="s3-yaml" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yaml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3-y1" class="tline" style="color:#888">services:</div>
+          <div id="s3-y2" class="tline" style="padding-left:10px;color:#4eff9a">frontend:        <span style="color:#333"># ← this is the hostname</span></div>
+          <div id="s3-y3" class="tline" style="padding-left:18px;color:#aaa">build: ./frontend</div>
+          <div id="s3-y4" class="tline" style="padding-left:18px;color:#aaa">environment:</div>
+          <div id="s3-y5" class="tline" style="padding-left:26px;color:#aaa">API_URL: <span style="color:#4eff9a">http://backend:5000</span></div>
+          <div id="s3-y6" class="tline" style="padding-left:10px;color:#4eff9a">backend:         <span style="color:#333"># ← use THIS as hostname</span></div>
+          <div id="s3-y7" class="tline" style="padding-left:18px;color:#aaa">build: ./backend</div>
+          <div id="s3-y8" class="tline" style="padding-left:18px;color:#aaa">ports: [<span style="color:#4eff9a">"5000:5000"</span>]</div>
+        </div>
+      </div>
+
+      <!-- rule card -->
+      <div id="s3-rule" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0a3015;border-right:1px solid #0a3015;border-bottom:1px solid #0a3015;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">THE RULE</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div id="s3-r1" class="tline" style="font-size:6px;color:#aaa;line-height:1.8">Compose auto-creates a network. Each service joins it. Each service's <span style="color:#4eff9a">name</span> becomes its DNS hostname. Use the name, not localhost.</div>
+          <div id="s3-r2" class="tline" style="font-size:6px;color:#e8a020;line-height:1.8">⚠ This only works container-to-container. From your browser (outside Docker), you still use localhost + the mapped port.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Compose puts services on a shared network. Names become hostnames.</div>
+    <div class="ih">Replace localhost with the service name. That's the entire fix.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">name</div><div class="sl">= HOSTNAME</div></div>
+    <div class="sc"><div class="sv pu">DNS</div><div class="sl">AUTO-RESOLVES</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">CONNECTED</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function svgShow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); });
+}
+function svgHide(id) {
+  const e = document.getElementById(id); if (e) e.setAttribute('opacity','0');
+}
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function hide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+function tshow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function thide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+
+// animate a circle along a straight path
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-claim'); hide('s1-diag'); hide('s1-error');
+    const svgEls = ['s1-fe-box','s1-fe-lbl','s1-fe-sub','s1-fe-wall','s1-fe-wall-t','s1-fe-wall-t2',
+      's1-fe-lh','s1-fe-lh2','s1-fe-loop','s1-fe-loop-t',
+      's1-be-box','s1-be-lbl','s1-be-sub','s1-be-wall','s1-be-wall-t','s1-be-wall-t2',
+      's1-be-port','s1-be-port2','s1-be-x','s1-be-x2',
+      's1-wall','s1-wall-t','s1-fetch','s1-fetch-t','s1-fetch-x'];
+    svgEls.forEach(svgHide);
+    ['s1-err1','s1-err2','s1-err3','s1-err4','s1-err5'].forEach(thide);
+  }
+  if (n === 2) {
+    hide('s2-intro'); hide('s2-nsdiag'); hide('s2-table'); hide('s2-mental');
+    const svgEls = ['s2-laptop','s2-laptop-t','s2-laptop-t2',
+      's2-a-bubble','s2-a-t','s2-a-lh','s2-a-desc','s2-a-desc2',
+      's2-b-bubble','s2-b-t','s2-b-lh','s2-b-desc','s2-b-desc2',
+      's2-arr-a','s2-arr-b','s2-barrier','s2-barrier-t','s2-nocross','s2-nocross-t'];
+    svgEls.forEach(svgHide);
+    ['s2-t1','s2-t2','s2-t3','s2-t4'].forEach(thide);
+  }
+  if (n === 3) {
+    hide('s3-compare'); hide('s3-diag'); hide('s3-yaml'); hide('s3-rule');
+    const svgEls = ['s3-netbg','s3-net-t','s3-dns','s3-dns-t','s3-dns-t2','s3-dns-t3',
+      's3-fe','s3-fe-t','s3-fe-code','s3-fe-code2','s3-fe-code3',
+      's3-be','s3-be-t','s3-be-port','s3-be-ok',
+      's3-arr1','s3-arr1-t','s3-arr2','s3-arr2-t',
+      's3-main-arr','s3-main-t','s3-pkt'];
+    svgEls.forEach(svgHide);
+    ['s3-bad','s3-bad2','s3-good','s3-good2',
+     's3-y1','s3-y2','s3-y3','s3-y4','s3-y5','s3-y6','s3-y7','s3-y8',
+     's3-r1','s3-r2'].forEach(thide);
+  }
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('s1-claim', 200);
+    show('s1-diag', 700);
+    // build the broken diagram
+    const fe = ['s1-fe-box','s1-fe-lbl','s1-fe-sub','s1-fe-wall','s1-fe-wall-t','s1-fe-wall-t2'];
+    fe.forEach((id, i) => svgShow(id, 900 + i * 100));
+    const be = ['s1-be-box','s1-be-lbl','s1-be-sub','s1-be-wall','s1-be-wall-t','s1-be-wall-t2','s1-be-port','s1-be-port2'];
+    be.forEach((id, i) => svgShow(id, 900 + i * 100));
+    svgShow('s1-wall', 1500);
+    svgShow('s1-wall-t', 1600);
+    // localhost loops back
+    svgShow('s1-fe-lh', 1800);
+    svgShow('s1-fe-lh2', 1950);
+    svgShow('s1-fe-loop', 2100);
+    svgShow('s1-fe-loop-t', 2300);
+    // backend is unreachable
+    svgShow('s1-be-x', 2100);
+    svgShow('s1-be-x2', 2250);
+    // attempt to fetch
+    svgShow('s1-fetch', 2600);
+    svgShow('s1-fetch-t', 2700);
+    svgShow('s1-fetch-x', 2900);
+    // error console
+    show('s1-error', 3100);
+    tshow('s1-err1', 3300);
+    tshow('s1-err2', 3550);
+    tshow('s1-err3', 3800);
+    tshow('s1-err4', 3950);
+    tshow('s1-err5', 4100);
+  }
+
+  if (n === 2) {
+    show('s2-intro', 200);
+    show('s2-nsdiag', 700);
+    svgShow('s2-laptop', 900);
+    svgShow('s2-laptop-t', 1000);
+    svgShow('s2-laptop-t2', 1100);
+    svgShow('s2-arr-a', 1300);
+    svgShow('s2-arr-b', 1400);
+    svgShow('s2-a-bubble', 1600);
+    svgShow('s2-a-t', 1700);
+    svgShow('s2-a-lh', 1800);
+    svgShow('s2-a-desc', 1900);
+    svgShow('s2-a-desc2', 2000);
+    svgShow('s2-b-bubble', 1600);
+    svgShow('s2-b-t', 1700);
+    svgShow('s2-b-lh', 1800);
+    svgShow('s2-b-desc', 1900);
+    svgShow('s2-b-desc2', 2000);
+    svgShow('s2-barrier', 2200);
+    svgShow('s2-barrier-t', 2300);
+    svgShow('s2-nocross', 2500);
+    svgShow('s2-nocross-t', 2600);
+    show('s2-table', 2900);
+    tshow('s2-t1', 3100);
+    tshow('s2-t2', 3350);
+    tshow('s2-t3', 3600);
+    tshow('s2-t4', 3850);
+    show('s2-mental', 4100);
+  }
+
+  if (n === 3) {
+    show('s3-compare', 200);
+    tshow('s3-bad', 400);
+    tshow('s3-bad2', 600);
+    tshow('s3-good', 900);
+    tshow('s3-good2', 1100);
+    show('s3-diag', 1400);
+    // build working diagram
+    svgShow('s3-netbg', 1600);
+    svgShow('s3-net-t', 1700);
+    svgShow('s3-fe', 1900);
+    svgShow('s3-fe-t', 2000);
+    svgShow('s3-fe-code', 2050);
+    svgShow('s3-fe-code2', 2100);
+    svgShow('s3-fe-code3', 2150);
+    svgShow('s3-be', 1900);
+    svgShow('s3-be-t', 2000);
+    svgShow('s3-be-port', 2100);
+    svgShow('s3-be-ok', 2200);
+    svgShow('s3-dns', 2300);
+    svgShow('s3-dns-t', 2400);
+    svgShow('s3-dns-t2', 2450);
+    svgShow('s3-dns-t3', 2500);
+    svgShow('s3-arr1', 2600);
+    svgShow('s3-arr1-t', 2700);
+    svgShow('s3-arr2', 2800);
+    svgShow('s3-arr2-t', 2900);
+    svgShow('s3-main-arr', 3100);
+    svgShow('s3-main-t', 3200);
+    // animate packet crossing
+    movePkt('s3-pkt', 130, 124, 236, 124, 3300, 600);
+    movePkt('s3-pkt', 130, 124, 236, 124, 4100, 600);
+    movePkt('s3-pkt', 130, 124, 236, 124, 4900, 600);
+    // yaml
+    show('s3-yaml', 3500);
+    ['s3-y1','s3-y2','s3-y3','s3-y4','s3-y5','s3-y6','s3-y7','s3-y8'].forEach((id, i) =>
+      tshow(id, 3700 + i * 160)
+    );
+    show('s3-rule', 5100);
+    tshow('s3-r1', 5300);
+    tshow('s3-r2', 5600);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

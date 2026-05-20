@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Networking — Bridge, Host, None Explained</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;
+}
+
+/* ── viewport container ── */
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+
+/* ── every scene fills the container exactly ── */
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2e}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+
+/* ── scrollable animation area ── */
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.pu{border-color:#a060c0}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a060c0}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060810;border:1px solid #0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}.sv.pu{color:#a060c0}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}.pu{color:#a060c0}
+
+.net-beam{stroke-dasharray:200;stroke-dashoffset:200;transition:stroke-dashoffset .7s ease-out}
+.net-beam.go{stroke-dashoffset:0}
+
+.net-card{
+  opacity:0;transform:scale(.94);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.net-card.visible{opacity:1;transform:scale(1)}
+
+.feat-row{
+  opacity:0;transform:translateX(-6px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.feat-row.visible{opacity:1;transform:translateX(0)}
+
+.cmd-chip{opacity:0;transition:opacity .3s;}
+.cmd-chip.visible{opacity:1}
+
+.use-card{
+  opacity:0;transform:translateY(6px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.use-card.visible{opacity:1;transform:translateY(0)}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+@keyframes pktRight{
+  0%{transform:translateX(0);opacity:1}
+  80%{opacity:1}
+  100%{transform:translateX(60px);opacity:0}
+}
+.pkt-right{animation:pktRight .8s ease-in-out forwards}
+
+@keyframes natPulse{
+  0%,100%{border-color:#e8a020}
+  50%{border-color:#ffd080}
+}
+.nat-pulse{animation:natPulse 1s ease-in-out infinite}
+
+.tl{opacity:0;transition:opacity .25s}
+.tl.visible{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════ SCENE 1: HOOK + OVERVIEW ═══════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">DOCKER NETWORKING</div>
+    <div class="hdr-sub">BRIDGE · HOST · NONE · OVERLAY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">OVERVIEW</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">4 MODES</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div id="s1-hero" style="border:2px solid #e8a020;border-radius:3px;padding:14px;opacity:0;transition:opacity .5s;text-align:center;background:#0c0800">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:2px;margin-bottom:10px">THE CHOICE THAT MATTERS</div>
+        <div style="font-size:9px;color:#ffe8c0;line-height:1.9;margin-bottom:8px">FOUR NETWORK MODES.<br>ONE WRONG CHOICE<br>BREAKS YOUR<br>WHOLE STACK.</div>
+        <div style="font-size:7px;color:#555;line-height:1.8">Network mode affects isolation,<br>security, performance, and<br>how containers find each other.</div>
+      </div>
+
+      <div id="s1-modes" style="opacity:0;transition:opacity .5s;display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:7px;color:#555;letter-spacing:2px;margin-bottom:2px">THE 4 MODES</div>
+        <div style="border:1px solid #0a1a3a;border-radius:2px;padding:9px;display:flex;align-items:center;gap:10px;background:#04060c">
+          <div style="font-size:11px;flex-shrink:0;width:24px">🌉</div>
+          <div>
+            <div style="font-size:8px;color:#4ec9e1;margin-bottom:3px">BRIDGE (default)</div>
+            <div style="font-size:6px;color:#888;line-height:1.6">Private network, NAT to host, port publishing. Container-to-container via name.</div>
+          </div>
+        </div>
+        <div style="border:1px solid #0d2a0d;border-radius:2px;padding:9px;display:flex;align-items:center;gap:10px;background:#040c04">
+          <div style="font-size:11px;flex-shrink:0;width:24px">⚡</div>
+          <div>
+            <div style="font-size:8px;color:#4eff9a;margin-bottom:3px">HOST</div>
+            <div style="font-size:6px;color:#888;line-height:1.6">Shares host network stack. No isolation. Highest performance. Linux only.</div>
+          </div>
+        </div>
+        <div style="border:1px solid #1a1a2e;border-radius:2px;padding:9px;display:flex;align-items:center;gap:10px;background:#06060a">
+          <div style="font-size:11px;flex-shrink:0;width:24px">🚫</div>
+          <div>
+            <div style="font-size:8px;color:#888;margin-bottom:3px">NONE</div>
+            <div style="font-size:6px;color:#666;line-height:1.6">No network interface. Completely air-gapped. Loopback only. Security sandboxing.</div>
+          </div>
+        </div>
+        <div style="border:1px solid #1a0d2e;border-radius:2px;padding:9px;display:flex;align-items:center;gap:10px;background:#060408">
+          <div style="font-size:11px;flex-shrink:0;width:24px">☁</div>
+          <div>
+            <div style="font-size:8px;color:#a060c0;margin-bottom:3px">OVERLAY (Swarm/K8s)</div>
+            <div style="font-size:6px;color:#888;line-height:1.6">Multi-host networking. Containers on different machines talk as if local. VXLAN tunnel.</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO UNDERSTAND EACH MODE
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">NETWORK MODE</div>
+    <div class="ih am">Set once at container start. Can't change later.</div>
+    <div class="il" style="font-size:7px">docker run --network=bridge|host|none|[custom]. Wrong choice means either no connectivity, broken isolation, or missed performance gains. Bridge is default and correct for most cases.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">bridge</div><div class="sl">default<br>isolated</div></div>
+    <div class="sc"><div class="sv gn">host</div><div class="sl">fast<br>no isolation</div></div>
+    <div class="sc"><div class="sv">none</div><div class="sl">air-gap<br>secure</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 2: BRIDGE NETWORK ═══════════════ -->
+<div class="scene" id="s2" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">BRIDGE NETWORK</div>
+    <div class="hdr-sub">ISOLATED SUBNET · NAT · PORT PUBLISHING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">MODE 1</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">DEFAULT</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-diag" style="border:2px solid #4ec9e1;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:8px;text-align:center">BRIDGE NETWORK — ISOLATED SUBNET + NAT</div>
+        <svg width="330" height="175" viewBox="0 0 330 175">
+          <rect x="4" y="4" width="322" height="167" rx="5" fill="#04060c" stroke="#1a1a3a" stroke-width="1.5"/>
+          <text x="20" y="16" fill="#1a1a3a" font-family="'Press Start 2P'" font-size="4">HOST MACHINE</text>
+          <rect x="10" y="22" width="220" height="128" rx="4" fill="#04080e" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <text x="120" y="34" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4">docker0 bridge · 172.17.0.0/16</text>
+          <rect id="s2-ca" x="18" y="42" width="90" height="52" rx="4" fill="#040c10" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2-ca-t1" x="63" y="58" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">container-a</text>
+          <text id="s2-ca-t2" x="63" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">172.17.0.2</text>
+          <text id="s2-ca-t3" x="63" y="80" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">:3000</text>
+          <text id="s2-ca-t4" x="63" y="90" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3" opacity="0">eth0: private</text>
+          <rect id="s2-cb" x="130" y="42" width="90" height="52" rx="4" fill="#040c10" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2-cb-t1" x="175" y="58" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">container-b</text>
+          <text id="s2-cb-t2" x="175" y="69" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">172.17.0.3</text>
+          <text id="s2-cb-t3" x="175" y="80" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">:5432</text>
+          <text id="s2-cb-t4" x="175" y="90" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3" opacity="0">eth0: private</text>
+          <path id="s2-ctoc" d="M108,68 L130,68" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <text id="s2-ctoc-t" x="119" y="63" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3" opacity="0">direct</text>
+          <rect id="s2-bridge" x="60" y="104" width="100" height="18" rx="3" fill="#0a1428" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2-bridge-t" x="110" y="116" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">docker0 bridge</text>
+          <rect id="s2-nat" x="243" y="62" width="74" height="34" rx="3" fill="#100a00" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="s2-nat-t1" x="280" y="76" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="5" opacity="0">NAT</text>
+          <text id="s2-nat-t2" x="280" y="88" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">iptables rules</text>
+          <path id="s2-pub" d="M230,68 L243,72" stroke="#e8a020" stroke-width="1.5" fill="none" stroke-dasharray="200" stroke-dashoffset="200"/>
+          <text id="s2-pub-t" x="237" y="62" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="3" opacity="0">-p 8080:3000</text>
+          <rect x="268" y="130" width="50" height="20" rx="3" fill="#0a0808" stroke="#555" stroke-width="1"/>
+          <text x="293" y="143" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">INTERNET</text>
+          <path id="s2-ext" d="M293,130 L280,96" stroke="#555" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0"/>
+          <line id="s2-l1" x1="63" y1="94" x2="90" y2="104" stroke="#1a2a3a" stroke-width="1" opacity="0"/>
+          <line id="s2-l2" x1="175" y1="94" x2="130" y2="104" stroke="#1a2a3a" stroke-width="1" opacity="0"/>
+        </svg>
+      </div>
+
+      <div id="s2-feats" style="border:1px solid #0a1a2e;border-radius:3px;padding:10px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:7px">BRIDGE NETWORK PROPERTIES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="feat-row" id="f1" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span>Containers get private IPs (172.17.0.x) isolated from host</span>
+          </div>
+          <div class="feat-row" id="f2" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span>Containers on same bridge talk directly by name (DNS)</span>
+          </div>
+          <div class="feat-row" id="f3" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span>External access via port publishing: -p host:container</span>
+          </div>
+          <div class="feat-row" id="f4" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#e8a020;flex-shrink:0">⚠</span>
+            <span style="color:#aaa">NAT overhead for every external packet (minor)</span>
+          </div>
+          <div class="feat-row" id="f5" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✕</span>
+            <span style="color:#aaa">Default bridge: no automatic DNS. Use custom bridges instead.</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s2-cmds" style="border:1px solid #0a1a2e;border-radius:3px;padding:8px;background:#04060c;opacity:0;transition:opacity .5s;font-size:6px;line-height:2">
+        <div class="tl" id="c1" style="color:#555"># default bridge (no DNS between containers)</div>
+        <div class="tl" id="c2" style="color:#4ec9e1">docker run --network=bridge nginx</div>
+        <div class="tl" id="c3" style="color:#555;margin-top:3px"># custom bridge (DNS by container name) ← recommended</div>
+        <div class="tl" id="c4" style="color:#4eff9a">docker network create myapp</div>
+        <div class="tl" id="c5" style="color:#4eff9a">docker run --network=myapp --name=db postgres</div>
+        <div class="tl" id="c6" style="color:#4eff9a">docker run --network=myapp --name=api -p 3000:3000 node</div>
+        <div class="tl" id="c7" style="color:#555;margin-top:3px"># api can reach db by name: postgres://db:5432</div>
+      </div>
+
+      <div class="step-block" id="s2-s1">
+        <div class="step-num">!</div>
+        <div class="step-text">Default bridge doesn't support DNS. Always create a <span class="cy">custom bridge network</span> — then containers discover each other by container name. docker-compose does this automatically.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">BRIDGE NETWORK</div>
+    <div class="ih">Isolated subnet + NAT. The right default for most apps.</div>
+    <div class="il" style="font-size:7px">Use bridge for: web apps, databases, microservices. Create a custom bridge (not the default one) to get automatic DNS resolution between containers by name.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">172.17.x</div><div class="sl">private<br>subnet</div></div>
+    <div class="sc"><div class="sv am">NAT</div><div class="sl">iptables<br>masquerade</div></div>
+    <div class="sc"><div class="sv gn">DNS</div><div class="sl">custom bridge<br>only</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 3: HOST NETWORK ═══════════════ -->
+<div class="scene" id="s3" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title" style="color:#4eff9a">HOST NETWORK</div>
+    <div class="hdr-sub">SHARES HOST STACK · NO ISOLATION · MAX PERFORMANCE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">MODE 2</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">NO ISOLATION</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-diag" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">HOST NETWORK — CONTAINER IS THE HOST</div>
+        <svg width="330" height="145" viewBox="0 0 330 145">
+          <rect x="4" y="4" width="322" height="137" rx="5" fill="#020804" stroke="#4eff9a" stroke-width="2"/>
+          <text x="20" y="16" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">HOST MACHINE + CONTAINER (same namespace)</text>
+          <rect id="s3-stack" x="10" y="22" width="310" height="40" rx="4" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-st1" x="165" y="38" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">SHARED NETWORK NAMESPACE</text>
+          <text id="s3-st2" x="165" y="50" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">eth0: 192.168.1.10 · lo: 127.0.0.1 · same routing table</text>
+          <rect id="s3-cont" x="30" y="72" width="130" height="50" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-ct1" x="95" y="88" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">CONTAINER</text>
+          <text id="s3-ct2" x="95" y="99" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="4" opacity="0">binds :3000</text>
+          <text id="s3-ct3" x="95" y="110" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">no eth0 — uses host's</text>
+          <rect id="s3-nopub" x="180" y="72" width="140" height="50" rx="4" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s3-np1" x="250" y="86" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">NO -p NEEDED</text>
+          <text id="s3-np2" x="250" y="97" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">container:3000 IS</text>
+          <text id="s3-np3" x="250" y="106" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">host:3000 directly</text>
+          <text id="s3-np4" x="250" y="115" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="3" opacity="0">zero NAT overhead</text>
+          <rect id="s3-ext" x="30" y="128" width="60" height="12" rx="2" fill="#0a0808" stroke="#555" stroke-width="1" opacity="0"/>
+          <text id="s3-ext-t" x="60" y="137" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="3" opacity="0">INTERNET → host:3000 directly</text>
+          <rect id="s3-warn" x="4" y="128" width="322" height="12" rx="2" fill="#1a0808" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3-warn-t" x="165" y="138" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3" opacity="0">⚠ Container can bind ANY host port · No network isolation · Linux only</text>
+        </svg>
+      </div>
+
+      <div id="s3-feats" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">HOST NETWORK PROPERTIES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="feat-row" id="hf1" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span>No NAT — <span style="color:#4eff9a">fastest possible network performance</span></span>
+          </div>
+          <div class="feat-row" id="hf2" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span>No -p flag needed — container ports = host ports directly</span>
+          </div>
+          <div class="feat-row" id="hf3" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✕</span>
+            <span style="color:#e85050">No network isolation — container can access all host ports</span>
+          </div>
+          <div class="feat-row" id="hf4" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✕</span>
+            <span style="color:#e85050">Port conflicts: two containers can't use same port</span>
+          </div>
+          <div class="feat-row" id="hf5" style="display:flex;align-items:center;gap:7px;font-size:7px">
+            <span style="color:#e8a020;flex-shrink:0">⚠</span>
+            <span style="color:#aaa">Linux only — no effect on Docker Desktop (Mac/Windows)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">💡</div>
+        <div class="step-text"><span class="gn">When to use host:</span> network-sensitive monitoring tools (Prometheus node_exporter), high-throughput proxies (Nginx), anything where NAT overhead matters. <span class="rd">Never use for untrusted code.</span></div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">!</div>
+        <div class="step-text">On <span class="am">Docker Desktop (Mac/Windows)</span> host networking is silently a no-op — there's a Linux VM in between. Your container still gets isolated. Only meaningful on bare Linux hosts.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">HOST NETWORK</div>
+    <div class="ih gn">Zero NAT. Container IS the host network.</div>
+    <div class="il" style="font-size:7px">Use for: network monitoring, high-throughput proxies, when every microsecond matters. Never for web apps or databases — too much blast radius if container is compromised.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">0</div><div class="sl">NAT<br>overhead</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">network<br>isolation</div></div>
+    <div class="sc"><div class="sv am">Linux</div><div class="sl">only works<br>on Linux</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 4: NONE + COMPARISON ═══════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#888">NONE + MODE COMPARISON</div>
+    <div class="hdr-sub">AIR-GAP · WHEN TO USE EACH · DECISION GUIDE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#888">MODE 3+</span>
+    <span class="sbadge" style="color:#888;border-color:#555">NONE + SUMMARY</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4-none-diag" style="border:2px solid #333;border-radius:3px;padding:10px;background:#040408;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#888;letter-spacing:1px;margin-bottom:8px;text-align:center">NONE — AIR-GAPPED CONTAINER</div>
+        <svg width="330" height="80" viewBox="0 0 330 80">
+          <rect x="80" y="4" width="170" height="60" rx="4" fill="#040408" stroke="#333" stroke-width="2"/>
+          <text x="165" y="22" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">CONTAINER</text>
+          <text x="165" y="34" text-anchor="middle" fill="#444" font-family="'Press Start 2P'" font-size="4">lo: 127.0.0.1 only</text>
+          <text x="165" y="46" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="3">no eth0 · no routes</text>
+          <text x="165" y="56" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="3">no outbound, no inbound</text>
+          <text x="30" y="30" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">INTERNET</text>
+          <line x1="60" y1="30" x2="80" y2="30" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="70" y="25" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="7">✕</text>
+          <text x="295" y="30" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="5">OTHER</text>
+          <line x1="250" y1="30" x2="280" y2="30" stroke="#333" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="265" y="25" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="7">✕</text>
+          <text x="165" y="75" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="3">use case: ML training jobs, offline data processing, security sandboxing</text>
+        </svg>
+      </div>
+
+      <div id="s4-cmp" style="opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:6px">WHEN TO USE EACH</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div class="use-card" id="uc1" style="border:1px solid #0a1a3a;border-radius:2px;padding:8px;background:#04060c">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:9px;flex-shrink:0">🌉</span>
+              <div style="font-size:8px;color:#4ec9e1">BRIDGE → Web apps, APIs, databases</div>
+            </div>
+            <div style="font-size:6px;color:#888;line-height:1.8">docker-compose default. Custom bridge for DNS. -p for external access. 99% of use cases.</div>
+          </div>
+          <div class="use-card" id="uc2" style="border:1px solid #0d2010;border-radius:2px;padding:8px;background:#040c04">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:9px;flex-shrink:0">⚡</span>
+              <div style="font-size:8px;color:#4eff9a">HOST → Monitoring, high-throughput proxies</div>
+            </div>
+            <div style="font-size:6px;color:#888;line-height:1.8">Prometheus node_exporter, performance-critical services. Linux only. Trusted workloads.</div>
+          </div>
+          <div class="use-card" id="uc3" style="border:1px solid #1a1a2e;border-radius:2px;padding:8px;background:#06060a">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:9px;flex-shrink:0">🚫</span>
+              <div style="font-size:8px;color:#888">NONE → Offline batch jobs, security sandboxing</div>
+            </div>
+            <div style="font-size:6px;color:#666;line-height:1.8">ML training, data transformations, cryptography operations, untrusted code execution.</div>
+          </div>
+          <div class="use-card" id="uc4" style="border:1px solid #1a0d2e;border-radius:2px;padding:8px;background:#060408">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:9px;flex-shrink:0">☁</span>
+              <div style="font-size:8px;color:#a060c0">OVERLAY → Multi-host Swarm / Kubernetes</div>
+            </div>
+            <div style="font-size:6px;color:#666;line-height:1.8">When containers span multiple Docker hosts. VXLAN tunnel. Used by docker swarm and flannel/calico in K8s.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-block cy" id="s4-s1">
+        <div class="step-num">💡</div>
+        <div class="step-text">In <span class="cy">docker-compose</span>, all services automatically join a custom bridge network named <span class="cy">[project]_default</span>. DNS works by service name. No configuration needed — this is the right default.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">NONE NETWORK</div>
+    <div class="ih">Total isolation. Only loopback. Maximum security.</div>
+    <div class="il" style="font-size:7px">docker run --network=none is the strongest isolation Docker offers. No packets in or out. Use for untrusted code, compliance-sensitive batch jobs, or anything that should never phone home.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">none</div><div class="sl">loopback<br>only</div></div>
+    <div class="sc"><div class="sv pu">overlay</div><div class="sl">multi-host<br>VXLAN</div></div>
+    <div class="sc"><div class="sv gn">compose</div><div class="sl">auto-bridge<br>with DNS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SCENE 5: INSPECT + DEBUG ═══════════════ -->
+<div class="scene" id="s5" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">INSPECT & DEBUG</div>
+    <div class="hdr-sub">USEFUL COMMANDS · TROUBLESHOOTING NETWORKS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">COMMANDS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CHEAT SHEET</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s5-term" style="border:2px solid #4ec9e1;border-radius:3px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0a1a2e;font-size:6px;color:#4ec9e1">Docker Networking Cheat Sheet</div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div class="tl" id="t1" style="color:#555"># list all networks</div>
+          <div class="tl" id="t2" style="color:#4ec9e1">docker network ls</div>
+          <div class="tl" id="t3" style="color:#555;margin-top:3px"># inspect network (see containers + IPs)</div>
+          <div class="tl" id="t4" style="color:#4ec9e1">docker network inspect myapp</div>
+          <div class="tl" id="t5" style="color:#555;margin-top:3px"># create custom bridge (with DNS)</div>
+          <div class="tl" id="t6" style="color:#4eff9a">docker network create --driver bridge myapp</div>
+          <div class="tl" id="t7" style="color:#555;margin-top:3px"># connect running container to network</div>
+          <div class="tl" id="t8" style="color:#4eff9a">docker network connect myapp container-name</div>
+          <div class="tl" id="t9" style="color:#555;margin-top:3px"># debug: exec into container, test connectivity</div>
+          <div class="tl" id="t10" style="color:#e8a020">docker exec -it api sh</div>
+          <div class="tl" id="t11" style="color:#e8a020">ping db  # works if on same custom bridge</div>
+          <div class="tl" id="t12" style="color:#e8a020">curl http://db:5432  # connect by name</div>
+          <div class="tl" id="t13" style="color:#555;margin-top:3px"># check container network settings</div>
+          <div class="tl" id="t14" style="color:#4ec9e1">docker inspect container --format '{{json .NetworkSettings}}'</div>
+          <div class="tl" id="t15" style="color:#555;margin-top:3px"># prune unused networks</div>
+          <div class="tl" id="t16" style="color:#e85050">docker network prune</div>
+        </div>
+      </div>
+
+      <div id="s5-gotchas" style="border:1px solid #2a1a00;border-radius:3px;padding:10px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:7px">COMMON GOTCHAS</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div class="feat-row" id="g1" style="display:flex;align-items:flex-start;gap:7px">
+            <span style="color:#e85050;flex-shrink:0;padding-top:1px">①</span>
+            <span><span style="color:#e85050">Default bridge has no DNS</span> — containers can't find each other by name. Always create a named network.</span>
+          </div>
+          <div class="feat-row" id="g2" style="display:flex;align-items:flex-start;gap:7px">
+            <span style="color:#e85050;flex-shrink:0;padding-top:1px">②</span>
+            <span><span style="color:#e85050">--network=host silently ignored</span> on Mac/Windows Docker Desktop. Works only on Linux.</span>
+          </div>
+          <div class="feat-row" id="g3" style="display:flex;align-items:flex-start;gap:7px">
+            <span style="color:#e8a020;flex-shrink:0;padding-top:1px">③</span>
+            <span><span style="color:#e8a020">-p 3000:3000 vs EXPOSE 3000</span> — EXPOSE is documentation only. -p actually publishes.</span>
+          </div>
+          <div class="feat-row" id="g4" style="display:flex;align-items:flex-start;gap:7px">
+            <span style="color:#4ec9e1;flex-shrink:0;padding-top:1px">④</span>
+            <span><span style="color:#4ec9e1">docker-compose auto-creates</span> a network. Services reach each other by service name, not container name.</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">RULE OF THUMB</div>
+    <div class="ih">docker-compose + custom bridge covers 99% of cases</div>
+    <div class="il" style="font-size:7px">If you're using docker-compose, you already have correct networking. If running standalone containers, create a named bridge network first, then --network=[name]. Never use default bridge for production.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv cy">network ls</div><div class="sl">list all<br>networks</div></div>
+    <div class="sc"><div class="sv gn">inspect</div><div class="sl">see IPs +<br>containers</div></div>
+    <div class="sc"><div class="sv am">connect</div><div class="sl">join running<br>container</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(4)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(5)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+const tl=id=>{const el=document.getElementById(id);if(el)el.classList.add('visible');}
+
+function goScene(n){
+  clearTimers();
+  const prev=document.getElementById('s'+currentScene);
+  const next=document.getElementById('s'+n);
+  const fwd=n>currentScene;
+
+  // position next off-screen in correct direction
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight; // force reflow
+
+  // animate both simultaneously
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+
+  prev.classList.remove('active');
+  next.classList.add('active');
+  currentScene=n;
+  resetScene(n);
+  delay(()=>playScene(n),80);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-hero','s1-modes','s1-cta'].forEach(id=>setOp(id,'0'));
+  }
+  if(n===2){
+    setOp('s2-diag','0'); setOp('s2-feats','0'); setOp('s2-cmds','0');
+    rmV('s2-s1');
+    const svgElems=['s2-ca','s2-ca-t1','s2-ca-t2','s2-ca-t3','s2-ca-t4',
+      's2-cb','s2-cb-t1','s2-cb-t2','s2-cb-t3','s2-cb-t4',
+      's2-ctoc','s2-ctoc-t','s2-bridge','s2-bridge-t',
+      's2-nat','s2-nat-t1','s2-nat-t2','s2-pub','s2-pub-t',
+      's2-ext','s2-l1','s2-l2'];
+    svgElems.forEach(id=>svgOp(id,'0'));
+    resetBeam('s2-ctoc'); resetBeam('s2-pub');
+    ['f1','f2','f3','f4','f5'].forEach(id=>rmV(id));
+    for(let i=1;i<=7;i++){const el=document.getElementById('c'+i);if(el)el.classList.remove('visible');}
+  }
+  if(n===3){
+    setOp('s3-diag','0'); setOp('s3-feats','0');
+    ['s3-s1','s3-s2'].forEach(id=>rmV(id));
+    ['s3-stack','s3-st1','s3-st2','s3-cont','s3-ct1','s3-ct2','s3-ct3',
+     's3-nopub','s3-np1','s3-np2','s3-np3','s3-np4',
+     's3-ext','s3-ext-t','s3-warn','s3-warn-t'].forEach(id=>svgOp(id,'0'));
+    ['hf1','hf2','hf3','hf4','hf5'].forEach(id=>rmV(id));
+  }
+  if(n===4){
+    setOp('s4-none-diag','0'); setOp('s4-cmp','0');
+    rmV('s4-s1');
+    ['uc1','uc2','uc3','uc4'].forEach(id=>rmV(id));
+  }
+  if(n===5){
+    setOp('s5-term','0'); setOp('s5-gotchas','0');
+    for(let i=1;i<=16;i++){const el=document.getElementById('t'+i);if(el)el.classList.remove('visible');}
+    ['g1','g2','g3','g4'].forEach(id=>rmV(id));
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>setOp('s1-hero','1'),200);
+    delay(()=>setOp('s1-modes','1'),900);
+    delay(()=>setOp('s1-cta','1'),1700);
+  }
+
+  if(n===2){
+    delay(()=>setOp('s2-diag','1'),200);
+    delay(()=>{ svgOp('s2-ca','1'); ['s2-ca-t1','s2-ca-t2','s2-ca-t3','s2-ca-t4'].forEach(id=>svgOp(id,'1')); },600);
+    delay(()=>{ svgOp('s2-cb','1'); ['s2-cb-t1','s2-cb-t2','s2-cb-t3','s2-cb-t4'].forEach(id=>svgOp(id,'1')); },900);
+    delay(()=>{ svgOp('s2-bridge','1'); svgOp('s2-bridge-t','1'); svgOp('s2-l1','1'); svgOp('s2-l2','1'); },1100);
+    delay(()=>{ goBeam('s2-ctoc',400); svgOp('s2-ctoc-t','1'); },1400);
+    delay(()=>{ svgOp('s2-nat','1'); svgOp('s2-nat-t1','1'); svgOp('s2-nat-t2','1'); },1700);
+    delay(()=>{ goBeam('s2-pub',400); svgOp('s2-pub-t','1'); svgOp('s2-ext','1'); },2000);
+    delay(()=>{
+      setOp('s2-feats','1');
+      ['f1','f2','f3','f4','f5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },1400);
+    delay(()=>{
+      setOp('s2-cmds','1');
+      for(let i=1;i<=7;i++) delay(()=>tl('c'+i),i*150);
+    },2400);
+    delay(()=>addV('s2-s1'),2600);
+  }
+
+  if(n===3){
+    delay(()=>setOp('s3-diag','1'),200);
+    delay(()=>{ svgOp('s3-stack','1'); svgOp('s3-st1','1'); svgOp('s3-st2','1'); },600);
+    delay(()=>{ svgOp('s3-cont','1'); svgOp('s3-ct1','1'); svgOp('s3-ct2','1'); svgOp('s3-ct3','1'); },1000);
+    delay(()=>{ svgOp('s3-nopub','1'); svgOp('s3-np1','1'); svgOp('s3-np2','1'); svgOp('s3-np3','1'); svgOp('s3-np4','1'); },1300);
+    delay(()=>{ svgOp('s3-warn','1'); svgOp('s3-warn-t','1'); },1700);
+    delay(()=>{
+      setOp('s3-feats','1');
+      ['hf1','hf2','hf3','hf4','hf5'].forEach((id,i)=>delay(()=>addV(id),i*200));
+    },1100);
+    delay(()=>addV('s3-s1'),1500);
+    delay(()=>addV('s3-s2'),2200);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-none-diag','1'),200);
+    delay(()=>{
+      setOp('s4-cmp','1');
+      ['uc1','uc2','uc3','uc4'].forEach((id,i)=>delay(()=>addV(id),i*300));
+    },700);
+    delay(()=>addV('s4-s1'),1800);
+  }
+
+  if(n===5){
+    delay(()=>setOp('s5-term','1'),200);
+    for(let i=1;i<=16;i++) delay(()=>tl('t'+i),400+i*180);
+    delay(()=>{
+      setOp('s5-gotchas','1');
+      ['g1','g2','g3','g4'].forEach((id,i)=>delay(()=>addV(id),i*300));
+    },3300);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

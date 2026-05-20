@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Health Checks & Dependencies</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════ SCENE 1 — THE PROBLEM -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">THE RACE CONDITION</div>
+    <div class="hdr-sub">BACKEND STARTS BEFORE DB IS READY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RACE COND</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Broken compose snippet -->
+      <div style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#150005;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml — ❌ BROKEN</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s1l1" class="tline" style="color:#aaa">services:</div>
+          <div id="s1l2" class="tline" style="color:#4ec9e1">  backend:</div>
+          <div id="s1l3" class="tline" style="color:#aaa">    image: myapp</div>
+          <div id="s1l4" class="tline" style="color:#e8a020">    depends_on:</div>
+          <div id="s1l5" class="tline" style="color:#e8a020">      - db       <span style="color:#e85050"># ← NOT ENOUGH!</span></div>
+          <div id="s1l6" class="tline" style="color:#aaa">  db:</div>
+          <div id="s1l7" class="tline" style="color:#aaa">    image: mysql:8</div>
+        </div>
+      </div>
+
+      <!-- Timeline: crash scenario -->
+      <div id="s1tl" class="panel" style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;font-size:6px;color:#555;border-bottom:1px solid #3a0010">STARTUP TIMELINE — WITHOUT HEALTH CHECK</div>
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <!-- Time axis -->
+          <line x1="20" y1="155" x2="346" y2="155" stroke="#2a0010" stroke-width="1.5"/>
+          <text x="183" y="167" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">TIME →</text>
+
+          <!-- DB row -->
+          <text x="20" y="38" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">DB</text>
+
+          <!-- DB starting block -->
+          <rect id="s1db1" x="50" y="26" width="55" height="18" rx="2" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s1dt1" x="77" y="39" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">STARTING</text>
+
+          <!-- DB initialising -->
+          <rect id="s1db2" x="108" y="26" width="65" height="18" rx="2" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s1dt2" x="140" y="39" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">INIT DATA...</text>
+
+          <!-- DB ready -->
+          <rect id="s1db3" x="176" y="26" width="65" height="18" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s1dt3" x="208" y="39" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ READY</text>
+
+          <!-- DB vertical to axis -->
+          <line id="s1dl" x1="50" y1="44" x2="50" y2="155" stroke="#1a0010" stroke-width="1" stroke-dasharray="2,2" opacity="0"/>
+
+          <!-- Backend row -->
+          <text x="20" y="86" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace">API</text>
+
+          <!-- Backend starts immediately -->
+          <rect id="s1be1" x="50" y="74" width="65" height="18" rx="2" fill="#100015" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <text id="s1bt1" x="82" y="87" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">STARTING</text>
+
+          <!-- Backend tries to connect -->
+          <rect id="s1be2" x="118" y="74" width="70" height="18" rx="2" fill="#100015" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s1bt2" x="153" y="87" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">CONNECT DB</text>
+
+          <!-- Backend CRASH -->
+          <rect id="s1be3" x="150" y="68" width="80" height="30" rx="2" fill="#2a0000" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s1bt3a" x="190" y="82" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">💥 CRASH</text>
+          <text id="s1bt3b" x="190" y="94" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ECONNREFUSED</text>
+
+          <!-- Arrow showing DB not ready yet at crash point -->
+          <line id="s1arr" x1="190" y1="100" x2="190" y2="130" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s1arrt" x="190" y="143" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">DB NOT READY YET</text>
+
+          <!-- Moving packet (connection attempt) -->
+          <circle id="s1pkt" cx="50" cy="83" r="3.5" fill="#e85050" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Error log -->
+      <div id="s1err" class="panel" style="background:#0d0002;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0005;padding:5px 10px;border-bottom:1px solid #3a0010">
+          <span style="font-size:6px;color:#e85050">ERROR LOG</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s1e1" class="tline" style="color:#e85050">Error: connect ECONNREFUSED 127.0.0.1:3306</div>
+          <div id="s1e2" class="tline" style="color:#aaa">at TCPConnectWrap.afterConnect</div>
+          <div id="s1e3" class="tline" style="color:#e8a020">Container exited with code 1</div>
+          <div id="s1e4" class="tline" style="color:#555"># depends_on only waits for container</div>
+          <div id="s1e5" class="tline" style="color:#555"># start — NOT for DB to be ready</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">depends_on only waits for the container to start, not the process inside.</div>
+    <div class="ih rd">MySQL takes ~5-15s to initialise. Your backend gives it 0ms.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">💥</div><div class="sl">CRASH</div></div>
+    <div class="sc"><div class="sv rd">0ms</div><div class="sl">WAIT TIME</div></div>
+    <div class="sc"><div class="sv am">⚠</div><div class="sl">RACE COND</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 2 — THE FIX: HEALTHCHECK -->
+<div class="scene" id="s2" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">THE FIX: HEALTHCHECK</div>
+    <div class="hdr-sub">condition: service_healthy</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">THE FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Fixed compose file -->
+      <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml — ✅ FIXED</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2l1" class="tline" style="color:#aaa">services:</div>
+          <div id="s2l2" class="tline" style="color:#4ec9e1">  backend:</div>
+          <div id="s2l3" class="tline" style="color:#aaa">    image: myapp</div>
+          <div id="s2l4" class="tline" style="color:#4eff9a">    depends_on:</div>
+          <div id="s2l5" class="tline" style="color:#4eff9a">      db:</div>
+          <div id="s2l6" class="tline" style="color:#4eff9a">        condition: service_healthy  <span style="color:#888">← KEY</span></div>
+          <div id="s2l7" class="tline" style="color:#aaa">  db:</div>
+          <div id="s2l8" class="tline" style="color:#aaa">    image: mysql:8</div>
+          <div id="s2l9" class="tline" style="color:#a080ff">    healthcheck:</div>
+          <div id="s2l10" class="tline" style="color:#a080ff">      test: ["CMD","mysqladmin","ping","-h","localhost"]</div>
+          <div id="s2l11" class="tline" style="color:#a080ff">      interval: 5s</div>
+          <div id="s2l12" class="tline" style="color:#a080ff">      timeout: 3s</div>
+          <div id="s2l13" class="tline" style="color:#a080ff">      retries: 5</div>
+          <div id="s2l14" class="tline" style="color:#a080ff">      start_period: 15s</div>
+        </div>
+      </div>
+
+      <!-- healthcheck anatomy card -->
+      <div id="s2anat" class="panel" style="background:#000d04;border-left:4px solid #a080ff;border-top:1px solid #1a0838;border-right:1px solid #1a0838;border-bottom:1px solid #1a0838;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🔬</span>
+          <span style="font-size:7.5px;color:#a080ff">HEALTHCHECK ANATOMY</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.2">
+          <div><span style="color:#a080ff">test</span>       — command to run (exit 0 = healthy)</div>
+          <div><span style="color:#a080ff">interval</span>   — how often to probe (5s)</div>
+          <div><span style="color:#a080ff">timeout</span>    — max time per probe (3s)</div>
+          <div><span style="color:#a080ff">retries</span>    — fails before unhealthy (5)</div>
+          <div><span style="color:#a080ff">start_period</span> — grace window for init (15s)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">start_period gives MySQL time to initialise without counting failures.</div>
+    <div class="ih pu">Compose won't start backend until DB probe returns exit 0.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">5s</div><div class="sl">INTERVAL</div></div>
+    <div class="sc"><div class="sv pu">5×</div><div class="sl">RETRIES</div></div>
+    <div class="sc"><div class="sv pu">15s</div><div class="sl">START GRACE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 3 — TIMELINE COMPARISON -->
+<div class="scene" id="s3" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">TIMELINE COMPARISON</div>
+    <div class="hdr-sub">BEFORE vs AFTER — SIDE BY SIDE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">TIMELINE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">COMPARE</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- BAD timeline -->
+      <div id="s3bad" class="panel" style="background:#080002;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;font-size:6px;color:#e85050;border-bottom:1px solid #3a0010">❌ WITHOUT HEALTH CHECK</div>
+        <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+          <!-- Axis -->
+          <line x1="14" y1="105" x2="352" y2="105" stroke="#2a0010" stroke-width="1"/>
+          <!-- T markers -->
+          <line x1="60" y1="102" x2="60" y2="108" stroke="#555" stroke-width="1"/>
+          <text x="60" y="116" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">0s</text>
+          <line x1="140" y1="102" x2="140" y2="108" stroke="#555" stroke-width="1"/>
+          <text x="140" y="116" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">5s</text>
+          <line x1="220" y1="102" x2="220" y2="108" stroke="#555" stroke-width="1"/>
+          <text x="220" y="116" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">10s</text>
+          <line x1="300" y1="102" x2="300" y2="108" stroke="#555" stroke-width="1"/>
+          <text x="300" y="116" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">15s</text>
+
+          <!-- DB bar -->
+          <text x="14" y="26" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">DB</text>
+          <rect id="s3db1" x="60" y="14" width="48" height="14" rx="1" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s3dt1" x="84" y="24" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">START</text>
+          <rect id="s3db2" x="110" y="14" width="80" height="14" rx="1" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s3dt2" x="150" y="24" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">INITIALISING...</text>
+          <rect id="s3db3" x="192" y="14" width="100" height="14" rx="1" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3dt3" x="242" y="24" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ READY (too late!)</text>
+
+          <!-- API bar -->
+          <text x="14" y="58" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">API</text>
+          <rect id="s3ab1" x="60" y="46" width="48" height="14" rx="1" fill="#100015" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <text id="s3at1" x="84" y="56" text-anchor="middle" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">START</text>
+          <rect id="s3ab2" x="110" y="43" width="56" height="20" rx="1" fill="#2a0000" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s3at2a" x="138" y="54" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">💥 CRASH</text>
+          <text id="s3at2b" x="138" y="66" text-anchor="middle" font-size="4" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ECONNREFUSED</text>
+
+          <!-- Restart loop -->
+          <text id="s3rl" x="183" y="88" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">↩ RESTART LOOP (every 10s)</text>
+
+          <!-- Packet animation -->
+          <circle id="s3pkt1" cx="60" cy="53" r="3" fill="#e85050" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- GOOD timeline -->
+      <div id="s3good" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;font-size:6px;color:#4eff9a;border-bottom:1px solid #0d3018">✅ WITH HEALTH CHECK</div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Axis -->
+          <line x1="14" y1="115" x2="352" y2="115" stroke="#0d3018" stroke-width="1"/>
+          <line x1="60" y1="112" x2="60" y2="118" stroke="#555" stroke-width="1"/>
+          <text x="60" y="126" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">0s</text>
+          <line x1="140" y1="112" x2="140" y2="118" stroke="#555" stroke-width="1"/>
+          <text x="140" y="126" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">5s</text>
+          <line x1="220" y1="112" x2="220" y2="118" stroke="#555" stroke-width="1"/>
+          <text x="220" y="126" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">10s</text>
+          <line x1="300" y1="112" x2="300" y2="118" stroke="#555" stroke-width="1"/>
+          <text x="300" y="126" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace">15s</text>
+
+          <!-- DB bar -->
+          <text x="14" y="24" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">DB</text>
+          <rect id="s3gdb1" x="60" y="14" width="48" height="14" rx="1" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s3gdt1" x="84" y="24" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">START</text>
+          <rect id="s3gdb2" x="110" y="14" width="80" height="14" rx="1" fill="#1a0020" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s3gdt2" x="150" y="24" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">INITIALISING...</text>
+
+          <!-- Health probe pings -->
+          <circle id="s3hp1" cx="110" cy="21" r="3" fill="#a080ff" opacity="0"/>
+          <circle id="s3hp2" cx="130" cy="21" r="3" fill="#a080ff" opacity="0"/>
+          <circle id="s3hp3" cx="150" cy="21" r="3" fill="#a080ff" opacity="0"/>
+          <circle id="s3hp4" cx="170" cy="21" r="3" fill="#a080ff" opacity="0"/>
+          <text id="s3hpt" x="115" y="12" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">PROBING...</text>
+
+          <!-- DB ready -->
+          <rect id="s3gdb3" x="192" y="14" width="66" height="14" rx="1" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3gdt3" x="225" y="24" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ HEALTHY</text>
+
+          <!-- Signal to API -->
+          <line id="s3sig" x1="225" y1="28" x2="225" y2="50" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="2,2" opacity="0"/>
+          <polygon id="s3sigp" points="225,54 221,46 229,46" fill="#4eff9a" opacity="0"/>
+          <text id="s3sigt" x="240" y="44" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">UNBLOCKED!</text>
+
+          <!-- API waiting -->
+          <text x="14" y="68" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">API</text>
+          <rect id="s3gab1" x="60" y="57" width="160" height="14" rx="1" fill="#0a0010" stroke="#555" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s3gat1" x="140" y="67" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">⏳ WAITING (blocked by Compose)</text>
+
+          <!-- API starts after signal -->
+          <rect id="s3gab2" x="224" y="57" width="55" height="14" rx="1" fill="#100015" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <text id="s3gat2" x="251" y="67" text-anchor="middle" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">START</text>
+
+          <!-- API healthy -->
+          <rect id="s3gab3" x="282" y="57" width="70" height="14" rx="1" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3gat3" x="317" y="67" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ RUNNING</text>
+
+          <!-- Packet moving cleanly -->
+          <circle id="s3pkt2" cx="224" cy="64" r="3" fill="#4eff9a" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Key insight -->
+      <div id="s3insight" class="panel" style="background:#000d04;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">💡</span>
+          <span style="font-size:7.5px;color:#4ec9e1">WHY THIS WORKS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>Compose tracks 3 health states:</div>
+          <div><span style="color:#e8a020">starting</span> → <span style="color:#e85050">unhealthy</span> → <span style="color:#4eff9a">healthy</span></div>
+          <div>Backend stays paused until DB hits healthy.</div>
+          <div>No retry logic needed in your app code.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Compose holds the backend in "paused" state until the probe passes.</div>
+    <div class="ih">No app-level retry loops. Docker handles the orchestration.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">💥</div><div class="sl">NO CHECK</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">WITH CHECK</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">CRASHES</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 4 — REAL-WORLD PATTERNS -->
+<div class="scene" id="s4" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">REAL-WORLD CHECKS</div>
+    <div class="hdr-sub">MYSQL · POSTGRES · REDIS · MONGO</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">PATTERNS</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">REFERENCE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- MySQL -->
+      <div id="s4m1" class="panel" style="background:#05000f;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0518;padding:4px 10px;border-bottom:1px solid #200838">
+          <span style="font-size:6.5px;color:#e8a020">🐬 MYSQL / MARIADB</span>
+        </div>
+        <div style="padding:6px 10px;font-size:6px;color:#a080ff;line-height:2.2">
+          <div>healthcheck:</div>
+          <div style="padding-left:8px">test: ["CMD","mysqladmin","ping","-h","localhost"]</div>
+          <div style="padding-left:8px">interval: 5s  timeout: 3s  retries: 5</div>
+          <div style="padding-left:8px;color:#4eff9a">start_period: 15s  <span style="color:#555"># init time!</span></div>
+        </div>
+      </div>
+
+      <!-- Postgres -->
+      <div id="s4m2" class="panel" style="background:#05000f;border:2px solid #4ec9e1;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0518;padding:4px 10px;border-bottom:1px solid #200838">
+          <span style="font-size:6.5px;color:#4ec9e1">🐘 POSTGRESQL</span>
+        </div>
+        <div style="padding:6px 10px;font-size:6px;color:#a080ff;line-height:2.2">
+          <div>healthcheck:</div>
+          <div style="padding-left:8px">test: ["CMD-SHELL","pg_isready -U $$POSTGRES_USER"]</div>
+          <div style="padding-left:8px">interval: 5s  timeout: 3s  retries: 5</div>
+        </div>
+      </div>
+
+      <!-- Redis -->
+      <div id="s4m3" class="panel" style="background:#05000f;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0518;padding:4px 10px;border-bottom:1px solid #200838">
+          <span style="font-size:6.5px;color:#e85050">⚡ REDIS</span>
+        </div>
+        <div style="padding:6px 10px;font-size:6px;color:#a080ff;line-height:2.2">
+          <div>healthcheck:</div>
+          <div style="padding-left:8px">test: ["CMD","redis-cli","ping"]</div>
+          <div style="padding-left:8px">interval: 3s  timeout: 2s  retries: 3</div>
+        </div>
+      </div>
+
+      <!-- depends_on multi-service -->
+      <div id="s4m4" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:4px 10px;border-bottom:1px solid #0d3018">
+          <span style="font-size:6.5px;color:#4eff9a">🔗 MULTIPLE DEPENDENCIES</span>
+        </div>
+        <div style="padding:6px 10px;font-size:6px;color:#4eff9a;line-height:2.2">
+          <div style="color:#aaa">depends_on:</div>
+          <div style="color:#4eff9a;padding-left:8px">db:</div>
+          <div style="color:#4eff9a;padding-left:16px">condition: service_healthy</div>
+          <div style="color:#4ec9e1;padding-left:8px">redis:</div>
+          <div style="color:#4ec9e1;padding-left:16px">condition: service_healthy</div>
+          <div style="color:#a080ff;padding-left:8px">migrations:</div>
+          <div style="color:#a080ff;padding-left:16px">condition: service_completed_successfully</div>
+        </div>
+      </div>
+
+      <!-- Gotcha card -->
+      <div id="s4gc" class="panel" style="background:#120000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚠️</span>
+          <span style="font-size:7.5px;color:#e85050">COMMON GOTCHAS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>• Omit start_period → fails during init</div>
+          <div>• Skip healthcheck block → condition ignored</div>
+          <div>• CMD vs CMD-SHELL: shell expands $$ vars</div>
+          <div>• Swarm needs HEALTHCHECK in Dockerfile too</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">service_completed_successfully is perfect for one-shot migration containers.</div>
+    <div class="ih pu">All three conditions work together in depends_on.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">healthy</div><div class="sl">SERVICE UP</div></div>
+    <div class="sc"><div class="sv am">starting</div><div class="sl">GRACE PERIOD</div></div>
+    <div class="sc"><div class="sv rd">unhealthy</div><div class="sl">PROBE FAIL</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); } });
+}
+function hide(id) { const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); } }
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity='1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity='0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2-x1)*p);
+      d.setAttribute('cy', y1 + (y2-y1)*p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1l1','s1l2','s1l3','s1l4','s1l5','s1l6','s1l7'].forEach(hideEl);
+    hide('s1tl'); hide('s1err');
+    ['s1db1','s1dt1','s1db2','s1dt2','s1db3','s1dt3','s1dl',
+     's1be1','s1bt1','s1be2','s1bt2','s1be3','s1bt3a','s1bt3b',
+     's1arr','s1arrt'].forEach(svgHide);
+    const p = document.getElementById('s1pkt'); if(p) p.setAttribute('opacity','0');
+  }
+  if (n === 2) {
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6','s2l7','s2l8',
+     's2l9','s2l10','s2l11','s2l12','s2l13','s2l14'].forEach(hideEl);
+    hide('s2anat');
+  }
+  if (n === 3) {
+    hide('s3bad'); hide('s3good'); hide('s3insight');
+    ['s3db1','s3dt1','s3db2','s3dt2','s3db3','s3dt3',
+     's3ab1','s3at1','s3ab2','s3at2a','s3at2b','s3rl',
+     's3gdb1','s3gdt1','s3gdb2','s3gdt2','s3gdb3','s3gdt3',
+     's3hp1','s3hp2','s3hp3','s3hp4','s3hpt',
+     's3sig','s3sigp','s3sigt',
+     's3gab1','s3gat1','s3gab2','s3gat2','s3gab3','s3gat3'].forEach(svgHide);
+    ['s3pkt1','s3pkt2'].forEach(id => { const e=document.getElementById(id); if(e) e.setAttribute('opacity','0'); });
+  }
+  if (n === 4) {
+    ['s4m1','s4m2','s4m3','s4m4','s4gc'].forEach(hide);
+  }
+}
+
+function play(n) {
+  if (n === 1) {
+    showEl('s1l1', 200); showEl('s1l2', 450); showEl('s1l3', 650);
+    showEl('s1l4', 850); showEl('s1l5', 1050); showEl('s1l6', 1250); showEl('s1l7', 1450);
+    show('s1tl', 1700);
+    // DB bars
+    svgShow('s1db1', 2000); svgShow('s1dt1', 2000); svgShow('s1dl', 2000);
+    svgShow('s1db2', 2500); svgShow('s1dt2', 2500);
+    svgShow('s1db3', 3500); svgShow('s1dt3', 3500);
+    // API bars
+    svgShow('s1be1', 2000); svgShow('s1bt1', 2000);
+    svgShow('s1be2', 2500); svgShow('s1bt2', 2500);
+    // Packet shoots toward DB, gets refused
+    movePkt('s1pkt', 50, 83, 115, 50, 2700, 300);
+    // Crash
+    svgShow('s1be3', 3050); svgShow('s1bt3a', 3050); svgShow('s1bt3b', 3200);
+    svgShow('s1arr', 3400); svgShow('s1arrt', 3400);
+    show('s1err', 3700);
+    showEl('s1e1', 3800); showEl('s1e2', 4100); showEl('s1e3', 4400);
+    showEl('s1e4', 4700); showEl('s1e5', 4950);
+  }
+
+  if (n === 2) {
+    showEl('s2l1', 200); showEl('s2l2', 400); showEl('s2l3', 600);
+    showEl('s2l4', 800); showEl('s2l5', 950); showEl('s2l6', 1100);
+    showEl('s2l7', 1400); showEl('s2l8', 1600);
+    showEl('s2l9', 1900); showEl('s2l10', 2100); showEl('s2l11', 2300);
+    showEl('s2l12', 2500); showEl('s2l13', 2700); showEl('s2l14', 2900);
+    show('s2anat', 3300);
+  }
+
+  if (n === 3) {
+    show('s3bad', 200);
+    // Bad timeline
+    svgShow('s3db1', 600); svgShow('s3dt1', 600);
+    svgShow('s3db2', 1000); svgShow('s3dt2', 1000);
+    svgShow('s3ab1', 600); svgShow('s3at1', 600);
+    svgShow('s3ab2', 1050); svgShow('s3at2a', 1050); svgShow('s3at2b', 1200);
+    svgShow('s3db3', 1600); svgShow('s3dt3', 1600);
+    svgShow('s3rl', 1800);
+    movePkt('s3pkt1', 60, 53, 112, 21, 900, 300);
+
+    show('s3good', 2200);
+    // Good timeline
+    svgShow('s3gdb1', 2600); svgShow('s3gdt1', 2600);
+    svgShow('s3gab1', 2600); svgShow('s3gat1', 2600);
+    svgShow('s3gdb2', 3000); svgShow('s3gdt2', 3000);
+    // Health probes appearing one by one
+    svgShow('s3hpt', 3000);
+    svgShow('s3hp1', 3100); svgShow('s3hp2', 3400); svgShow('s3hp3', 3700); svgShow('s3hp4', 4000);
+    // DB goes healthy
+    svgShow('s3gdb3', 4200); svgShow('s3gdt3', 4200);
+    // Signal unlocks API
+    svgShow('s3sig', 4400); svgShow('s3sigp', 4400); svgShow('s3sigt', 4500);
+    svgShow('s3gab2', 4600); svgShow('s3gat2', 4600);
+    movePkt('s3pkt2', 224, 64, 282, 64, 4700, 350);
+    svgShow('s3gab3', 5100); svgShow('s3gat3', 5100);
+    show('s3insight', 5500);
+  }
+
+  if (n === 4) {
+    show('s4m1', 300);
+    show('s4m2', 900);
+    show('s4m3', 1500);
+    show('s4m4', 2100);
+    show('s4gc', 2900);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

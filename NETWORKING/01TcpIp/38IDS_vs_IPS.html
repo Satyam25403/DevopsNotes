@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>IDS vs IPS</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:11px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.rd{border-color:#e85050}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── node box ── */
+.nbox{border:2px solid #2a1f3d;border-radius:3px;padding:7px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;transition:border-color .3s,background .3s}
+.nbox-icon{font-size:14px;line-height:1}
+.nbox-lbl{font-size:6px;color:#888;text-align:center;line-height:1.5}
+.nbox-role{font-size:7px;text-align:center}
+
+/* ── packet beam ── */
+.beam-wrap{position:relative;height:14px;display:flex;align-items:center}
+.beam-track{position:absolute;left:0;right:0;height:2px;background:#1a1a2a;border-radius:1px}
+.beam-fill{position:absolute;left:0;height:2px;width:0;border-radius:1px;transition:width .55s ease-out}
+.beam-pkt{position:absolute;width:9px;height:9px;border-radius:50%;top:50%;transform:translate(-50%,-50%);left:0%;transition:left .55s ease-out,opacity .3s,background .3s;opacity:0;z-index:2}
+.beam-lbl{position:absolute;font-size:5px;font-family:'Press Start 2P',monospace;white-space:nowrap;top:-10px;left:50%;transform:translateX(-50%);color:#888;opacity:0;transition:opacity .3s}
+
+/* ── alert badge ── */
+.alert-badge{font-size:7px;padding:3px 8px;border-radius:2px;opacity:0;transition:opacity .4s;white-space:nowrap}
+.alert-badge.alert{background:#e8a02022;border:1px solid #e8a020;color:#e8a020}
+.alert-badge.drop{background:#e8505022;border:1px solid #e85050;color:#e85050}
+.alert-badge.pass{background:#4eff9a22;border:1px solid #4eff9a;color:#4eff9a}
+
+/* ── SPAN tap ── */
+.span-tap{position:relative;display:flex;flex-direction:column;align-items:center}
+.span-line{width:2px;height:24px;background:#4ec9e140;border-radius:1px;transition:background .3s}
+.span-line.active-span{background:#4ec9e1;box-shadow:0 0 6px #4ec9e160}
+
+/* ── step rows ── */
+.step-row{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;border-radius:3px;background:#130d1e;opacity:0;transition:opacity .4s;border-left:3px solid #2a1f3d}
+.step-row.ok{border-color:#4eff9a}
+.step-row.warn{border-color:#e8a020}
+.step-row.info{border-color:#4ec9e1}
+.step-row.rd{border-color:#e85050}
+.step-num{font-size:7px;color:#555;flex-shrink:0;min-width:14px}
+.step-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── snort rule line ── */
+.rule-line{font-size:7px;padding:5px 8px;background:#050c0f;border-left:3px solid #4ec9e1;margin-bottom:4px;opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;border-radius:0 2px 2px 0;word-break:break-all}
+.rk{color:#4ec9e1}
+.rv{color:#4eff9a}
+.rr{color:#e8a020}
+.re{color:#e85050}
+
+/* ── compare rows ── */
+.cmp-row{display:flex;gap:5px;margin-bottom:4px;opacity:0;transition:opacity .35s}
+.cmp-kw{font-size:7px;min-width:68px;flex-shrink:0;padding:5px 6px;border-radius:2px;text-align:center}
+.cmp-cell{flex:1;font-size:6px;color:#ccc;line-height:2;padding:5px 7px;background:#130d1e;border:1px solid #1a1a2a;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: IDS vs IPS Architecture ══════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">IDS vs IPS</div>
+    <div class="hdr-sub">DETECTION vs PREVENTION</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PLACEMENT & ROLE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CAMERA vs GUARD</span>
+  </div>
+
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">The key difference is <span style="color:#e8a020">where</span> they sit in the packet path.</div>
+
+      <!-- IDS block -->
+      <div style="background:#130d1e;border:2px solid #4ec9e1;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#4ec9e1;margin-bottom:8px">IDS — INTRUSION DETECTION SYSTEM</div>
+
+        <!-- Flow: client → switch → server, with SPAN copy -->
+        <div style="display:flex;align-items:center;gap:4px;position:relative">
+          <div class="nbox" style="border-color:#555;flex:1">
+            <div class="nbox-icon">💀</div>
+            <div class="nbox-lbl">attacker</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <div class="beam-wrap">
+              <div class="beam-track"></div>
+              <div class="beam-fill" id="ids_beam1" style="background:#e8a020"></div>
+              <div class="beam-pkt" id="ids_pkt1" style="background:#e8a020"></div>
+              <div class="beam-lbl" id="ids_lbl1">evil pkt</div>
+            </div>
+          </div>
+          <!-- switch with SPAN -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:0">
+            <div class="nbox" id="ids_switch" style="border-color:#555;padding:5px 6px">
+              <div class="nbox-icon" style="font-size:11px">🔀</div>
+              <div class="nbox-lbl">switch<br>SPAN</div>
+            </div>
+            <div class="span-tap">
+              <div class="span-line" id="ids_span_line"></div>
+              <div class="nbox" id="ids_box" style="border-color:#4ec9e1;background:#4ec9e10d;padding:5px 6px;width:58px">
+                <div class="nbox-icon" style="font-size:11px">📷</div>
+                <div class="nbox-lbl" style="color:#4ec9e1">IDS<br>OUT-OF-BAND</div>
+              </div>
+            </div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:2px">
+            <div class="beam-wrap">
+              <div class="beam-track"></div>
+              <div class="beam-fill" id="ids_beam2" style="background:#e8a020"></div>
+              <div class="beam-pkt" id="ids_pkt2" style="background:#e8a020"></div>
+            </div>
+          </div>
+          <div class="nbox" style="border-color:#555;flex:1">
+            <div class="nbox-icon">🖥</div>
+            <div class="nbox-lbl">server</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:center;margin-top:8px">
+          <div class="alert-badge alert" id="ids_alert">⚠ ALERT fired — log only</div>
+        </div>
+        <div style="font-size:7px;color:#ccc;margin-top:7px;line-height:2">
+          ✓ Zero latency impact (copy of traffic)<br>
+          ✓ Never drops packets<br>
+          <span style="color:#e85050">✗ Attack reaches server — detect only</span>
+        </div>
+      </div>
+
+      <!-- IPS block -->
+      <div style="background:#130d1e;border:2px solid #e85050;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#e85050;margin-bottom:8px">IPS — INTRUSION PREVENTION SYSTEM</div>
+
+        <!-- Inline flow -->
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="nbox" style="border-color:#555;flex:1">
+            <div class="nbox-icon">💀</div>
+            <div class="nbox-lbl">attacker</div>
+          </div>
+          <div style="flex:1">
+            <div class="beam-wrap">
+              <div class="beam-track"></div>
+              <div class="beam-fill" id="ips_beam1" style="background:#e85050"></div>
+              <div class="beam-pkt" id="ips_pkt1" style="background:#e85050"></div>
+              <div class="beam-lbl" id="ips_lbl1">evil pkt</div>
+            </div>
+          </div>
+          <div class="nbox" id="ips_box" style="border-color:#e85050;background:#e8505010;padding:5px 6px">
+            <div class="nbox-icon" style="font-size:11px">🛡</div>
+            <div class="nbox-lbl" style="color:#e85050">IPS<br>INLINE</div>
+          </div>
+          <div style="flex:1">
+            <div class="beam-wrap">
+              <div class="beam-track"></div>
+              <div class="beam-fill" id="ips_beam2" style="background:#e85050;width:0%"></div>
+              <div class="beam-pkt" id="ips_pkt2" style="background:#e85050"></div>
+            </div>
+          </div>
+          <div class="nbox" style="border-color:#555;flex:1">
+            <div class="nbox-icon">🖥</div>
+            <div class="nbox-lbl">server</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:center;margin-top:8px">
+          <div class="alert-badge drop" id="ips_drop">🚫 PACKET DROPPED</div>
+        </div>
+        <div style="font-size:7px;color:#ccc;margin-top:7px;line-height:2">
+          ✓ Blocks attack before server sees it<br>
+          <span style="color:#e85050">✗ Adds latency (inline inspection)</span><br>
+          <span style="color:#e85050">✗ Device fail = network fail (use fail-open)</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">IDS = out-of-band copy via SPAN port. Alert only. Zero latency impact.</div>
+    <div class="ih am">IPS = inline. Drops packets. A failed IPS device can take down your network.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">IDS</div><div class="sl">SPAN<br>COPY</div></div>
+    <div class="sc"><div class="sv rd">IPS</div><div class="sl">INLINE<br>DROP</div></div>
+    <div class="sc"><div class="sv am">FAIL<br>OPEN</div><div class="sl">IPS HW<br>BYPASS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: Signature vs Anomaly Detection ══════ -->
+<div class="scene" id="s2" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">IDS vs IPS</div>
+    <div class="hdr-sub">SIGNATURE vs ANOMALY DETECTION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">DETECTION ENGINES</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">TWO MODES</span>
+  </div>
+
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">How does the IDS/IPS decide what's malicious?</div>
+
+      <!-- Signature-based -->
+      <div style="background:#130d1e;border:2px solid #e8a020;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#e8a020;margin-bottom:7px">SIGNATURE-BASED</div>
+
+        <div style="font-size:7px;color:#ccc;margin-bottom:7px;line-height:1.9">Match traffic against a database of known attack patterns.</div>
+
+        <div style="display:flex;gap:5px;margin-bottom:7px">
+          <div style="flex:1;background:#e8a02010;border:1px solid #e8a02040;border-radius:2px;padding:6px;text-align:center">
+            <div style="font-size:8px;color:#e8a020">📋</div>
+            <div style="font-size:6px;color:#ccc;margin-top:3px;line-height:1.8">SIGNATURE DB<br>CVE-2024-xxxx<br>SQL injection<br>XSS patterns</div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:10px;color:#4ec9e1">↔</div>
+          <div style="flex:1;background:#4ec9e110;border:1px solid #4ec9e140;border-radius:2px;padding:6px;text-align:center">
+            <div style="font-size:8px">📦</div>
+            <div style="font-size:6px;color:#ccc;margin-top:3px;line-height:1.8">PACKET<br>PAYLOAD<br>MATCH?</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#4eff9a0d;border:1px solid #4eff9a40;border-radius:2px;padding:5px;text-align:center;opacity:0;transition:opacity .3s" id="sig_pro">
+            <div style="font-size:6px;color:#4eff9a;line-height:1.8">✓ Low false positives<br>✓ Fast matching<br>✓ Accurate for known CVEs</div>
+          </div>
+          <div style="flex:1;background:#e8505010;border:1px solid #e8505040;border-radius:2px;padding:5px;text-align:center;opacity:0;transition:opacity .3s" id="sig_con">
+            <div style="font-size:6px;color:#e85050;line-height:1.8">✗ Zero-days = invisible<br>✗ Needs daily updates<br>✗ Only known patterns</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Anomaly-based -->
+      <div style="background:#130d1e;border:2px solid #b07fff;border-radius:3px;padding:9px 10px">
+        <div style="font-size:8px;color:#b07fff;margin-bottom:7px">ANOMALY-BASED (BEHAVIOUR)</div>
+
+        <div style="font-size:7px;color:#ccc;margin-bottom:7px;line-height:1.9">Learn normal baseline → alert on deviations.</div>
+
+        <!-- baseline chart -->
+        <div style="background:#0a0a0f;border:1px solid #1a1a2a;border-radius:2px;padding:6px;margin-bottom:7px">
+          <div style="font-size:6px;color:#555;margin-bottom:4px">TRAFFIC BASELINE (requests/sec)</div>
+          <div style="display:flex;align-items:flex-end;gap:2px;height:28px">
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:40%;transition:height .4s" id="ab0"></div>
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:55%;transition:height .4s" id="ab1"></div>
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:50%;transition:height .4s" id="ab2"></div>
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:45%;transition:height .4s" id="ab3"></div>
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:60%;transition:height .4s" id="ab4"></div>
+            <div style="flex:1;background:#b07fff40;border-radius:1px 1px 0 0;height:48%;transition:height .4s" id="ab5"></div>
+            <div style="flex:1;background:#e8505080;border-radius:1px 1px 0 0;height:0%;transition:height .6s" id="ab6"></div>
+            <div style="flex:1;background:#e8505080;border-radius:1px 1px 0 0;height:0%;transition:height .6s" id="ab7"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:3px">
+            <div style="font-size:5px;color:#555">normal</div>
+            <div style="font-size:5px;color:#e85050" id="anomaly_lbl" style="opacity:0">← SPIKE DETECTED</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:6px">
+          <div style="flex:1;background:#4eff9a0d;border:1px solid #4eff9a40;border-radius:2px;padding:5px;text-align:center;opacity:0;transition:opacity .3s" id="anom_pro">
+            <div style="font-size:6px;color:#4eff9a;line-height:1.8">✓ Catches zero-days<br>✓ No signature needed<br>✓ Novel attack patterns</div>
+          </div>
+          <div style="flex:1;background:#e8505010;border:1px solid #e8505040;border-radius:2px;padding:5px;text-align:center;opacity:0;transition:opacity .3s" id="anom_con">
+            <div style="font-size:6px;color:#e85050;line-height:1.8">✗ High false positive rate<br>✗ Needs training period<br>✗ Flash sales = alerts</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Signature = known attacks only. Anomaly = catches zero-days but noisy.</div>
+    <div class="ih">Production: run both. Signature for precision, anomaly for unknown threats.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">SIG</div><div class="sl">LOW FP<br>KNOWN ONLY</div></div>
+    <div class="sc"><div class="sv" style="color:#b07fff">ANOM</div><div class="sl">ZERO-DAY<br>HIGH FP</div></div>
+    <div class="sc"><div class="sv gn">BOTH</div><div class="sl">PROD<br>SETUP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Snort/Suricata Rules + Decision Guide ══════ -->
+<div class="scene" id="s3" style="background:#091420">
+  <div class="hdr" style="background:#091420">
+    <div class="hdr-title">IDS vs IPS</div>
+    <div class="hdr-sub">SNORT RULES & WHEN TO USE EACH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SNORT / SURICATA</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">RULES</span>
+  </div>
+
+  <div class="anim" style="background:#091420">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Snort rules are human-readable. Each field has a specific meaning.</div>
+
+      <!-- Rule anatomy -->
+      <div class="rule-line" id="rl0" style="border-color:#e8a020">
+        <span style="color:#555"># SQL injection attempt on HTTP</span><br>
+        <span class="rk">alert</span> <span class="rr">tcp</span> <span class="rv">any any</span> <span class="rr">-&gt;</span> <span class="rv">any 80</span> (<br>
+        &nbsp;&nbsp;<span class="rk">msg:</span><span class="rv">"SQLi attempt"</span>;<br>
+        &nbsp;&nbsp;<span class="rk">content:</span><span class="rv">"1=1"</span>; <span class="rk">nocase</span>;<br>
+        &nbsp;&nbsp;<span class="rk">sid:</span><span class="rv">1000001</span>; <span class="rk">rev:</span><span class="rv">1</span>;<br>
+        )
+      </div>
+
+      <div class="rule-line" id="rl1" style="border-color:#e85050">
+        <span style="color:#555"># IPS mode: DROP the packet</span><br>
+        <span class="re">drop</span> <span class="rr">tcp</span> <span class="rv">any any</span> <span class="rr">-&gt;</span> <span class="rv">any 22</span> (<br>
+        &nbsp;&nbsp;<span class="rk">msg:</span><span class="rv">"SSH brute force"</span>;<br>
+        &nbsp;&nbsp;<span class="rk">detection_filter:</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;track by_src, count <span class="rv">5</span>, seconds <span class="rv">60</span>;<br>
+        &nbsp;&nbsp;<span class="rk">sid:</span><span class="rv">1000002</span>;<br>
+        )
+      </div>
+
+      <div class="rule-line" id="rl2" style="border-color:#4eff9a">
+        <span style="color:#555"># IDS mode: alert = log only, never blocks</span><br>
+        <span class="rk">alert</span> keyword → <span class="rv">log + notify</span> (IDS)<br>
+        <span class="re">drop</span> keyword → <span class="rv">block packet</span> (IPS mode)
+      </div>
+
+      <!-- Decision table -->
+      <div id="s3_table" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">WHEN TO USE WHICH</div>
+
+        <div class="cmp-row" id="cr0">
+          <div class="cmp-kw" style="background:#4ec9e118;border:1px solid #4ec9e140;color:#4ec9e1">USE IDS</div>
+          <div class="cmp-cell">
+            Need visibility without risk<br>
+            Prod traffic you can't afford to drop<br>
+            Initial deployment / tuning phase
+          </div>
+        </div>
+        <div class="cmp-row" id="cr1">
+          <div class="cmp-kw" style="background:#e8505018;border:1px solid #e8505040;color:#e85050">USE IPS</div>
+          <div class="cmp-cell">
+            Known-good traffic patterns established<br>
+            Low tolerance for attack reach<br>
+            Must have fail-open bypass hardware
+          </div>
+        </div>
+        <div class="cmp-row" id="cr2">
+          <div class="cmp-kw" style="background:#4eff9a18;border:1px solid #4eff9a40;color:#4eff9a">BOTH</div>
+          <div class="cmp-cell">
+            IDS for east-west (internal) traffic<br>
+            IPS at perimeter (north-south)<br>
+            Tune signatures on IDS before promoting to IPS
+          </div>
+        </div>
+
+        <div style="background:#130d1e;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .4s" id="s3_answer">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">INTERVIEW ANSWER</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            "Deploy IDS first — tune rules until false positives are minimal. Promote to IPS only at the perimeter with fail-open bypass. Run anomaly detection alongside for zero-day coverage."
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">alert = IDS mode. drop = IPS mode. Same rule syntax, different action.</div>
+    <div class="ih">Tune on IDS, promote to IPS. Always deploy fail-open bypass hardware inline.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">ALERT</div><div class="sl">IDS<br>ACTION</div></div>
+    <div class="sc"><div class="sv rd">DROP</div><div class="sl">IPS<br>ACTION</div></div>
+    <div class="sc"><div class="sv gn">TUNE</div><div class="sl">IDS FIRST<br>THEN IPS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* helpers for beam animation */
+function fireBeam(beamId,pktId,lblId,pct,clr,ms,cb){
+  delay(function(){
+    var b=document.getElementById(beamId);
+    var p=document.getElementById(pktId);
+    var l=lblId?document.getElementById(lblId):null;
+    if(b)b.style.width=(pct||100)+'%';
+    if(p){p.style.opacity='1';p.style.left=(pct||100)+'%';}
+    if(l)l.style.opacity='1';
+    if(cb)delay(cb,600);
+  },ms);
+}
+function resetBeam(beamId,pktId,lblId){
+  var b=document.getElementById(beamId);var p=document.getElementById(pktId);var l=lblId?document.getElementById(lblId):null;
+  if(b){b.style.transition='none';b.style.width='0%';setTimeout(function(){if(b)b.style.transition='width .55s ease-out';},50);}
+  if(p){p.style.transition='none';p.style.opacity='0';p.style.left='0%';setTimeout(function(){if(p){p.style.transition='left .55s ease-out,opacity .3s,background .3s';}},50);}
+  if(l){l.style.opacity='0';}
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  resetBeam('ids_beam1','ids_pkt1','ids_lbl1');
+  resetBeam('ids_beam2','ids_pkt2',null);
+  resetBeam('ips_beam1','ips_pkt1','ips_lbl1');
+  resetBeam('ips_beam2','ips_pkt2',null);
+  hide('ids_alert');
+  hide('ips_drop');
+  document.getElementById('ids_span_line').classList.remove('active-span');
+
+  // IDS: packet travels through to server (attack succeeds), SPAN copy fires alert
+  fireBeam('ids_beam1','ids_pkt1','ids_lbl1',100,'#e8a020',400,function(){
+    document.getElementById('ids_span_line').classList.add('active-span');
+  });
+  fireBeam('ids_beam2','ids_pkt2',null,100,'#e8a020',900,function(){
+    show('ids_alert');
+  });
+
+  // IPS: packet stops at IPS, never reaches server
+  fireBeam('ips_beam1','ips_pkt1','ips_lbl1',100,'#e85050',2200,function(){
+    // pkt turns red/blocked
+    var p=document.getElementById('ips_pkt1');
+    if(p)p.style.background='#e85050';
+    show('ips_drop');
+    // beam2 stays at 0 — packet never passes
+  });
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['sig_pro','sig_con','anom_pro','anom_con'].forEach(hide);
+  hide('anomaly_lbl');
+  // reset bars
+  ['ab0','ab1','ab2','ab3','ab4','ab5'].forEach(function(id){
+    var e=document.getElementById(id);
+    if(e)e.style.height={ab0:'40%',ab1:'55%',ab2:'50%',ab3:'45%',ab4:'60%',ab5:'48%'}[id];
+  });
+  document.getElementById('ab6').style.height='0%';
+  document.getElementById('ab7').style.height='0%';
+
+  delay(function(){show('sig_pro');},500);
+  delay(function(){show('sig_con');},1000);
+
+  // anomaly bars spike
+  delay(function(){
+    document.getElementById('ab6').style.height='95%';
+    document.getElementById('ab7').style.height='88%';
+    delay(function(){show('anomaly_lbl');},650);
+  },1800);
+  delay(function(){show('anom_pro');},2600);
+  delay(function(){show('anom_con');},3100);
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['rl0','rl1','rl2'].forEach(hide);
+  hide('s3_table');
+  hide('s3_answer');
+  ['cr0','cr1','cr2'].forEach(hide);
+
+  delay(function(){show('rl0');},400);
+  delay(function(){show('rl1');},1300);
+  delay(function(){show('rl2');},2200);
+  delay(function(){show('s3_table');},3000);
+  delay(function(){show('cr0');},3100);
+  delay(function(){show('cr1');},3500);
+  delay(function(){show('cr2');},3900);
+  delay(function(){show('s3_answer');},4500);
+}
+
+playS1();
+</script>
+</body>
+</html>

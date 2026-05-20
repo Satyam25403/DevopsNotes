@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker: Never Run as Root</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: THE PROBLEM -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">🐳 DOCKER ROOT RISK</div>
+    <div class="hdr-sub">YOUR CONTAINER IS RUNNING AS ROOT</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">⚠ THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CRITICAL VULN</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal: show who you are -->
+      <div style="background:#050002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">container shell</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">whoami</span></div>
+          <div id="s1l1" class="tline" style="color:#e85050;font-size:7px">root</div>
+          <div id="s1l2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">id</span></div>
+          <div id="s1l3" class="tline" style="color:#e85050">uid=0(root) gid=0(root)</div>
+          <div id="s1l4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">cat /etc/shadow</span></div>
+          <div id="s1l5" class="tline" style="color:#e8a020">root:$6$xyz...  ← host secrets VISIBLE</div>
+        </div>
+      </div>
+
+      <!-- Warning card -->
+      <div id="s1c1" class="panel" style="background:#100008;border-left:4px solid #e85050;border-top:1px solid #3a0010;border-right:1px solid #3a0010;border-bottom:1px solid #3a0010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">☠</span>
+          <span style="font-size:7.5px;color:#e85050">DEFAULT: UID 0 = ROOT</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker containers run as root by default. If a process inside is compromised, the attacker has root privileges — no password needed.</div>
+      </div>
+
+      <!-- Privilege diagram -->
+      <div id="s1c2" class="panel" style="background:#080002;border:2px solid #2a0008;border-radius:3px;overflow:hidden">
+        <div style="padding:8px 10px 4px;font-size:6.5px;color:#555;text-align:center">PRIVILEGE MAPPING</div>
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <!-- Container box -->
+          <rect x="10" y="15" width="160" height="80" rx="4" fill="#1a0008" stroke="#3a0010" stroke-width="1.5"/>
+          <text x="90" y="32" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <rect x="25" y="42" width="130" height="40" rx="3" fill="#2a0010" stroke="#e85050" stroke-width="1" stroke-dasharray="3,2"/>
+          <text x="90" y="59" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">process</text>
+          <text x="90" y="72" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">uid=0 (root)</text>
+          <!-- Arrow -->
+          <line x1="172" y1="55" x2="194" y2="55" stroke="#e85050" stroke-width="2" marker-end="url(#rarr)"/>
+          <text x="183" y="49" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">MAPS TO</text>
+          <!-- Host box -->
+          <rect x="196" y="15" width="160" height="80" rx="4" fill="#1a0008" stroke="#e85050" stroke-width="1.5"/>
+          <text x="276" y="32" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace">HOST OS</text>
+          <rect x="211" y="42" width="130" height="40" rx="3" fill="#3a0008" stroke="#e85050" stroke-width="1.5"/>
+          <text x="276" y="59" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">uid=0 (root)</text>
+          <text x="276" y="72" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">FULL CONTROL</text>
+          <defs><marker id="rarr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/></marker></defs>
+        </svg>
+      </div>
+
+      <!-- Severity note -->
+      <div id="s1c3" class="panel" style="background:#0a0005;border:1px solid #2a0010;border-radius:3px;padding:10px 12px">
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="color:#e85050;margin-bottom:4px">💀 BLAST RADIUS: UNLIMITED</div>
+          <div>→ Read/write any host file</div>
+          <div>→ Escape container via /proc</div>
+          <div>→ Install kernel modules</div>
+          <div>→ Access all other containers</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Default Docker image = root user. One exploited dependency = game over.</div>
+    <div class="ih rd">uid=0 in container → uid=0 on host. No jail break needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">UID 0</div><div class="sl">DEFAULT<br>DOCKER UID</div></div>
+    <div class="sc"><div class="sv rd">100%</div><div class="sl">HOST FILE<br>ACCESS</div></div>
+    <div class="sc"><div class="sv am">CVE-∞</div><div class="sl">ROOT ESCAPE<br>VECTORS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: ATTACK SCENARIO -->
+<div class="scene" id="s2" style="background:#0a0003">
+  <div class="hdr" style="background:#0a0003;border-bottom:1px solid #3a1500">
+    <div class="hdr-title" style="color:#e8a020">💀 ATTACK SCENARIO</div>
+    <div class="hdr-sub">EXPLOITED APP → ROOT ESCAPE</div>
+    <div class="dots">
+      <div class="dot done" id="d2-1"></div>
+      <div class="dot active" id="d2-2"></div>
+      <div class="dot" id="d2-3"></div>
+      <div class="dot" id="d2-4"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0003">
+    <span class="slabel" style="color:#e8a020">⚡ ATTACK CHAIN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ROOT ESCAPE</span>
+  </div>
+  <div class="anim" style="background:#0a0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Attack flow SVG -->
+      <div style="background:#050001;border:2px solid #2a1000;border-radius:3px;overflow:hidden">
+        <div style="padding:7px 10px 4px;font-size:6.5px;color:#555;text-align:center">ATTACK PROGRESSION</div>
+        <svg width="100%" height="200" viewBox="0 0 366 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="atk" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- Step 1: Attacker -->
+          <g id="a2b1" opacity="0">
+            <rect x="10" y="20" width="100" height="44" rx="3" fill="#1a0008" stroke="#e85050" stroke-width="1.5"/>
+            <text x="60" y="36" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">ATTACKER</text>
+            <text x="60" y="50" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace">sends payload</text>
+          </g>
+          <line id="a2l1" x1="112" y1="42" x2="148" y2="42" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#atk)"/>
+          <!-- Step 2: Vuln app -->
+          <g id="a2b2" opacity="0">
+            <rect x="150" y="20" width="100" height="44" rx="3" fill="#1a0806" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="200" y="36" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">VULN APP</text>
+            <text x="200" y="50" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace">RCE exploit</text>
+          </g>
+          <line id="a2l2" x1="252" y1="42" x2="290" y2="42" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#atk)"/>
+          <!-- Step 3: Container shell -->
+          <g id="a2b3" opacity="0">
+            <rect x="292" y="20" width="64" height="44" rx="3" fill="#1a0808" stroke="#e85050" stroke-width="1.5"/>
+            <text x="324" y="36" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">SHELL</text>
+            <text x="324" y="50" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">uid=0!</text>
+          </g>
+          <!-- Arrow down to container -->
+          <line id="a2l3" x1="324" y1="66" x2="324" y2="90" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0" marker-end="url(#atk)"/>
+          <!-- Container boundary -->
+          <g id="a2b4" opacity="0">
+            <rect x="20" y="92" width="336" height="60" rx="4" fill="#0f0005" stroke="#e85050" stroke-width="1" stroke-dasharray="4,2"/>
+            <text x="30" y="106" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">CONTAINER (running as root)</text>
+            <text x="40" y="128" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">→ mount /host:/host -v</text>
+            <text x="40" y="143" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">→ cat /host/etc/shadow ✓</text>
+          </g>
+          <!-- Arrow down to host -->
+          <line id="a2l4" x1="188" y1="154" x2="188" y2="170" stroke="#e85050" stroke-width="2" opacity="0" marker-end="url(#atk)"/>
+          <!-- Host box -->
+          <g id="a2b5" opacity="0">
+            <rect x="20" y="172" width="336" height="22" rx="3" fill="#2a0008" stroke="#e85050" stroke-width="2"/>
+            <text x="188" y="186" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace">💀 HOST OS — FULLY COMPROMISED</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Terminal showing escape -->
+      <div id="s2t1" class="panel" style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">attacker shell (inside container)</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2l1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -v /:/host ubuntu bash</div>
+          <div id="s2l2" class="tline" style="color:#e85050">root@container:/# ls /host/root</div>
+          <div id="s2l3" class="tline" style="color:#e8a020">.ssh  .aws  secrets.env  ← HOST FILES!</div>
+          <div id="s2l4" class="tline" style="color:#e85050">root@container:/# chroot /host</div>
+          <div id="s2l5" class="tline" style="color:#e85050">root@host:/# whoami</div>
+          <div id="s2l6" class="tline" style="color:#e85050;font-size:8px">root  ← YOU OWN THE HOST</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">One exploited npm package. One RCE. Container = root = host = everything.</div>
+    <div class="ih rd">Root in container + volume mount = full host takeover in 2 commands.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2 cmds</div><div class="sl">TO ESCAPE<br>CONTAINER</div></div>
+    <div class="sc"><div class="sv rd">0 mins</div><div class="sl">TO FULL<br>HOST PWNED</div></div>
+    <div class="sc"><div class="sv am">∞</div><div class="sl">DAMAGE<br>POTENTIAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: THE FIX — DOCKERFILE -->
+<div class="scene" id="s3" style="background:#000d04">
+  <div class="hdr" style="background:#000d04;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">🛡 THE FIX: DOCKERFILE</div>
+    <div class="hdr-sub">USER INSTRUCTION + ADDUSER + --CHOWN</div>
+    <div class="dots">
+      <div class="dot done" id="d3-1"></div>
+      <div class="dot done" id="d3-2"></div>
+      <div class="dot active" id="d3-3"></div>
+      <div class="dot" id="d3-4"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d04">
+    <span class="slabel" style="color:#4eff9a">✓ HARDENING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#000d04">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Dockerfile: BEFORE -->
+      <div id="s3c1" class="panel" style="background:#100008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0008;padding:5px 10px;border-bottom:1px solid #3a0010;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:6.5px;color:#e85050">✗ BEFORE — Dockerfile (dangerous)</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3;color:#aaa">
+          <div><span style="color:#4ec9e1">FROM</span> node:18-alpine</div>
+          <div><span style="color:#4ec9e1">WORKDIR</span> /app</div>
+          <div><span style="color:#4ec9e1">COPY</span> . .</div>
+          <div><span style="color:#4ec9e1">RUN</span> npm install</div>
+          <div><span style="color:#4ec9e1">CMD</span> ["node", "server.js"]</div>
+          <div style="color:#e85050;margin-top:4px"># Running as root! uid=0</div>
+        </div>
+      </div>
+
+      <!-- Dockerfile: AFTER -->
+      <div id="s3c2" class="panel" style="background:#001508;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:6.5px;color:#4eff9a">✓ AFTER — Dockerfile (safe)</span>
+        </div>
+        <div id="s3code" style="padding:10px 12px;font-size:6.5px;line-height:2.3;color:#aaa">
+          <div><span style="color:#4ec9e1">FROM</span> node:18-alpine</div>
+          <div><span style="color:#4ec9e1">WORKDIR</span> /app</div>
+          <div id="s3h1" class="tline" style="color:#4eff9a"><span style="color:#e8a020">RUN</span> addgroup -S appgroup <span style="color:#666">\</span></div>
+          <div id="s3h2" class="tline" style="color:#4eff9a">&nbsp;&nbsp;&amp;&amp; adduser -S appuser -G appgroup</div>
+          <div id="s3h3" class="tline"><span style="color:#4ec9e1">COPY</span> <span style="color:#e8a020">--chown=appuser:appgroup</span> . .</div>
+          <div id="s3h4" class="tline"><span style="color:#4ec9e1">RUN</span> npm install</div>
+          <div id="s3h5" class="tline" style="color:#4eff9a"><span style="color:#4ec9e1">USER</span> <span style="color:#4eff9a">appuser</span> <span style="color:#555"># ← non-root!</span></div>
+          <div id="s3h6" class="tline"><span style="color:#4ec9e1">CMD</span> ["node", "server.js"]</div>
+        </div>
+      </div>
+
+      <!-- Annotations -->
+      <div id="s3c3" class="panel" style="background:#000d04;border:1px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:6.5px;color:#aaa;line-height:2.2">
+          <div style="color:#4eff9a;margin-bottom:5px">KEY INSTRUCTIONS:</div>
+          <div><span style="color:#e8a020">addgroup -S</span> → system group, no login</div>
+          <div><span style="color:#e8a020">adduser -S</span> → system user (no passwd)</div>
+          <div><span style="color:#e8a020">--chown</span> → files owned by appuser</div>
+          <div><span style="color:#4eff9a">USER</span> → switch before CMD/ENTRYPOINT</div>
+        </div>
+      </div>
+
+      <!-- Verify card -->
+      <div id="s3c4" class="panel" style="background:#050002;border:2px solid #0d2010;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">verify it worked</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> myapp whoami</div>
+          <div id="s3v1" class="tline" style="color:#4eff9a">appuser</div>
+          <div id="s3v2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> myapp id</div>
+          <div id="s3v3" class="tline" style="color:#4eff9a">uid=100(appuser) gid=101(appgroup)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">adduser + USER directive drops privileges before your app ever starts.</div>
+    <div class="ih">Even if exploited: attacker gets uid=100, not uid=0. Blast radius contained.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3 lines</div><div class="sl">TO FIX<br>DOCKERFILE</div></div>
+    <div class="sc"><div class="sv gn">uid≠0</div><div class="sl">NO ROOT<br>PRIVILEGE</div></div>
+    <div class="sc"><div class="sv am">limited</div><div class="sl">BLAST<br>RADIUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: COMPARISON — ROOT vs NON-ROOT -->
+<div class="scene" id="s4" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">⚔ ROOT vs NON-ROOT</div>
+    <div class="hdr-sub">ATTACK OUTCOME COMPARISON</div>
+    <div class="dots">
+      <div class="dot done" id="d4-1"></div>
+      <div class="dot done" id="d4-2"></div>
+      <div class="dot done" id="d4-3"></div>
+      <div class="dot active" id="d4-4"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">◈ BLAST RADIUS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COMPARISON</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Side-by-side comparison -->
+      <div id="s4cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:6px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">☠ ROOT</div>
+            <div style="font-size:5.5px;color:#888;margin-top:3px">uid=0</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.1">
+            <div style="color:#e85050">✗ read /etc/shadow</div>
+            <div style="color:#e85050">✗ write /etc/crontab</div>
+            <div style="color:#e85050">✗ install kernel mods</div>
+            <div style="color:#e85050">✗ chroot to host</div>
+            <div style="color:#e85050">✗ kill any process</div>
+            <div style="color:#e85050">✗ read other ctnrs</div>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:6px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ NON-ROOT</div>
+            <div style="font-size:5.5px;color:#888;margin-top:3px">uid=100</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.1">
+            <div style="color:#4eff9a">✓ blocked by kernel</div>
+            <div style="color:#4eff9a">✓ permission denied</div>
+            <div style="color:#4eff9a">✓ no CAP_SYS_MODULE</div>
+            <div style="color:#4eff9a">✓ chroot fails</div>
+            <div style="color:#4eff9a">✓ only own processes</div>
+            <div style="color:#4eff9a">✓ isolated by UID</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Blast radius diagram -->
+      <div id="s4diag" class="panel" style="background:#000608;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:7px 10px 4px;font-size:6.5px;color:#555;text-align:center">BLAST RADIUS IF CONTAINER EXPLOITED</div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Root scenario -->
+          <text x="91" y="18" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">ROOT CONTAINER</text>
+          <circle cx="91" cy="75" r="56" fill="none" stroke="#e85050" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/>
+          <circle cx="91" cy="75" r="40" fill="#2a0008" stroke="#e85050" stroke-width="1.5" opacity="0.6"/>
+          <text x="91" y="65" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="91" y="79" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">+HOST</text>
+          <text x="91" y="93" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace">+ALL CTRS</text>
+          <text x="91" y="122" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">☠ EVERYTHING</text>
+          <!-- Non-root scenario -->
+          <text x="275" y="18" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">NON-ROOT CTNER</text>
+          <circle cx="275" cy="75" r="22" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0.8"/>
+          <text x="275" y="72" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">APP</text>
+          <text x="275" y="84" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">FILES ONLY</text>
+          <text x="275" y="122" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">✓ CONTAINED</text>
+        </svg>
+      </div>
+
+      <!-- Runtime flag bonus tip -->
+      <div id="s4tip" class="panel" style="background:#000d18;border-left:4px solid #a080ff;border-top:1px solid #1a1030;border-right:1px solid #1a1030;border-bottom:1px solid #1a1030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px">💡</span>
+          <span style="font-size:7.5px;color:#a080ff">RUNTIME OVERRIDE (BONUS)</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Can't change Dockerfile? Force non-root at runtime:</div>
+        <div style="margin-top:6px;font-size:6.5px;color:#4ec9e1;line-height:2.0">
+          docker run <span style="color:#a080ff">--user 1000:1000</span> myimage
+        </div>
+        <div style="margin-top:4px;font-size:6.5px;color:#4eff9a;line-height:2.0">
+          k8s: securityContext.runAsNonRoot: true
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Non-root doesn't prevent all attacks — but it makes escalation dramatically harder.</div>
+    <div class="ih">Defence in depth: least privilege is layer one. Always drop root.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">UID≠0</div><div class="sl">NON-ROOT<br>RULE</div></div>
+    <div class="sc"><div class="sv gn">-S flag</div><div class="sl">SYSTEM<br>USER TYPE</div></div>
+    <div class="sc"><div class="sv pu">--user</div><div class="sl">RUNTIME<br>OVERRIDE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)" style="font-size:8px">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3','s1l4','s1l5'].forEach(hideEl);
+    ['s1c1','s1c2','s1c3'].forEach(hide);
+  }
+  if(n===2){
+    ['a2b1','a2b2','a2b3','a2b4','a2b5','a2l1','a2l2','a2l3','a2l4'].forEach(svgHide);
+    hide('s2t1');
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6'].forEach(hideEl);
+  }
+  if(n===3){
+    hide('s3c1');hide('s3c2');hide('s3c3');hide('s3c4');
+    ['s3h1','s3h2','s3h3','s3h4','s3h5','s3h6','s3v1','s3v2','s3v3'].forEach(hideEl);
+  }
+  if(n===4){
+    hide('s4cmp');hide('s4diag');hide('s4tip');
+  }
+}
+
+function play(n){
+  clr();
+  if(n===1){
+    showEl('s1l1',300);
+    showEl('s1l2',700);
+    showEl('s1l3',1000);
+    showEl('s1l4',1500);
+    showEl('s1l5',1900);
+    show('s1c1',2400);
+    show('s1c2',3100);
+    show('s1c3',3800);
+  }
+  if(n===2){
+    svgShow('a2b1',200);
+    svgShow('a2l1',700);
+    svgShow('a2b2',900);
+    svgShow('a2l2',1400);
+    svgShow('a2b3',1600);
+    svgShow('a2l3',2100);
+    svgShow('a2b4',2400);
+    svgShow('a2l4',3000);
+    svgShow('a2b5',3300);
+    show('s2t1',3700);
+    showEl('s2l1',3900);
+    showEl('s2l2',4300);
+    showEl('s2l3',4700);
+    showEl('s2l4',5100);
+    showEl('s2l5',5500);
+    showEl('s2l6',5800);
+  }
+  if(n===3){
+    show('s3c1',200);
+    show('s3c2',900);
+    showEl('s3h1',1100);
+    showEl('s3h2',1400);
+    showEl('s3h3',1700);
+    showEl('s3h4',2000);
+    showEl('s3h5',2300);
+    showEl('s3h6',2600);
+    show('s3c3',3000);
+    show('s3c4',3600);
+    showEl('s3v1',3900);
+    showEl('s3v2',4300);
+    showEl('s3v3',4600);
+  }
+  if(n===4){
+    show('s4cmp',300);
+    show('s4diag',1200);
+    show('s4tip',2400);
+  }
+}
+
+window.addEventListener('load',()=>{af(200,()=>play(1));});
+</script>
+</body>
+</html>

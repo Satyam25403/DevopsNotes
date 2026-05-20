@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Volumes</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* container box */
+.cbox{border:2px solid;border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;transition:border-color .4s,background .4s,opacity .4s}
+.cbox-title{font-size:8px;letter-spacing:.5px}
+.cbox-fs{border:1px dashed;border-radius:2px;padding:7px 8px}
+.cbox-fs-label{font-size:6px;margin-bottom:4px;letter-spacing:1px}
+.data-row{font-size:7px;line-height:2.0;font-family:'Press Start 2P',monospace}
+
+/* volume box */
+.vol-box{border:2px solid #4eff9a;border-radius:4px;padding:10px 12px;background:#04140a;display:flex;flex-direction:column;gap:6px;transition:opacity .4s}
+.vol-title{font-size:8px;color:#4eff9a;letter-spacing:.5px}
+.vol-data{font-size:7px;line-height:2.0;font-family:'Press Start 2P',monospace}
+
+/* mount line */
+.mount-line{display:flex;align-items:center;gap:6px;padding:4px 0}
+.mount-bar{flex:1;height:3px;border-radius:1px;width:0;transition:width .7s ease-out}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:8px;font-family:'Press Start 2P',monospace;line-height:2.1;color:#ccc}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* explosion animation */
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+@keyframes fadeout{0%{opacity:1}100%{opacity:0;transform:scale(.85)}}
+.dying{animation:shake .3s ease, fadeout .5s ease .3s forwards}
+
+/* volume types */
+.vtype-card{border:2px solid;border-radius:3px;padding:10px 10px;display:flex;flex-direction:column;gap:6px}
+.vtype-title{font-size:8px;letter-spacing:.5px}
+.vtype-sub{font-size:7px;color:#888;line-height:1.8}
+.vtype-cmd{font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;background:#0a0a14;padding:5px 7px;border-radius:2px;line-height:1.8}
+.vtype-when{font-size:6px;color:#aaa;line-height:1.7}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — THE PROBLEM: EPHEMERAL FS
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DOCKER VOLUMES</div>
+    <div class="hdr-sub">DATA THAT SURVIVES CONTAINER DEATH</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">NO VOLUME</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DATA LOST</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- container alive with data -->
+      <div class="fade" id="s1e1">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">CONTAINER RUNNING — DATA INSIDE</div>
+        <div class="cbox" id="cbox1" style="border-color:#4ec9e1;background:#04101a">
+          <div class="cbox-title" style="color:#4ec9e1">🐳 postgres container</div>
+          <div class="cbox-fs" style="border-color:#4ec9e150">
+            <div class="cbox-fs-label" style="color:#4ec9e1">CONTAINER FILESYSTEM (ephemeral)</div>
+            <div class="data-row">
+              <span style="color:#4eff9a">users</span>: 1,842 rows<br>
+              <span style="color:#4eff9a">orders</span>: 9,210 rows<br>
+              <span style="color:#4eff9a">products</span>: 340 rows<br>
+              <span style="color:#888">/var/lib/postgresql/data</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- docker rm command -->
+      <div class="fade" id="s1e2">
+        <div class="cmd-block" style="border-color:#e85050">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line"><span style="color:#4ec9e1">docker</span> <span style="color:#e85050">rm -f</span> postgres</div>
+          <div class="cmd-out" id="rmout" style="min-height:12px"> </div>
+        </div>
+      </div>
+
+      <!-- container explodes / disappears -->
+      <div class="fade" id="s1e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">CONTAINER REMOVED — DATA GONE</div>
+        <div class="cbox" id="cbox2" style="border-color:#e85050;background:#1a0808">
+          <div class="cbox-title" style="color:#e85050">💀 container destroyed</div>
+          <div class="cbox-fs" style="border-color:#e8505050">
+            <div class="cbox-fs-label" style="color:#e85050">FILESYSTEM WIPED</div>
+            <div class="data-row">
+              <span style="color:#e85050;text-decoration:line-through">users</span>: <span style="color:#e85050">DELETED</span><br>
+              <span style="color:#e85050;text-decoration:line-through">orders</span>: <span style="color:#e85050">DELETED</span><br>
+              <span style="color:#e85050;text-decoration:line-through">products</span>: <span style="color:#e85050">DELETED</span><br>
+              <span style="color:#555">everything gone forever</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the rule -->
+      <div class="fade" id="s1e4" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">⚠ THE RULE OF CONTAINER FILESYSTEMS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Every container gets a <span style="color:#e8a020">fresh writable layer</span><br>
+          on top of the image. This layer is<br>
+          <span style="color:#e85050">destroyed with the container.</span><br>
+          Nothing written inside persists by default.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Container filesystem dies with the container.</div>
+    <div class="ih rd">Every restart = fresh slate. All data wiped.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0 rows</div><div class="sl">after restart</div></div>
+    <div class="sc"><div class="sv rd">wiped</div><div class="sl">on docker rm</div></div>
+    <div class="sc"><div class="sv am">ephemeral</div><div class="sl">by default</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — THE FIX: VOLUMES SURVIVE
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">VOLUME TO THE RESCUE</div>
+    <div class="hdr-sub">DATA LIVES OUTSIDE THE CONTAINER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">WITH VOLUME</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DATA SAFE</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- volume exists independently -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">STEP 1 — VOLUME EXISTS INDEPENDENTLY</div>
+        <div class="vol-box" id="vol1">
+          <div class="vol-title">📦 docker volume: pgdata</div>
+          <div class="vol-data">
+            <span style="color:#4eff9a">users</span>: 1,842 rows<br>
+            <span style="color:#4eff9a">orders</span>: 9,210 rows<br>
+            <span style="color:#4eff9a">products</span>: 340 rows
+          </div>
+          <div style="font-size:6px;color:#888;margin-top:2px">managed by Docker — NOT inside any container</div>
+        </div>
+      </div>
+
+      <!-- mount line connecting volume to container -->
+      <div class="fade" id="s2e2">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">STEP 2 — MOUNTED INTO CONTAINER</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="font-size:8px;color:#4eff9a;width:60px;flex-shrink:0;text-align:center">pgdata<br>volume</div>
+          <div style="flex:1;position:relative;height:20px">
+            <div id="mountbar" style="height:3px;background:#4eff9a;width:0;transition:width .8s ease-out;margin-top:8px;border-radius:1px"></div>
+          </div>
+          <div style="font-size:8px;color:#4ec9e1;width:70px;flex-shrink:0;text-align:center">postgres<br>container</div>
+        </div>
+        <div style="font-size:6px;color:#888;text-align:center;margin-top:4px">-v pgdata:/var/lib/postgresql/data</div>
+      </div>
+
+      <!-- container dies but volume survives -->
+      <div class="fade" id="s2e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">STEP 3 — CONTAINER DIES. VOLUME SURVIVES.</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:2px solid #e85050;border-radius:3px;padding:8px 8px;background:#1a0808">
+            <div style="font-size:7px;color:#e85050;margin-bottom:4px">💀 container</div>
+            <div style="font-size:7px;color:#555;line-height:1.8">
+              writable layer<br>
+              <span style="text-decoration:line-through">destroyed</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;font-size:14px;color:#555">≠</div>
+          <div style="flex:1;border:2px solid #4eff9a;border-radius:3px;padding:8px 8px;background:#04140a">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">📦 volume</div>
+            <div style="font-size:7px;color:#4eff9a;line-height:1.8">
+              pgdata<br>
+              still alive ✓
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- new container gets same data -->
+      <div class="fade" id="s2e4">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">STEP 4 — NEW CONTAINER. SAME DATA.</div>
+        <div class="cbox" style="border-color:#4eff9a;background:#04140a">
+          <div class="cbox-title" style="color:#4eff9a">🐳 postgres (new container)</div>
+          <div class="cbox-fs" style="border-color:#4eff9a50">
+            <div class="cbox-fs-label" style="color:#4eff9a">VOLUME MOUNTED → DATA INTACT</div>
+            <div class="data-row">
+              <span style="color:#4eff9a">users</span>: 1,842 rows ✓<br>
+              <span style="color:#4eff9a">orders</span>: 9,210 rows ✓<br>
+              <span style="color:#4eff9a">products</span>: 340 rows ✓
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Volume lives outside the container lifecycle.</div>
+    <div class="ih" style="color:#4eff9a">New container, same volume = data fully intact.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">lives on</div><div class="sl">after rm</div></div>
+    <div class="sc"><div class="sv gn">reattach</div><div class="sl">to new container</div></div>
+    <div class="sc"><div class="sv gn">intact</div><div class="sl">all data safe</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — COMMANDS & USAGE
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE COMMANDS</div>
+    <div class="hdr-sub">CREATE · MOUNT · INSPECT · REMOVE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">VOLUME COMMANDS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">REFERENCE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- create -->
+      <div class="cmd-block fade" id="s3e1" style="border-color:#4ec9e1">
+        <div class="cmd-prompt">CREATE a named volume</div>
+        <div class="cmd-line">
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">volume create</span> <span style="color:#4eff9a">pgdata</span>
+        </div>
+        <div class="cmd-out">pgdata<br><span style="color:#888"># or omit — Docker auto-creates on run</span></div>
+      </div>
+
+      <!-- mount with -v -->
+      <div class="cmd-block fade" id="s3e2" style="border-color:#4eff9a">
+        <div class="cmd-prompt">MOUNT volume into a container</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker run</span> -d \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">-v</span> <span style="color:#4eff9a">pgdata</span><span style="color:#555">:</span><span style="color:#4ec9e1">/var/lib/postgresql/data</span> \<br>
+          &nbsp;&nbsp;<span style="color:#888">--name postgres postgres:16</span>
+        </div>
+      </div>
+
+      <!-- list and inspect -->
+      <div class="cmd-block fade" id="s3e3">
+        <div class="cmd-prompt">LIST &amp; INSPECT volumes</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">volume ls</span><br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e8a020">volume inspect</span> <span style="color:#4eff9a">pgdata</span>
+        </div>
+        <div class="cmd-out">
+          <span style="color:#888">Mountpoint:</span> <span style="color:#4eff9a">/var/lib/docker/volumes/pgdata/_data</span>
+        </div>
+      </div>
+
+      <!-- remove -->
+      <div class="cmd-block fade" id="s3e4" style="border-color:#e85050">
+        <div class="cmd-prompt">REMOVE a volume (explicit, irreversible)</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e85050">volume rm</span> pgdata<br>
+          <span style="color:#4ec9e1">docker</span> <span style="color:#e85050">volume prune</span> <span style="color:#888"># remove all unused</span>
+        </div>
+        <div class="cmd-out"><span style="color:#e85050">⚠ data is permanently deleted</span></div>
+      </div>
+
+      <!-- --mount syntax note -->
+      <div class="fade" id="s3e5" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">💡 MODERN --mount SYNTAX</div>
+        <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.1">
+          <span style="color:#4ec9e1">docker run</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--mount</span> type=volume,\<br>
+          &nbsp;&nbsp;source=pgdata,\<br>
+          &nbsp;&nbsp;target=/var/lib/postgresql/data \<br>
+          &nbsp;&nbsp;postgres:16
+        </div>
+        <div style="margin-top:6px;font-size:7px;color:#888">More explicit. Preferred in new Dockerfiles.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">docker volume create → run -v name:path.</div>
+    <div class="ih cy">Volume rm is explicit — data won't vanish by accident.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">create</div><div class="sl">named volume</div></div>
+    <div class="sc"><div class="sv gn">-v</div><div class="sl">mount syntax</div></div>
+    <div class="sc"><div class="sv rd">rm</div><div class="sl">explicit delete</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — VOLUME TYPES + WHEN TO USE
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">VOLUME TYPES</div>
+    <div class="hdr-sub">NAMED · BIND MOUNT · TMPFS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PICK ONE ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- named volume -->
+      <div class="vtype-card fade" id="s4e1" style="border-color:#4eff9a">
+        <div class="vtype-title" style="color:#4eff9a">📦 NAMED VOLUME</div>
+        <div class="vtype-cmd">-v pgdata:/var/lib/postgresql/data</div>
+        <div class="vtype-sub">Managed by Docker. Stored in Docker's own area.<br>Survives container removal. Portable between containers.</div>
+        <div class="vtype-when"><span style="color:#4eff9a">USE FOR:</span> databases, app state, anything that must persist in prod.</div>
+      </div>
+
+      <!-- bind mount -->
+      <div class="vtype-card fade" id="s4e2" style="border-color:#4ec9e1">
+        <div class="vtype-title" style="color:#4ec9e1">📂 BIND MOUNT</div>
+        <div class="vtype-cmd">-v /host/path:/container/path</div>
+        <div class="vtype-sub">Maps a host directory directly into the container.<br>Changes on host = instantly visible inside container.</div>
+        <div class="vtype-when"><span style="color:#4ec9e1">USE FOR:</span> local dev — live reload, config injection, sharing source code.</div>
+      </div>
+
+      <!-- tmpfs -->
+      <div class="vtype-card fade" id="s4e3" style="border-color:#e8a020">
+        <div class="vtype-title" style="color:#e8a020">⚡ TMPFS MOUNT</div>
+        <div class="vtype-cmd">--tmpfs /run:size=100m</div>
+        <div class="vtype-sub">Stored in host memory only. Never written to disk.<br>Fastest option. Disappears when container stops.</div>
+        <div class="vtype-when"><span style="color:#e8a020">USE FOR:</span> secrets, session tokens, scratch space — sensitive + ephemeral.</div>
+      </div>
+
+      <!-- decision summary -->
+      <div class="fade" id="s4e4" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#888;letter-spacing:1px">QUICK DECISION GUIDE</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:7px">
+            <span style="color:#ccc">Database / app state in prod</span>
+            <span style="color:#4eff9a">named volume</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:7px">
+            <span style="color:#ccc">Live code reload in dev</span>
+            <span style="color:#4ec9e1">bind mount</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:7px">
+            <span style="color:#ccc">Secrets / temp scratch</span>
+            <span style="color:#e8a020">tmpfs</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:7px">
+            <span style="color:#ccc">Nothing needs to persist</span>
+            <span style="color:#888">no mount needed</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Named = prod. Bind = dev. tmpfs = secrets.</div>
+    <div class="ih" style="color:#4eff9a">Pick by what survives and where it lives.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">named</div><div class="sl">prod persistence</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">bind</div><div class="sl">dev live reload</div></div>
+    <div class="sc"><div class="sv am">tmpfs</div><div class="sl">memory only</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1','s3e2','s3e3','s3e4','s3e5'],
+    4:['s4e1','s4e2','s4e3','s4e4']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  const mb=document.getElementById('mountbar');
+  if(mb) mb.style.width='0';
+  const ro=document.getElementById('rmout');
+  if(ro) ro.innerHTML=' ';
+  // reset cbox2 if present
+  const cb2=document.getElementById('cbox2');
+  if(cb2) cb2.style.opacity='1';
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1200);
+  setTimeout(()=>{
+    const ro=document.getElementById('rmout');
+    if(ro) ro.innerHTML='postgres';
+  },1800);
+  show('s1e3',2400);
+  show('s1e4',3300);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  show('s2e2',1100);
+  setTimeout(()=>{
+    const mb=document.getElementById('mountbar');
+    if(mb) mb.style.width='100%';
+  },1300);
+  show('s2e3',2200);
+  show('s2e4',3100);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  show('s3e2',1000);
+  show('s3e3',1800);
+  show('s3e4',2600);
+  show('s3e5',3500);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  show('s4e2',1100);
+  show('s4e3',1900);
+  show('s4e4',2700);
+}
+
+play1();
+</script>
+</body>
+</html>

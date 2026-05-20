@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>MSSQL Port 1433 — Security</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #14100a}
+.hdr-title{font-size:11px;color:#f87171;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#1a0808;transition:background .2s}
+.dot.active{background:#f87171}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #f87171;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.cy{border-color:#22d3ee}
+.il{color:#888}.ih{color:#f87171}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.cy{color:#22d3ee}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#0f0808;border:1px solid #1a0808;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#f87171;text-align:center;line-height:1.3}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.cy{color:#22d3ee}
+.sl{font-size:6px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #f87171;background:transparent;color:#f87171;cursor:pointer;transition:all .15s}
+.btn:hover{background:#f8717120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* terminal */
+.term{background:#050202;border:2px solid #1a0808;padding:8px 10px;border-radius:2px;font-size:7px;line-height:1.9}
+.t-prompt{color:#f87171}
+.t-cmd{color:#fff}
+.t-comment{color:#2a0808;font-size:6px}
+.t-out{color:#4eff9a;font-size:6px}
+.t-warn{color:#e8a020;font-size:6px}
+.t-hi{color:#f87171;font-size:6px}
+.t-redacted{color:#1a0808;background:#1a0808;border-radius:1px;user-select:none}
+
+/* threat card */
+.threat-card{opacity:0;transition:opacity 0.5s;background:#0f0505;border:1px solid #2a0808;padding:8px 10px;border-radius:2px;margin-bottom:5px}
+.threat-card.show{opacity:1}
+.tc-title{font-size:7px;margin-bottom:4px}
+.tc-body{font-size:6px;color:#666;line-height:1.8}
+
+/* fix card */
+.fix-card{opacity:0;transition:opacity 0.5s;background:#050a05;border:1px solid #1a2a1a;padding:8px 10px;border-radius:2px;margin-bottom:5px}
+.fix-card.show{opacity:1}
+.fc-title{font-size:7px;margin-bottom:4px}
+.fc-body{font-size:6px;color:#666;line-height:1.8}
+
+/* risk meter */
+.risk-bar-wrap{background:#0a0505;height:10px;border-radius:4px;overflow:hidden;margin-top:4px}
+.risk-bar{height:100%;border-radius:4px;width:0;transition:width 1s ease-out}
+
+/* attack path */
+.ap-step{display:flex;align-items:center;gap:6px;padding:5px 0;font-size:6px;opacity:0;transition:opacity 0.4s}
+.ap-step.show{opacity:1}
+.ap-num{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0;border:1px solid}
+.ap-arrow{font-size:8px;color:#2a0808}
+
+/* audit log rows */
+.log-row{display:flex;gap:5px;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;font-size:6px;opacity:0;transition:opacity 0.35s;margin-bottom:3px}
+.log-row.show{opacity:1}
+.log-sev{min-width:50px;font-size:5px;padding:1px 4px;border-radius:2px;border:1px solid;text-align:center;flex-shrink:0}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.4s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — WHAT IS MSSQL + THE ATTACK SURFACE
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0808">
+  <div class="hdr" style="background:#0f0808">
+    <div class="hdr-title">MSSQL — PORT 1433</div>
+    <div class="hdr-sub">THE DATABASE THAT CAN SHELL YOUR SERVER</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f87171">ATTACK SURFACE</span>
+    <span class="sbadge" style="color:#f87171;border-color:#f87171">CRITICAL RISK</span>
+  </div>
+
+  <div class="anim" style="background:#0f0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- port + protocol overview -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ Microsoft SQL Server — default port 1433/TCP</div>
+      <div style="background:#050202;border:1px solid #1a0808;padding:9px;border-radius:2px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+          <div style="text-align:center">
+            <div style="font-size:18px">🌐</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">attacker</div>
+          </div>
+          <div style="flex:1;text-align:center">
+            <div style="height:1px;background:#1a0808;position:relative">
+              <div style="position:absolute;left:0;top:0;height:1px;width:0;background:#f87171;transition:width 0.8s ease-out" id="s1-line"></div>
+            </div>
+            <div style="font-size:6px;color:#f87171;margin-top:3px" id="s1-line-label" style="opacity:0">TCP:1433 → TDS protocol</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-size:18px">🗄️</div>
+            <div style="font-size:6px;color:#555;margin-top:2px">SQL Server</div>
+          </div>
+          <div style="font-size:8px;color:#2a0808">→</div>
+          <div style="text-align:center">
+            <div style="font-size:18px">🖥️</div>
+            <div style="font-size:6px;color:#f87171;margin-top:2px" id="s1-os-label">OS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what xp_cmdshell is -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ xp_cmdshell — the dangerous stored procedure</div>
+      <div style="background:#050202;border:2px solid #f87171;padding:9px;border-radius:2px" id="s1-xp-box" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#f87171;margin-bottom:5px">WHAT IT IS</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          xp_cmdshell is a built-in MSSQL extended stored procedure.<br>
+          it passes a string directly to the Windows command shell<br>
+          and returns the output as SQL rows.<br><br>
+          <span style="color:#f87171">disabled by default</span> since SQL Server 2005 —<br>
+          but it can be re-enabled in two SQL statements<br>
+          by anyone with <span style="color:#f87171">sysadmin</span> privileges.
+        </div>
+      </div>
+
+      <!-- threat summary — no commands, just what it enables -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ what an attacker can do once enabled</div>
+      <div id="s1-threats" style="display:flex;flex-direction:column;gap:4px">
+        <div class="threat-card" id="st1">
+          <div class="tc-title" style="color:#f87171">① READ ANY FILE ON THE SERVER</div>
+          <div class="tc-body">execute OS commands → read sensitive files, credentials, configs stored outside the DB</div>
+          <div class="risk-bar-wrap"><div class="risk-bar" id="rb1" style="background:#f87171"></div></div>
+        </div>
+        <div class="threat-card" id="st2">
+          <div class="tc-title" style="color:#f87171">② DOWNLOAD & RUN MALWARE</div>
+          <div class="tc-body">shell access → download payload via certutil/bitsadmin → execute → full backdoor</div>
+          <div class="risk-bar-wrap"><div class="risk-bar" id="rb2" style="background:#f87171"></div></div>
+        </div>
+        <div class="threat-card" id="st3">
+          <div class="tc-title" style="color:#e8a020">③ LATERAL MOVEMENT</div>
+          <div class="tc-body">SQL Server often runs as SYSTEM → pivot to domain, steal credentials, move laterally</div>
+          <div class="risk-bar-wrap"><div class="risk-bar" id="rb3" style="background:#e8a020"></div></div>
+        </div>
+        <div class="threat-card" id="st4">
+          <div class="tc-title" style="color:#e8a020">④ PERSISTENCE VIA SCHEDULED TASKS</div>
+          <div class="tc-body">OS shell → create scheduled tasks, registry run keys, or new local admin accounts</div>
+          <div class="risk-bar-wrap"><div class="risk-bar" id="rb4" style="background:#e8a020"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">xp_cmdshell = SQL query → OS shell (SYSTEM level)</div>
+    <div class="ih">disabled by default. re-enabled by sysadmin in 2 SQL<br>statements. SQL Server often runs as NT AUTHORITY\SYSTEM.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">1433</div><div class="sl">DEFAULT<br>PORT</div></div>
+    <div class="sc"><div class="sv rd">SYSTEM</div><div class="sl">TYPICAL<br>PRIV LEVEL</div></div>
+    <div class="sc"><div class="sv rd">CRITICAL</div><div class="sl">CVSSv3<br>SEVERITY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — SA ACCOUNT + HOW ACCESS IS GAINED
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0f0808">
+  <div class="hdr" style="background:#0f0808">
+    <div class="hdr-title">MSSQL — PORT 1433</div>
+    <div class="hdr-sub">HOW ATTACKERS GET IN — THE SA ACCOUNT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f87171">ACCESS VECTORS</span>
+    <span class="sbadge" style="color:#f87171;border-color:#f87171">SA ACCOUNT</span>
+  </div>
+
+  <div class="anim" style="background:#0f0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- sa account explained -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ the 'sa' account — SQL Server's built-in admin</div>
+      <div style="background:#050202;border:2px solid #f87171;padding:9px;border-radius:2px" id="s2-sa-box">
+        <div style="font-size:7px;color:#f87171;margin-bottom:5px">sa = System Administrator</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          built-in SQL authentication account · full sysadmin role.<br>
+          when SQL auth is enabled, 'sa' is always present.<br><br>
+          commonly found in the wild with:<br>
+          <span style="color:#f87171">• blank password (empty string)</span><br>
+          <span style="color:#f87171">• password = 'sa'</span><br>
+          <span style="color:#e8a020">• password = the company name</span><br>
+          <span style="color:#e8a020">• password from leaked breach database</span>
+        </div>
+      </div>
+
+      <!-- attack chain overview — no commands -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ typical attack chain (concept, not steps)</div>
+      <div id="s2-chain" style="display:flex;flex-direction:column;gap:3px">
+        <div class="ap-step" id="ap1">
+          <div class="ap-num" style="border-color:#f87171;color:#f87171;background:#150505">1</div>
+          <div style="color:#888;flex:1">port scan finds 1433 open externally → SQL Server exposed</div>
+        </div>
+        <div class="ap-step" id="ap2">
+          <div class="ap-num" style="border-color:#f87171;color:#f87171;background:#150505">2</div>
+          <div style="color:#888;flex:1">attempt sa with blank/common passwords → login succeeds</div>
+        </div>
+        <div class="ap-step" id="ap3">
+          <div class="ap-num" style="border-color:#f87171;color:#f87171;background:#150505">3</div>
+          <div style="color:#888;flex:1">check xp_cmdshell status → disabled → re-enable via sp_configure</div>
+        </div>
+        <div class="ap-step" id="ap4">
+          <div class="ap-num" style="border-color:#f87171;color:#f87171;background:#150505">4</div>
+          <div style="color:#888;flex:1">execute OS commands as NT AUTHORITY\SYSTEM → full server control</div>
+        </div>
+        <div class="ap-step" id="ap5">
+          <div class="ap-num" style="border-color:#e8a020;color:#e8a020;background:#150d05">5</div>
+          <div style="color:#888;flex:1">establish persistence · move laterally to AD domain</div>
+        </div>
+      </div>
+
+      <!-- detection note -->
+      <div id="s2-detect" style="opacity:0;transition:opacity 0.5s;background:#050a05;border:2px solid #4eff9a;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">DETECTION OPPORTUNITY</div>
+        <div style="font-size:6px;color:#888;line-height:1.9">
+          sp_configure changes are logged in SQL Server Error Log.<br>
+          xp_cmdshell execution fires Event ID 15457 in Windows Event Log.<br>
+          sa login from external IP should alert immediately — never normal.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">sa + blank password = instant sysadmin over SQL auth</div>
+    <div class="ih rd">1433 exposed + sa account + weak password = full OS<br>compromise in minutes. still found in production.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">sa</div><div class="sl">BUILT-IN<br>SYSADMIN</div></div>
+    <div class="sc"><div class="sv rd">BLANK</div><div class="sl">COMMON<br>SA PASSWORD</div></div>
+    <div class="sc"><div class="sv am">15457</div><div class="sl">EVENT ID<br>xp_cmdshell</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — DETECTION: AUDIT LOGS + ALERTS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0f0808">
+  <div class="hdr" style="background:#0f0808">
+    <div class="hdr-title">MSSQL — PORT 1433</div>
+    <div class="hdr-sub">DETECT THE ATTACK — WHAT TO MONITOR</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">DETECTION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">AUDIT + SIEM</span>
+  </div>
+
+  <div class="anim" style="background:#0f0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- SQL Server audit log sim -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ SQL Server Error Log + Windows Event Log — live alerts</div>
+      <div id="s3-logs" style="display:flex;flex-direction:column;gap:3px"></div>
+
+      <!-- event IDs reference -->
+      <div style="font-size:7px;color:#2a0808;margin-bottom:-3px">▸ key event IDs to monitor</div>
+      <div style="background:#050202;border:1px solid #1a0808;border-radius:2px;overflow:hidden">
+        <div style="display:flex;gap:4px;padding:5px 8px;background:#0f0505;border-bottom:1px solid #1a0808;font-size:6px;color:#555">
+          <div style="min-width:60px">EVENT ID</div>
+          <div style="flex:1">MEANING</div>
+          <div style="min-width:48px">SEVERITY</div>
+        </div>
+        <div id="s3-evtrows" style="padding:5px 8px;display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+
+      <!-- SIEM rule example -->
+      <div id="s3-siem" style="opacity:0;transition:opacity 0.5s">
+        <div style="font-size:7px;color:#2a0808;margin-bottom:4px">▸ sample SIEM detection rule</div>
+        <div class="term" style="min-height:auto;font-size:6px">
+          <div><span class="t-comment"># Splunk: alert on xp_cmdshell re-enable</span></div>
+          <div><span style="color:#e8a020">index=wineventlog EventCode=15457</span></div>
+          <div><span style="color:#e8a020">OR (EventCode=18456 src_ip!=10.0.0.0/8)</span></div>
+          <div><span style="color:#e8a020">| where like(Message, "%xp_cmdshell%")</span></div>
+          <div><span class="t-out">→ alert: CRITICAL · page on-call immediately</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">sp_configure change + EventID 15457 = alert immediately</div>
+    <div class="ih am">sa login from external IP is always anomalous. xp_cmdshell<br>re-enable logged in SQL Error Log and Windows Event Log.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">18456</div><div class="sl">FAILED<br>SA LOGIN</div></div>
+    <div class="sc"><div class="sv rd">15457</div><div class="sl">xp_cmdshell<br>CHANGED</div></div>
+    <div class="sc"><div class="sv am">4625</div><div class="sl">WIN AUTH<br>FAILURE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — HARDENING CHECKLIST
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0f0808">
+  <div class="hdr" style="background:#0f0808">
+    <div class="hdr-title">MSSQL — PORT 1433</div>
+    <div class="hdr-sub">HARDENING — 6 CONTROLS THAT MATTER</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">HARDENING</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CHECKLIST</span>
+  </div>
+
+  <div class="anim" style="background:#0f0808">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <div class="fix-card" id="fc1">
+        <div class="fc-title" style="color:#4eff9a">① DISABLE xp_cmdshell — PERMANENTLY</div>
+        <div class="fc-body">
+          disable via sp_configure and lock with policy.<br>
+          use DDL trigger to alert + revert if re-enabled.<br>
+          no legitimate app should need xp_cmdshell in production.
+        </div>
+        <div class="term" style="margin-top:5px;min-height:auto;font-size:6px">
+          <div><span class="t-comment"># disable and lock xp_cmdshell</span></div>
+          <div><span style="color:#4eff9a">EXEC sp_configure 'xp_cmdshell', 0; RECONFIGURE;</span></div>
+          <div><span style="color:#4eff9a">EXEC sp_configure 'show advanced options', 0; RECONFIGURE;</span></div>
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc2">
+        <div class="fc-title" style="color:#4eff9a">② WINDOWS AUTH ONLY — DISABLE SQL AUTH</div>
+        <div class="fc-body">
+          SQL Auth mode allows sa and local SQL accounts.<br>
+          Windows Auth (Kerberos) ties to AD — no sa, no SQL passwords.<br>
+          set server authentication mode to "Windows Authentication Mode".
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc3">
+        <div class="fc-title" style="color:#4eff9a">③ FIREWALL: NEVER EXPOSE 1433 EXTERNALLY</div>
+        <div class="fc-body">
+          1433 should only be reachable from app server subnets.<br>
+          firewall rule: allow 1433 only from 10.x.x.x/app-tier VLAN.<br>
+          use SQL Server Browser service only on internal networks.
+        </div>
+        <div class="term" style="margin-top:5px;min-height:auto;font-size:6px">
+          <div><span class="t-comment"># Windows Firewall — block 1433 inbound from internet</span></div>
+          <div><span style="color:#4eff9a">netsh advfirewall firewall add rule name="Block SQL 1433"</span></div>
+          <div><span style="color:#4eff9a">protocol=TCP localport=1433 action=block dir=in</span></div>
+          <div><span style="color:#4eff9a">remoteip=0.0.0.0/0</span></div>
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc4">
+        <div class="fc-title" style="color:#e8a020">④ RENAME / DISABLE THE SA ACCOUNT</div>
+        <div class="fc-body">
+          if SQL Auth is required, disable 'sa' and create a named account.<br>
+          rename sa to an obscure name — stops automated tooling.<br>
+          enforce strong password policy on all SQL logins.
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc5">
+        <div class="fc-title" style="color:#e8a020">⑤ LEAST PRIVILEGE SERVICE ACCOUNT</div>
+        <div class="fc-body">
+          SQL Server runs as SYSTEM by default → total OS access on compromise.<br>
+          use a dedicated low-privilege domain service account.<br>
+          grant only: logon as service, access to SQL data directories.
+        </div>
+      </div>
+
+      <div class="fix-card" id="fc6">
+        <div class="fc-title" style="color:#4eff9a">⑥ ENABLE SQL SERVER AUDIT TO SIEM</div>
+        <div class="fc-body">
+          audit: successful/failed logins, sp_configure changes, DDL events.<br>
+          ship to SIEM. alert on: sa login, xp_cmdshell enable, bulk export.<br>
+          retention: 90 days minimum for incident response.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">disable xp_cmdshell + Windows Auth + firewall 1433</div>
+    <div class="ih gn">these 3 controls eliminate 95% of MSSQL attack surface.<br>least-priv service account contains the blast radius.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">6</div><div class="sl">HARDENING<br>CONTROLS</div></div>
+    <div class="sc"><div class="sv rd">NEVER</div><div class="sl">EXPOSE<br>1433 EXTERN</div></div>
+    <div class="sc"><div class="sv gn">WIN<br>AUTH</div><div class="sl">AUTH<br>MODE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  [playS1,playS2,playS3,playS4][n-1]();
+}
+
+// ── SCENE 1 ───────────────────────────────────
+function playS1(){
+  clearT();
+  document.getElementById('s1-line').style.width='0';
+  document.getElementById('s1-line-label').style.opacity='0';
+  document.getElementById('s1-os-label').style.color='#555';
+  document.getElementById('s1-xp-box').style.opacity='0';
+  ['st1','st2','st3','st4'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+  ['rb1','rb2','rb3','rb4'].forEach(id=>{ document.getElementById(id).style.width='0'; });
+
+  T(()=>{
+    document.getElementById('s1-line').style.width='100%';
+    setTimeout(()=>{ document.getElementById('s1-line-label').style.opacity='1'; },700);
+    setTimeout(()=>{ document.getElementById('s1-os-label').style.color='#f87171'; },1200);
+  },400);
+
+  T(()=>{ document.getElementById('s1-xp-box').style.opacity='1'; },1600);
+
+  const bars=[{id:'rb1',w:'95%'},{id:'rb2',w:'100%'},{id:'rb3',w:'80%'},{id:'rb4',w:'75%'}];
+  ['st1','st2','st3','st4'].forEach((id,i)=>{
+    T(()=>{
+      document.getElementById(id).classList.add('show');
+      setTimeout(()=>{ document.getElementById(bars[i].id).style.width=bars[i].w; },200);
+    },2600+i*500);
+  });
+}
+
+// ── SCENE 2 ───────────────────────────────────
+function playS2(){
+  clearT();
+  document.getElementById('s2-detect').style.opacity='0';
+  ['ap1','ap2','ap3','ap4','ap5'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+
+  ['ap1','ap2','ap3','ap4','ap5'].forEach((id,i)=>{
+    T(()=>{ document.getElementById(id).classList.add('show'); },400+i*700);
+  });
+  T(()=>{ document.getElementById('s2-detect').style.opacity='1'; },4200);
+}
+
+// ── SCENE 3 ───────────────────────────────────
+const logEvents=[
+  {time:'14:23:01',msg:'Login failed for user \'sa\' from 203.0.113.42',sev:'CRIT',sevColor:'#f87171'},
+  {time:'14:23:04',msg:'Login failed for user \'sa\' from 203.0.113.42 (attempt 2)',sev:'CRIT',sevColor:'#f87171'},
+  {time:'14:23:07',msg:'Login succeeded for user \'sa\' from 203.0.113.42',sev:'CRIT',sevColor:'#f87171'},
+  {time:'14:23:09',msg:'EventID 15457: Configuration option \'xp_cmdshell\' changed to 1',sev:'CRIT',sevColor:'#f87171'},
+  {time:'14:23:11',msg:'EventID 15457: Configuration option \'show advanced options\' changed',sev:'HIGH',sevColor:'#e8a020'},
+  {time:'14:23:14',msg:'xp_cmdshell execution detected — output captured in error log',sev:'CRIT',sevColor:'#f87171'},
+];
+
+const evtRows=[
+  {id:'18456',desc:'Failed SQL login attempt',sev:'HIGH',c:'#e8a020'},
+  {id:'15457',desc:'sp_configure / xp_cmdshell state changed',sev:'CRITICAL',c:'#f87171'},
+  {id:'4625', desc:'Windows auth failure (linked server)',sev:'HIGH',c:'#e8a020'},
+  {id:'17830',desc:'Network connection error / port scan',sev:'MED',c:'#555'},
+];
+
+function playS3(){
+  clearT();
+  document.getElementById('s3-logs').innerHTML='';
+  document.getElementById('s3-evtrows').innerHTML='';
+  document.getElementById('s3-siem').style.opacity='0';
+
+  logEvents.forEach((ev,i)=>{
+    T(()=>{
+      const row=document.createElement('div');
+      row.className='log-row show';
+      row.style.borderColor=ev.sevColor+'40';
+      row.innerHTML=`<span class="log-sev" style="border-color:${ev.sevColor};color:${ev.sevColor}">${ev.sev}</span>
+        <span style="color:#555;min-width:52px;font-size:5px">${ev.time}</span>
+        <span style="flex:1;color:#888;font-size:6px;line-height:1.5">${ev.msg}</span>`;
+      document.getElementById('s3-logs').appendChild(row);
+    },300+i*500);
+  });
+
+  T(()=>{
+    evtRows.forEach((ev,i)=>{
+      setTimeout(()=>{
+        const row=document.createElement('div');
+        row.style.cssText=`display:flex;gap:4px;padding:4px 6px;border-radius:2px;border:1px solid ${ev.c}30;font-size:6px;margin-bottom:3px;animation:fadeUp 0.3s ease`;
+        row.innerHTML=`<span style="min-width:44px;color:${ev.c}">${ev.id}</span>
+          <span style="flex:1;color:#666">${ev.desc}</span>
+          <span style="color:${ev.c};min-width:48px;text-align:right">${ev.sev}</span>`;
+        document.getElementById('s3-evtrows').appendChild(row);
+      },i*250);
+    });
+  },3500);
+
+  T(()=>{ document.getElementById('s3-siem').style.opacity='1'; },5000);
+}
+
+// ── SCENE 4 ───────────────────────────────────
+function playS4(){
+  clearT();
+  ['fc1','fc2','fc3','fc4','fc5','fc6'].forEach(id=>{ document.getElementById(id).classList.remove('show'); });
+  ['fc1','fc2','fc3','fc4','fc5','fc6'].forEach((id,i)=>{
+    T(()=>{ document.getElementById(id).classList.add('show'); },400+i*550);
+  });
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

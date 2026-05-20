@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Docker Network Isolation</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════ SCENE 1: FLAT NETWORK — THE PROBLEM ══════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">🐳 THE FLAT NETWORK</div>
+    <div class="hdr-sub">EVERYONE TALKS TO EVERYONE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">⚠ THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SECURITY RISK</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1_diag" class="panel" style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#100004;padding:5px 10px;border-bottom:1px solid #3a0010;font-size:6.5px;color:#e85050;text-align:center">default bridge — no isolation</div>
+        <svg width="100%" height="220" viewBox="0 0 366 220" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f1_glow_r" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- zone background -->
+          <rect id="s1_zone" x="8" y="8" width="350" height="204" rx="6"
+                fill="#1a0005" stroke="#3a0010" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
+          <text id="s1_zone_lbl" x="183" y="24" text-anchor="middle" font-size="6"
+                fill="#5a0018" font-family="'Press Start 2P',monospace" opacity="0">default network — flat</text>
+          <!-- frontend -->
+          <rect id="s1_fn" x="20" y="38" width="95" height="58" rx="3"
+                fill="#200008" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="s1_fn_t1" x="67" y="62" text-anchor="middle" font-size="7"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">frontend</text>
+          <text id="s1_fn_t2" x="67" y="76" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:3000</text>
+          <text id="s1_fn_t3" x="67" y="89" text-anchor="middle" font-size="5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">react app</text>
+          <!-- api -->
+          <rect id="s1_api" x="135" y="38" width="95" height="58" rx="3"
+                fill="#00100a" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s1_api_t1" x="182" y="62" text-anchor="middle" font-size="7"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api</text>
+          <text id="s1_api_t2" x="182" y="76" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:8080</text>
+          <text id="s1_api_t3" x="182" y="89" text-anchor="middle" font-size="5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">express</text>
+          <!-- database -->
+          <rect id="s1_db" x="251" y="38" width="100" height="58" rx="3"
+                fill="#0a0018" stroke="#a080ff" stroke-width="2" opacity="0"/>
+          <text id="s1_db_t1" x="301" y="62" text-anchor="middle" font-size="7"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">database</text>
+          <text id="s1_db_t2" x="301" y="76" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:5432</text>
+          <text id="s1_db_t3" x="301" y="89" text-anchor="middle" font-size="5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">postgres</text>
+          <!-- ok arrows -->
+          <line id="s1_ok1" x1="115" y1="67" x2="131" y2="67" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s1_ok1a" points="135,67 127,63 127,71" fill="#4eff9a" opacity="0"/>
+          <line id="s1_ok2" x1="230" y1="67" x2="247" y2="67" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s1_ok2a" points="251,67 243,63 243,71" fill="#4eff9a" opacity="0"/>
+          <!-- bad arc frontend → db -->
+          <path id="s1_bad_arc" d="M 67 96 Q 183 162 301 96"
+                stroke="#e85050" stroke-width="2" fill="none" stroke-dasharray="5,3" opacity="0"/>
+          <polygon id="s1_bad_arr" points="301,96 295,88 305,90" fill="#e85050" opacity="0"/>
+          <text id="s1_bad_lbl" x="183" y="158" text-anchor="middle" font-size="6.5"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">DIRECT DB ACCESS!</text>
+          <!-- animated packet along arc -->
+          <circle id="s1_pkt" cx="67" cy="96" r="5" fill="#e85050" opacity="0" filter="url(#f1_glow_r)"/>
+          <!-- warning box -->
+          <rect id="s1_warn" x="60" y="170" width="246" height="44" rx="3"
+                fill="#1a0000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s1_warn_t1" x="183" y="188" text-anchor="middle" font-size="6.5"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⚠ ANY container</text>
+          <text id="s1_warn_t2" x="183" y="202" text-anchor="middle" font-size="6.5"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">can reach :5432</text>
+          <text id="s1_warn_t3" x="183" y="213" text-anchor="middle" font-size="5.5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">no isolation on default bridge</text>
+        </svg>
+      </div>
+
+      <div id="s1_cards" class="panel" style="display:flex;flex-direction:column;gap:7px">
+        <div style="background:#120000;border-left:4px solid #e85050;padding:9px 12px">
+          <div style="font-size:7px;color:#e85050;margin-bottom:5px">💀 BREACH SCENARIO</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">XSS in frontend → attacker runs SQL queries directly against postgres. Game over.</div>
+        </div>
+        <div style="background:#0d0800;border-left:4px solid #e8a020;padding:9px 12px">
+          <div style="font-size:7px;color:#e8a020;margin-bottom:5px">⚠ ALSO WRONG</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9">All services share one DNS namespace. Any container can resolve any other by name.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">On the default bridge, all containers see each other. Nothing is isolated.</div>
+    <div class="ih rd">Your frontend should never be able to speak to your database. Ever.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">FLAT</div><div class="sl">NETWORK<br>MODEL</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">CONTAINERS<br>EXPOSED</div></div>
+    <div class="sc"><div class="sv am">0</div><div class="sl">ZONES<br>DEFINED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 2: CUSTOM NETWORKS CONCEPT ══════════ -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">🌐 CUSTOM NETWORKS</div>
+    <div class="hdr-sub">SCOPED DNS + REAL ISOLATION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">THE CONCEPT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">HOW IT WORKS</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2_diag" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">two custom networks — different scopes</div>
+        <svg width="100%" height="195" viewBox="0 0 366 195" xmlns="http://www.w3.org/2000/svg">
+          <!-- frontend-net zone -->
+          <rect id="s2_fn_net" x="8" y="10" width="172" height="175" rx="5"
+                fill="#00080f" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_fn_net_l" x="94" y="26" text-anchor="middle" font-size="6"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">frontend-net</text>
+          <!-- backend-net zone -->
+          <rect id="s2_bn_net" x="186" y="10" width="172" height="175" rx="5"
+                fill="#001008" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_bn_net_l" x="272" y="26" text-anchor="middle" font-size="6"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">backend-net</text>
+          <!-- frontend container -->
+          <rect id="s2_fe" x="18" y="38" width="100" height="52" rx="3"
+                fill="#001020" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s2_fe_t1" x="68" y="59" text-anchor="middle" font-size="6.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">frontend</text>
+          <text id="s2_fe_t2" x="68" y="73" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:3000</text>
+          <text id="s2_fe_t3" x="68" y="84" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">frontend-net ✓</text>
+          <!-- api container straddles both -->
+          <rect id="s2_api" x="133" y="38" width="100" height="52" rx="3"
+                fill="#001408" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s2_api_t1" x="183" y="59" text-anchor="middle" font-size="6.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api</text>
+          <text id="s2_api_t2" x="183" y="73" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:8080</text>
+          <text id="s2_api_t3" x="183" y="84" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">both nets ✓</text>
+          <!-- database container -->
+          <rect id="s2_db" x="248" y="38" width="100" height="52" rx="3"
+                fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s2_db_t1" x="298" y="59" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">database</text>
+          <text id="s2_db_t2" x="298" y="73" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:5432</text>
+          <text id="s2_db_t3" x="298" y="84" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">backend-net ✓</text>
+          <!-- ok arrows -->
+          <line id="s2_ok_fa" x1="118" y1="64" x2="133" y2="64" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s2_ok_fa_a" points="137,64 129,60 129,68" fill="#4eff9a" opacity="0"/>
+          <line id="s2_ok_ad" x1="233" y1="64" x2="248" y2="64" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s2_ok_ad_a" points="252,64 244,60 244,68" fill="#4eff9a" opacity="0"/>
+          <!-- dns scope labels -->
+          <text id="s2_dns1" x="68" y="115" text-anchor="middle" font-size="5.5"
+                fill="#2a4a5a" font-family="'Press Start 2P',monospace" opacity="0">resolves: api</text>
+          <text id="s2_dns2" x="183" y="115" text-anchor="middle" font-size="5.5"
+                fill="#2a5a40" font-family="'Press Start 2P',monospace" opacity="0">resolves: all</text>
+          <text id="s2_dns3" x="298" y="115" text-anchor="middle" font-size="5.5"
+                fill="#3a2a5a" font-family="'Press Start 2P',monospace" opacity="0">resolves: db</text>
+          <!-- BLOCKED arc fe → db -->
+          <path id="s2_blk" d="M 68 90 Q 183 152 298 90"
+                stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_blk_x" x="183" y="149" text-anchor="middle" font-size="13"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">✕</text>
+          <text id="s2_blk_l" x="183" y="164" text-anchor="middle" font-size="6"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">no route — different network</text>
+          <!-- blocked packet arc attempt -->
+          <circle id="s2_blk_pkt" cx="68" cy="90" r="4.5" fill="#e85050" opacity="0"/>
+        </svg>
+      </div>
+
+      <div id="s2_ins1" class="panel" style="background:#00080f;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:9px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">🔍 SCOPED DNS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Containers only resolve names of services on <span style="color:#4ec9e1">the same network</span>. frontend can resolve "api" but NOT "database".</div>
+      </div>
+
+      <div id="s2_ins2" class="panel" style="background:#001008;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:9px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">🌉 API BRIDGES BOTH</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">The API service joins <span style="color:#4ec9e1">both</span> networks. It's the only path from front to back. Database is invisible to the frontend zone.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Custom networks give each zone its own isolated DNS namespace.</div>
+    <div class="ih" style="color:#4ec9e1">If you're not on the network, you can't even resolve the hostname.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">2</div><div class="sl">CUSTOM<br>NETWORKS</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">BRIDGE<br>SERVICE</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">DB<br>EXPOSURE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 3: COMPOSE CONFIG ══════════ -->
+<div class="scene" id="s3" style="background:#001008">
+  <div class="hdr" style="background:#001008;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">📄 THE COMPOSE CONFIG</div>
+    <div class="hdr-sub">NETWORKS IN YAML</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001008">
+    <span class="slabel" style="color:#4eff9a">IMPLEMENTATION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">WRITE IT</span>
+  </div>
+  <div class="anim" style="background:#001008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3_yaml" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#031208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.4">
+          <div id="y1"  class="tline" style="color:#a080ff">services:</div>
+          <div id="y2"  class="tline" style="color:#e8a020;padding-left:10px">frontend:</div>
+          <div id="y3"  class="tline" style="color:#888;padding-left:20px">image: my-react-app</div>
+          <div id="y4"  class="tline" style="color:#888;padding-left:20px">networks:</div>
+          <div id="y5"  class="tline" style="color:#4ec9e1;padding-left:30px">- frontend-net  <span style="color:#2a4a2a"># only</span></div>
+          <div id="y6"  class="tline" style="color:#4ec9e1;padding-left:10px">api:</div>
+          <div id="y7"  class="tline" style="color:#888;padding-left:20px">image: my-express-api</div>
+          <div id="y8"  class="tline" style="color:#888;padding-left:20px">networks:</div>
+          <div id="y9"  class="tline" style="color:#4eff9a;padding-left:30px">- frontend-net  <span style="color:#1a3a1a"># bridge!</span></div>
+          <div id="y10" class="tline" style="color:#4eff9a;padding-left:30px">- backend-net   <span style="color:#1a3a1a"># bridge!</span></div>
+          <div id="y11" class="tline" style="color:#a080ff;padding-left:10px">database:</div>
+          <div id="y12" class="tline" style="color:#888;padding-left:20px">image: postgres:15</div>
+          <div id="y13" class="tline" style="color:#888;padding-left:20px">networks:</div>
+          <div id="y14" class="tline" style="color:#a080ff;padding-left:30px">- backend-net   <span style="color:#2a1a4a"># only</span></div>
+          <div id="y15" class="tline" style="color:#555;padding-left:30px"># NOT on frontend-net!</div>
+          <div id="y16" class="tline" style="color:#a080ff;margin-top:4px">networks:</div>
+          <div id="y17" class="tline" style="color:#4ec9e1;padding-left:10px">frontend-net:</div>
+          <div id="y18" class="tline" style="color:#888;padding-left:20px">driver: bridge</div>
+          <div id="y19" class="tline" style="color:#4eff9a;padding-left:10px">backend-net:</div>
+          <div id="y20" class="tline" style="color:#888;padding-left:20px">driver: bridge</div>
+        </div>
+      </div>
+
+      <div id="s3_ann" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#001020;border:1px solid #4ec9e1;border-radius:2px;padding:8px 9px">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:5px">frontend-net</div>
+          <div style="font-size:5.8px;color:#aaa;line-height:2.0">frontend ✓<br>api ✓<br><span style="color:#e85050">database ✗</span></div>
+        </div>
+        <div style="background:#001408;border:1px solid #4eff9a;border-radius:2px;padding:8px 9px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">backend-net</div>
+          <div style="font-size:5.8px;color:#aaa;line-height:2.0"><span style="color:#e85050">frontend ✗</span><br>api ✓<br>database ✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Define named networks at the bottom, assign services to them explicitly.</div>
+    <div class="ih">The API is the ONLY service on both. That's intentional — it's the gatekeeper.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">20</div><div class="sl">YAML<br>LINES</div></div>
+    <div class="sc"><div class="sv gn">bridge</div><div class="sl">DRIVER<br>TYPE</div></div>
+    <div class="sc"><div class="sv pu">scoped</div><div class="sl">DNS<br>PER NET</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 4: PACKET FLOWS ══════════ -->
+<div class="scene" id="s4" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0040">
+    <div class="hdr-title" style="color:#a080ff">⚡ TRAFFIC RULES</div>
+    <div class="hdr-sub">WHO CAN REACH WHOM — ANIMATED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#a080ff">LIVE FLOWS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ANIMATED</span>
+  </div>
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4_diag" class="panel" style="background:#060010;border:2px solid #2a0040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;border-bottom:1px solid #2a0040;font-size:6.5px;color:#a080ff;text-align:center">network topology — packet flows</div>
+        <svg width="100%" height="265" viewBox="0 0 366 265" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f4_glow_g" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="f4_glow_r" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- zone backgrounds (always visible) -->
+          <rect x="8" y="8" width="212" height="248" rx="6"
+                fill="#00040f" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="114" y="24" text-anchor="middle" font-size="5.5"
+                fill="#1a3a4a" font-family="'Press Start 2P',monospace">frontend-net</text>
+          <rect x="146" y="8" width="212" height="248" rx="6"
+                fill="#001008" stroke="#4eff9a" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="252" y="24" text-anchor="middle" font-size="5.5"
+                fill="#1a3a2a" font-family="'Press Start 2P',monospace">backend-net</text>
+          <!-- USER -->
+          <rect id="s4_usr" x="15" y="32" width="78" height="44" rx="3"
+                fill="#100018" stroke="#888" stroke-width="1.5" opacity="0"/>
+          <text id="s4_usr_t1" x="54" y="50" text-anchor="middle" font-size="6.5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">USER</text>
+          <text id="s4_usr_t2" x="54" y="66" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">browser</text>
+          <!-- FRONTEND -->
+          <rect id="s4_fe" x="15" y="100" width="103" height="52" rx="3"
+                fill="#001020" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="s4_fe_t1" x="66" y="122" text-anchor="middle" font-size="6.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">frontend</text>
+          <text id="s4_fe_t2" x="66" y="136" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:3000</text>
+          <text id="s4_fe_t3" x="66" y="147" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">frontend-net</text>
+          <!-- API straddles both zones -->
+          <rect id="s4_api" x="133" y="100" width="100" height="52" rx="3"
+                fill="#001a0a" stroke="#4ec9e1" stroke-width="2.5" opacity="0"/>
+          <text id="s4_api_t1" x="183" y="120" text-anchor="middle" font-size="7"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">API</text>
+          <text id="s4_api_t2" x="183" y="134" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">:8080 · both nets</text>
+          <text id="s4_api_t3" x="183" y="146" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">gatekeeper</text>
+          <!-- DATABASE -->
+          <rect id="s4_db" x="253" y="100" width="100" height="52" rx="3"
+                fill="#0a0020" stroke="#a080ff" stroke-width="2" opacity="0"/>
+          <text id="s4_db_t1" x="303" y="122" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">database</text>
+          <text id="s4_db_t2" x="303" y="136" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">:5432</text>
+          <text id="s4_db_t3" x="303" y="147" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">backend-net</text>
+          <!-- static dim connectors -->
+          <line x1="54" y1="76" x2="54" y2="100" stroke="#2a2a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line x1="118" y1="126" x2="133" y2="126" stroke="#2a2a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <line x1="233" y1="126" x2="253" y2="126" stroke="#2a2a3a" stroke-width="1" stroke-dasharray="2,2"/>
+          <!-- flow labels -->
+          <text id="s4_fl1" x="28" y="93" font-size="5.5" fill="#444"
+                font-family="'Press Start 2P',monospace" opacity="0">HTTP</text>
+          <text id="s4_fl2" x="118" y="121" font-size="5.5" fill="#444"
+                font-family="'Press Start 2P',monospace" opacity="0">REST</text>
+          <text id="s4_fl3" x="236" y="121" font-size="5.5" fill="#444"
+                font-family="'Press Start 2P',monospace" opacity="0">SQL</text>
+          <!-- animated packets (green happy path) -->
+          <circle id="s4_pkt_uf" cx="54" cy="76" r="4.5" fill="#4eff9a" opacity="0" filter="url(#f4_glow_g)"/>
+          <circle id="s4_pkt_fa" cx="118" cy="126" r="4.5" fill="#4ec9e1" opacity="0" filter="url(#f4_glow_g)"/>
+          <circle id="s4_pkt_ad" cx="233" cy="126" r="4.5" fill="#a080ff" opacity="0" filter="url(#f4_glow_g)"/>
+          <!-- bad arc: frontend tries to reach db -->
+          <path id="s4_bad_arc" d="M 66 152 Q 183 220 303 152"
+                stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="4,3" opacity="0"/>
+          <circle id="s4_pkt_bad" cx="66" cy="152" r="4.5" fill="#e85050" opacity="0" filter="url(#f4_glow_r)"/>
+          <text id="s4_bad_x" x="183" y="218" text-anchor="middle" font-size="13"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">✕</text>
+          <text id="s4_bad_l1" x="183" y="234" text-anchor="middle" font-size="6"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">BLOCKED — no route</text>
+          <text id="s4_bad_l2" x="183" y="248" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">frontend can't resolve "database"</text>
+        </svg>
+      </div>
+
+      <div id="s4_sum" class="panel" style="display:flex;flex-direction:column;gap:6px">
+        <div style="background:#001408;border:1px solid #0d3018;border-radius:2px;padding:8px 10px;display:flex;align-items:center;gap:9px">
+          <span style="font-size:10px">✅</span>
+          <div style="font-size:6.5px;color:#4eff9a;line-height:1.9">USER → frontend → API → database</div>
+        </div>
+        <div style="background:#120000;border:1px solid #3a0010;border-radius:2px;padding:8px 10px;display:flex;align-items:center;gap:9px">
+          <span style="font-size:10px">🚫</span>
+          <div style="font-size:6.5px;color:#e85050;line-height:1.9">frontend → database (DNS fails, blocked)</div>
+        </div>
+        <div style="background:#120000;border:1px solid #3a0010;border-radius:2px;padding:8px 10px;display:flex;align-items:center;gap:9px">
+          <span style="font-size:10px">🚫</span>
+          <div style="font-size:6.5px;color:#e85050;line-height:1.9">database → frontend (no path either way)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">The green path is the only path. Everything else has no route.</div>
+    <div class="ih pu">Isolation isn't a firewall rule — it's just not being on the same network.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">VALID<br>PATH</div></div>
+    <div class="sc"><div class="sv rd">2</div><div class="sl">BLOCKED<br>PATHS</div></div>
+    <div class="sc"><div class="sv pu">0</div><div class="sl">FIREWALL<br>RULES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 5: PRODUCTION EXTRAS ══════════ -->
+<div class="scene" id="s5" style="background:#001508">
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">🚀 PRODUCTION EXTRAS</div>
+    <div class="hdr-sub">OVERLAY NETWORKS + BEYOND</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">NEXT LEVEL</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SWARM + K8S</span>
+  </div>
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s5_cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#000d18;border:2px solid #4ec9e1;border-radius:2px;overflow:hidden">
+          <div style="background:#001020;padding:5px 7px;border-bottom:1px solid #0d2030;text-align:center">
+            <div style="font-size:6.5px;color:#4ec9e1">bridge</div>
+          </div>
+          <div style="padding:8px 9px;font-size:6px;color:#aaa;line-height:2.0">Single host<br>Dev &amp; local prod<br>docker compose<br><span style="color:#4ec9e1">→ use this first</span></div>
+        </div>
+        <div style="background:#001a08;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#002010;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">overlay</div>
+          </div>
+          <div style="padding:8px 9px;font-size:6px;color:#aaa;line-height:2.0">Multi-host cluster<br>Docker Swarm<br>Encrypted VXLAN<br><span style="color:#4eff9a">→ for swarm/k8s</span></div>
+        </div>
+      </div>
+
+      <div id="s5_hard" class="panel" style="background:#001a08;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px">🔒 EXTRA HARDENING</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div id="ht1" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4eff9a">internal: true</span> — network with no egress to internet</div>
+          <div id="ht2" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4eff9a">encrypt: true</span> — VXLAN payload encrypted (overlay)</div>
+          <div id="ht3" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4eff9a">expose:</span> not ports: — only advertise to linked containers</div>
+          <div id="ht4" class="tline" style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4eff9a">network policies</span> — Kubernetes NetworkPolicy for L3/L4</div>
+        </div>
+      </div>
+
+      <div id="s5_model" class="panel" style="background:#0a0018;border:2px solid #a080ff;border-radius:3px;padding:11px 13px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:8px">🧠 THE MENTAL MODEL</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #e8a020">
+            <span style="color:#e8a020">frontend-net</span> = public zone<br>Faces users. Minimal trust.
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #4ec9e1">
+            <span style="color:#4ec9e1">API</span> = DMZ (demilitarised zone)<br>Translates public ↔ private.
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #a080ff">
+            <span style="color:#a080ff">backend-net</span> = private zone<br>No public access. Ever.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Bridge for local, overlay for clusters. Same isolation model, different scope.</div>
+    <div class="ih">Public zone → DMZ → private zone. Classic defence-in-depth.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">bridge</div><div class="sl">LOCAL<br>DEV</div></div>
+    <div class="sc"><div class="sv gn">overlay</div><div class="sl">CLUSTER<br>PROD</div></div>
+    <div class="sc"><div class="sv pu">DMZ</div><div class="sl">API AS<br>GATEWAY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)" style="font-size:8px">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1, T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+
+function show(id,ms){
+  af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});
+}
+function hide(id){
+  const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}
+}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+// Animate packet along straight line
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);
+      d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+    }
+    af(16,step);
+  });
+}
+
+// Animate packet along quadratic bezier arc
+function movePktArc(id,x1,y1,cx,cy,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const t=Math.min(f/frames,1);
+      const mt=1-t;
+      const px=mt*mt*x1+2*mt*t*cx+t*t*x2;
+      const py=mt*mt*y1+2*mt*t*cy+t*t*y2;
+      d.setAttribute('cx',px);d.setAttribute('cy',py);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+    }
+    af(16,step);
+  });
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('s1_diag');hide('s1_cards');
+    ['s1_zone','s1_zone_lbl','s1_fn','s1_fn_t1','s1_fn_t2','s1_fn_t3',
+     's1_api','s1_api_t1','s1_api_t2','s1_api_t3',
+     's1_db','s1_db_t1','s1_db_t2','s1_db_t3',
+     's1_ok1','s1_ok1a','s1_ok2','s1_ok2a',
+     's1_bad_arc','s1_bad_arr','s1_bad_lbl','s1_pkt',
+     's1_warn','s1_warn_t1','s1_warn_t2','s1_warn_t3'].forEach(svgHide);
+  }
+  if(n===2){
+    hide('s2_diag');hide('s2_ins1');hide('s2_ins2');
+    ['s2_fn_net','s2_fn_net_l','s2_bn_net','s2_bn_net_l',
+     's2_fe','s2_fe_t1','s2_fe_t2','s2_fe_t3',
+     's2_api','s2_api_t1','s2_api_t2','s2_api_t3',
+     's2_db','s2_db_t1','s2_db_t2','s2_db_t3',
+     's2_ok_fa','s2_ok_fa_a','s2_ok_ad','s2_ok_ad_a',
+     's2_dns1','s2_dns2','s2_dns3',
+     's2_blk','s2_blk_x','s2_blk_l','s2_blk_pkt'].forEach(svgHide);
+  }
+  if(n===3){
+    hide('s3_yaml');hide('s3_ann');
+    for(let i=1;i<=20;i++)hideEl('y'+i);
+  }
+  if(n===4){
+    hide('s4_diag');hide('s4_sum');
+    ['s4_usr','s4_usr_t1','s4_usr_t2',
+     's4_fe','s4_fe_t1','s4_fe_t2','s4_fe_t3',
+     's4_api','s4_api_t1','s4_api_t2','s4_api_t3',
+     's4_db','s4_db_t1','s4_db_t2','s4_db_t3',
+     's4_fl1','s4_fl2','s4_fl3',
+     's4_pkt_uf','s4_pkt_fa','s4_pkt_ad',
+     's4_bad_arc','s4_pkt_bad','s4_bad_x','s4_bad_l1','s4_bad_l2'].forEach(svgHide);
+  }
+  if(n===5){
+    hide('s5_cmp');hide('s5_hard');hide('s5_model');
+    ['ht1','ht2','ht3','ht4'].forEach(hideEl);
+  }
+}
+
+function play(n){
+  clr();
+
+  if(n===1){
+    show('s1_diag',200);
+    svgShow('s1_zone',350);
+    svgShow('s1_zone_lbl',450);
+    svgShow('s1_fn',650);svgShow('s1_fn_t1',800);svgShow('s1_fn_t2',800);svgShow('s1_fn_t3',800);
+    svgShow('s1_api',1000);svgShow('s1_api_t1',1150);svgShow('s1_api_t2',1150);svgShow('s1_api_t3',1150);
+    svgShow('s1_db',1350);svgShow('s1_db_t1',1500);svgShow('s1_db_t2',1500);svgShow('s1_db_t3',1500);
+    svgShow('s1_ok1',1700);svgShow('s1_ok1a',1700);
+    svgShow('s1_ok2',1850);svgShow('s1_ok2a',1850);
+    // bad arc appears then packet travels it
+    svgShow('s1_bad_arc',2200);
+    movePktArc('s1_pkt',67,96,183,162,301,96,2350,700);
+    svgShow('s1_bad_arr',3100);
+    svgShow('s1_bad_lbl',3200);
+    svgShow('s1_warn',3600);
+    svgShow('s1_warn_t1',3700);svgShow('s1_warn_t2',3850);svgShow('s1_warn_t3',4000);
+    show('s1_cards',4400);
+  }
+
+  if(n===2){
+    show('s2_diag',200);
+    svgShow('s2_fn_net',350);svgShow('s2_fn_net_l',500);
+    svgShow('s2_bn_net',550);svgShow('s2_bn_net_l',700);
+    svgShow('s2_fe',800);svgShow('s2_fe_t1',950);svgShow('s2_fe_t2',950);svgShow('s2_fe_t3',950);
+    svgShow('s2_api',1100);svgShow('s2_api_t1',1250);svgShow('s2_api_t2',1250);svgShow('s2_api_t3',1250);
+    svgShow('s2_db',1400);svgShow('s2_db_t1',1550);svgShow('s2_db_t2',1550);svgShow('s2_db_t3',1550);
+    svgShow('s2_ok_fa',1800);svgShow('s2_ok_fa_a',1800);
+    svgShow('s2_ok_ad',1950);svgShow('s2_ok_ad_a',1950);
+    svgShow('s2_dns1',2200);svgShow('s2_dns2',2200);svgShow('s2_dns3',2200);
+    svgShow('s2_blk',2600);
+    movePktArc('s2_blk_pkt',68,90,183,152,298,90,2750,600);
+    svgShow('s2_blk_x',3450);svgShow('s2_blk_l',3550);
+    show('s2_ins1',4000);
+    show('s2_ins2',4700);
+  }
+
+  if(n===3){
+    show('s3_yaml',200);
+    for(let i=1;i<=20;i++) showEl('y'+i, 400+(i-1)*175);
+    show('s3_ann',4000);
+  }
+
+  if(n===4){
+    show('s4_diag',200);
+    svgShow('s4_usr',400);svgShow('s4_usr_t1',550);svgShow('s4_usr_t2',550);
+    svgShow('s4_fe',700);svgShow('s4_fe_t1',850);svgShow('s4_fe_t2',850);svgShow('s4_fe_t3',850);
+    svgShow('s4_api',1000);svgShow('s4_api_t1',1150);svgShow('s4_api_t2',1150);svgShow('s4_api_t3',1150);
+    svgShow('s4_db',1300);svgShow('s4_db_t1',1450);svgShow('s4_db_t2',1450);svgShow('s4_db_t3',1450);
+    svgShow('s4_fl1',1700);svgShow('s4_fl2',1800);svgShow('s4_fl3',1900);
+    // Green happy path — run twice
+    function greenFlow(off){
+      movePkt('s4_pkt_uf',54,76,54,100,off,300);
+      movePkt('s4_pkt_fa',118,126,133,126,off+450,300);
+      movePkt('s4_pkt_ad',233,126,253,126,off+900,300);
+    }
+    greenFlow(2100);
+    greenFlow(3400);
+    // Bad attempt
+    svgShow('s4_bad_arc',4700);
+    movePktArc('s4_pkt_bad',66,152,183,220,303,152,4850,700);
+    svgShow('s4_bad_x',5650);svgShow('s4_bad_l1',5800);svgShow('s4_bad_l2',5950);
+    show('s4_sum',6400);
+  }
+
+  if(n===5){
+    show('s5_cmp',300);
+    show('s5_hard',1000);
+    showEl('ht1',1200);showEl('ht2',1550);showEl('ht3',1900);showEl('ht4',2250);
+    show('s5_model',2800);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

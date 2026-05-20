@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>docker-compose.yaml Anatomy</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+/* callout annotation */
+.callout{opacity:0;transition:opacity .35s;display:flex;align-items:flex-start;gap:8px;padding:7px 10px;border-radius:2px;margin-top:0}
+.callout.vis{opacity:1}
+.callout-arrow{font-size:9px;flex-shrink:0;margin-top:1px}
+.callout-text{font-size:6px;line-height:1.9;color:#ccc}
+/* highlight pulse */
+@keyframes hlpulse{0%{opacity:.25}50%{opacity:1}100%{opacity:.25}}
+.hl{animation:hlpulse 1.2s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — services, image, build
+═══════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#00060f">
+
+  <div class="hdr" style="background:#00060f;border-bottom:1px solid #0a1a2a">
+    <div class="hdr-title" style="color:#4ec9e1">YAML ANATOMY</div>
+    <div class="hdr-sub">SERVICES · IMAGE · BUILD</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00060f">
+    <span class="slabel" style="color:#4ec9e1">PART 1 OF 4</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">SERVICES</span>
+  </div>
+
+  <div class="anim" style="background:#00060f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- full yaml, always visible, lines light up -->
+      <div id="s1-yaml" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yaml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <!-- services key -->
+          <div id="s1-key-services" style="color:#aaa;transition:color .3s"><span id="s1-hl-services" style="color:#aaa;transition:color .3s">services:</span></div>
+          <!-- web service -->
+          <div id="s1-key-web" style="color:#aaa;padding-left:10px;transition:color .3s"><span id="s1-hl-web" style="transition:color .3s">web:</span></div>
+          <div id="s1-key-build" style="color:#aaa;padding-left:18px;transition:color .3s">  <span id="s1-hl-build" style="transition:color .3s">build: <span style="color:#666">./app</span></span></div>
+          <div style="color:#444;padding-left:18px">  ports: ["3000:3000"]</div>
+          <div style="color:#444;padding-left:18px">  environment:</div>
+          <div style="color:#444;padding-left:26px">    NODE_ENV: production</div>
+          <div style="color:#444;padding-left:18px">  depends_on: [db]</div>
+          <!-- db service -->
+          <div id="s1-key-db" style="color:#aaa;padding-left:10px;transition:color .3s"><span id="s1-hl-db" style="transition:color .3s">db:</span></div>
+          <div id="s1-key-image" style="color:#aaa;padding-left:18px;transition:color .3s">  <span id="s1-hl-image" style="transition:color .3s">image: <span style="color:#666">postgres:15</span></span></div>
+          <div style="color:#444;padding-left:18px">  environment:</div>
+          <div style="color:#444;padding-left:26px">    POSTGRES_PASSWORD: secret</div>
+          <div style="color:#444;padding-left:18px">  volumes:</div>
+          <div style="color:#444;padding-left:26px">    - pgdata:/var/lib/postgresql/data</div>
+          <!-- volumes top-level -->
+          <div style="color:#444">volumes:</div>
+          <div style="color:#444;padding-left:10px">  pgdata:</div>
+        </div>
+      </div>
+
+      <!-- callout: services -->
+      <div id="s1-co-services" class="callout" style="background:#001525;border-left:3px solid #4ec9e1">
+        <span class="callout-arrow" style="color:#4ec9e1">▶</span>
+        <div class="callout-text">
+          <span style="color:#4ec9e1">services:</span> — the top-level key. Everything inside is a named container. Think of it as your app's guest list.
+        </div>
+      </div>
+
+      <!-- callout: image -->
+      <div id="s1-co-image" class="callout" style="background:#001525;border-left:3px solid #e8a020">
+        <span class="callout-arrow" style="color:#e8a020">▶</span>
+        <div class="callout-text">
+          <span style="color:#e8a020">image:</span> — pull a pre-built image from Docker Hub (or a registry). <span style="color:#e8a020">postgres:15</span> means "official postgres, version 15".
+        </div>
+      </div>
+
+      <!-- callout: build -->
+      <div id="s1-co-build" class="callout" style="background:#001525;border-left:3px solid #a080ff">
+        <span class="callout-arrow" style="color:#a080ff">▶</span>
+        <div class="callout-text">
+          <span style="color:#a080ff">build:</span> — build from a local Dockerfile instead of pulling. Path points to the folder containing your Dockerfile.
+        </div>
+      </div>
+
+      <!-- image vs build compare -->
+      <div id="s1-compare" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#0d0500;border:1px solid #3a2a00;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#e8a020;margin-bottom:5px">image:</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.9">Use when you want an existing published image. No source code needed.</div>
+        </div>
+        <div style="background:#05000d;border:1px solid #2a1545;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#a080ff;margin-bottom:5px">build:</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.9">Use when you have a Dockerfile and want Compose to build the image for you.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Every service is one container. Give it a name, then tell it where to get its image.</div>
+    <div class="ih">image: pulls. build: compiles your Dockerfile.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">services</div><div class="sl">TOP-LEVEL KEY</div></div>
+    <div class="sc"><div class="sv am">image</div><div class="sl">PULL FROM HUB</div></div>
+    <div class="sc"><div class="sv pu">build</div><div class="sl">USE DOCKERFILE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — ports & environment
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#0a0500">
+
+  <div class="hdr" style="background:#0a0500;border-bottom:1px solid #2a1500">
+    <div class="hdr-title" style="color:#e8a020">YAML ANATOMY</div>
+    <div class="hdr-sub">PORTS · ENVIRONMENT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0500">
+    <span class="slabel" style="color:#e8a020">PART 2 OF 4</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">EXPOSE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0500">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s2-yaml" class="panel" style="background:#080300;border:2px solid #2a1500;border-radius:3px;overflow:hidden">
+        <div style="background:#120700;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yaml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div style="color:#444">services:</div>
+          <div style="color:#444;padding-left:10px">web:</div>
+          <div style="color:#444;padding-left:18px">build: ./app</div>
+
+          <!-- ports highlighted -->
+          <div id="s2-key-ports" style="color:#aaa;padding-left:18px;transition:color .3s"><span id="s2-hl-ports" style="transition:color .3s">ports:</span></div>
+          <div id="s2-key-ports2" style="color:#aaa;padding-left:26px;transition:color .3s">- <span id="s2-hl-ports2" style="transition:color .3s"><span style="color:#e8a020">"3000</span>:<span style="color:#4eff9a">3000</span>"</span></div>
+
+          <!-- env highlighted -->
+          <div id="s2-key-env" style="color:#aaa;padding-left:18px;transition:color .3s"><span id="s2-hl-env" style="transition:color .3s">environment:</span></div>
+          <div id="s2-key-env2" style="color:#aaa;padding-left:26px;transition:color .3s"><span id="s2-hl-env2" style="transition:color .3s">NODE_ENV: <span style="color:#4eff9a">production</span></span></div>
+          <div id="s2-key-env3" style="color:#aaa;padding-left:26px;transition:color .3s"><span id="s2-hl-env3" style="transition:color .3s">API_KEY: <span style="color:#4eff9a">abc123</span></span></div>
+          <div id="s2-key-env4" style="color:#aaa;padding-left:26px;transition:color .3s"><span id="s2-hl-env4" style="transition:color .3s">DB_HOST: <span style="color:#4ec9e1">db</span></span></div>
+
+          <div style="color:#444;padding-left:18px">depends_on: [db]</div>
+          <div style="color:#444;padding-left:10px">db:</div>
+          <div style="color:#444;padding-left:18px">image: postgres:15</div>
+          <div style="color:#444;padding-left:18px">ports:</div>
+          <div style="color:#444;padding-left:26px">- "5432:5432"</div>
+          <div style="color:#444;padding-left:18px">environment:</div>
+          <div style="color:#444;padding-left:26px">POSTGRES_PASSWORD: secret</div>
+        </div>
+      </div>
+
+      <!-- ports diagram -->
+      <div id="s2-portdiag" class="panel" style="background:#080300;border:2px solid #2a1500;border-radius:3px;overflow:hidden">
+        <div style="background:#120700;padding:5px 12px">
+          <div style="font-size:6.5px;color:#e8a020;text-align:center">HOW PORTS WORK: HOST:CONTAINER</div>
+        </div>
+        <div style="padding:10px 12px">
+          <svg width="100%" height="72" viewBox="0 0 366 72" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <!-- host box -->
+            <rect x="4" y="14" width="150" height="44" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="79" y="10" text-anchor="middle" font-size="6" fill="#e8a020">YOUR LAPTOP</text>
+            <text x="79" y="34" text-anchor="middle" font-size="8" fill="#e8a020">:3000</text>
+            <text x="79" y="48" text-anchor="middle" font-size="5.5" fill="#888">localhost:3000</text>
+            <!-- arrow -->
+            <line x1="158" y1="36" x2="204" y2="36" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="3,2"/>
+            <polygon points="208,36 201,32 201,40" fill="#4ec9e1"/>
+            <text x="183" y="28" text-anchor="middle" font-size="5" fill="#4ec9e1">maps to</text>
+            <!-- container box -->
+            <rect x="212" y="14" width="150" height="44" rx="2" fill="#001808" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="287" y="10" text-anchor="middle" font-size="6" fill="#4eff9a">CONTAINER</text>
+            <text x="287" y="34" text-anchor="middle" font-size="8" fill="#4eff9a">:3000</text>
+            <text x="287" y="48" text-anchor="middle" font-size="5.5" fill="#888">web listens here</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- callout: ports -->
+      <div id="s2-co-ports" class="callout" style="background:#120700;border-left:3px solid #e8a020">
+        <span class="callout-arrow" style="color:#e8a020">▶</span>
+        <div class="callout-text">
+          <span style="color:#e8a020">ports: "HOST:CONTAINER"</span> — left side is your laptop, right side is inside the container. <span style="color:#e8a020">3000:3000</span> opens localhost:3000 to the container's port 3000.
+        </div>
+      </div>
+
+      <!-- callout: environment -->
+      <div id="s2-co-env" class="callout" style="background:#001508;border-left:3px solid #4eff9a">
+        <span class="callout-arrow" style="color:#4eff9a">▶</span>
+        <div class="callout-text">
+          <span style="color:#4eff9a">environment:</span> — inject env vars into the container. Note <span style="color:#4ec9e1">DB_HOST: db</span> — services find each other by their service name. No IP addresses needed.
+        </div>
+      </div>
+
+      <!-- env_file tip -->
+      <div id="s2-tip" class="panel" style="background:#050d00;border:1px solid #1a3000;padding:9px 11px;border-radius:2px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:5px">💡 PRO TIP: env_file</div>
+        <div style="font-size:6px;color:#aaa;line-height:1.9">Don't hardcode secrets! Use <span style="color:#4eff9a">env_file: .env</span> to load from a .env file and add .env to .gitignore.</div>
+        <div style="font-size:6px;color:#555;margin-top:5px;line-height:1.9">env_file: .env  ← reads KEY=VALUE pairs from file</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Ports bridge your laptop and the container. Env vars configure the app.</div>
+    <div class="ih am">Services talk to each other using their name as hostname.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv am">"H:C"</div><div class="sl">HOST:CONTAINER</div></div>
+    <div class="sc"><div class="sv gn">env</div><div class="sl">CONFIG INJECT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">name</div><div class="sl">SVC HOSTNAME</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — volumes & depends_on
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060010">
+
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff">YAML ANATOMY</div>
+    <div class="hdr-sub">VOLUMES · DEPENDS_ON</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#a080ff">PART 3 OF 4</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">PERSIST</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div id="s3-yaml" class="panel" style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yaml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div style="color:#444">services:</div>
+          <div style="color:#444;padding-left:10px">web:</div>
+          <div style="color:#444;padding-left:18px">build: ./app</div>
+          <div style="color:#444;padding-left:18px">ports: ["3000:3000"]</div>
+
+          <!-- depends_on highlighted -->
+          <div id="s3-key-dep" style="color:#aaa;padding-left:18px;transition:color .3s"><span id="s3-hl-dep" style="transition:color .3s">depends_on:</span></div>
+          <div id="s3-key-dep2" style="color:#aaa;padding-left:26px;transition:color .3s">- <span id="s3-hl-dep2" style="transition:color .3s;color:#aaa"><span style="color:#4ec9e1">db</span></span></div>
+
+          <div style="color:#444;padding-left:10px">db:</div>
+          <div style="color:#444;padding-left:18px">image: postgres:15</div>
+          <div style="color:#444;padding-left:18px">environment:</div>
+          <div style="color:#444;padding-left:26px">POSTGRES_PASSWORD: secret</div>
+
+          <!-- volumes in service highlighted -->
+          <div id="s3-key-svol" style="color:#aaa;padding-left:18px;transition:color .3s"><span id="s3-hl-svol" style="transition:color .3s">volumes:</span></div>
+          <div id="s3-key-svol2" style="color:#aaa;padding-left:26px;transition:color .3s">- <span id="s3-hl-svol2" style="transition:color .3s"><span style="color:#a080ff">pgdata</span>:/var/lib/postgresql/data</span></div>
+
+          <!-- top-level volumes highlighted -->
+          <div id="s3-key-tvol" style="color:#aaa;transition:color .3s"><span id="s3-hl-tvol" style="transition:color .3s">volumes:</span></div>
+          <div id="s3-key-tvol2" style="color:#aaa;padding-left:10px;transition:color .3s"><span id="s3-hl-tvol2" style="transition:color .3s"><span style="color:#a080ff">pgdata</span>:</span></div>
+        </div>
+      </div>
+
+      <!-- depends_on callout -->
+      <div id="s3-co-dep" class="callout" style="background:#04001a;border-left:3px solid #4ec9e1">
+        <span class="callout-arrow" style="color:#4ec9e1">▶</span>
+        <div class="callout-text">
+          <span style="color:#4ec9e1">depends_on:</span> — controls startup order. Compose starts <span style="color:#4ec9e1">db</span> before <span style="color:#4ec9e1">web</span>. Prevents "can't connect to database" errors on boot.
+        </div>
+      </div>
+
+      <!-- volumes diagram -->
+      <div id="s3-voldiag" class="panel" style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 12px">
+          <div style="font-size:6.5px;color:#a080ff;text-align:center">HOW NAMED VOLUMES WORK</div>
+        </div>
+        <div style="padding:8px 10px">
+          <svg width="100%" height="80" viewBox="0 0 366 80" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <!-- container -->
+            <rect x="4" y="10" width="140" height="58" rx="2" fill="#080010" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="74" y="7" text-anchor="middle" font-size="5.5" fill="#4ec9e1">CONTAINER</text>
+            <text x="74" y="30" text-anchor="middle" font-size="6" fill="#aaa">/var/lib/</text>
+            <text x="74" y="44" text-anchor="middle" font-size="6" fill="#aaa">postgresql/data</text>
+            <!-- arrow -->
+            <line x1="148" y1="39" x2="192" y2="39" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="3,2"/>
+            <polygon points="196,39 189,35 189,43" fill="#a080ff"/>
+            <text x="172" y="31" text-anchor="middle" font-size="5" fill="#a080ff">mounts</text>
+            <!-- volume box -->
+            <rect x="200" y="10" width="162" height="58" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5"/>
+            <text x="281" y="7" text-anchor="middle" font-size="5.5" fill="#a080ff">NAMED VOLUME</text>
+            <text x="281" y="30" text-anchor="middle" font-size="7" fill="#a080ff">pgdata</text>
+            <text x="281" y="47" text-anchor="middle" font-size="5" fill="#555">persists on host disk</text>
+            <text x="281" y="60" text-anchor="middle" font-size="5" fill="#555">survives container restart</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- volumes callout -->
+      <div id="s3-co-vol" class="callout" style="background:#0a0018;border-left:3px solid #a080ff">
+        <span class="callout-arrow" style="color:#a080ff">▶</span>
+        <div class="callout-text">
+          <span style="color:#a080ff">volumes:</span> — declare once at top-level (<span style="color:#a080ff">pgdata:</span>), mount inside a service. Data survives <span style="color:#e85050">docker compose down</span>. Use <span style="color:#e85050">down -v</span> to wipe it.
+        </div>
+      </div>
+
+      <!-- bind mount vs named volume -->
+      <div id="s3-compare" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#05000d;border:1px solid #2a1045;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#a080ff;margin-bottom:5px">NAMED VOLUME</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.9"><span style="color:#a080ff">pgdata:</span>/var/lib/...<br/>Docker manages location. Best for databases.</div>
+        </div>
+        <div style="background:#00050d;border:1px solid #0a2040;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:5px">BIND MOUNT</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.9"><span style="color:#4ec9e1">./src</span>:/app/src<br/>Maps a local folder. Best for live code reload.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Volumes persist data beyond container lifetime. depends_on orders startup.</div>
+    <div class="ih pu">Delete container, keep data. pgdata: survives restarts.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">pgdata</div><div class="sl">NAMED VOLUME</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">./src</div><div class="sl">BIND MOUNT</div></div>
+    <div class="sc"><div class="sv gn">order</div><div class="sl">DEPENDS_ON</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 4 — Full Annotated Example + Reading Guide
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001508">
+
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0a2a10">
+    <div class="hdr-title" style="color:#4eff9a">YAML ANATOMY</div>
+    <div class="hdr-sub">FULL EXAMPLE — READ ANY FILE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">PART 4 OF 4</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COMPLETE</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- color legend -->
+      <div id="s4-legend" class="panel" style="background:#001a08;border:1px solid #0a3015;padding:9px 11px;border-radius:2px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:7px;letter-spacing:.5px">COLOR KEY</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+          <div style="font-size:5.5px;color:#4ec9e1;line-height:1.8">● <span style="color:#aaa">service names</span></div>
+          <div style="font-size:5.5px;color:#e8a020;line-height:1.8">● <span style="color:#aaa">image / build path</span></div>
+          <div style="font-size:5.5px;color:#4eff9a;line-height:1.8">● <span style="color:#aaa">port mappings</span></div>
+          <div style="font-size:5.5px;color:#a080ff;line-height:1.8">● <span style="color:#aaa">volumes</span></div>
+          <div style="font-size:5.5px;color:#e85050;line-height:1.8">● <span style="color:#aaa">env vars (secrets)</span></div>
+          <div style="font-size:5.5px;color:#888;line-height:1.8">● <span style="color:#aaa">depends_on / misc</span></div>
+        </div>
+      </div>
+
+      <!-- full annotated yaml -->
+      <div id="s4-yaml" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4eff9a">complete docker-compose.yaml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div id="s4-l0" class="tline" style="color:#888">services:                          <span style="color:#333"># ← top-level</span></div>
+          <div id="s4-l1" class="tline" style="padding-left:10px;color:#4ec9e1">web:                               <span style="color:#333"># service name</span></div>
+          <div id="s4-l2" class="tline" style="padding-left:18px;color:#aaa">build: <span style="color:#e8a020">./app</span>                    <span style="color:#333"># build Dockerfile</span></div>
+          <div id="s4-l3" class="tline" style="padding-left:18px;color:#aaa">ports:</div>
+          <div id="s4-l4" class="tline" style="padding-left:26px;color:#aaa">  - "<span style="color:#4eff9a">3000</span>:<span style="color:#4eff9a">3000</span>"              <span style="color:#333"># host:container</span></div>
+          <div id="s4-l5" class="tline" style="padding-left:18px;color:#aaa">environment:</div>
+          <div id="s4-l6" class="tline" style="padding-left:26px;color:#aaa">  NODE_ENV: <span style="color:#e85050">production</span>        <span style="color:#333"># env var</span></div>
+          <div id="s4-l7" class="tline" style="padding-left:26px;color:#aaa">  DB_HOST: <span style="color:#4ec9e1">db</span>               <span style="color:#333"># ← service name!</span></div>
+          <div id="s4-l8" class="tline" style="padding-left:18px;color:#aaa">depends_on: [<span style="color:#888">db</span>]              <span style="color:#333"># start order</span></div>
+          <div id="s4-l9" class="tline" style="padding-left:10px;color:#4ec9e1">db:                                <span style="color:#333"># service name</span></div>
+          <div id="s4-l10" class="tline" style="padding-left:18px;color:#aaa">image: <span style="color:#e8a020">postgres:15</span>            <span style="color:#333"># pull from Hub</span></div>
+          <div id="s4-l11" class="tline" style="padding-left:18px;color:#aaa">environment:</div>
+          <div id="s4-l12" class="tline" style="padding-left:26px;color:#aaa">  POSTGRES_PASSWORD: <span style="color:#e85050">secret</span>   <span style="color:#333"># secret ← .env!</span></div>
+          <div id="s4-l13" class="tline" style="padding-left:18px;color:#aaa">volumes:</div>
+          <div id="s4-l14" class="tline" style="padding-left:26px;color:#aaa">  - <span style="color:#a080ff">pgdata</span>:/var/lib/postgresql/data</div>
+          <div id="s4-l15" class="tline" style="color:#888">volumes:                           <span style="color:#333"># top-level declare</span></div>
+          <div id="s4-l16" class="tline" style="padding-left:10px;color:#aaa">  <span style="color:#a080ff">pgdata</span>:                        <span style="color:#333"># named volume</span></div>
+        </div>
+      </div>
+
+      <!-- quick-read guide -->
+      <div id="s4-guide" class="panel" style="background:#001a08;border:1px solid #0a3015;padding:10px 11px;border-radius:2px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:8px">HOW TO READ ANY COMPOSE FILE</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div id="s4-g1" class="tline" style="font-size:6px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">1.</span> Count the services — how many containers?</div>
+          <div id="s4-g2" class="tline" style="font-size:6px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">2.</span> Check image: vs build: — pulled or local?</div>
+          <div id="s4-g3" class="tline" style="font-size:6px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">3.</span> Look at ports: — what's exposed to localhost?</div>
+          <div id="s4-g4" class="tline" style="font-size:6px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">4.</span> Read environment: — what config does it need?</div>
+          <div id="s4-g5" class="tline" style="font-size:6px;color:#aaa;line-height:1.8"><span style="color:#4eff9a">5.</span> Check volumes: — what data persists?</div>
+          <div id="s4-g6" class="tline" style="font-size:6px;color:#e8a020;line-height:1.8">→ Then just: docker compose up</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">services → image/build → ports → env → volumes → depends_on.</div>
+    <div class="ih">That's every docker-compose.yaml ever written.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">6</div><div class="sl">KEYS TO KNOW</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">2min</div><div class="sl">TO READ ANY FILE</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">YOU GOT THIS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function tshow(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function thide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+
+// Light up a yaml line with accent color, then dim back
+function hlLine(id, color, ms, dur) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.style.color = color;
+    e.style.textShadow = '0 0 8px ' + color + '88';
+  });
+  af(ms + dur, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.style.color = '#aaa';
+    e.style.textShadow = 'none';
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-yaml'); hide('s1-co-services'); hide('s1-co-image'); hide('s1-co-build'); hide('s1-compare');
+    // reset highlight colors
+    ['s1-key-services','s1-key-web','s1-key-build','s1-key-db','s1-key-image'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.color = '#aaa'; e.style.textShadow = 'none'; }
+    });
+  }
+  if (n === 2) {
+    hide('s2-yaml'); hide('s2-portdiag'); hide('s2-co-ports'); hide('s2-co-env'); hide('s2-tip');
+    ['s2-key-ports','s2-key-ports2','s2-key-env','s2-key-env2','s2-key-env3','s2-key-env4'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.color = '#aaa'; e.style.textShadow = 'none'; }
+    });
+  }
+  if (n === 3) {
+    hide('s3-yaml'); hide('s3-co-dep'); hide('s3-voldiag'); hide('s3-co-vol'); hide('s3-compare');
+    ['s3-key-dep','s3-key-dep2','s3-key-svol','s3-key-svol2','s3-key-tvol','s3-key-tvol2'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.color = '#aaa'; e.style.textShadow = 'none'; }
+    });
+  }
+  if (n === 4) {
+    hide('s4-legend'); hide('s4-yaml'); hide('s4-guide');
+    const tlines = ['s4-l0','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6','s4-l7',
+                    's4-l8','s4-l9','s4-l10','s4-l11','s4-l12','s4-l13','s4-l14','s4-l15','s4-l16',
+                    's4-g1','s4-g2','s4-g3','s4-g4','s4-g5','s4-g6'];
+    tlines.forEach(thide);
+  }
+}
+
+function hlYaml(id, color, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.style.color = color;
+    e.style.textShadow = '0 0 6px ' + color + '66';
+  });
+}
+function dimYaml(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    e.style.color = '#aaa';
+    e.style.textShadow = 'none';
+  });
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('s1-yaml', 200);
+    // highlight services key
+    af(500, () => hlYaml('s1-key-services', '#4ec9e1', 0));
+    show('s1-co-services', 600);
+    af(1400, () => dimYaml('s1-key-services', 0));
+
+    // highlight image
+    af(1600, () => hlYaml('s1-key-image', '#e8a020', 0));
+    af(1600, () => hlYaml('s1-key-db', '#e8a020', 0));
+    show('s1-co-image', 1700);
+    af(2600, () => dimYaml('s1-key-image', 0));
+    af(2600, () => dimYaml('s1-key-db', 0));
+
+    // highlight build
+    af(2700, () => hlYaml('s1-key-build', '#a080ff', 0));
+    af(2700, () => hlYaml('s1-key-web', '#a080ff', 0));
+    show('s1-co-build', 2800);
+    af(3600, () => dimYaml('s1-key-build', 0));
+    af(3600, () => dimYaml('s1-key-web', 0));
+
+    show('s1-compare', 3800);
+  }
+
+  if (n === 2) {
+    show('s2-yaml', 200);
+
+    // highlight ports
+    af(500, () => hlYaml('s2-key-ports', '#e8a020', 0));
+    af(500, () => hlYaml('s2-key-ports2', '#e8a020', 0));
+    show('s2-portdiag', 600);
+    show('s2-co-ports', 700);
+    af(1800, () => dimYaml('s2-key-ports', 0));
+    af(1800, () => dimYaml('s2-key-ports2', 0));
+
+    // highlight environment
+    af(2000, () => hlYaml('s2-key-env', '#4eff9a', 0));
+    af(2000, () => hlYaml('s2-key-env2', '#4eff9a', 0));
+    af(2000, () => hlYaml('s2-key-env3', '#4eff9a', 0));
+    af(2000, () => hlYaml('s2-key-env4', '#4ec9e1', 0));
+    show('s2-co-env', 2100);
+    af(3200, () => dimYaml('s2-key-env', 0));
+    af(3200, () => dimYaml('s2-key-env2', 0));
+    af(3200, () => dimYaml('s2-key-env3', 0));
+    af(3200, () => dimYaml('s2-key-env4', 0));
+
+    show('s2-tip', 3400);
+  }
+
+  if (n === 3) {
+    show('s3-yaml', 200);
+
+    // highlight depends_on
+    af(500, () => hlYaml('s3-key-dep', '#4ec9e1', 0));
+    af(500, () => hlYaml('s3-key-dep2', '#4ec9e1', 0));
+    show('s3-co-dep', 600);
+    af(1700, () => dimYaml('s3-key-dep', 0));
+    af(1700, () => dimYaml('s3-key-dep2', 0));
+
+    // highlight volumes
+    af(1900, () => hlYaml('s3-key-svol', '#a080ff', 0));
+    af(1900, () => hlYaml('s3-key-svol2', '#a080ff', 0));
+    af(1900, () => hlYaml('s3-key-tvol', '#a080ff', 0));
+    af(1900, () => hlYaml('s3-key-tvol2', '#a080ff', 0));
+    show('s3-voldiag', 2000);
+    show('s3-co-vol', 2100);
+    af(3300, () => dimYaml('s3-key-svol', 0));
+    af(3300, () => dimYaml('s3-key-svol2', 0));
+    af(3300, () => dimYaml('s3-key-tvol', 0));
+    af(3300, () => dimYaml('s3-key-tvol2', 0));
+
+    show('s3-compare', 3500);
+  }
+
+  if (n === 4) {
+    show('s4-legend', 200);
+    show('s4-yaml', 700);
+    const yamlLines = ['s4-l0','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6','s4-l7',
+                       's4-l8','s4-l9','s4-l10','s4-l11','s4-l12','s4-l13','s4-l14','s4-l15','s4-l16'];
+    yamlLines.forEach((id, i) => tshow(id, 1000 + i * 130));
+    const guideStart = 1000 + yamlLines.length * 130 + 300;
+    show('s4-guide', guideStart);
+    ['s4-g1','s4-g2','s4-g3','s4-g4','s4-g5','s4-g6'].forEach((id, i) =>
+      tshow(id, guideStart + 300 + i * 250)
+    );
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

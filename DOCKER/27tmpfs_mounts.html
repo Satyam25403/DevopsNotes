@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>tmpfs Mounts</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#b47eff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.pu{color:#b47eff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#b47eff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* RAM chip pixel art */
+.ram-chip{border:2px solid #b47eff;border-radius:3px;background:#0d0820;padding:10px 10px;display:flex;flex-direction:column;gap:5px;position:relative}
+.ram-title{font-size:7px;color:#b47eff;letter-spacing:1px;margin-bottom:2px}
+.ram-pins{display:flex;justify-content:space-between;margin-bottom:2px}
+.ram-pin{width:6px;height:12px;background:#b47eff;border-radius:1px;opacity:.7}
+.ram-slots{display:flex;flex-direction:column;gap:3px}
+.ram-slot{height:18px;border:1px solid #3a1f5d;border-radius:2px;padding:2px 6px;display:flex;align-items:center;justify-content:space-between;font-size:6px;font-family:'Press Start 2P',monospace;transition:background .3s,border-color .3s}
+.ram-slot.lit{background:#1a0a30;border-color:#b47eff}
+.ram-slot.gone{background:#0a0a0a;border-color:#2a1f3d;opacity:.4}
+
+/* disk icon */
+.disk-icon{border:2px solid #e8a020;border-radius:50%;width:56px;height:56px;display:flex;align-items:center;justify-content:center;position:relative;flex-shrink:0}
+.disk-inner{border:1px solid #e8a020;border-radius:50%;width:20px;height:20px;background:#1a1208}
+
+/* storage comparison */
+.stor-compare{display:flex;gap:8px;align-items:stretch}
+.stor-col{flex:1;border:2px solid;border-radius:3px;padding:10px 8px;display:flex;flex-direction:column;align-items:center;gap:6px}
+.stor-icon{font-size:28px}
+.stor-name{font-size:8px;text-align:center;letter-spacing:.5px}
+.stor-props{display:flex;flex-direction:column;gap:4px;width:100%}
+.stor-prop{font-size:6px;color:#aaa;line-height:1.7;text-align:center}
+
+/* data cells animation */
+.data-cell{display:inline-block;font-size:6px;padding:2px 5px;border-radius:1px;font-family:'Press Start 2P',monospace;margin:1px;transition:opacity .4s,background .4s,color .4s}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:8px;font-family:'Press Start 2P',monospace;line-height:2.2;color:#ccc}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* forensic scan */
+.scan-row{display:flex;flex-direction:column;gap:5px}
+.scan-line{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #2a1f3d;border-radius:2px;font-size:7px}
+.scan-path{color:#888;flex:1;font-family:'Press Start 2P',monospace}
+.scan-result{font-size:7px;flex-shrink:0;font-family:'Press Start 2P',monospace}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.pulse{animation:pulse 1.5s ease-in-out infinite}
+
+@keyframes fadeout-cells{0%{opacity:1;background:#1a0a30}100%{opacity:0;background:#0a0a0a}}
+.cell-die{animation:fadeout-cells .6s ease forwards}
+
+@keyframes scanline{0%{top:0}100%{top:100%}}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — WHAT IS tmpfs
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">tmpfs MOUNTS</div>
+    <div class="hdr-sub">SECRETS THAT LEAVE NO TRACE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b47eff">WHAT IS tmpfs</span>
+    <span class="sbadge" style="color:#b47eff;border-color:#b47eff">RAM ONLY</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- three storage types side by side -->
+      <div class="stor-compare fade" id="s1e1">
+        <!-- disk volume -->
+        <div class="stor-col" style="border-color:#e8a020">
+          <div class="stor-icon">💾</div>
+          <div class="stor-name" style="color:#e8a020">VOLUME</div>
+          <div class="stor-props">
+            <div class="stor-prop">on disk</div>
+            <div class="stor-prop">survives stop</div>
+            <div class="stor-prop" style="color:#e8a020">traceable</div>
+          </div>
+        </div>
+        <!-- bind mount -->
+        <div class="stor-col" style="border-color:#4ec9e1">
+          <div class="stor-icon">📂</div>
+          <div class="stor-name" style="color:#4ec9e1">BIND</div>
+          <div class="stor-props">
+            <div class="stor-prop">host path</div>
+            <div class="stor-prop">survives stop</div>
+            <div class="stor-prop" style="color:#e8a020">traceable</div>
+          </div>
+        </div>
+        <!-- tmpfs -->
+        <div class="stor-col" style="border-color:#b47eff">
+          <div class="stor-icon">⚡</div>
+          <div class="stor-name" style="color:#b47eff">tmpfs</div>
+          <div class="stor-props">
+            <div class="stor-prop">RAM only</div>
+            <div class="stor-prop">wiped on stop</div>
+            <div class="stor-prop" style="color:#4eff9a">no disk trace</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ram chip with data lighting up -->
+      <div class="fade" id="s1e2">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">tmpfs LIVES HERE — SYSTEM RAM</div>
+        <div class="ram-chip">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
+            <div class="ram-title">🔋 RAM — /run/secrets</div>
+            <div style="font-size:6px;color:#b47eff" id="ramstatus">● ACTIVE</div>
+          </div>
+          <div style="display:flex;justify-content:space-around;margin-bottom:4px">
+            <div class="ram-pin"></div><div class="ram-pin"></div><div class="ram-pin"></div>
+            <div class="ram-pin"></div><div class="ram-pin"></div><div class="ram-pin"></div>
+            <div class="ram-pin"></div><div class="ram-pin"></div>
+          </div>
+          <div class="ram-slots">
+            <div class="ram-slot" id="rs1"><span>API_KEY</span><span style="color:#4eff9a" id="rs1val">sk-prod-x8k2…</span></div>
+            <div class="ram-slot" id="rs2"><span>DB_PASS</span><span style="color:#4eff9a" id="rs2val">p@ssw0rd!!</span></div>
+            <div class="ram-slot" id="rs3"><span>JWT_SECRET</span><span style="color:#4eff9a" id="rs3val">eyJhbGci…</span></div>
+            <div class="ram-slot" id="rs4"><span>SESSION_KEY</span><span style="color:#4eff9a" id="rs4val">f3a9c1…</span></div>
+          </div>
+          <div style="margin-top:6px;font-size:6px;color:#555;text-align:center">never written to /dev/sda — only in RAM</div>
+        </div>
+      </div>
+
+      <!-- key rule -->
+      <div class="fade" id="s1e3" style="border:1px solid #b47eff;border-radius:3px;padding:10px 12px;background:#0d0820">
+        <div style="font-size:7px;color:#b47eff;margin-bottom:6px">💡 THE CORE GUARANTEE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          tmpfs data <span style="color:#b47eff">only ever exists in RAM</span>.<br>
+          It is never written to disk. Ever.<br>
+          Container stops → RAM freed → <span style="color:#4eff9a">data gone</span>.<br>
+          No log. No cache. No trace.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">tmpfs = temporary filesystem backed by RAM.</div>
+    <div class="ih pu">Never touches disk. Vanishes when container stops.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">RAM</div><div class="sl">storage location</div></div>
+    <div class="sc"><div class="sv gn">0 bytes</div><div class="sl">on disk</div></div>
+    <div class="sc"><div class="sv gn">auto</div><div class="sl">wiped on stop</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — DEATH ANIMATION: STOP = WIPE
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">STOP = EVAPORATES</div>
+    <div class="hdr-sub">WATCH THE DATA DISAPPEAR</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b47eff">LIFECYCLE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">GONE ON STOP</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- running state -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px;letter-spacing:1px">● CONTAINER RUNNING</div>
+        <!-- container box with RAM inside -->
+        <div style="border:2px solid #4ec9e1;border-radius:4px;padding:10px 12px;background:#04101a">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">🐳 my-app container</div>
+          <!-- tmpfs inside container -->
+          <div style="border:2px solid #b47eff;border-radius:3px;padding:8px 10px;background:#0d0820">
+            <div style="font-size:6px;color:#b47eff;margin-bottom:6px;letter-spacing:1px">⚡ tmpfs → /run/secrets</div>
+            <div id="cells-container" style="display:flex;flex-wrap:wrap;gap:3px">
+              <div class="data-cell" id="cell1" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">API_KEY</div>
+              <div class="data-cell" id="cell2" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">DB_PASS</div>
+              <div class="data-cell" id="cell3" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">JWT_SECRET</div>
+              <div class="data-cell" id="cell4" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">SESSION</div>
+              <div class="data-cell" id="cell5" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">OAUTH_TOKEN</div>
+              <div class="data-cell" id="cell6" style="background:#1a0a30;color:#b47eff;border:1px solid #b47eff50">STRIPE_KEY</div>
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:6px;color:#888">💾 disk: <span style="color:#e85050">nothing written here</span></div>
+        </div>
+      </div>
+
+      <!-- docker stop command -->
+      <div class="fade" id="s2e2">
+        <div class="cmd-block" style="border-color:#e85050">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line"><span style="color:#4ec9e1">docker</span> <span style="color:#e85050">stop</span> my-app</div>
+          <div class="cmd-out" id="stopout"> </div>
+        </div>
+      </div>
+
+      <!-- data evaporating -->
+      <div class="fade" id="s2e3">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px;letter-spacing:1px">✕ CONTAINER STOPPED — RAM FREED</div>
+        <div style="border:2px solid #e85050;border-radius:4px;padding:10px 12px;background:#1a0808;opacity:.7">
+          <div style="font-size:7px;color:#e85050;margin-bottom:8px">💀 container stopped</div>
+          <div style="border:1px dashed #3a1f3d;border-radius:3px;padding:8px 10px;background:#0a0a0a">
+            <div style="font-size:6px;color:#333;margin-bottom:6px;letter-spacing:1px">tmpfs → /run/secrets</div>
+            <div style="display:flex;flex-wrap:wrap;gap:3px">
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">API_KEY</div>
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">DB_PASS</div>
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">JWT_SECRET</div>
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">SESSION</div>
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">OAUTH_TOKEN</div>
+              <div class="data-cell" style="background:#0a0a0a;color:#222;border:1px solid #1a1a1a">STRIPE_KEY</div>
+            </div>
+            <div style="font-size:6px;color:#333;margin-top:6px;text-align:center">memory freed — values are gone</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- disk forensics: nothing there -->
+      <div class="fade" id="s2e4" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">🔍 FORENSIC CHECK — DISK IS CLEAN</div>
+        <div class="scan-row">
+          <div class="scan-line">
+            <span class="scan-path">/var/lib/docker/…</span>
+            <span class="scan-result" style="color:#4eff9a">nothing ✓</span>
+          </div>
+          <div class="scan-line">
+            <span class="scan-path">/proc/… swap</span>
+            <span class="scan-result" style="color:#4eff9a">nothing ✓</span>
+          </div>
+          <div class="scan-line">
+            <span class="scan-path">disk forensics</span>
+            <span class="scan-result" style="color:#4eff9a">no trace ✓</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">docker stop → RAM freed → secrets gone forever.</div>
+    <div class="ih rd">No swap. No disk write. No forensic recovery.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">RAM</div><div class="sl">while running</div></div>
+    <div class="sc"><div class="sv rd">wiped</div><div class="sl">on stop/crash</div></div>
+    <div class="sc"><div class="sv gn">clean</div><div class="sl">disk untouched</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — SYNTAX & OPTIONS
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE SYNTAX</div>
+    <div class="hdr-sub">--tmpfs FLAG vs --mount vs COMPOSE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b47eff">COMMANDS</span>
+    <span class="sbadge" style="color:#b47eff;border-color:#b47eff">REFERENCE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- --tmpfs shorthand -->
+      <div class="cmd-block fade" id="s3e1" style="border-color:#b47eff">
+        <div class="cmd-prompt">FORM 1 — --tmpfs shorthand</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker run</span> \<br>
+          &nbsp;&nbsp;<span style="color:#b47eff">--tmpfs</span> <span style="color:#4eff9a">/run/secrets</span><span style="color:#555">:size=64m</span> \<br>
+          &nbsp;&nbsp;<span style="color:#888">my-app</span>
+        </div>
+        <div class="cmd-out">
+          <span style="color:#888">path[:options]  — comma separated</span>
+        </div>
+      </div>
+
+      <!-- --mount verbose -->
+      <div class="cmd-block fade" id="s3e2" style="border-color:#4ec9e1">
+        <div class="cmd-prompt">FORM 2 — --mount explicit (preferred)</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker run</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--mount</span> type=<span style="color:#b47eff">tmpfs</span>,\<br>
+          &nbsp;&nbsp;destination=<span style="color:#4eff9a">/run/secrets</span>,\<br>
+          &nbsp;&nbsp;tmpfs-size=<span style="color:#4ec9e1">67108864</span> \<br>
+          &nbsp;&nbsp;<span style="color:#888">my-app</span>
+        </div>
+      </div>
+
+      <!-- compose -->
+      <div class="cmd-block fade" id="s3e3" style="border-color:#4eff9a">
+        <div class="cmd-prompt">FORM 3 — Docker Compose</div>
+        <div class="cmd-line" style="line-height:2.3;color:#ccc">
+          <span style="color:#e8a020">services</span>:<br>
+          &nbsp;&nbsp;<span style="color:#4ec9e1">app</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#e8a020">tmpfs</span>:<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <span style="color:#4eff9a">/run/secrets</span><span style="color:#555">:size=64m</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <span style="color:#4eff9a">/tmp/scratch</span>
+        </div>
+      </div>
+
+      <!-- options reference -->
+      <div class="fade" id="s3e4" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#b47eff;letter-spacing:1px">USEFUL OPTIONS</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#b47eff;width:100px;flex-shrink:0;font-family:'Press Start 2P',monospace">size=64m</span>
+            <span style="color:#aaa">cap at 64 MB — prevent RAM exhaustion</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#b47eff;width:100px;flex-shrink:0;font-family:'Press Start 2P',monospace">noexec</span>
+            <span style="color:#aaa">block executing binaries from tmpfs</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#b47eff;width:100px;flex-shrink:0;font-family:'Press Start 2P',monospace">nosuid</span>
+            <span style="color:#aaa">disable setuid bits — extra hardening</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#b47eff;width:100px;flex-shrink:0;font-family:'Press Start 2P',monospace">mode=1777</span>
+            <span style="color:#aaa">set filesystem permissions (octal)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- hardened example -->
+      <div class="cmd-block fade" id="s3e5" style="border-color:#4eff9a">
+        <div class="cmd-prompt">HARDENED PRODUCTION EXAMPLE</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker run</span> \<br>
+          &nbsp;&nbsp;<span style="color:#b47eff">--tmpfs</span> <span style="color:#4eff9a">/run/secrets</span>:\<br>
+          &nbsp;&nbsp;<span style="color:#888">size=32m,noexec,nosuid</span> \<br>
+          &nbsp;&nbsp;<span style="color:#888">my-app</span>
+        </div>
+        <div class="cmd-out"><span style="color:#4eff9a">32MB RAM cap + no exec + no setuid ✓</span></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">--tmpfs path:options or --mount type=tmpfs.</div>
+    <div class="ih pu">Always set size= to prevent runaway RAM usage.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">--tmpfs</div><div class="sl">quick form</div></div>
+    <div class="sc"><div class="sv gn">size=</div><div class="sl">cap RAM use</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">noexec</div><div class="sl">harden it</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — WHEN TO USE + FULL COMPARISON
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">WHEN TO USE tmpfs</div>
+    <div class="hdr-sub">USE CASES + FULL MOUNT COMPARISON</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FINAL GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- ideal use cases -->
+      <div class="fade" id="s4e1" style="border:2px solid #b47eff;border-radius:3px;padding:10px 12px;background:#0d0820">
+        <div style="font-size:7px;color:#b47eff;margin-bottom:8px;letter-spacing:1px">✅ PERFECT FOR tmpfs</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:center;font-size:7px">
+            <span style="color:#b47eff;flex-shrink:0">⚡</span>
+            <div style="color:#ccc;line-height:1.7">API keys, tokens, passwords — <span style="color:#b47eff">runtime secrets</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:7px">
+            <span style="color:#b47eff;flex-shrink:0">⚡</span>
+            <div style="color:#ccc;line-height:1.7">JWT signing keys, OAuth tokens — <span style="color:#b47eff">short-lived creds</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:7px">
+            <span style="color:#b47eff;flex-shrink:0">⚡</span>
+            <div style="color:#ccc;line-height:1.7">Session data, in-memory cache — <span style="color:#b47eff">ephemeral state</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:7px">
+            <span style="color:#b47eff;flex-shrink:0">⚡</span>
+            <div style="color:#ccc;line-height:1.7">Scratch space, temp files — <span style="color:#b47eff">fast I/O, no disk</span></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;font-size:7px">
+            <span style="color:#b47eff;flex-shrink:0">⚡</span>
+            <div style="color:#ccc;line-height:1.7">Compliance: data must not persist — <span style="color:#b47eff">GDPR, HIPAA</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what NOT to use -->
+      <div class="fade" id="s4e2" style="border:1px solid #e85050;border-radius:3px;padding:10px 12px;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px;letter-spacing:1px">✗ NEVER USE tmpfs FOR</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Databases — data disappears on every restart</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Large files — RAM is expensive, disk is cheap</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Anything that must survive a restart</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- full three-way mount comparison -->
+      <div class="fade" id="s4e3" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#888;letter-spacing:1px">MOUNT TYPE DECISION TABLE</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;justify-content:space-between;font-size:7px;padding-bottom:4px;border-bottom:1px solid #1a1a2e">
+            <span style="color:#888;flex:2">need</span>
+            <span style="color:#888;flex:1;text-align:right">use</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#ccc;flex:2">secrets, tokens, runtime creds</span>
+            <span style="color:#b47eff;flex:1;text-align:right">tmpfs</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#ccc;flex:2">DB data, persistent app state</span>
+            <span style="color:#4eff9a;flex:1;text-align:right">named vol</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#ccc;flex:2">live code reload in dev</span>
+            <span style="color:#4ec9e1;flex:1;text-align:right">bind mount</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#ccc;flex:2">fast scratch/temp files</span>
+            <span style="color:#b47eff;flex:1;text-align:right">tmpfs</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:7px">
+            <span style="color:#ccc;flex:2">compliance — must not persist</span>
+            <span style="color:#b47eff;flex:1;text-align:right">tmpfs</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">tmpfs = secrets + scratch. Never for persistence.</div>
+    <div class="ih" style="color:#4eff9a">RAM dies → secrets die. The best kind of cleanup.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">tmpfs</div><div class="sl">secrets + temp</div></div>
+    <div class="sc"><div class="sv gn">named</div><div class="sl">persist to disk</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">bind</div><div class="sl">dev + hot reload</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1','s3e2','s3e3','s3e4','s3e5'],
+    4:['s4e1','s4e2','s4e3']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  // reset ram slots
+  for(let i=1;i<=4;i++){
+    const s=document.getElementById('rs'+i);
+    if(s){s.className='ram-slot';s.style.opacity='1';}
+  }
+  // reset cells
+  for(let i=1;i<=6;i++){
+    const c=document.getElementById('cell'+i);
+    if(c){
+      c.style.background='#1a0a30';
+      c.style.color='#b47eff';
+      c.style.border='1px solid #b47eff50';
+      c.style.opacity='1';
+    }
+  }
+  const so=document.getElementById('stopout');
+  if(so) so.innerHTML=' ';
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1100);
+  // light up RAM slots sequentially
+  for(let i=1;i<=4;i++){
+    setTimeout(()=>{
+      const s=document.getElementById('rs'+i);
+      if(s) s.classList.add('lit');
+    },1300+i*200);
+  }
+  show('s1e3',2600);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  // cells light up
+  for(let i=1;i<=6;i++){
+    setTimeout(()=>{
+      const c=document.getElementById('cell'+i);
+      if(c){
+        c.style.background='#2a0a40';
+        c.style.color='#d4a0ff';
+        c.style.border='1px solid #b47eff';
+      }
+    },500+i*100);
+  }
+  show('s2e2',1400);
+  setTimeout(()=>{
+    const so=document.getElementById('stopout');
+    if(so) so.innerHTML='my-app';
+  },2000);
+  // cells die one by one
+  for(let i=1;i<=6;i++){
+    setTimeout(()=>{
+      const c=document.getElementById('cell'+i);
+      if(c){
+        c.style.transition='opacity .5s, background .5s, color .5s';
+        c.style.background='#0a0a0a';
+        c.style.color='#1a1a1a';
+        c.style.border='1px solid #111';
+        c.style.opacity='0.2';
+      }
+    },2300+i*180);
+  }
+  show('s2e3',3600);
+  show('s2e4',4500);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  show('s3e2',1100);
+  show('s3e3',2000);
+  show('s3e4',2900);
+  show('s3e5',3800);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  show('s4e2',1400);
+  show('s4e3',2300);
+}
+
+play1();
+</script>
+</body>
+</html>

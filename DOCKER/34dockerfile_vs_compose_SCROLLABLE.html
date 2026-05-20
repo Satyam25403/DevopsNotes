@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dockerfile vs Compose</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════════════ SCENE 1 — THE CONFUSION -->
+<div class="scene active" id="s1" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0040">
+    <div class="hdr-title" style="color:#a080ff">DOCKERFILE vs COMPOSE</div>
+    <div class="hdr-sub">NOT ENEMIES — TEAMMATES</div>
+    <div class="dots">
+      <div class="dot active" id="d1_1"></div>
+      <div class="dot" id="d1_2"></div>
+      <div class="dot" id="d1_3"></div>
+      <div class="dot" id="d1_4"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#e8a020">THE CONFUSION</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">COMMON MYTH</span>
+  </div>
+
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- the big question -->
+      <div id="q_box" class="panel" style="background:#110008;border:2px solid #a080ff;border-radius:3px;padding:14px 14px;text-align:center">
+        <div style="font-size:9px;color:#888;margin-bottom:10px">THE QUESTION EVERYONE ASKS</div>
+        <div style="font-size:10px;color:#fff;line-height:2.0">"Do I use a<br><span style="color:#4ec9e1">Dockerfile</span><br><span style="color:#888">OR</span><br><span style="color:#4eff9a">docker-compose</span>?"</div>
+      </div>
+
+      <!-- the wrong mental model -->
+      <div id="wrong_box" class="panel" style="background:#120000;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0000;padding:5px 10px;border-bottom:1px solid #3a1010;display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px">❌</span>
+          <span style="font-size:7px;color:#e85050">WRONG MENTAL MODEL</span>
+        </div>
+        <div style="padding:10px 12px">
+          <div style="display:flex;align-items:center;justify-content:space-around">
+            <div style="text-align:center">
+              <div style="font-size:20px;margin-bottom:5px">📄</div>
+              <div style="font-size:6.5px;color:#4ec9e1">Dockerfile</div>
+            </div>
+            <div id="vs_text" style="font-size:14px;color:#e85050;opacity:0;transition:opacity .3s">VS</div>
+            <div style="text-align:center">
+              <div style="font-size:20px;margin-bottom:5px">📋</div>
+              <div style="font-size:6.5px;color:#4eff9a">docker-compose</div>
+            </div>
+          </div>
+          <div id="myth_label" style="text-align:center;margin-top:8px;font-size:6px;color:#888;opacity:0;transition:opacity .3s">← people think it's either/or</div>
+        </div>
+      </div>
+
+      <!-- the truth -->
+      <div id="truth_box" class="panel" style="background:#001508;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;display:flex;align-items:center;gap:6px">
+          <span style="font-size:8px">✅</span>
+          <span style="font-size:7px;color:#4eff9a">REALITY</span>
+        </div>
+        <div style="padding:10px 12px">
+          <div style="display:flex;align-items:center;justify-content:space-around">
+            <div style="text-align:center">
+              <div style="font-size:20px;margin-bottom:5px">📄</div>
+              <div style="font-size:6.5px;color:#4ec9e1">Dockerfile</div>
+            </div>
+            <div id="plus_text" style="font-size:18px;color:#4eff9a;opacity:0;transition:opacity .3s">+</div>
+            <div style="text-align:center">
+              <div style="font-size:20px;margin-bottom:5px">📋</div>
+              <div style="font-size:6.5px;color:#4eff9a">docker-compose</div>
+            </div>
+          </div>
+          <div id="truth_label" style="text-align:center;margin-top:8px;font-size:6px;color:#4eff9a;opacity:0;transition:opacity .3s">← they work TOGETHER</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Most devs hit this fork and pick one. That's the trap.</div>
+    <div class="ih am">They solve different problems — you almost always need both.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1</div><div class="sl">FILE BUILDS<br>IMAGE</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">FILE RUNS<br>SERVICES</div></div>
+    <div class="sc"><div class="sv gn">∞</div><div class="sl">TOGETHER<br>COMBOS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCENE 2 — DOCKERFILE -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">DOCKERFILE</div>
+    <div class="hdr-sub">RECIPE FOR ONE IMAGE</div>
+    <div class="dots">
+      <div class="dot done" id="d2_1"></div>
+      <div class="dot active" id="d2_2"></div>
+      <div class="dot" id="d2_3"></div>
+      <div class="dot" id="d2_4"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">BUILD STEP</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">IMAGE FACTORY</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- dockerfile terminal -->
+      <div id="df_term" class="panel" style="background:#050a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080f18;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.4">
+          <div id="df1" class="tline" style="color:#a080ff">FROM node:18-alpine</div>
+          <div id="df2" class="tline" style="color:#4ec9e1">WORKDIR /app</div>
+          <div id="df3" class="tline" style="color:#4ec9e1">COPY package*.json ./</div>
+          <div id="df4" class="tline" style="color:#e8a020">RUN npm install</div>
+          <div id="df5" class="tline" style="color:#4ec9e1">COPY . .</div>
+          <div id="df6" class="tline" style="color:#e8a020">RUN npm run build</div>
+          <div id="df7" class="tline" style="color:#4eff9a">CMD ["node", "server.js"]</div>
+        </div>
+      </div>
+
+      <!-- build arrow + image output -->
+      <div id="df_flow" class="panel">
+        <svg width="100%" height="90" viewBox="0 0 366 90" xmlns="http://www.w3.org/2000/svg">
+          <!-- dockerfile box -->
+          <rect x="10" y="15" width="110" height="60" rx="3" fill="#050a10" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="65" y="38" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace">DOCKER</text>
+          <text x="65" y="54" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace">FILE</text>
+          <text x="65" y="68" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">instructions</text>
+
+          <!-- build arrow -->
+          <line id="build_arrow" x1="120" y1="45" x2="210" y2="45" stroke="#e8a020" stroke-width="2" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="build_arrowhead" points="214,45 206,41 206,49" fill="#e8a020" opacity="0"/>
+          <text id="build_label" x="165" y="38" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">docker build</text>
+
+          <!-- image box -->
+          <rect id="img_box" x="218" y="15" width="138" height="60" rx="3" fill="#001408" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+          <text id="img_lbl1" x="287" y="38" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">myapp:1.0</text>
+          <text id="img_lbl2" x="287" y="54" text-anchor="middle" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">IMAGE</text>
+          <text id="img_lbl3" x="287" y="68" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ BUILT</text>
+
+          <!-- animated build packet -->
+          <circle id="build_pkt" cx="120" cy="45" r="5" fill="#e8a020" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- one job card -->
+      <div id="df_card" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:7px">📦 DOCKERFILE = ONE JOB</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Define the environment for <span style="color:#fff">one</span> container.<br>
+          Base image → deps → code → start cmd.<br>
+          Output: a <span style="color:#4eff9a">portable image</span> anyone can run.
+        </div>
+      </div>
+
+      <!-- what it does NOT do -->
+      <div id="df_nope" class="panel" style="background:#0d0000;border-left:4px solid #e85050;border-top:1px solid #2a1010;border-right:1px solid #2a1010;border-bottom:1px solid #2a1010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:7px">🚫 WHAT IT CANNOT DO</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Link a <span style="color:#e85050">database</span> container to your app.<br>
+          Set up <span style="color:#e85050">networks</span> between services.<br>
+          Mount <span style="color:#e85050">volumes</span> across containers.<br>
+          <span style="color:#888">→ That's Compose's job.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">A Dockerfile is a blueprint. It tells Docker HOW to build one image.</div>
+    <div class="ih" style="color:#4ec9e1">Think: recipe card. Not the whole kitchen.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1</div><div class="sl">IMAGE<br>OUTPUT</div></div>
+    <div class="sc"><div class="sv am">N</div><div class="sl">LAYER<br>STEPS</div></div>
+    <div class="sc"><div class="sv gn">∅</div><div class="sl">NO NET-<br>WORKING</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCENE 3 — COMPOSE -->
+<div class="scene" id="s3" style="background:#001508">
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">DOCKER COMPOSE</div>
+    <div class="hdr-sub">CONDUCTOR OF CONTAINERS</div>
+    <div class="dots">
+      <div class="dot done" id="d3_1"></div>
+      <div class="dot done" id="d3_2"></div>
+      <div class="dot active" id="d3_3"></div>
+      <div class="dot" id="d3_4"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">ORCHESTRATE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MULTI-SERVICE</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- compose yaml terminal -->
+      <div id="cy_term" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#021208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:7px;line-height:2.4">
+          <div id="cy1" class="tline" style="color:#a080ff">services:</div>
+          <div id="cy2" class="tline" style="color:#4ec9e1;padding-left:10px">app:</div>
+          <div id="cy3" class="tline" style="color:#888;padding-left:20px">build: <span style="color:#4eff9a">.</span>  <span style="color:#555"># uses Dockerfile!</span></div>
+          <div id="cy4" class="tline" style="color:#888;padding-left:20px">ports: <span style="color:#e8a020">"3000:3000"</span></div>
+          <div id="cy5" class="tline" style="color:#888;padding-left:20px">depends_on: <span style="color:#4ec9e1">db</span></div>
+          <div id="cy6" class="tline" style="color:#4ec9e1;padding-left:10px">db:</div>
+          <div id="cy7" class="tline" style="color:#888;padding-left:20px">image: <span style="color:#e8a020">postgres:15</span></div>
+          <div id="cy8" class="tline" style="color:#888;padding-left:20px">volumes: <span style="color:#a080ff">pgdata:/var/lib/pq</span></div>
+        </div>
+      </div>
+
+      <!-- network diagram -->
+      <div id="cy_net" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#021208;padding:5px 10px;border-bottom:1px solid #0d3018">
+          <div style="font-size:6.5px;color:#4eff9a;text-align:center">WHAT COMPOSE CREATES</div>
+        </div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- network background bubble -->
+          <rect id="net_bg" x="8" y="8" width="350" height="114" rx="5" fill="none" stroke="#1a3020" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+          <text id="net_lbl" x="183" y="22" text-anchor="middle" font-size="6" fill="#1a4025" font-family="'Press Start 2P',monospace" opacity="0">app_default network</text>
+
+          <!-- app container -->
+          <rect id="app_box" x="20" y="35" width="130" height="75" rx="3" fill="#001408" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="app_lbl1" x="85" y="58" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">app</text>
+          <text id="app_lbl2" x="85" y="74" text-anchor="middle" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">:3000</text>
+          <text id="app_lbl3" x="85" y="90" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">from Dockerfile</text>
+          <text id="app_lbl4" x="85" y="104" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">node.js</text>
+
+          <!-- db container -->
+          <rect id="db_box" x="216" y="35" width="130" height="75" rx="3" fill="#0d0800" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="db_lbl1" x="281" y="58" text-anchor="middle" font-size="7" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">db</text>
+          <text id="db_lbl2" x="281" y="74" text-anchor="middle" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">:5432</text>
+          <text id="db_lbl3" x="281" y="90" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">from registry</text>
+          <text id="db_lbl4" x="281" y="104" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">postgres:15</text>
+
+          <!-- connection line -->
+          <line id="conn_line" x1="150" y1="72" x2="216" y2="72" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <circle id="conn_pkt" cx="150" cy="72" r="4" fill="#4eff9a" opacity="0"/>
+          <text id="conn_lbl" x="183" y="68" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">SQL</text>
+        </svg>
+      </div>
+
+      <!-- compose powers card -->
+      <div id="cy_card" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:7px">🎼 COMPOSE = ORCHESTRATOR</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Run <span style="color:#4ec9e1">multiple services</span> with one command.<br>
+          Wire them together on a shared <span style="color:#4eff9a">network</span>.<br>
+          Mount <span style="color:#a080ff">volumes</span>, set <span style="color:#e8a020">env vars</span>, manage order.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Compose references your Dockerfile via `build: .`</div>
+    <div class="ih">It doesn't replace the Dockerfile — it calls it.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">N</div><div class="sl">SERVICES<br>MANAGED</div></div>
+    <div class="sc"><div class="sv pu">1</div><div class="sl">SHARED<br>NETWORK</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">COMMAND<br>TO RUN ALL</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCENE 4 — TOGETHER -->
+<div class="scene" id="s4" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0040">
+    <div class="hdr-title" style="color:#a080ff">TOGETHER IN THE WILD</div>
+    <div class="hdr-sub">THE FULL PICTURE</div>
+    <div class="dots">
+      <div class="dot done" id="d4_1"></div>
+      <div class="dot done" id="d4_2"></div>
+      <div class="dot done" id="d4_3"></div>
+      <div class="dot active" id="d4_4"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#a080ff">FULL FLOW</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">UNLOCK DOCKER</span>
+  </div>
+
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- full flow SVG -->
+      <div id="full_svg" class="panel" style="background:#06000f;border:2px solid #2a0040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;border-bottom:1px solid #2a0040">
+          <div style="font-size:6.5px;color:#a080ff;text-align:center">TYPICAL PROJECT LAYOUT</div>
+        </div>
+        <svg width="100%" height="200" viewBox="0 0 366 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow2">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Dockerfile block -->
+          <rect id="f_df" x="10" y="10" width="105" height="55" rx="3" fill="#00080f" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="f_df_t1" x="62" y="32" text-anchor="middle" font-size="6.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">Dockerfile</text>
+          <text id="f_df_t2" x="62" y="48" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">FROM node:18</text>
+          <text id="f_df_t3" x="62" y="60" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">CMD server.js</text>
+
+          <!-- compose.yml block -->
+          <rect id="f_cy" x="10" y="80" width="105" height="55" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="f_cy_t1" x="62" y="102" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">compose.yml</text>
+          <text id="f_cy_t2" x="62" y="118" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">app: build: .</text>
+          <text id="f_cy_t3" x="62" y="130" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">db: postgres</text>
+
+          <!-- arrows from both to docker engine -->
+          <line id="f_arr1" x1="115" y1="37" x2="175" y2="90" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <line id="f_arr2" x1="115" y1="107" x2="175" y2="100" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+
+          <!-- docker engine -->
+          <rect id="f_eng" x="178" y="65" width="90" height="55" rx="3" fill="#0a000f" stroke="#a080ff" stroke-width="2" opacity="0"/>
+          <text id="f_eng_t1" x="223" y="87" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">DOCKER</text>
+          <text id="f_eng_t2" x="223" y="103" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">ENGINE</text>
+          <text id="f_eng_t3" x="223" y="116" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">builds + runs</text>
+
+          <!-- arrow to running containers -->
+          <line id="f_arr3" x1="268" y1="92" x2="308" y2="70" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <line id="f_arr4" x1="268" y1="100" x2="308" y2="130" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+
+          <!-- app container running -->
+          <rect id="f_app" x="311" y="40" width="48" height="42" rx="2" fill="#001408" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="f_app_t" x="335" y="57" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">app</text>
+          <text id="f_app_p" x="335" y="71" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">:3000</text>
+          <text id="f_app_s" x="335" y="83" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">▶</text>
+
+          <!-- db container running -->
+          <rect id="f_db" x="311" y="107" width="48" height="42" rx="2" fill="#0d0800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="f_db_t" x="335" y="124" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">db</text>
+          <text id="f_db_p" x="335" y="138" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">:5432</text>
+          <text id="f_db_s" x="335" y="150" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">▶</text>
+
+          <!-- animated packets -->
+          <circle id="pkt_df" cx="62" cy="37" r="4" fill="#4ec9e1" opacity="0" filter="url(#glow2)"/>
+          <circle id="pkt_cy" cx="62" cy="107" r="4" fill="#4eff9a" opacity="0" filter="url(#glow2)"/>
+
+          <!-- docker up label -->
+          <text id="f_cmd" x="183" y="190" text-anchor="left" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">$ docker compose up</text>
+        </svg>
+      </div>
+
+      <!-- mental model cards -->
+      <div id="mm1" class="panel" style="background:#00080f;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">📄</span>
+          <span style="font-size:7px;color:#4ec9e1">DOCKERFILE = "HOW TO COOK ONE DISH"</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Ingredients, steps, temperature. One recipe → one result.</div>
+      </div>
+
+      <div id="mm2" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">📋</span>
+          <span style="font-size:7px;color:#4eff9a">COMPOSE = "THE RESTAURANT MENU"</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Lists all dishes (services), how they relate, who serves what.</div>
+      </div>
+
+      <div id="mm3" class="panel" style="background:#0a0018;border-left:4px solid #a080ff;border-top:1px solid #2a0040;border-right:1px solid #2a0040;border-bottom:1px solid #2a0040;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">🚀</span>
+          <span style="font-size:7px;color:#a080ff">THE ONE COMMAND TO RULE THEM ALL</span>
+        </div>
+        <div style="font-size:7px;color:#4eff9a;line-height:2.0;text-align:center;padding:4px 0">docker compose up --build</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Builds images via Dockerfiles, starts all containers, wires everything.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Dockerfile defines. Compose orchestrates. Same project, different jobs.</div>
+    <div class="ih pu">Now you hold the full Docker mental model. 🎮</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">📄</div><div class="sl">BUILDS<br>IMAGE</div></div>
+    <div class="sc"><div class="sv" style="color:#4eff9a">📋</div><div class="sl">RUNS<br>SERVICES</div></div>
+    <div class="sc"><div class="sv pu">⚡</div><div class="sl">TOGETHER<br>= POWER</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity', '1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity', '0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('q_box'); hide('wrong_box'); hide('truth_box');
+    hideEl('vs_text'); hideEl('myth_label'); hideEl('plus_text'); hideEl('truth_label');
+  }
+  if (n === 2) {
+    hide('df_term'); hide('df_flow'); hide('df_card'); hide('df_nope');
+    ['df1','df2','df3','df4','df5','df6','df7'].forEach(id => { const e=document.getElementById(id); if(e){e.style.opacity='0';e.classList.remove('vis');}});
+    ['build_arrow','build_arrowhead','build_label','img_box','img_lbl1','img_lbl2','img_lbl3'].forEach(id => svgHide(id));
+    svgHide('build_pkt');
+  }
+  if (n === 3) {
+    hide('cy_term'); hide('cy_net'); hide('cy_card');
+    ['cy1','cy2','cy3','cy4','cy5','cy6','cy7','cy8'].forEach(id => { const e=document.getElementById(id); if(e){e.style.opacity='0';e.classList.remove('vis');}});
+    ['net_bg','net_lbl','app_box','app_lbl1','app_lbl2','app_lbl3','app_lbl4',
+     'db_box','db_lbl1','db_lbl2','db_lbl3','db_lbl4','conn_line','conn_lbl'].forEach(id => svgHide(id));
+    svgHide('conn_pkt');
+  }
+  if (n === 4) {
+    hide('full_svg'); hide('mm1'); hide('mm2'); hide('mm3');
+    ['f_df','f_df_t1','f_df_t2','f_df_t3','f_cy','f_cy_t1','f_cy_t2','f_cy_t3',
+     'f_arr1','f_arr2','f_eng','f_eng_t1','f_eng_t2','f_eng_t3',
+     'f_arr3','f_arr4','f_app','f_app_t','f_app_p','f_app_s',
+     'f_db','f_db_t','f_db_p','f_db_s','f_cmd','pkt_df','pkt_cy'].forEach(id => svgHide(id));
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    show('q_box', 200);
+    show('wrong_box', 700);
+    showEl('vs_text', 1000);
+    showEl('myth_label', 1300);
+    show('truth_box', 1800);
+    showEl('plus_text', 2100);
+    showEl('truth_label', 2400);
+  }
+
+  if (n === 2) {
+    show('df_term', 200);
+    ['df1','df2','df3','df4','df5','df6','df7'].forEach((id, i) => {
+      af(500 + i * 280, () => {
+        const e = document.getElementById(id);
+        if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+      });
+    });
+    show('df_flow', 2400);
+    svgShow('build_arrow', 2700);
+    svgShow('build_arrowhead', 2700);
+    svgShow('build_label', 2700);
+    movePkt('build_pkt', 120, 45, 210, 45, 2800, 500);
+    svgShow('img_box', 3350);
+    svgShow('img_lbl1', 3500);
+    svgShow('img_lbl2', 3500);
+    svgShow('img_lbl3', 3700);
+    show('df_card', 4000);
+    show('df_nope', 4500);
+  }
+
+  if (n === 3) {
+    show('cy_term', 200);
+    ['cy1','cy2','cy3','cy4','cy5','cy6','cy7','cy8'].forEach((id, i) => {
+      af(500 + i * 280, () => {
+        const e = document.getElementById(id);
+        if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+      });
+    });
+    show('cy_net', 2800);
+    svgShow('net_bg', 3000);
+    svgShow('net_lbl', 3000);
+    svgShow('app_box', 3200);
+    svgShow('app_lbl1', 3350);
+    svgShow('app_lbl2', 3350);
+    svgShow('app_lbl3', 3500);
+    svgShow('app_lbl4', 3500);
+    svgShow('db_box', 3700);
+    svgShow('db_lbl1', 3850);
+    svgShow('db_lbl2', 3850);
+    svgShow('db_lbl3', 4000);
+    svgShow('db_lbl4', 4000);
+    svgShow('conn_line', 4200);
+    svgShow('conn_lbl', 4300);
+    movePkt('conn_pkt', 150, 72, 216, 72, 4400, 500);
+    show('cy_card', 5000);
+  }
+
+  if (n === 4) {
+    show('full_svg', 200);
+    svgShow('f_df', 400);
+    svgShow('f_df_t1', 550);
+    svgShow('f_df_t2', 650);
+    svgShow('f_df_t3', 750);
+    svgShow('f_cy', 600);
+    svgShow('f_cy_t1', 750);
+    svgShow('f_cy_t2', 850);
+    svgShow('f_cy_t3', 950);
+    svgShow('f_arr1', 1200);
+    svgShow('f_arr2', 1200);
+    movePkt('pkt_df', 62, 37, 178, 90, 1300, 550);
+    movePkt('pkt_cy', 62, 107, 178, 100, 1500, 550);
+    svgShow('f_eng', 1800);
+    svgShow('f_eng_t1', 1950);
+    svgShow('f_eng_t2', 1950);
+    svgShow('f_eng_t3', 2100);
+    svgShow('f_arr3', 2300);
+    svgShow('f_arr4', 2300);
+    svgShow('f_app', 2600);
+    svgShow('f_app_t', 2750);
+    svgShow('f_app_p', 2750);
+    svgShow('f_app_s', 2900);
+    svgShow('f_db', 2800);
+    svgShow('f_db_t', 2950);
+    svgShow('f_db_p', 2950);
+    svgShow('f_db_s', 3100);
+    svgShow('f_cmd', 3400);
+    show('mm1', 3800);
+    show('mm2', 4200);
+    show('mm3', 4600);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

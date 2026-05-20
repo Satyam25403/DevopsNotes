@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Volume vs Bind Mount</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════ SCENE 1 — OVERVIEW -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">VOLUME vs BIND MOUNT</div>
+    <div class="hdr-sub">SAME FLAG — VERY DIFFERENT BEHAVIOR</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">INTRO</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ARCH</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Docker command comparison -->
+      <div style="background:#050a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a1520;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -v mydata:/app/data img</div>
+          <div id="s1l1" class="tline" style="color:#4eff9a">▲ VOLUME — Docker manages this</div>
+          <div style="color:#888;margin-top:6px">$ <span style="color:#4ec9e1">docker run</span> -v ./src:/app/src img</div>
+          <div id="s1l2" class="tline" style="color:#e8a020">▲ BIND MOUNT — host path, your risk</div>
+        </div>
+      </div>
+
+      <!-- Two-column visual diff -->
+      <div id="s1cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">📦 VOLUME</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.2">
+            <div>Docker-managed</div>
+            <div>Portable</div>
+            <div>Production-safe</div>
+            <div>Isolated</div>
+            <div style="color:#4eff9a">mydata:/app/data</div>
+          </div>
+        </div>
+        <div style="background:#120600;border:2px solid #e8a020;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0a00;padding:5px 7px;border-bottom:1px solid #3a2010;text-align:center">
+            <div style="font-size:6.5px;color:#e8a020">🔗 BIND MOUNT</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.2">
+            <div>Host-coupled</div>
+            <div>Dev only</div>
+            <div>⚠ Perm risks</div>
+            <div>OS-dependent</div>
+            <div style="color:#e8a020">./src:/app/src</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SVG: Architecture overview -->
+      <div id="s1svg" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="140" viewBox="0 0 366 140" xmlns="http://www.w3.org/2000/svg">
+          <!-- Container box -->
+          <rect x="133" y="10" width="100" height="46" rx="3" fill="#0a1a28" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="183" y="28" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="183" y="42" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">/app/data</text>
+
+          <!-- Volume box -->
+          <rect x="14" y="80" width="100" height="46" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="64" y="98" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">VOLUME</text>
+          <text x="64" y="113" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">docker managed</text>
+
+          <!-- Host box -->
+          <rect x="252" y="80" width="100" height="46" rx="3" fill="#1a0800" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="302" y="98" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">HOST FS</text>
+          <text x="302" y="113" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">./src on disk</text>
+
+          <!-- Arrow: volume -->
+          <line id="s1va" x1="114" y1="103" x2="148" y2="56" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s1vp" points="148,56 140,60 144,68" fill="#4eff9a" opacity="0"/>
+          <text id="s1vt" x="115" y="78" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">mount</text>
+
+          <!-- Arrow: bind -->
+          <line id="s1ba" x1="252" y1="103" x2="218" y2="56" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <polygon id="s1bp" points="218,56 226,60 222,68" fill="#e8a020" opacity="0"/>
+          <text id="s1bt" x="251" y="78" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">bind</text>
+
+          <!-- Packet dot -->
+          <circle id="s1pkt" cx="64" cy="103" r="4" fill="#4eff9a" opacity="0"/>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Pick wrong and you'll regret it in production.</div>
+    <div class="ih">Same -v flag. Completely different semantics.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">📦</div><div class="sl">VOLUME</div></div>
+    <div class="sc"><div class="sv am">🔗</div><div class="sl">BIND MOUNT</div></div>
+    <div class="sc"><div class="sv pu">🔐</div><div class="sl">TMPFS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCENE 2 — VOLUMES DEEP DIVE -->
+<div class="scene" id="s2" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">DOCKER VOLUMES</div>
+    <div class="hdr-sub">PRODUCTION-GRADE PERSISTENT STORAGE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">VOLUMES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PROD SAFE</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal: volume commands -->
+      <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">volumes</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888"># Create a named volume</div>
+          <div id="s2l1" class="tline" style="color:#4ec9e1">$ docker volume create pgdata</div>
+          <div id="s2l2" class="tline" style="color:#888"># Use in docker run</div>
+          <div id="s2l3" class="tline" style="color:#4ec9e1">$ docker run -v pgdata:/var/lib/postgresql/data postgres</div>
+          <div id="s2l4" class="tline" style="color:#888"># Or in compose</div>
+          <div id="s2l5" class="tline" style="color:#4eff9a">volumes:</div>
+          <div id="s2l6" class="tline" style="color:#4eff9a">  pgdata:</div>
+        </div>
+      </div>
+
+      <!-- Volume anatomy SVG -->
+      <div id="s2svg" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;font-size:6px;color:#555;border-bottom:1px solid #0d3018">VOLUME ANATOMY</div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Docker daemon box -->
+          <rect x="20" y="15" width="90" height="36" rx="2" fill="#001208" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="65" y="29" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">DOCKER</text>
+          <text x="65" y="43" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">DAEMON</text>
+
+          <!-- Arrow to storage -->
+          <line id="s2a1" x1="110" y1="33" x2="158" y2="33" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s2p1" points="162,33 154,29 154,37" fill="#4eff9a" opacity="0"/>
+
+          <!-- /var/lib/docker/volumes -->
+          <rect x="162" y="15" width="110" height="36" rx="2" fill="#001208" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="217" y="29" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">/var/lib/docker/</text>
+          <text x="217" y="43" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace">volumes/pgdata</text>
+
+          <!-- Container mounts from volume -->
+          <line id="s2a2" x1="217" y1="51" x2="217" y2="78" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <polygon id="s2p2" points="217,82 213,74 221,74" fill="#4eff9a" opacity="0"/>
+
+          <!-- Container -->
+          <rect x="152" y="82" width="130" height="36" rx="2" fill="#0a1a10" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="217" y="97" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="217" y="111" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">/var/lib/postgresql/data</text>
+
+          <!-- Properties badges -->
+          <rect id="s2b1" x="14" y="78" width="66" height="18" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2t1" x="47" y="91" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">PORTABLE</text>
+          <rect id="s2b2" x="14" y="100" width="66" height="18" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2t2" x="47" y="113" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">ISOLATED</text>
+        </svg>
+      </div>
+
+      <!-- Feature cards -->
+      <div id="s2c1" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🏭</span>
+          <span style="font-size:7.5px;color:#4eff9a">USE VOLUMES WHEN...</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>• Database files (postgres, mysql, mongo)</div>
+          <div>• Sharing data between containers</div>
+          <div>• Deploying to any machine (CI/CD)</div>
+          <div>• Backing up with docker volume inspect</div>
+        </div>
+      </div>
+
+      <div id="s2c2" class="panel" style="background:#0a0a00;border-left:4px solid #e8a020;border-top:1px solid #2a2008;border-right:1px solid #2a2008;border-bottom:1px solid #2a2008;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚠️</span>
+          <span style="font-size:7.5px;color:#e8a020">VOLUME GOTCHAS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>• Volume persists after container removal</div>
+          <div>• Run docker volume prune to clean up</div>
+          <div>• First mount copies image content in</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Docker stores data in /var/lib/docker/volumes/. No host path needed.</div>
+    <div class="ih">Volumes survive container removal and work on any host.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">PROD SAFE</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">PORTABLE</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">BACKUPABLE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCENE 3 — BIND MOUNTS DEEP DIVE -->
+<div class="scene" id="s3" style="background:#120600">
+  <div class="hdr" style="background:#120600;border-bottom:1px solid #3a1500">
+    <div class="hdr-title" style="color:#e8a020">BIND MOUNTS</div>
+    <div class="hdr-sub">HOST-COUPLED — DEV ONLY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#120600">
+    <span class="slabel" style="color:#e8a020">BIND MOUNTS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DEV ONLY</span>
+  </div>
+
+  <div class="anim" style="background:#120600">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal: bind mount command -->
+      <div style="background:#0a0400;border:2px solid #3a1500;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0800;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">bind-mount</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888"># Dev: live-reload your source</div>
+          <div id="s3l1" class="tline" style="color:#4ec9e1">$ docker run -v $(pwd)/src:/app/src node</div>
+          <div id="s3l2" class="tline" style="color:#888"># Or in compose (dev override)</div>
+          <div id="s3l3" class="tline" style="color:#e8a020">volumes:</div>
+          <div id="s3l4" class="tline" style="color:#e8a020">  - ./src:/app/src  # host path!</div>
+          <div id="s3l5" class="tline" style="color:#e85050">  # ↑ breaks on other machines</div>
+        </div>
+      </div>
+
+      <!-- Bind mount SVG diagram -->
+      <div id="s3svg" class="panel" style="background:#0a0400;border:2px solid #3a1500;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;font-size:6px;color:#555;border-bottom:1px solid #3a1500">BIND MOUNT — DIRECT HOST ACCESS</div>
+        <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+          <!-- Host FS box -->
+          <rect x="20" y="15" width="110" height="40" rx="2" fill="#1a0800" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="75" y="31" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace">HOST FS</text>
+          <text x="75" y="46" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">/home/user/project/src</text>
+
+          <!-- Direct arrow (two-way) -->
+          <line id="s3a1" x1="130" y1="35" x2="230" y2="35" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <polygon id="s3p1" points="234,35 226,31 226,39" fill="#e8a020" opacity="0"/>
+          <polygon id="s3p2" points="126,35 134,31 134,39" fill="#e8a020" opacity="0"/>
+          <text id="s3t1" x="180" y="28" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">LIVE SYNC</text>
+
+          <!-- Container box -->
+          <rect x="234" y="15" width="112" height="40" rx="2" fill="#1a0a00" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="290" y="31" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="290" y="46" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">/app/src</text>
+
+          <!-- Danger indicators -->
+          <rect id="s3d1" x="20" y="68" width="110" height="18" rx="2" fill="#2a0000" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3dt1" x="75" y="81" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⚠ PERM RISK</text>
+
+          <rect id="s3d2" x="144" y="68" width="78" height="18" rx="2" fill="#2a0000" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3dt2" x="183" y="81" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">OS-SPECIFIC</text>
+
+          <rect id="s3d3" x="236" y="68" width="110" height="18" rx="2" fill="#2a0000" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s3dt3" x="291" y="81" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">NOT PORTABLE</text>
+
+          <!-- Packet animation -->
+          <circle id="s3pkt" cx="130" cy="35" r="4" fill="#e8a020" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Good use / Bad use cards -->
+      <div id="s3good" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">✅</span>
+          <span style="font-size:7.5px;color:#4eff9a">GOOD: USE BIND MOUNTS FOR</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>• Hot reload during local dev</div>
+          <div>• Injecting config files at runtime</div>
+          <div>• Reading host logs / sockets</div>
+        </div>
+      </div>
+
+      <div id="s3bad" class="panel" style="background:#120000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🚫</span>
+          <span style="font-size:7.5px;color:#e85050">NEVER USE BIND MOUNTS FOR</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>• Database files in production</div>
+          <div>• Multi-host / Swarm / K8s deploys</div>
+          <div>• Secrets (use tmpfs instead!)</div>
+          <div>• CI/CD pipelines on fresh runners</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Container gets direct read/write access to your host filesystem.</div>
+    <div class="ih am">Misconfigured permissions can let a container escape to the host.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">⚡</div><div class="sl">HOT RELOAD</div></div>
+    <div class="sc"><div class="sv rd">✗</div><div class="sl">NOT PORTABLE</div></div>
+    <div class="sc"><div class="sv rd">⚠</div><div class="sl">PERM RISK</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCENE 4 — DECISION TREE -->
+<div class="scene" id="s4" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">DECISION TREE</div>
+    <div class="hdr-sub">PICK THE RIGHT MOUNT EVERY TIME</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">DECISION</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">REFERENCE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Decision tree SVG -->
+      <div style="background:#05000f;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;font-size:6px;color:#555;border-bottom:1px solid #200838">MOUNT SELECTION FLOWCHART</div>
+        <svg width="100%" height="280" viewBox="0 0 366 280" xmlns="http://www.w3.org/2000/svg">
+
+          <!-- Root question -->
+          <rect id="t0" x="103" y="8" width="160" height="30" rx="3" fill="#1a0838" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="tt0" x="183" y="19" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">WHAT ARE YOU</text>
+          <text id="tt0b" x="183" y="32" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">STORING?</text>
+
+          <!-- Branch lines -->
+          <line id="tl1" x1="183" y1="38" x2="183" y2="54" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <line id="tl2" x1="75" y1="54" x2="290" y2="54" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <line id="tl3" x1="75" y1="54" x2="75" y2="70" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <line id="tl4" x1="183" y1="54" x2="183" y2="70" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <line id="tl5" x1="290" y1="54" x2="290" y2="70" stroke="#a080ff" stroke-width="1" opacity="0"/>
+
+          <!-- Q text on branches -->
+          <text id="tb1" x="75" y="63" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">DB DATA</text>
+          <text id="tb2" x="183" y="63" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">SRC CODE</text>
+          <text id="tb3" x="290" y="63" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">SECRETS</text>
+
+          <!-- DB DATA → VOLUME -->
+          <rect id="n1" x="20" y="70" width="110" height="50" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="nt1" x="75" y="87" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">📦 VOLUME</text>
+          <text id="nt1b" x="75" y="101" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">pgdata:/var/lib/</text>
+          <text id="nt1c" x="75" y="113" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">postgresql/data</text>
+
+          <!-- SRC CODE → BIND MOUNT -->
+          <rect id="n2" x="128" y="70" width="110" height="50" rx="3" fill="#120600" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="nt2" x="183" y="87" text-anchor="middle" font-size="7" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">🔗 BIND</text>
+          <text id="nt2b" x="183" y="101" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">./src:/app/src</text>
+          <text id="nt2c" x="183" y="113" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">(dev only!)</text>
+
+          <!-- SECRETS → TMPFS -->
+          <rect id="n3" x="235" y="70" width="110" height="50" rx="3" fill="#0a000f" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="nt3" x="290" y="87" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">🔐 TMPFS</text>
+          <text id="nt3b" x="290" y="101" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">--tmpfs /run/</text>
+          <text id="nt3c" x="290" y="113" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">secrets</text>
+
+          <!-- Lines down from nodes -->
+          <line id="tl6" x1="75" y1="120" x2="75" y2="145" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <line id="tl7" x1="183" y1="120" x2="183" y2="145" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <line id="tl8" x1="290" y1="120" x2="290" y2="145" stroke="#a080ff" stroke-width="1" opacity="0"/>
+
+          <!-- Secondary question: prod or dev? (for bind) -->
+          <rect id="n2b" x="128" y="145" width="110" height="32" rx="3" fill="#120000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="nt2bq" x="183" y="158" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">PRODUCTION?</text>
+          <text id="nt2bq2" x="183" y="171" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">USE VOLUME ↗</text>
+
+          <!-- Volume properties -->
+          <rect id="n1p" x="20" y="145" width="110" height="50" rx="3" fill="#001208" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="nt1p1" x="75" y="161" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ Works on any OS</text>
+          <text id="nt1p2" x="75" y="175" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ Survives rebuild</text>
+          <text id="nt1p3" x="75" y="189" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ Easy backup</text>
+
+          <!-- tmpfs properties -->
+          <rect id="n3p" x="235" y="145" width="110" height="50" rx="3" fill="#0a000f" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="nt3p1" x="290" y="161" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">✓ RAM only</text>
+          <text id="nt3p2" x="290" y="175" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">✓ Never on disk</text>
+          <text id="nt3p3" x="290" y="189" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">✓ Gone on stop</text>
+
+          <!-- Compose example at bottom -->
+          <line id="tl9" x1="20" y1="210" x2="346" y2="210" stroke="#200838" stroke-width="1" opacity="0"/>
+          <text id="tbot" x="183" y="225" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">COMPOSE EXAMPLE</text>
+
+          <text id="tb1c" x="20" y="242" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">volumes:</text>
+          <text id="tb2c" x="20" y="256" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">  pgdata:  # volume</text>
+          <text id="tb3c" x="20" y="270" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">  - ./src:/app # bind</text>
+        </svg>
+      </div>
+
+      <!-- Quick reference table -->
+      <div id="s4tbl" class="panel" style="background:#05000f;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 8px;font-size:6px;color:#a080ff;border-bottom:1px solid #200838">QUICK REFERENCE</div>
+        <div style="padding:6px 8px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;font-size:5.5px">
+          <div style="color:#555">FEATURE</div>
+          <div style="color:#4eff9a;text-align:center">VOLUME</div>
+          <div style="color:#e8a020;text-align:center">BIND</div>
+
+          <div style="color:#888">Managed by</div>
+          <div style="color:#4eff9a;text-align:center">Docker</div>
+          <div style="color:#e8a020;text-align:center">You</div>
+
+          <div style="color:#888">Prod use</div>
+          <div style="color:#4eff9a;text-align:center">✓ YES</div>
+          <div style="color:#e85050;text-align:center">✗ NO</div>
+
+          <div style="color:#888">Hot reload</div>
+          <div style="color:#e85050;text-align:center">✗ NO</div>
+          <div style="color:#4eff9a;text-align:center">✓ YES</div>
+
+          <div style="color:#888">Portable</div>
+          <div style="color:#4eff9a;text-align:center">✓ YES</div>
+          <div style="color:#e85050;text-align:center">✗ NO</div>
+
+          <div style="color:#888">Perm risk</div>
+          <div style="color:#4eff9a;text-align:center">LOW</div>
+          <div style="color:#e85050;text-align:center">HIGH</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">tmpfs mounts store data in RAM only — perfect for secrets.</div>
+    <div class="ih pu">Default to volumes. Use bind mounts only for dev hot reload.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">📦</div><div class="sl">PROD → VOL</div></div>
+    <div class="sc"><div class="sv am">🔗</div><div class="sl">DEV → BIND</div></div>
+    <div class="sc"><div class="sv pu">🔐</div><div class="sl">SECRETS → TMP</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity', '1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity', '0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1l1','s1l2'].forEach(hideEl);
+    ['s1cmp','s1svg'].forEach(hide);
+    ['s1va','s1vp','s1vt','s1ba','s1bp','s1bt'].forEach(id => svgHide(id));
+    const p = document.getElementById('s1pkt'); if(p) p.setAttribute('opacity','0');
+  }
+  if (n === 2) {
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6'].forEach(hideEl);
+    ['s2svg','s2c1','s2c2'].forEach(hide);
+    ['s2a1','s2p1','s2a2','s2p2','s2b1','s2t1','s2b2','s2t2'].forEach(id => svgHide(id));
+  }
+  if (n === 3) {
+    ['s3l1','s3l2','s3l3','s3l4','s3l5'].forEach(hideEl);
+    ['s3svg','s3good','s3bad'].forEach(hide);
+    ['s3a1','s3p1','s3p2','s3t1','s3d1','s3dt1','s3d2','s3dt2','s3d3','s3dt3'].forEach(id => svgHide(id));
+    const p = document.getElementById('s3pkt'); if(p) p.setAttribute('opacity','0');
+  }
+  if (n === 4) {
+    ['t0','tt0','tt0b','tl1','tl2','tl3','tl4','tl5','tb1','tb2','tb3',
+     'n1','nt1','nt1b','nt1c','n2','nt2','nt2b','nt2c','n3','nt3','nt3b','nt3c',
+     'tl6','tl7','tl8','n2b','nt2bq','nt2bq2','n1p','nt1p1','nt1p2','nt1p3',
+     'n3p','nt3p1','nt3p2','nt3p3','tl9','tbot','tb1c','tb2c','tb3c'
+    ].forEach(id => svgHide(id));
+    hide('s4tbl');
+  }
+}
+
+function play(n) {
+  if (n === 1) {
+    showEl('s1l1', 300);
+    showEl('s1l2', 700);
+    show('s1cmp', 1100);
+    show('s1svg', 1700);
+    // Animate volume arrow
+    svgShow('s1va', 2000); svgShow('s1vp', 2000); svgShow('s1vt', 2100);
+    movePkt('s1pkt', 64, 103, 148, 56, 2200, 500);
+    // Animate bind arrow
+    af(2800, () => { svgShow('s1ba', 0); svgShow('s1bp', 0); svgShow('s1bt', 0); });
+    movePkt('s1pkt', 302, 103, 218, 56, 2900, 500);
+  }
+
+  if (n === 2) {
+    showEl('s2l1', 300);
+    showEl('s2l2', 600);
+    showEl('s2l3', 900);
+    showEl('s2l4', 1200);
+    showEl('s2l5', 1500);
+    showEl('s2l6', 1800);
+    show('s2svg', 2100);
+    svgShow('s2a1', 2500); svgShow('s2p1', 2500);
+    svgShow('s2a2', 3000); svgShow('s2p2', 3000);
+    svgShow('s2b1', 3400); svgShow('s2t1', 3400);
+    svgShow('s2b2', 3700); svgShow('s2t2', 3700);
+    show('s2c1', 4100);
+    show('s2c2', 4600);
+  }
+
+  if (n === 3) {
+    showEl('s3l1', 300);
+    showEl('s3l2', 700);
+    showEl('s3l3', 1000);
+    showEl('s3l4', 1300);
+    showEl('s3l5', 1600);
+    show('s3svg', 2000);
+    svgShow('s3a1', 2400); svgShow('s3p1', 2400); svgShow('s3p2', 2400); svgShow('s3t1', 2500);
+    movePkt('s3pkt', 130, 35, 230, 35, 2600, 400);
+    movePkt('s3pkt', 230, 35, 130, 35, 3100, 400);
+    svgShow('s3d1', 3600); svgShow('s3dt1', 3600);
+    svgShow('s3d2', 3900); svgShow('s3dt2', 3900);
+    svgShow('s3d3', 4200); svgShow('s3dt3', 4200);
+    show('s3good', 4600);
+    show('s3bad', 5100);
+  }
+
+  if (n === 4) {
+    svgShow('t0', 200); svgShow('tt0', 200); svgShow('tt0b', 200);
+    svgShow('tl1', 600);
+    svgShow('tl2', 800); svgShow('tl3', 800); svgShow('tl4', 800); svgShow('tl5', 800);
+    svgShow('tb1', 1000); svgShow('tb2', 1000); svgShow('tb3', 1000);
+    svgShow('n1', 1300); svgShow('nt1', 1300); svgShow('nt1b', 1300); svgShow('nt1c', 1300);
+    svgShow('n2', 1600); svgShow('nt2', 1600); svgShow('nt2b', 1600); svgShow('nt2c', 1600);
+    svgShow('n3', 1900); svgShow('nt3', 1900); svgShow('nt3b', 1900); svgShow('nt3c', 1900);
+    svgShow('tl6', 2200); svgShow('tl7', 2200); svgShow('tl8', 2200);
+    svgShow('n1p', 2500); svgShow('nt1p1', 2500); svgShow('nt1p2', 2500); svgShow('nt1p3', 2500);
+    svgShow('n2b', 2800); svgShow('nt2bq', 2800); svgShow('nt2bq2', 2800);
+    svgShow('n3p', 3100); svgShow('nt3p1', 3100); svgShow('nt3p2', 3100); svgShow('nt3p3', 3100);
+    svgShow('tl9', 3500); svgShow('tbot', 3600);
+    svgShow('tb1c', 3900); svgShow('tb2c', 4200); svgShow('tb3c', 4500);
+    show('s4tbl', 5000);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

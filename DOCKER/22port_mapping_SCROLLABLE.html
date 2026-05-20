@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Port Mapping</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════ SCENE 1: The Problem -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">NOTHING LOADS</div>
+    <div class="hdr-sub">CONTAINER IS ISOLATED FROM HOST</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ISOLATED</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal: naive docker run -->
+      <div style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker run</span> nginx</div>
+          <div id="s1l1" class="tline" style="color:#4eff9a">/docker-entrypoint.sh: Launching...</div>
+          <div id="s1l2" class="tline" style="color:#4eff9a">2024/01/01 nginx: start worker process</div>
+          <div id="s1l3" class="tline" style="color:#888"># New terminal — let's try to reach it</div>
+          <div id="s1l4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">curl</span> localhost:80</div>
+          <div id="s1l5" class="tline" style="color:#e85050">curl: (7) Failed to connect to</div>
+          <div id="s1l6" class="tline" style="color:#e85050">localhost port 80: Connection refused</div>
+        </div>
+      </div>
+
+      <!-- Isolation diagram -->
+      <div id="s1diag" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;background:#120008;border-bottom:1px solid #2d0010;font-size:6.5px;color:#555;text-align:center">NETWORK ISOLATION</div>
+        <svg width="100%" height="160" viewBox="0 0 366 160" xmlns="http://www.w3.org/2000/svg">
+
+          <!-- HOST box -->
+          <rect x="6" y="14" width="152" height="132" rx="4" fill="#0a0010" stroke="#2a1f3d" stroke-width="1.5"/>
+          <text x="82" y="30" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">YOUR MACHINE</text>
+
+          <!-- Browser in host -->
+          <rect x="18" y="40" width="128" height="44" rx="3" fill="#130d1e" stroke="#2a1f3d" stroke-width="1"/>
+          <text x="82" y="59" text-anchor="middle" font-size="6.5" fill="#aaa" font-family="'Press Start 2P',monospace">browser</text>
+          <text x="82" y="75" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">curl localhost:80</text>
+
+          <!-- X mark: no port on host -->
+          <rect id="s1xbox" x="18" y="96" width="128" height="38" rx="3" fill="#1a0008" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s1xtxt" x="82" y="112" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">port 80</text>
+          <text id="s1xtxt2" x="82" y="126" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">NOT EXPOSED</text>
+
+          <!-- Barrier wall -->
+          <rect id="s1wall" x="163" y="14" width="40" height="132" rx="2" fill="#1a0006" stroke="#e85050" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s1walltxt" x="183" y="88" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0" transform="rotate(-90,183,88)">NAMESPACE WALL</text>
+
+          <!-- CONTAINER box -->
+          <rect x="207" y="14" width="152" height="132" rx="4" fill="#0a0010" stroke="#2a1f3d" stroke-width="1.5"/>
+          <text x="283" y="30" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">CONTAINER</text>
+
+          <!-- nginx inside container -->
+          <rect id="s1nginx" x="219" y="40" width="128" height="44" rx="3" fill="#001508" stroke="#1a2810" stroke-width="1" opacity="0"/>
+          <text id="s1nginxtxt" x="283" y="59" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">nginx</text>
+          <text id="s1nginxport" x="283" y="75" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">listening :80</text>
+
+          <!-- container port pill -->
+          <rect id="s1cport" x="219" y="96" width="128" height="38" rx="3" fill="#001508" stroke="#0a4020" stroke-width="1" opacity="0"/>
+          <text id="s1cporttxt" x="283" y="112" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">port 80 open</text>
+          <text id="s1cporttxt2" x="283" y="126" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">inside only</text>
+
+          <!-- Blocked arrow attempt -->
+          <defs>
+            <marker id="redArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+          <line id="s1blockarr" x1="148" y1="115" x2="162" y2="115" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0" marker-end="url(#redArr)"/>
+          <!-- X blocker -->
+          <text id="s1blockx" x="183" y="119" text-anchor="middle" font-size="10" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">✕</text>
+        </svg>
+      </div>
+
+      <!-- Explanation card -->
+      <div id="s1card" class="panel" style="background:#0f0003;border-left:4px solid #e85050;border-top:1px solid #2d0010;border-right:1px solid #2d0010;border-bottom:1px solid #2d0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">WHY IT FAILS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker containers run in their own network namespace. Nginx binds to port 80 inside the container — but that's invisible to your host OS. There's no path in.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Nginx is healthy inside the container — it just can't be reached.</div>
+    <div class="ih rd">Container networks are isolated from the host by default.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">:80</div><div class="sl">NGINX<br>INSIDE</div></div>
+    <div class="sc"><div class="sv rd">NONE</div><div class="sl">HOST<br>MAPPING</div></div>
+    <div class="sc"><div class="sv rd">✕</div><div class="sl">CONNECTION<br>STATUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCENE 2: The Fix -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">-p HOST:CONTAINER</div>
+    <div class="hdr-sub">PUBLISH A PORT TO YOUR HOST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">THE FIX</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">-p FLAG</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Fixed command terminal -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker run</span> <span id="s2pflag" style="color:#e8a020;opacity:0">-p 8080:80</span> nginx</div>
+          <div id="s2l1" class="tline" style="color:#4eff9a">✓ Container started</div>
+          <div id="s2l2" class="tline" style="color:#4eff9a">✓ 0.0.0.0:8080 → container:80</div>
+          <div id="s2l3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">curl</span> localhost:8080</div>
+          <div id="s2l4" class="tline" style="color:#4eff9a">&lt;!DOCTYPE html&gt;</div>
+          <div id="s2l5" class="tline" style="color:#4eff9a">&lt;title&gt;Welcome to nginx!&lt;/title&gt;</div>
+        </div>
+      </div>
+
+      <!-- Bridged diagram -->
+      <div id="s2diag" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;background:#001018;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">PORT FORWARDING BRIDGE</div>
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="cyanArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="greenArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- HOST box -->
+          <rect x="6" y="14" width="152" height="148" rx="4" fill="#000d10" stroke="#0d2030" stroke-width="1.5"/>
+          <text x="82" y="30" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">YOUR HOST</text>
+
+          <!-- browser box -->
+          <rect id="s2browser" x="18" y="40" width="128" height="40" rx="3" fill="#001018" stroke="#0d2030" stroke-width="1" opacity="0"/>
+          <text id="s2browsertxt" x="82" y="57" text-anchor="middle" font-size="6.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">browser</text>
+          <text id="s2browsertxt2" x="82" y="72" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0">localhost:8080</text>
+
+          <!-- host port box -->
+          <rect id="s2hport" x="18" y="96" width="128" height="54" rx="3" fill="#001828" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2hporttxt" x="82" y="118" text-anchor="middle" font-size="9" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">:8080</text>
+          <text id="s2hporttxt2" x="82" y="136" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">HOST PORT</text>
+
+          <!-- bridge label -->
+          <text id="s2bridgelbl" x="183" y="30" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">-p 8080:80</text>
+
+          <!-- bridge arrow -->
+          <line id="s2bridgearr" x1="148" y1="123" x2="207" y2="123" stroke="#4ec9e1" stroke-width="2" opacity="0" marker-end="url(#cyanArr)"/>
+          <!-- vertical arrow browser→hport -->
+          <line id="s2varr" x1="82" y1="82" x2="82" y2="94" stroke="#4ec9e1" stroke-width="1.5" opacity="0" marker-end="url(#cyanArr)"/>
+
+          <!-- animated packet -->
+          <circle id="s2pkt" cx="30" cy="123" r="5" fill="#4ec9e1" opacity="0"/>
+
+          <!-- CONTAINER box -->
+          <rect x="207" y="14" width="152" height="148" rx="4" fill="#000d10" stroke="#0d2030" stroke-width="1.5"/>
+          <text x="283" y="30" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">CONTAINER</text>
+
+          <!-- container port -->
+          <rect id="s2cport" x="219" y="96" width="128" height="54" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s2cporttxt" x="283" y="118" text-anchor="middle" font-size="9" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">:80</text>
+          <text id="s2cporttxt2" x="283" y="136" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">CONTAINER PORT</text>
+
+          <!-- nginx box -->
+          <rect id="s2nginx" x="219" y="40" width="128" height="40" rx="3" fill="#001508" stroke="#1a2810" stroke-width="1" opacity="0"/>
+          <text id="s2nginxtxt" x="283" y="57" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">nginx</text>
+          <text id="s2nginxtxt2" x="283" y="72" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">serving HTTP</text>
+
+          <!-- vertical arrow cport→nginx -->
+          <line id="s2cvarr" x1="283" y1="94" x2="283" y2="82" stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#greenArr)"/>
+        </svg>
+      </div>
+
+      <!-- Syntax breakdown -->
+      <div id="s2syntax" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:6px 10px;background:#001018;border-bottom:1px solid #0d2030;font-size:7px;color:#4ec9e1;text-align:center">SYNTAX BREAKDOWN</div>
+        <div style="padding:10px 12px;display:grid;grid-template-columns:1fr 24px 1fr;gap:6px;align-items:center">
+          <div style="background:#001828;border:1px solid #4ec9e1;border-radius:3px;padding:8px 6px;text-align:center">
+            <div style="font-size:6px;color:#4ec9e1;margin-bottom:5px">HOST PORT</div>
+            <div style="font-size:11px;color:#e8a020">8080</div>
+            <div style="font-size:5.5px;color:#666;margin-top:4px;line-height:1.8">Any free port on your machine. You choose this.</div>
+          </div>
+          <div style="font-size:13px;color:#555;text-align:center">:</div>
+          <div style="background:#001508;border:1px solid #4eff9a;border-radius:3px;padding:8px 6px;text-align:center">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">CONTAINER PORT</div>
+            <div style="font-size:11px;color:#4eff9a">80</div>
+            <div style="font-size:5.5px;color:#666;margin-top:4px;line-height:1.8">Port the app inside listens on. Check the image docs.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">-p tells Docker to forward traffic from your host into the container.</div>
+    <div class="ih">localhost:8080 on host → port 80 in container.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">8080</div><div class="sl">HOST<br>PORT</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:18px">→</div><div class="sl">FORWARDED<br>TO</div></div>
+    <div class="sc"><div class="sv gn">80</div><div class="sl">CONTAINER<br>PORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════ SCENE 3: Real World -->
+<div class="scene" id="s3" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">COMMON PORTS</div>
+    <div class="hdr-sub">MAPPINGS & GOTCHAS TO KNOW</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CHEATSHEET</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Port mapping cheatsheet -->
+      <div id="s3tbl" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:6px 10px;border-bottom:1px solid #1a2810;font-size:7px;color:#4eff9a;text-align:center">COMMON IMAGES & PORTS</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:5px 4px;border-bottom:1px solid #0d1808;font-size:6px;color:#555">
+            <span>IMAGE</span><span style="text-align:center">COMMAND</span><span style="text-align:right">OPEN</span>
+          </div>
+          <div id="s3r1" style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1808;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#4ec9e1">nginx</span>
+            <span style="color:#e8a020;text-align:center">-p 8080:80</span>
+            <span style="color:#666;text-align:right">:8080</span>
+          </div>
+          <div id="s3r2" style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1808;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#4ec9e1">postgres</span>
+            <span style="color:#e8a020;text-align:center">-p 5432:5432</span>
+            <span style="color:#666;text-align:right">:5432</span>
+          </div>
+          <div id="s3r3" style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1808;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#4ec9e1">redis</span>
+            <span style="color:#e8a020;text-align:center">-p 6379:6379</span>
+            <span style="color:#666;text-align:right">:6379</span>
+          </div>
+          <div id="s3r4" style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1808;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#4ec9e1">mysql</span>
+            <span style="color:#e8a020;text-align:center">-p 3306:3306</span>
+            <span style="color:#666;text-align:right">:3306</span>
+          </div>
+          <div id="s3r5" style="display:grid;grid-template-columns:80px 1fr 60px;gap:6px;padding:7px 4px;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#4ec9e1">node app</span>
+            <span style="color:#e8a020;text-align:center">-p 3000:3000</span>
+            <span style="color:#666;text-align:right">:3000</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gotcha: port in use -->
+      <div id="s3g1" class="panel" style="background:#0f0900;border-left:4px solid #e8a020;border-top:1px solid #201408;border-right:1px solid #201408;border-bottom:1px solid #201408;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ GOTCHA: PORT ALREADY IN USE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">If 8080 is taken, pick any other host port: <span style="color:#e8a020">-p 9090:80</span>. The LEFT side is yours to choose. The RIGHT side must match what's inside the image.</div>
+      </div>
+
+      <!-- Gotcha: multiple ports -->
+      <div id="s3g2" class="panel" style="background:#0a0010;border-left:4px solid #a080ff;border-top:1px solid #1a1028;border-right:1px solid #1a1028;border-bottom:1px solid #1a1028;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">★ MULTIPLE PORTS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Stack -p flags for multi-port apps:<br><span style="color:#a080ff">-p 8080:80 -p 8443:443</span><br>Each flag maps exactly one port pair.</div>
+      </div>
+
+      <!-- Verify terminal -->
+      <div id="s3term" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">verify mappings</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker ps</span></div>
+          <div id="s3tl1" class="tline" style="color:#4eff9a">PORTS: 0.0.0.0:8080->80/tcp</div>
+          <div id="s3tl2" class="tline" style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker port</span> my_nginx</div>
+          <div id="s3tl3" class="tline" style="color:#4eff9a">80/tcp -> 0.0.0.0:8080</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Left = host port (your choice). Right = container port (app's choice).</div>
+    <div class="ih">Use docker ps or docker port to verify your mapping is live.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">LEFT</div><div class="sl">YOUR HOST<br>PORT</div></div>
+    <div class="sc"><div class="sv gn">RIGHT</div><div class="sl">APP CONTAINER<br>PORT</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">IT WORKS<br>NOW</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function animPkt(id,x1,y1,x2,y2,dur){
+  const d=document.getElementById(id);if(!d)return;
+  d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+  const frames=Math.max(1,Math.round(dur/16));let f=0;
+  function step(){
+    f++;const p=Math.min(f/frames,1);
+    d.setAttribute('cx',x1+(x2-x1)*p);
+    d.setAttribute('cy',y1+(y2-y1)*p);
+    if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+  }
+  af(16,step);
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3','s1l4','s1l5','s1l6'].forEach(id=>hideEl(id));
+    hide('s1diag');hide('s1card');
+    ['s1xbox','s1xtxt','s1xtxt2','s1wall','s1walltxt','s1nginx','s1nginxtxt','s1nginxport','s1cport','s1cporttxt','s1cporttxt2','s1blockarr','s1blockx'].forEach(id=>svgHide(id));
+  }
+  if(n===2){
+    hideEl('s2pflag');
+    ['s2l1','s2l2','s2l3','s2l4','s2l5'].forEach(id=>hideEl(id));
+    hide('s2diag');hide('s2syntax');
+    ['s2browser','s2browsertxt','s2browsertxt2','s2hport','s2hporttxt','s2hporttxt2','s2bridgelbl','s2bridgearr','s2varr','s2pkt','s2cport','s2cporttxt','s2cporttxt2','s2nginx','s2nginxtxt','s2nginxtxt2','s2cvarr'].forEach(id=>svgHide(id));
+  }
+  if(n===3){
+    hide('s3tbl');hide('s3g1');hide('s3g2');hide('s3term');
+    ['s3r1','s3r2','s3r3','s3r4','s3r5','s3tl1','s3tl2','s3tl3'].forEach(id=>hideEl(id));
+  }
+}
+
+function play(n){
+  if(n===1){
+    showEl('s1l1',200);
+    showEl('s1l2',500);
+    showEl('s1l3',900);
+    showEl('s1l4',1200);
+    showEl('s1l5',1600);
+    showEl('s1l6',1900);
+    show('s1diag',500);
+    svgShow('s1nginx',700);svgShow('s1nginxtxt',850);svgShow('s1nginxport',1000);
+    svgShow('s1cport',1200);svgShow('s1cporttxt',1350);svgShow('s1cporttxt2',1500);
+    svgShow('s1wall',1700);svgShow('s1walltxt',1800);
+    svgShow('s1xbox',2000);svgShow('s1xtxt',2150);svgShow('s1xtxt2',2300);
+    svgShow('s1blockarr',2500);
+    svgShow('s1blockx',2700);
+    show('s1card',2900);
+  }
+  if(n===2){
+    showEl('s2pflag',300);
+    showEl('s2l1',600);showEl('s2l2',1000);showEl('s2l3',1400);showEl('s2l4',1800);showEl('s2l5',2100);
+    show('s2diag',400);
+    svgShow('s2browser',600);svgShow('s2browsertxt',750);svgShow('s2browsertxt2',900);
+    svgShow('s2hport',1100);svgShow('s2hporttxt',1250);svgShow('s2hporttxt2',1400);
+    svgShow('s2varr',1600);
+    svgShow('s2bridgelbl',1800);
+    svgShow('s2bridgearr',2000);
+    af(2100,()=>animPkt('s2pkt',20,123,340,123,600));
+    svgShow('s2cport',2400);svgShow('s2cporttxt',2550);svgShow('s2cporttxt2',2700);
+    svgShow('s2nginx',2900);svgShow('s2nginxtxt',3050);svgShow('s2nginxtxt2',3200);
+    svgShow('s2cvarr',3400);
+    show('s2syntax',3700);
+  }
+  if(n===3){
+    show('s3tbl',200);
+    showEl('s3r1',400);showEl('s3r2',700);showEl('s3r3',1000);showEl('s3r4',1300);showEl('s3r5',1600);
+    show('s3g1',1900);
+    show('s3g2',2500);
+    show('s3term',3100);
+    showEl('s3tl1',3400);showEl('s3tl2',3700);showEl('s3tl3',4000);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

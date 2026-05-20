@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Compose Watch</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════ SCENE 1 — THE OLD WAY (bind mount pain) -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">THE OLD WAY</div>
+    <div class="hdr-sub">BIND MOUNT PAIN IN DEV</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">LEGACY</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- old compose snippet -->
+      <div style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#150005;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml — ❌ OLD WAY</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s1l1" class="tline" style="color:#aaa">services:</div>
+          <div id="s1l2" class="tline" style="color:#4ec9e1">  app:</div>
+          <div id="s1l3" class="tline" style="color:#aaa">    image: myapp</div>
+          <div id="s1l4" class="tline" style="color:#e8a020">    volumes:</div>
+          <div id="s1l5" class="tline" style="color:#e8a020">      - ./src:/app/src  <span style="color:#e85050"># bind mount</span></div>
+          <div id="s1l6" class="tline" style="color:#e85050">      # ↑ permission hell awaits</div>
+        </div>
+      </div>
+
+      <!-- Problem cards -->
+      <div id="s1c1" class="panel" style="background:#120000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">😤</span>
+          <span style="font-size:7.5px;color:#e85050">BIND MOUNT PROBLEMS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <div>• Root owns files → can't edit on host</div>
+          <div>• macOS / Windows path translation bugs</div>
+          <div>• node_modules leaks from host into container</div>
+          <div>• Works on my machine™, breaks in CI</div>
+        </div>
+      </div>
+
+      <!-- SVG: The mess diagram -->
+      <div id="s1svg" class="panel" style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;font-size:6px;color:#555;border-bottom:1px solid #3a0010">THE PERMISSION MESS</div>
+        <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+          <!-- Host box -->
+          <rect x="14" y="15" width="100" height="40" rx="2" fill="#1a0800" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="64" y="30" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace">HOST</text>
+          <text x="64" y="44" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">uid:1000 (you)</text>
+
+          <!-- Container box -->
+          <rect x="252" y="15" width="100" height="40" rx="2" fill="#1a0000" stroke="#e85050" stroke-width="1.5"/>
+          <text x="302" y="30" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="302" y="44" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">uid:0 (root)</text>
+
+          <!-- Arrows -->
+          <line id="s1a1" x1="114" y1="35" x2="248" y2="35" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <polygon id="s1p1" points="252,35 244,31 244,39" fill="#e85050" opacity="0"/>
+          <text id="s1t1" x="183" y="29" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">./src mounted</text>
+
+          <!-- Permission denied badge -->
+          <rect id="s1pb" x="118" y="65" width="130" height="20" rx="2" fill="#2a0000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s1pt" x="183" y="79" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⛔ PERMISSION DENIED</text>
+
+          <!-- uid mismatch note -->
+          <text id="s1um" x="183" y="108" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">uid mismatch → root owns your files</text>
+        </svg>
+      </div>
+
+      <div id="s1c2" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">✨</span>
+          <span style="font-size:7.5px;color:#4eff9a">COMPOSE WATCH FIXES THIS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          No volume mounts needed. Watch copies files<br>
+          into the container on save. You own the host<br>
+          files. Container owns its own copy. No conflict.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Bind mounts share the inode — uid mismatch poisons everything.</div>
+    <div class="ih rd">Compose Watch copies files. No sharing. No conflict.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">⛔</div><div class="sl">PERM HELL</div></div>
+    <div class="sc"><div class="sv rd">🪟</div><div class="sl">WIN/MAC BUG</div></div>
+    <div class="sc"><div class="sv gn">→</div><div class="sl">USE WATCH</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 2 — COMPOSE WATCH CONFIG -->
+<div class="scene" id="s2" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">COMPOSE WATCH CONFIG</div>
+    <div class="hdr-sub">THREE ACTIONS — sync / rebuild / sync+restart</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">CONFIG</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">COMPOSE 2.22+</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Full watch config -->
+      <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2l1" class="tline" style="color:#aaa">services:</div>
+          <div id="s2l2" class="tline" style="color:#4ec9e1">  app:</div>
+          <div id="s2l3" class="tline" style="color:#aaa">    build: .</div>
+          <div id="s2l4" class="tline" style="color:#4eff9a">    develop:</div>
+          <div id="s2l5" class="tline" style="color:#4eff9a">      watch:</div>
+          <div id="s2l6" class="tline" style="color:#4ec9e1">        - action: sync</div>
+          <div id="s2l7" class="tline" style="color:#aaa">          path: ./src</div>
+          <div id="s2l8" class="tline" style="color:#aaa">          target: /app/src</div>
+          <div id="s2l9" class="tline" style="color:#a080ff">        - action: rebuild</div>
+          <div id="s2l10" class="tline" style="color:#aaa">          path: package.json</div>
+          <div id="s2l11" class="tline" style="color:#e8a020">        - action: sync+restart</div>
+          <div id="s2l12" class="tline" style="color:#aaa">          path: .env</div>
+          <div id="s2l13" class="tline" style="color:#aaa">          target: /app/.env</div>
+        </div>
+      </div>
+
+      <!-- Three action cards -->
+      <div id="s2ac1" class="panel" style="background:#000d04;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:8px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">⚡</span>
+          <span style="font-size:7.5px;color:#4ec9e1">sync</span>
+          <span style="font-size:6px;color:#555;margin-left:auto">~50ms</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Copy changed file into running container. No restart. Fastest — use for src/, templates, CSS.</div>
+      </div>
+
+      <div id="s2ac2" class="panel" style="background:#0a000f;border-left:4px solid #a080ff;border-top:1px solid #1a0838;border-right:1px solid #1a0838;border-bottom:1px solid #1a0838;padding:8px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">🔨</span>
+          <span style="font-size:7.5px;color:#a080ff">rebuild</span>
+          <span style="font-size:6px;color:#555;margin-left:auto">full build</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Trigger docker build + replace container. Use for package.json, Dockerfile, go.mod changes.</div>
+      </div>
+
+      <div id="s2ac3" class="panel" style="background:#0a0800;border-left:4px solid #e8a020;border-top:1px solid #2a2008;border-right:1px solid #2a2008;border-bottom:1px solid #2a2008;padding:8px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+          <span style="font-size:12px">🔄</span>
+          <span style="font-size:7.5px;color:#e8a020">sync+restart</span>
+          <span style="font-size:6px;color:#555;margin-left:auto">~1-2s</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Sync file then restart the process (not rebuild image). Perfect for .env, config files that need re-read.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">develop.watch lives inside the service block — no volumes needed.</div>
+    <div class="ih">Run with: docker compose watch</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">sync</div><div class="sl">50ms</div></div>
+    <div class="sc"><div class="sv pu" style="font-size:9px">rebuild</div><div class="sl">FULL BUILD</div></div>
+    <div class="sc"><div class="sv am" style="font-size:9px">sync+rst</div><div class="sl">1-2s</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 3 — LIVE FLOW ANIMATION -->
+<div class="scene" id="s3" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">WATCH IN ACTION</div>
+    <div class="hdr-sub">FILE SAVED → SYNCED → RELOADED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">FLOW</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ANIMATED</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Main pipeline SVG -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;font-size:6px;color:#555;border-bottom:1px solid #0d2030">COMPOSE WATCH PIPELINE</div>
+        <svg width="100%" height="200" viewBox="0 0 366 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <!-- Step 1: Host editor -->
+          <rect id="s3b1" x="10" y="14" width="72" height="44" rx="3" fill="#0a1520" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s3t1a" x="46" y="30" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">EDITOR</text>
+          <text id="s3t1b" x="46" y="44" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">app.js saved</text>
+          <!-- file save flash -->
+          <rect id="s3flash" x="10" y="14" width="72" height="44" rx="3" fill="#4ec9e140" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+
+          <!-- Arrow 1 → Watch daemon -->
+          <line id="s3arr1" x1="82" y1="36" x2="116" y2="36" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <polygon id="s3ap1" points="120,36 112,32 112,40" fill="#4ec9e1" opacity="0"/>
+          <text id="s3al1" x="99" y="29" text-anchor="middle" font-size="4.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">inotify</text>
+
+          <!-- Step 2: Watch daemon -->
+          <rect id="s3b2" x="120" y="14" width="72" height="44" rx="3" fill="#0a1520" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s3t2a" x="156" y="30" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">WATCH</text>
+          <text id="s3t2b" x="156" y="44" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">daemon</text>
+
+          <!-- Arrow 2 → Container -->
+          <line id="s3arr2" x1="192" y1="36" x2="226" y2="36" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <polygon id="s3ap2" points="230,36 222,32 222,40" fill="#a080ff" opacity="0"/>
+          <text id="s3al2" x="209" y="29" text-anchor="middle" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">docker cp</text>
+
+          <!-- Step 3: Container -->
+          <rect id="s3b3" x="230" y="14" width="72" height="44" rx="3" fill="#0a1520" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3t3a" x="266" y="30" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">CONTAINER</text>
+          <text id="s3t3b" x="266" y="44" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">/app/src</text>
+
+          <!-- Arrow 3 → Nodemon -->
+          <line id="s3arr3" x1="266" y1="58" x2="266" y2="84" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s3ap3" points="266,88 262,80 270,80" fill="#4eff9a" opacity="0"/>
+
+          <!-- Step 4: Nodemon -->
+          <rect id="s3b4" x="194" y="88" width="144" height="36" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3t4a" x="266" y="104" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">nodemon restart</text>
+          <text id="s3t4b" x="266" y="118" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">detects change → reloads</text>
+
+          <!-- Arrow 4 → Browser -->
+          <line id="s3arr4" x1="194" y1="106" x2="160" y2="106" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <polygon id="s3ap4" points="156,106 164,102 164,110" fill="#4eff9a" opacity="0"/>
+          <text id="s3al4" x="177" y="99" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">HMR / SSE</text>
+
+          <!-- Step 5: Browser -->
+          <rect id="s3b5" x="48" y="88" width="108" height="36" rx="3" fill="#0a000f" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s3t5a" x="102" y="104" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">🌐 BROWSER</text>
+          <text id="s3t5b" x="102" y="118" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">page refreshes!</text>
+
+          <!-- Timing labels -->
+          <text id="s3tm1" x="46" y="148" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">0ms</text>
+          <text id="s3tm2" x="156" y="148" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">~10ms</text>
+          <text id="s3tm3" x="266" y="148" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">~50ms</text>
+          <text id="s3tm4" x="266" y="162" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">~300ms</text>
+          <text id="s3tm5" x="102" y="162" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">~500ms total</text>
+
+          <!-- Packet dot -->
+          <circle id="s3pkt" cx="46" cy="36" r="4" fill="#4eff9a" opacity="0" filter="url(#glow)"/>
+
+          <!-- Total time banner -->
+          <rect id="s3banner" x="10" y="172" width="346" height="22" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s3bannerT" x="183" y="187" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">⚡ SAVE TO REFRESH: ~500ms — no restart needed</text>
+        </svg>
+      </div>
+
+      <!-- Terminal log -->
+      <div id="s3log" class="panel" style="background:#050a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a1520;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker compose watch</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3lg1" class="tline" style="color:#888">Watch enabled — watching for changes</div>
+          <div id="s3lg2" class="tline" style="color:#4ec9e1">Syncing app/src/index.js → /app/src/index.js</div>
+          <div id="s3lg3" class="tline" style="color:#4eff9a">[nodemon] restarting due to changes...</div>
+          <div id="s3lg4" class="tline" style="color:#4eff9a">[nodemon] starting node server.js</div>
+          <div id="s3lg5" class="tline" style="color:#888">Server listening on :3000</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Watch uses docker cp under the hood — no volume, no uid conflict.</div>
+    <div class="ih">Sub-second feedback loop, any OS, zero permission issues.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">~50ms</div><div class="sl">SYNC</div></div>
+    <div class="sc"><div class="sv gn">~300ms</div><div class="sl">RESTART</div></div>
+    <div class="sc"><div class="sv gn">~500ms</div><div class="sl">TOTAL</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════ SCENE 4 — IGNORE + PATTERNS + TIPS -->
+<div class="scene" id="s4" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">IGNORE & PATTERNS</div>
+    <div class="hdr-sub">DON'T SYNC node_modules INTO THE CONTAINER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">PATTERNS</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">REFERENCE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ignore example -->
+      <div id="s4c1" class="panel" style="background:#05000f;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0518;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">exclude node_modules</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#4eff9a">develop:</div>
+          <div style="color:#4eff9a;padding-left:8px">watch:</div>
+          <div style="color:#4ec9e1;padding-left:16px">- action: sync</div>
+          <div style="color:#aaa;padding-left:24px">path: ./src</div>
+          <div style="color:#aaa;padding-left:24px">target: /app/src</div>
+          <div style="color:#e85050;padding-left:24px">ignore:</div>
+          <div style="color:#e85050;padding-left:32px">- node_modules  <span style="color:#555"># critical!</span></div>
+          <div style="color:#e85050;padding-left:32px">- "**/*.test.js"</div>
+          <div style="color:#e85050;padding-left:32px">- dist/</div>
+        </div>
+      </div>
+
+      <!-- Decision guide -->
+      <div id="s4c2" class="panel" style="background:#05000f;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 8px;font-size:6px;color:#a080ff;border-bottom:1px solid #200838">WHICH ACTION TO USE?</div>
+        <div style="padding:6px 8px;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:5.5px">
+          <div style="color:#555">FILE CHANGED</div>
+          <div style="color:#555">ACTION</div>
+
+          <div style="color:#aaa">src/*.js / *.ts</div>
+          <div style="color:#4ec9e1">sync</div>
+
+          <div style="color:#aaa">*.css / *.html</div>
+          <div style="color:#4ec9e1">sync</div>
+
+          <div style="color:#aaa">.env / config.*</div>
+          <div style="color:#e8a020">sync+restart</div>
+
+          <div style="color:#aaa">package.json</div>
+          <div style="color:#a080ff">rebuild</div>
+
+          <div style="color:#aaa">Dockerfile</div>
+          <div style="color:#a080ff">rebuild</div>
+
+          <div style="color:#aaa">go.mod / Gemfile</div>
+          <div style="color:#a080ff">rebuild</div>
+        </div>
+      </div>
+
+      <!-- Pro tips -->
+      <div id="s4c3" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🏆</span>
+          <span style="font-size:7.5px;color:#4eff9a">PRO TIPS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <div>• Use --no-deps to watch one service only</div>
+          <div>• Combine with profiles: dev vs prod</div>
+          <div>• Watch + healthcheck = safe restart chain</div>
+          <div>• Still use volumes for DB data (they're unrelated)</div>
+        </div>
+      </div>
+
+      <!-- Command reference -->
+      <div id="s4c4" class="panel" style="background:#050a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a1520;padding:5px 10px;border-bottom:1px solid #0d2030">
+          <span style="font-size:6px;color:#4ec9e1">COMMANDS</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker compose watch</span></div>
+          <div style="color:#555"># watch all services with develop.watch</div>
+          <div style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker compose watch app</span></div>
+          <div style="color:#555"># watch only the 'app' service</div>
+          <div style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker compose up --watch</span></div>
+          <div style="color:#555"># start + watch in one command</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">ignore: under each rule uses gitignore-style glob patterns.</div>
+    <div class="ih pu">docker compose up --watch starts and watches in one step.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">sync</div><div class="sl">src files</div></div>
+    <div class="sc"><div class="sv am">+rst</div><div class="sl">.env cfg</div></div>
+    <div class="sc"><div class="sv pu">rebuild</div><div class="sl">pkg.json</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); } });
+}
+function hide(id) { const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); } }
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity='1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity='0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs, keepVisible) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2-x1)*p);
+      d.setAttribute('cy', y1 + (y2-y1)*p);
+      if (f < frames) af(16, step);
+      else if (!keepVisible) d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function flashEl(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id); if (!e) return;
+    e.setAttribute('opacity','1');
+    af(200, () => e.setAttribute('opacity','0'));
+    af(400, () => e.setAttribute('opacity','1'));
+    af(600, () => e.setAttribute('opacity','0'));
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1l1','s1l2','s1l3','s1l4','s1l5','s1l6'].forEach(hideEl);
+    hide('s1c1'); hide('s1svg'); hide('s1c2');
+    ['s1a1','s1p1','s1t1','s1pb','s1pt','s1um'].forEach(svgHide);
+  }
+  if (n === 2) {
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6','s2l7','s2l8',
+     's2l9','s2l10','s2l11','s2l12','s2l13'].forEach(hideEl);
+    hide('s2ac1'); hide('s2ac2'); hide('s2ac3');
+  }
+  if (n === 3) {
+    ['s3b1','s3t1a','s3t1b','s3flash',
+     's3arr1','s3ap1','s3al1',
+     's3b2','s3t2a','s3t2b',
+     's3arr2','s3ap2','s3al2',
+     's3b3','s3t3a','s3t3b',
+     's3arr3','s3ap3',
+     's3b4','s3t4a','s3t4b',
+     's3arr4','s3ap4','s3al4',
+     's3b5','s3t5a','s3t5b',
+     's3tm1','s3tm2','s3tm3','s3tm4','s3tm5',
+     's3banner','s3bannerT'].forEach(svgHide);
+    const p = document.getElementById('s3pkt'); if(p) p.setAttribute('opacity','0');
+    hide('s3log');
+    ['s3lg1','s3lg2','s3lg3','s3lg4','s3lg5'].forEach(hideEl);
+  }
+  if (n === 4) {
+    hide('s4c1'); hide('s4c2'); hide('s4c3'); hide('s4c4');
+  }
+}
+
+function play(n) {
+  if (n === 1) {
+    showEl('s1l1', 200); showEl('s1l2', 400); showEl('s1l3', 600);
+    showEl('s1l4', 800); showEl('s1l5', 1000); showEl('s1l6', 1200);
+    show('s1c1', 1600);
+    show('s1svg', 2400);
+    svgShow('s1a1', 2800); svgShow('s1p1', 2800); svgShow('s1t1', 2900);
+    svgShow('s1pb', 3300); svgShow('s1pt', 3300);
+    svgShow('s1um', 3700);
+    show('s1c2', 4200);
+  }
+
+  if (n === 2) {
+    showEl('s2l1', 200); showEl('s2l2', 380); showEl('s2l3', 560);
+    showEl('s2l4', 740); showEl('s2l5', 900);
+    showEl('s2l6', 1100); showEl('s2l7', 1260); showEl('s2l8', 1420);
+    showEl('s2l9', 1700); showEl('s2l10', 1880);
+    showEl('s2l11', 2100); showEl('s2l12', 2280); showEl('s2l13', 2440);
+    show('s2ac1', 2800);
+    show('s2ac2', 3300);
+    show('s2ac3', 3800);
+  }
+
+  if (n === 3) {
+    // Step 1: editor appears
+    svgShow('s3b1', 300); svgShow('s3t1a', 300); svgShow('s3t1b', 300);
+    svgShow('s3tm1', 400);
+    // File save flash
+    flashEl('s3flash', 700);
+    // Packet leaves editor
+    movePkt('s3pkt', 46, 36, 120, 36, 900, 350);
+    // Arrow 1 lights up
+    svgShow('s3arr1', 900); svgShow('s3ap1', 900); svgShow('s3al1', 950);
+    // Watch daemon appears
+    svgShow('s3b2', 1200); svgShow('s3t2a', 1200); svgShow('s3t2b', 1200);
+    svgShow('s3tm2', 1300);
+    // Packet from watch to container
+    movePkt('s3pkt', 120, 36, 230, 36, 1400, 350);
+    svgShow('s3arr2', 1400); svgShow('s3ap2', 1400); svgShow('s3al2', 1450);
+    // Container appears
+    svgShow('s3b3', 1700); svgShow('s3t3a', 1700); svgShow('s3t3b', 1700);
+    svgShow('s3tm3', 1800);
+    // Packet down to nodemon
+    movePkt('s3pkt', 266, 36, 266, 88, 1900, 300);
+    svgShow('s3arr3', 1900); svgShow('s3ap3', 1900);
+    // Nodemon restarts
+    svgShow('s3b4', 2200); svgShow('s3t4a', 2200); svgShow('s3t4b', 2200);
+    svgShow('s3tm4', 2300);
+    // Signal to browser
+    movePkt('s3pkt', 194, 106, 156, 106, 2600, 300);
+    svgShow('s3arr4', 2600); svgShow('s3ap4', 2600); svgShow('s3al4', 2650);
+    // Browser refreshes
+    svgShow('s3b5', 2900); svgShow('s3t5a', 2900); svgShow('s3t5b', 2900);
+    svgShow('s3tm5', 3000);
+    // Total banner
+    svgShow('s3banner', 3400); svgShow('s3bannerT', 3400);
+    // Terminal log
+    show('s3log', 3700);
+    showEl('s3lg1', 3800); showEl('s3lg2', 4100); showEl('s3lg3', 4400);
+    showEl('s3lg4', 4700); showEl('s3lg5', 5000);
+  }
+
+  if (n === 4) {
+    show('s4c1', 300);
+    show('s4c2', 1100);
+    show('s4c3', 1900);
+    show('s4c4', 2600);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

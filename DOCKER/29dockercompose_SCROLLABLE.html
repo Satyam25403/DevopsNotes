@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker Compose — Why You Need It</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — The Problem: 5 Manual docker run Commands
+═══════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050">DOCKER COMPOSE</div>
+    <div class="hdr-sub">STOP TYPING 5 COMMANDS</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">PAIN</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- intro card -->
+      <div id="s1-intro" class="panel" style="background:#180008;border-left:4px solid #e85050;border-top:1px solid #3a0015;border-right:1px solid #3a0015;border-bottom:1px solid #3a0015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">⚠ YOUR TYPICAL APP STACK</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Running a modern app means juggling containers — a database, a backend, a frontend, a cache, a queue. Without Compose, you manage each one manually.</div>
+      </div>
+
+      <!-- 5 docker run commands terminal -->
+      <div id="s1-term" class="panel" style="background:#050002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal — the hard way</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.4">
+          <div id="s1-l0" class="tline" style="color:#888">$ <span style="color:#e85050">docker network create</span> myapp-net</div>
+          <div id="s1-l1" class="tline" style="color:#888">$ <span style="color:#e8a020">docker run</span> -d --name postgres \</div>
+          <div id="s1-l1b" class="tline" style="color:#666;padding-left:12px">--network myapp-net -e POSTGRES_PASSWORD=secret \</div>
+          <div id="s1-l1c" class="tline" style="color:#666;padding-left:12px">-v pgdata:/var/lib/postgresql/data postgres:15</div>
+          <div id="s1-l2" class="tline" style="color:#888">$ <span style="color:#e8a020">docker run</span> -d --name redis \</div>
+          <div id="s1-l2b" class="tline" style="color:#666;padding-left:12px">--network myapp-net redis:alpine</div>
+          <div id="s1-l3" class="tline" style="color:#888">$ <span style="color:#e8a020">docker run</span> -d --name backend \</div>
+          <div id="s1-l3b" class="tline" style="color:#666;padding-left:12px">--network myapp-net -p 8000:8000 \</div>
+          <div id="s1-l3c" class="tline" style="color:#666;padding-left:12px">-e DATABASE_URL=postgres://... myapp-backend</div>
+          <div id="s1-l4" class="tline" style="color:#888">$ <span style="color:#e8a020">docker run</span> -d --name frontend \</div>
+          <div id="s1-l4b" class="tline" style="color:#666;padding-left:12px">--network myapp-net -p 3000:3000 myapp-frontend</div>
+          <div id="s1-l5" class="tline" style="color:#888">$ <span style="color:#e8a020">docker run</span> -d --name worker \</div>
+          <div id="s1-l5b" class="tline" style="color:#666;padding-left:12px">--network myapp-net -e REDIS_URL=redis://... myapp-worker</div>
+          <div id="s1-pain" class="tline" style="color:#e85050;margin-top:4px">😱 And if anything crashes, do it all again...</div>
+        </div>
+      </div>
+
+      <!-- pain points -->
+      <div id="s1-pain1" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#180005;border:1px solid #3a0015;padding:8px 10px;border-radius:2px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:5px">✗ ORDER MATTERS</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Network must exist before containers. DB before backend. Easy to forget.</div>
+        </div>
+        <div style="background:#180005;border:1px solid #3a0015;padding:8px 10px;border-radius:2px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:5px">✗ NO MEMORY</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Flags live in your shell history. New teammate? Good luck.</div>
+        </div>
+        <div style="background:#180005;border:1px solid #3a0015;padding:8px 10px;border-radius:2px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:5px">✗ TEAR DOWN</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Stop each container. Remove each. Remove network. Remove volumes.</div>
+        </div>
+        <div style="background:#180005;border:1px solid #3a0015;padding:8px 10px;border-radius:2px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:5px">✗ ENV DRIFT</div>
+          <div style="font-size:6px;color:#888;line-height:1.8">Your env vars differ from your teammate's. Bugs only on their machine.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Every service needs its own flags, network, volumes, env vars.</div>
+    <div class="ih rd">This is the problem Docker Compose was built to solve.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">5</div><div class="sl">COMMANDS TO RUN</div></div>
+    <div class="sc"><div class="sv am">12+</div><div class="sl">FLAGS TO REMEMBER</div></div>
+    <div class="sc"><div class="sv rd">😱</div><div class="sl">NEW TEAMMATE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — The Solution: docker-compose.yaml
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#001508">
+
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0a2a10">
+    <div class="hdr-title" style="color:#4eff9a">DOCKER COMPOSE</div>
+    <div class="hdr-sub">ONE FILE TO RULE THEM ALL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">THE SOLUTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">YAML</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- intro -->
+      <div id="s2-intro" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0a3015;border-right:1px solid #0a3015;border-bottom:1px solid #0a3015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">✓ docker-compose.yaml</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">One declarative YAML file describes your entire stack. Services, networks, volumes, env vars — all versioned, all shared, all reproducible.</div>
+      </div>
+
+      <!-- the yaml file -->
+      <div id="s2-yaml" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4eff9a">docker-compose.yaml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2-l0" class="tline" style="color:#a080ff">services:</div>
+          <div id="s2-l1" class="tline" style="color:#4ec9e1;padding-left:10px">db:</div>
+          <div id="s2-l1b" class="tline" style="color:#888;padding-left:18px">image: <span style="color:#e8a020">postgres:15</span></div>
+          <div id="s2-l1c" class="tline" style="color:#888;padding-left:18px">environment:</div>
+          <div id="s2-l1d" class="tline" style="color:#888;padding-left:26px">POSTGRES_PASSWORD: <span style="color:#4eff9a">secret</span></div>
+          <div id="s2-l1e" class="tline" style="color:#888;padding-left:18px">volumes: [<span style="color:#e8a020">pgdata:/var/lib/postgresql/data</span>]</div>
+          <div id="s2-l2" class="tline" style="color:#4ec9e1;padding-left:10px">redis:</div>
+          <div id="s2-l2b" class="tline" style="color:#888;padding-left:18px">image: <span style="color:#e8a020">redis:alpine</span></div>
+          <div id="s2-l3" class="tline" style="color:#4ec9e1;padding-left:10px">backend:</div>
+          <div id="s2-l3b" class="tline" style="color:#888;padding-left:18px">build: <span style="color:#e8a020">./backend</span></div>
+          <div id="s2-l3c" class="tline" style="color:#888;padding-left:18px">ports: [<span style="color:#4eff9a">"8000:8000"</span>]</div>
+          <div id="s2-l3d" class="tline" style="color:#888;padding-left:18px">depends_on: [<span style="color:#a080ff">db, redis</span>]</div>
+          <div id="s2-l4" class="tline" style="color:#4ec9e1;padding-left:10px">frontend:</div>
+          <div id="s2-l4b" class="tline" style="color:#888;padding-left:18px">build: <span style="color:#e8a020">./frontend</span></div>
+          <div id="s2-l4c" class="tline" style="color:#888;padding-left:18px">ports: [<span style="color:#4eff9a">"3000:3000"</span>]</div>
+          <div id="s2-l5" class="tline" style="color:#4ec9e1;padding-left:10px">worker:</div>
+          <div id="s2-l5b" class="tline" style="color:#888;padding-left:18px">build: <span style="color:#e8a020">./worker</span></div>
+          <div id="s2-l5c" class="tline" style="color:#888;padding-left:18px">depends_on: [<span style="color:#a080ff">redis</span>]</div>
+          <div id="s2-l6" class="tline" style="color:#a080ff">volumes:</div>
+          <div id="s2-l6b" class="tline" style="color:#888;padding-left:10px">pgdata:</div>
+        </div>
+      </div>
+
+      <!-- then just one command -->
+      <div id="s2-cmd" class="panel" style="background:#050d02;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal — the easy way</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.4">
+          <div id="s2-c1" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker compose up</span></div>
+          <div id="s2-c2" class="tline" style="color:#4eff9a">✓ Network myapp_default created</div>
+          <div id="s2-c3" class="tline" style="color:#4eff9a">✓ Volume pgdata created</div>
+          <div id="s2-c4" class="tline" style="color:#4eff9a">✓ Container db started</div>
+          <div id="s2-c5" class="tline" style="color:#4eff9a">✓ Container redis started</div>
+          <div id="s2-c6" class="tline" style="color:#4eff9a">✓ Container backend started</div>
+          <div id="s2-c7" class="tline" style="color:#4eff9a">✓ Container frontend started</div>
+          <div id="s2-c8" class="tline" style="color:#4eff9a">✓ Container worker started</div>
+          <div id="s2-c9" class="tline" style="color:#a080ff;margin-top:3px">🚀 All services running!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">One file. Committed to git. Shared with your whole team.</div>
+    <div class="ih">docker compose up — that's literally it.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">YAML FILE</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">COMMAND</div></div>
+    <div class="sc"><div class="sv gn">🚀</div><div class="sl">FULL STACK UP</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — Key Concepts + Cheat Sheet
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#00040f">
+
+  <div class="hdr" style="background:#00040f;border-bottom:1px solid #0a1530">
+    <div class="hdr-title" style="color:#4ec9e1">DOCKER COMPOSE</div>
+    <div class="hdr-sub">CONCEPTS + CHEAT SHEET</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00040f">
+    <span class="slabel" style="color:#4ec9e1">KEY CONCEPTS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">ESSENTIALS</span>
+  </div>
+
+  <div class="anim" style="background:#00040f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- concepts grid -->
+      <div id="s3-concepts" class="panel">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px;letter-spacing:1px">WHAT COMPOSE MANAGES FOR YOU</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div id="s3-c1" class="panel" style="background:#000d18;border-left:3px solid #4ec9e1;padding:8px 10px;display:flex;gap:10px;align-items:flex-start">
+            <span style="font-size:13px;flex-shrink:0">🔗</span>
+            <div>
+              <div style="font-size:6.5px;color:#4ec9e1;margin-bottom:4px">SERVICES</div>
+              <div style="font-size:6px;color:#aaa;line-height:1.8">Each container is a "service". Services find each other by name — backend can reach db just by hostname <span style="color:#4eff9a">db</span>.</div>
+            </div>
+          </div>
+          <div id="s3-c2" class="panel" style="background:#000d18;border-left:3px solid #a080ff;padding:8px 10px;display:flex;gap:10px;align-items:flex-start">
+            <span style="font-size:13px;flex-shrink:0">🌐</span>
+            <div>
+              <div style="font-size:6.5px;color:#a080ff;margin-bottom:4px">NETWORKS</div>
+              <div style="font-size:6px;color:#aaa;line-height:1.8">Compose auto-creates a private network. All services join it. No <span style="color:#e85050">--network</span> flags needed. Isolated from other apps.</div>
+            </div>
+          </div>
+          <div id="s3-c3" class="panel" style="background:#000d18;border-left:3px solid #e8a020;padding:8px 10px;display:flex;gap:10px;align-items:flex-start">
+            <span style="font-size:13px;flex-shrink:0">💾</span>
+            <div>
+              <div style="font-size:6.5px;color:#e8a020;margin-bottom:4px">VOLUMES</div>
+              <div style="font-size:6px;color:#aaa;line-height:1.8">Named volumes declared once, shared across containers. Data persists even when you <span style="color:#4eff9a">docker compose down</span>.</div>
+            </div>
+          </div>
+          <div id="s3-c4" class="panel" style="background:#000d18;border-left:3px solid #4eff9a;padding:8px 10px;display:flex;gap:10px;align-items:flex-start">
+            <span style="font-size:13px;flex-shrink:0">⚙️</span>
+            <div>
+              <div style="font-size:6.5px;color:#4eff9a;margin-bottom:4px">DEPENDS_ON</div>
+              <div style="font-size:6px;color:#aaa;line-height:1.8">Startup ordering. Tell Compose that <span style="color:#4ec9e1">backend</span> must wait for <span style="color:#4ec9e1">db</span>. No more race conditions.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- cheat sheet -->
+      <div id="s3-cheat" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">compose cheat sheet</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.5">
+          <div id="s3-ch1" class="tline"><span style="color:#4eff9a">docker compose up</span>       <span style="color:#555"># start all</span></div>
+          <div id="s3-ch2" class="tline"><span style="color:#4eff9a">docker compose up -d</span>     <span style="color:#555"># start detached</span></div>
+          <div id="s3-ch3" class="tline"><span style="color:#4eff9a">docker compose down</span>      <span style="color:#555"># stop + remove</span></div>
+          <div id="s3-ch4" class="tline"><span style="color:#4eff9a">docker compose down -v</span>   <span style="color:#555"># also delete volumes</span></div>
+          <div id="s3-ch5" class="tline"><span style="color:#4eff9a">docker compose logs -f</span>   <span style="color:#555"># tail all logs</span></div>
+          <div id="s3-ch6" class="tline"><span style="color:#4ec9e1">docker compose ps</span>        <span style="color:#555"># list services</span></div>
+          <div id="s3-ch7" class="tline"><span style="color:#e8a020">docker compose build</span>     <span style="color:#555"># rebuild images</span></div>
+          <div id="s3-ch8" class="tline"><span style="color:#a080ff">docker compose exec db bash</span> <span style="color:#555"># shell in service</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Compose is the standard way to develop multi-service apps locally.</div>
+    <div class="ih">git add docker-compose.yaml — your teammates will thank you.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">up</div><div class="sl">START ALL</div></div>
+    <div class="sc"><div class="sv rd">down</div><div class="sl">STOP ALL</div></div>
+    <div class="sc"><div class="sv pu">exec</div><div class="sl">SHELL IN</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) e.style.opacity = '1';
+  });
+}
+function hideEl(id) {
+  const e = document.getElementById(id);
+  if (e) e.style.opacity = '0';
+}
+function tshow(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function thide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1-intro','s1-term','s1-pain1'].forEach(hide);
+    ['s1-l0','s1-l1','s1-l1b','s1-l1c','s1-l2','s1-l2b',
+     's1-l3','s1-l3b','s1-l3c','s1-l4','s1-l4b','s1-l5','s1-l5b','s1-pain'].forEach(thide);
+  }
+  if (n === 2) {
+    ['s2-intro','s2-yaml','s2-cmd'].forEach(hide);
+    ['s2-l0','s2-l1','s2-l1b','s2-l1c','s2-l1d','s2-l1e',
+     's2-l2','s2-l2b','s2-l3','s2-l3b','s2-l3c','s2-l3d',
+     's2-l4','s2-l4b','s2-l4c','s2-l5','s2-l5b','s2-l5c',
+     's2-l6','s2-l6b',
+     's2-c1','s2-c2','s2-c3','s2-c4','s2-c5','s2-c6','s2-c7','s2-c8','s2-c9'].forEach(thide);
+  }
+  if (n === 3) {
+    ['s3-concepts','s3-cheat'].forEach(hide);
+    ['s3-c1','s3-c2','s3-c3','s3-c4'].forEach(hide);
+    ['s3-ch1','s3-ch2','s3-ch3','s3-ch4','s3-ch5','s3-ch6','s3-ch7','s3-ch8'].forEach(thide);
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    show('s1-intro', 200);
+    show('s1-term', 600);
+    // stagger terminal lines
+    const lines = ['s1-l0','s1-l1','s1-l1b','s1-l1c','s1-l2','s1-l2b',
+                   's1-l3','s1-l3b','s1-l3c','s1-l4','s1-l4b','s1-l5','s1-l5b','s1-pain'];
+    lines.forEach((id, i) => tshow(id, 900 + i * 220));
+    show('s1-pain1', 900 + lines.length * 220 + 200);
+  }
+  if (n === 2) {
+    show('s2-intro', 200);
+    show('s2-yaml', 600);
+    const yamlLines = ['s2-l0','s2-l1','s2-l1b','s2-l1c','s2-l1d','s2-l1e',
+                       's2-l2','s2-l2b','s2-l3','s2-l3b','s2-l3c','s2-l3d',
+                       's2-l4','s2-l4b','s2-l4c','s2-l5','s2-l5b','s2-l5c',
+                       's2-l6','s2-l6b'];
+    yamlLines.forEach((id, i) => tshow(id, 900 + i * 160));
+    const cmdStart = 900 + yamlLines.length * 160 + 300;
+    show('s2-cmd', cmdStart);
+    const cmdLines = ['s2-c1','s2-c2','s2-c3','s2-c4','s2-c5','s2-c6','s2-c7','s2-c8','s2-c9'];
+    cmdLines.forEach((id, i) => tshow(id, cmdStart + 300 + i * 200));
+  }
+  if (n === 3) {
+    show('s3-concepts', 200);
+    show('s3-c1', 400);
+    show('s3-c2', 800);
+    show('s3-c3', 1200);
+    show('s3-c4', 1600);
+    show('s3-cheat', 2100);
+    const cheatLines = ['s3-ch1','s3-ch2','s3-ch3','s3-ch4','s3-ch5','s3-ch6','s3-ch7','s3-ch8'];
+    cheatLines.forEach((id, i) => tshow(id, 2400 + i * 220));
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>
