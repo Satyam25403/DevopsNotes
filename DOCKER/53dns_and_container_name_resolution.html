@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Docker DNS & Container Name Resolution</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════ SCENE 1: DEFAULT BRIDGE — DNS BROKEN ══════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">🐳 DEFAULT BRIDGE: NO DNS</div>
+    <div class="hdr-sub">CONTAINER NAMES DON'T RESOLVE HERE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">⚠ THE CONFUSION</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">COMMON TRAP</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Default bridge diagram -->
+      <div id="s1_diag" class="panel" style="background:#080002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#100004;padding:5px 10px;border-bottom:1px solid #3a0010;font-size:6.5px;color:#e85050;text-align:center">docker0 — default bridge (no embedded DNS)</div>
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f1r" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- docker0 bridge bar -->
+          <rect id="s1_bridge" x="30" y="110" width="306" height="18" rx="3"
+                fill="#2a0008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s1_bridge_l" x="183" y="123" text-anchor="middle" font-size="6"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">docker0  172.17.0.1</text>
+          <!-- container A -->
+          <rect id="s1_ca" x="20" y="30" width="100" height="52" rx="3"
+                fill="#200008" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text id="s1_ca_t1" x="70" y="52" text-anchor="middle" font-size="6.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">app-a</text>
+          <text id="s1_ca_t2" x="70" y="66" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">172.17.0.2</text>
+          <text id="s1_ca_t3" x="70" y="78" text-anchor="middle" font-size="5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">docker run</text>
+          <!-- container B -->
+          <rect id="s1_cb" x="246" y="30" width="100" height="52" rx="3"
+                fill="#200008" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s1_cb_t1" x="296" y="52" text-anchor="middle" font-size="6.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">app-b</text>
+          <text id="s1_cb_t2" x="296" y="66" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">172.17.0.3</text>
+          <text id="s1_cb_t3" x="296" y="78" text-anchor="middle" font-size="5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">docker run</text>
+          <!-- legs to bridge -->
+          <line id="s1_leg_a" x1="70" y1="82" x2="70" y2="110" stroke="#3a0010" stroke-width="1.5" opacity="0"/>
+          <line id="s1_leg_b" x1="296" y1="82" x2="296" y2="110" stroke="#3a0010" stroke-width="1.5" opacity="0"/>
+          <!-- DNS query packet traveling from A to B, failing -->
+          <circle id="s1_pkt" cx="70" cy="56" r="5" fill="#e85050" opacity="0" filter="url(#f1r)"/>
+          <!-- question mark explode -->
+          <text id="s1_qm" x="183" y="68" text-anchor="middle" font-size="18"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">?</text>
+          <text id="s1_fail" x="183" y="86" text-anchor="middle" font-size="6"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">Name or service not known</text>
+        </svg>
+      </div>
+
+      <!-- Terminal: failed resolution -->
+      <div id="s1_term" class="panel" style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">app-a container shell</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t1l1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --name app-a nginx</div>
+          <div id="t1l2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --name app-b redis</div>
+          <div id="t1l3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> app-a ping app-b</div>
+          <div id="t1l4" class="tline" style="color:#e85050">ping: app-b: Name or service not known</div>
+          <div id="t1l5" class="tline" style="color:#e8a020"># default bridge has NO DNS resolver</div>
+          <div id="t1l6" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> app-a ping 172.17.0.3</div>
+          <div id="t1l7" class="tline" style="color:#4eff9a">PING 172.17.0.3 ... works (by IP only)</div>
+        </div>
+      </div>
+
+      <!-- Warning card -->
+      <div id="s1_warn" class="panel" style="background:#100008;border-left:4px solid #e85050;border-top:1px solid #3a0010;border-right:1px solid #3a0010;border-bottom:1px solid #3a0010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px">💀</span>
+          <span style="font-size:7.5px;color:#e85050">docker0 IS DNS-BLIND</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">The default bridge docker0 predates Docker's embedded DNS server. Name resolution was bolted on later — only for user-defined networks.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">"Why does ping app-b fail?" — You're on the default bridge.</div>
+    <div class="ih rd">docker0 has no DNS. IPs only. User-defined networks fix this.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">docker0</div><div class="sl">DEFAULT<br>BRIDGE</div></div>
+    <div class="sc"><div class="sv rd">NO</div><div class="sl">DNS<br>RESOLVER</div></div>
+    <div class="sc"><div class="sv am">IP only</div><div class="sl">ONLY WAY<br>TO REACH</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 2: EMBEDDED DNS SERVER 127.0.0.11 ══════════ -->
+<div class="scene" id="s2" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">🔮 127.0.0.11 — EMBEDDED DNS</div>
+    <div class="hdr-sub">DOCKER'S BUILT-IN NAME SERVER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">◈ HOW IT WORKS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PROTOCOL</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- DNS resolution flow diagram — redesigned vertical layout -->
+      <div id="s2_diag" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">DNS query flow — user-defined network</div>
+        <svg width="100%" height="310" viewBox="0 0 366 310" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f2g" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="f2c" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+            <marker id="arr2g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+
+          <!-- ── ROW 1: three node boxes at y=10 ── -->
+          <!-- app-a (left) -->
+          <rect id="s2_ca" x="8" y="10" width="96" height="62" rx="3"
+                fill="#001020" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s2_ca_t1" x="56" y="30" text-anchor="middle" font-size="7"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">app-a</text>
+          <text id="s2_ca_t2" x="56" y="45" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">resolv.conf:</text>
+          <text id="s2_ca_t3" x="56" y="58" text-anchor="middle" font-size="5.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">127.0.0.11</text>
+
+          <!-- Docker DNS (centre) -->
+          <rect id="s2_dns" x="133" y="10" width="100" height="62" rx="3"
+                fill="#001828" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s2_dns_t1" x="183" y="28" text-anchor="middle" font-size="5.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">DOCKER DNS</text>
+          <text id="s2_dns_t2" x="183" y="44" text-anchor="middle" font-size="7.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">127.0.0.11</text>
+          <text id="s2_dns_t3" x="183" y="58" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">embedded resolver</text>
+
+          <!-- app-b (right) -->
+          <rect id="s2_cb" x="262" y="10" width="96" height="62" rx="3"
+                fill="#001020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s2_cb_t1" x="310" y="30" text-anchor="middle" font-size="7"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">app-b</text>
+          <text id="s2_cb_t2" x="310" y="45" text-anchor="middle" font-size="5.5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">172.18.0.3</text>
+          <text id="s2_cb_t3" x="310" y="58" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">redis</text>
+
+          <!-- ── STEP 1: app-a → DNS query (y=90) ── -->
+          <!-- step badge -->
+          <rect id="s2_s1bg" x="8" y="82" width="44" height="14" rx="2"
+                fill="#001828" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="s2_s1lbl" x="30" y="92" text-anchor="middle" font-size="5.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">① QUERY</text>
+          <!-- arrow -->
+          <line id="s2_a1" x1="104" y1="90" x2="129" y2="90"
+                stroke="#4ec9e1" stroke-width="1.5" opacity="0" marker-end="url(#arr2)"/>
+          <!-- label above arrow, centred in the gap -->
+          <text id="s2_a1l" x="116" y="85" text-anchor="middle" font-size="6"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">app-b?</text>
+          <!-- animated query packet -->
+          <circle id="s2_pkt_q" cx="104" cy="90" r="4.5" fill="#4ec9e1" opacity="0" filter="url(#f2c)"/>
+
+          <!-- ── STEP 2: DNS lookup → app-b (y=118) ── -->
+          <rect id="s2_s2bg" x="8" y="110" width="56" height="14" rx="2"
+                fill="#001828" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2_s2lbl" x="36" y="120" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">② LOOKUP</text>
+          <line id="s2_a2" x1="233" y1="118" x2="258" y2="118"
+                stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0" marker-end="url(#arr2g)"/>
+          <text id="s2_a2l" x="245" y="113" text-anchor="middle" font-size="6"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">resolve</text>
+
+          <!-- ── STEP 3: DNS replies to app-a (y=148) ── -->
+          <rect id="s2_s3bg" x="8" y="140" width="44" height="14" rx="2"
+                fill="#001828" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2_s3lbl" x="30" y="150" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">③ REPLY</text>
+          <!-- arrow right-to-left: DNS → app-a -->
+          <line id="s2_a3" x1="129" y1="148" x2="106" y2="148"
+                stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#arr2g)"/>
+          <text id="s2_a3l" x="116" y="143" text-anchor="middle" font-size="6"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">172.18.0.3</text>
+          <!-- animated reply packet -->
+          <circle id="s2_pkt_r" cx="129" cy="148" r="4.5" fill="#4eff9a" opacity="0" filter="url(#f2g)"/>
+
+          <!-- ── STEP 4: app-a connects directly to app-b (y=180) ── -->
+          <rect id="s2_s4bg" x="8" y="172" width="44" height="14" rx="2"
+                fill="#001828" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s2_s4lbl" x="30" y="182" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">④ CONNECT</text>
+          <line id="s2_direct" x1="104" y1="180" x2="258" y2="180"
+                stroke="#4eff9a" stroke-width="2" stroke-dasharray="5,3" opacity="0" marker-end="url(#arr2g)"/>
+          <text id="s2_direct_l" x="183" y="175" text-anchor="middle" font-size="6"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">direct to 172.18.0.3</text>
+          <!-- animated data packet -->
+          <circle id="s2_pkt_d" cx="104" cy="180" r="4.5" fill="#4eff9a" opacity="0" filter="url(#f2g)"/>
+
+          <!-- ── resolv.conf detail box (y=202) ── -->
+          <rect id="s2_res" x="8" y="202" width="350" height="100" rx="3"
+                fill="#010608" stroke="#0d2030" stroke-width="1" opacity="0"/>
+          <text id="s2_res_t0" x="183" y="218" text-anchor="middle" font-size="6"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">/etc/resolv.conf — injected by Docker</text>
+          <!-- divider -->
+          <line id="s2_res_div" x1="18" y1="224" x2="348" y2="224"
+                stroke="#0d2030" stroke-width="1" opacity="0"/>
+          <text id="s2_res_t1" x="22" y="242" font-size="7"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">nameserver 127.0.0.11</text>
+          <text id="s2_res_t2" x="22" y="260" font-size="7"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">options ndots:0</text>
+          <text id="s2_res_t3" x="22" y="278" font-size="5.5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0"># auto-written by Docker daemon on container start</text>
+          <text id="s2_res_t4" x="22" y="294" font-size="5.5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0"># only on user-defined networks, NOT default bridge</text>
+        </svg>
+      </div>
+
+      <!-- Key fact cards -->
+      <div id="s2_c1" class="panel" style="background:#001828;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px">🔮</span>
+          <span style="font-size:7.5px;color:#4ec9e1">DOCKER INJECTS THE RESOLVER</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker rewrites <span style="color:#4ec9e1">/etc/resolv.conf</span> in every container on a user-defined network. The nameserver is always <span style="color:#4eff9a">127.0.0.11</span> — a loopback address that intercepts DNS queries before they leave the container.</div>
+      </div>
+
+      <div id="s2_c2" class="panel" style="background:#000810;border:1px solid #0d2030;border-radius:3px;padding:10px 12px">
+        <div style="font-size:6.5px;color:#aaa;line-height:2.2">
+          <div style="color:#4ec9e1;margin-bottom:5px">WHAT 127.0.0.11 KNOWS:</div>
+          <div><span style="color:#4eff9a">→</span> Every container name on the same network</div>
+          <div><span style="color:#4eff9a">→</span> Every service name from docker-compose</div>
+          <div><span style="color:#4eff9a">→</span> All --network-alias values (multiple names)</div>
+          <div><span style="color:#e85050">✗</span> Containers on OTHER networks</div>
+          <div><span style="color:#e85050">✗</span> Containers on the default bridge</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Every user-net container gets nameserver 127.0.0.11 auto-injected.</div>
+    <div class="ih" style="color:#4ec9e1">This resolver knows every container name — but only within the same network.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1" id="s2sv1">127</div><div class="sl">.0.0.11<br>DNS ADDR</div></div>
+    <div class="sc"><div class="sv gn">auto</div><div class="sl">INJECTED<br>BY DOCKER</div></div>
+    <div class="sc"><div class="sv pu">scoped</div><div class="sl">SAME NET<br>ONLY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 3: USER-DEFINED NETWORK — DNS WORKS ══════════ -->
+<div class="scene" id="s3" style="background:#000d04">
+  <div class="hdr" style="background:#000d04;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">✓ USER-DEFINED: DNS WORKS</div>
+    <div class="hdr-sub">THE FIX — CREATE YOUR OWN NETWORK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d04">
+    <span class="slabel" style="color:#4eff9a">✓ THE FIX</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#000d04">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- side-by-side: before/after -->
+      <div id="s3_cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#100008;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0008;padding:5px 7px;border-bottom:1px solid #3a0010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ DEFAULT BRIDGE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            <div style="color:#888">docker run \</div>
+            <div style="color:#e8a020">  --name app-a nginx</div>
+            <div style="color:#888">docker run \</div>
+            <div style="color:#e8a020">  --name app-b redis</div>
+            <div style="color:#e85050;margin-top:4px">ping app-b → FAIL</div>
+            <div style="color:#e85050">no DNS resolver</div>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ USER-DEFINED</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            <div style="color:#4eff9a">docker network create</div>
+            <div style="color:#4eff9a">  mynet</div>
+            <div style="color:#888">docker run --network</div>
+            <div style="color:#888">  mynet --name app-a</div>
+            <div style="color:#4eff9a;margin-top:4px">ping app-b → OK ✓</div>
+            <div style="color:#4eff9a">DNS auto-injected</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Working terminal -->
+      <div id="s3_term" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#031208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">user-defined network — DNS works</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t3l1" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker network create</span> mynet</div>
+          <div id="t3l2" class="tline" style="color:#4ec9e1">a8f3c... (network created)</div>
+          <div id="t3l3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --network mynet --name app-a nginx</div>
+          <div id="t3l4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --network mynet --name app-b redis</div>
+          <div id="t3l5" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> app-a ping -c1 app-b</div>
+          <div id="t3l6" class="tline" style="color:#4eff9a">PING app-b (172.18.0.3): 56 bytes</div>
+          <div id="t3l7" class="tline" style="color:#4eff9a">64 bytes from 172.18.0.3 ← IT WORKS!</div>
+          <div id="t3l8" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker exec</span> app-a cat /etc/resolv.conf</div>
+          <div id="t3l9" class="tline" style="color:#4ec9e1">nameserver 127.0.0.11  ← auto-injected</div>
+        </div>
+      </div>
+
+      <!-- Compose note -->
+      <div id="s3_note" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px">📋</span>
+          <span style="font-size:7.5px;color:#4eff9a">WHY COMPOSE JUST WORKS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">docker compose automatically creates a user-defined network for your project. Every service resolves every other by service name. Zero config.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">docker network create → user-defined → DNS auto-injected. Done.</div>
+    <div class="ih">Compose creates this for you. docker run needs --network explicitly.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">create</div><div class="sl">NETWORK<br>COMMAND</div></div>
+    <div class="sc"><div class="sv gn">--net</div><div class="sl">FLAG ON<br>docker run</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">auto</div><div class="sl">COMPOSE<br>DOES THIS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 4: --link DEPRECATED + --network-alias ══════════ -->
+<div class="scene" id="s4" style="background:#0a0305">
+  <div class="hdr" style="background:#0a0305;border-bottom:1px solid #2a1500">
+    <div class="hdr-title" style="color:#e8a020">⚰ --link vs --network-alias</div>
+    <div class="hdr-sub">THE OLD WAY IS DEAD. LONG LIVE ALIASES.</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0305">
+    <span class="slabel" style="color:#e8a020">⚰ DEPRECATED</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">STOP USING</span>
+  </div>
+  <div class="anim" style="background:#0a0305">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- --link autopsy -->
+      <div id="s4_link" class="panel" style="background:#0d0800;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#180e00;padding:5px 10px;border-bottom:1px solid #3a2000;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:6.5px;color:#e85050">☠ --link (DEPRECATED since Docker 1.12)</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3;color:#aaa">
+          <div id="t4l1" class="tline"><span style="color:#e85050">docker run</span> --link app-b:alias app-a</div>
+          <div id="t4l2" class="tline" style="color:#555"># What it did (badly):</div>
+          <div id="t4l3" class="tline"><span style="color:#e8a020">→</span> injected env vars: APP_B_PORT_6379_TCP</div>
+          <div id="t4l4" class="tline"><span style="color:#e8a020">→</span> added /etc/hosts entry for alias</div>
+          <div id="t4l5" class="tline"><span style="color:#e85050">✗</span> one-directional only</div>
+          <div id="t4l6" class="tline"><span style="color:#e85050">✗</span> breaks when container restarts</div>
+          <div id="t4l7" class="tline"><span style="color:#e85050">✗</span> does NOT work across networks</div>
+          <div id="t4l8" class="tline" style="color:#e85050;margin-top:2px">☠ DO NOT USE THIS</div>
+        </div>
+      </div>
+
+      <!-- --network-alias: the good stuff -->
+      <div id="s4_alias" class="panel" style="background:#001508;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#4eff9a;text-align:center">✓ --network-alias (multiple DNS names per container)</div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3;color:#aaa">
+          <div id="t4a1" class="tline"><span style="color:#4ec9e1">docker run</span> -d \</div>
+          <div id="t4a2" class="tline" style="padding-left:10px">--network mynet \</div>
+          <div id="t4a3" class="tline" style="padding-left:10px">--name redis-primary \</div>
+          <div id="t4a4" class="tline" style="padding-left:10px"><span style="color:#4eff9a">--network-alias cache \</span></div>
+          <div id="t4a5" class="tline" style="padding-left:10px"><span style="color:#4eff9a">--network-alias db-cache \</span></div>
+          <div id="t4a6" class="tline" style="padding-left:10px">redis</div>
+          <div id="t4a7" class="tline" style="color:#4eff9a;margin-top:4px"># Now reachable by 3 names:</div>
+          <div id="t4a8" class="tline" style="color:#4ec9e1">ping redis-primary  ← container name</div>
+          <div id="t4a9" class="tline" style="color:#4ec9e1">ping cache          ← alias 1</div>
+          <div id="t4a10" class="tline" style="color:#4ec9e1">ping db-cache       ← alias 2</div>
+        </div>
+      </div>
+
+      <!-- Use case card -->
+      <div id="s4_use" class="panel" style="background:#001020;border-left:4px solid #a080ff;border-top:1px solid #1a1030;border-right:1px solid #1a1030;border-bottom:1px solid #1a1030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px">💡</span>
+          <span style="font-size:7.5px;color:#a080ff">ALIAS USE CASE: BLUE/GREEN DEPLOYS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Point multiple containers at the same alias "api". DNS round-robins between them. Swap containers without changing any client config.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">--link is deprecated. It's fragile, one-directional, and breaks on restart.</div>
+    <div class="ih am">--network-alias gives a container multiple DNS names. Use it instead.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">--link</div><div class="sl">DEPRECATED<br>DEAD</div></div>
+    <div class="sc"><div class="sv gn">alias</div><div class="sl">MULTI-NAME<br>DNS</div></div>
+    <div class="sc"><div class="sv pu">round</div><div class="sl">ROBIN<br>LB</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 5: CHEAT SHEET ══════════ -->
+<div class="scene" id="s5" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">📋 DNS CHEAT SHEET</div>
+    <div class="hdr-sub">EVERYTHING IN ONE PLACE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">◈ REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SHIP IT</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- comparison table via cards -->
+      <div id="s5_tbl" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">default bridge vs user-defined network</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <!-- header row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 0;border-bottom:1px solid #0d2030">
+            <div style="font-size:5.5px;color:#666">FEATURE</div>
+            <div style="font-size:5.5px;color:#e85050;text-align:center">DEFAULT</div>
+            <div style="font-size:5.5px;color:#4eff9a;text-align:center">USER-DEFINED</div>
+          </div>
+          <div id="tr1" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 0;border-bottom:1px solid #0a0a18">
+            <div style="font-size:5.5px;color:#888">DNS by name</div>
+            <div style="font-size:6px;color:#e85050;text-align:center">✗</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+          </div>
+          <div id="tr2" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 0;border-bottom:1px solid #0a0a18">
+            <div style="font-size:5.5px;color:#888">127.0.0.11</div>
+            <div style="font-size:6px;color:#e85050;text-align:center">✗</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+          </div>
+          <div id="tr3" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 0;border-bottom:1px solid #0a0a18">
+            <div style="font-size:5.5px;color:#888">Isolation</div>
+            <div style="font-size:6px;color:#e85050;text-align:center">✗</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+          </div>
+          <div id="tr4" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 0;border-bottom:1px solid #0a0a18">
+            <div style="font-size:5.5px;color:#888">--network-alias</div>
+            <div style="font-size:6px;color:#e85050;text-align:center">✗</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+          </div>
+          <div id="tr5" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:6px 0">
+            <div style="font-size:5.5px;color:#888">Ping by IP</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick commands -->
+      <div id="s5_cmds" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">quick reference commands</div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3;color:#aaa">
+          <div id="c1" class="tline"><span style="color:#4eff9a">docker network create</span> mynet</div>
+          <div id="c2" class="tline"><span style="color:#4ec9e1">docker run</span> --network mynet --name svc redis</div>
+          <div id="c3" class="tline"><span style="color:#a080ff">docker run</span> --network mynet --network-alias cache redis</div>
+          <div id="c4" class="tline"><span style="color:#888"># verify DNS inside container:</span></div>
+          <div id="c5" class="tline"><span style="color:#4ec9e1">docker exec</span> svc cat /etc/resolv.conf</div>
+          <div id="c6" class="tline"><span style="color:#4ec9e1">docker exec</span> svc nslookup cache</div>
+          <div id="c7" class="tline"><span style="color:#e8a020">docker network inspect</span> mynet</div>
+        </div>
+      </div>
+
+      <!-- Mental model -->
+      <div id="s5_model" class="panel" style="background:#0a0018;border:2px solid #a080ff;border-radius:3px;padding:11px 13px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:8px">🧠 MENTAL MODEL</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #e85050">
+            <span style="color:#e85050">docker0</span> = legacy switch. Dumb. IP only.
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #4ec9e1">
+            <span style="color:#4ec9e1">user-defined</span> = smart switch. Has a DNS server at <span style="color:#4eff9a">127.0.0.11</span>.
+          </div>
+          <div style="font-size:6.5px;color:#aaa;line-height:1.9;padding:6px 9px;background:#06000f;border-left:3px solid #4eff9a">
+            <span style="color:#4eff9a">Compose</span> = creates a user-defined network per project automatically. That's why it works.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">User-defined network = automatic DNS. Default bridge = IP-only legacy.</div>
+    <div class="ih" style="color:#4ec9e1">Compose works because it creates a user-defined network. docker run needs --network.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">docker0</div><div class="sl">NO DNS<br>LEGACY</div></div>
+    <div class="sc"><div class="sv gn">user-net</div><div class="sl">DNS AUTO<br>INJECTED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">.11</div><div class="sl">127.0.0<br>DNS ADDR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)" style="font-size:8px">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);
+      d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+    }
+    af(16,step);
+  });
+}
+
+function movePktBounce(id,x1,y1,xmid,ymid,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const half=Math.round(durMs/2);
+    const f1=Math.max(1,Math.round(half/16));let f=0;
+    function step1(){
+      f++;const p=Math.min(f/f1,1);
+      d.setAttribute('cx',x1+(xmid-x1)*p);
+      d.setAttribute('cy',y1+(ymid-y1)*p);
+      if(f<f1)af(16,step1);else{
+        let f2=0;const fr2=Math.max(1,Math.round(half/16));
+        function step2(){
+          f2++;const p2=Math.min(f2/fr2,1);
+          d.setAttribute('cx',xmid+(x2-xmid)*p2);
+          d.setAttribute('cy',ymid+(y2-ymid)*p2);
+          if(f2<fr2)af(16,step2);else d.setAttribute('opacity','0');
+        }
+        af(16,step2);
+      }
+    }
+    af(16,step1);
+  });
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('s1_diag');hide('s1_term');hide('s1_warn');
+    ['s1_bridge','s1_bridge_l','s1_ca','s1_ca_t1','s1_ca_t2','s1_ca_t3',
+     's1_cb','s1_cb_t1','s1_cb_t2','s1_cb_t3',
+     's1_leg_a','s1_leg_b','s1_pkt','s1_qm','s1_fail'].forEach(svgHide);
+    ['t1l1','t1l2','t1l3','t1l4','t1l5','t1l6','t1l7'].forEach(hideEl);
+  }
+  if(n===2){
+    hide('s2_diag');hide('s2_c1');hide('s2_c2');
+    ['s2_ca','s2_ca_t1','s2_ca_t2','s2_ca_t3',
+     's2_dns','s2_dns_t1','s2_dns_t2','s2_dns_t3',
+     's2_cb','s2_cb_t1','s2_cb_t2','s2_cb_t3',
+     's2_s1bg','s2_s1lbl','s2_a1','s2_a1l','s2_pkt_q',
+     's2_s2bg','s2_s2lbl','s2_a2','s2_a2l',
+     's2_s3bg','s2_s3lbl','s2_a3','s2_a3l','s2_pkt_r',
+     's2_s4bg','s2_s4lbl','s2_direct','s2_direct_l','s2_pkt_d',
+     's2_res','s2_res_div','s2_res_t0','s2_res_t1','s2_res_t2','s2_res_t3','s2_res_t4'].forEach(svgHide);
+  }
+  if(n===3){
+    hide('s3_cmp');hide('s3_term');hide('s3_note');
+    ['t3l1','t3l2','t3l3','t3l4','t3l5','t3l6','t3l7','t3l8','t3l9'].forEach(hideEl);
+  }
+  if(n===4){
+    hide('s4_link');hide('s4_alias');hide('s4_use');
+    ['t4l1','t4l2','t4l3','t4l4','t4l5','t4l6','t4l7','t4l8',
+     't4a1','t4a2','t4a3','t4a4','t4a5','t4a6','t4a7','t4a8','t4a9','t4a10'].forEach(hideEl);
+  }
+  if(n===5){
+    hide('s5_tbl');hide('s5_cmds');hide('s5_model');
+    ['tr1','tr2','tr3','tr4','tr5','c1','c2','c3','c4','c5','c6','c7'].forEach(hideEl);
+  }
+}
+
+function play(n){
+  clr();
+
+  if(n===1){
+    show('s1_diag',200);
+    svgShow('s1_bridge',350);svgShow('s1_bridge_l',450);
+    svgShow('s1_ca',650);svgShow('s1_ca_t1',800);svgShow('s1_ca_t2',800);svgShow('s1_ca_t3',800);
+    svgShow('s1_cb',1000);svgShow('s1_cb_t1',1150);svgShow('s1_cb_t2',1150);svgShow('s1_cb_t3',1150);
+    svgShow('s1_leg_a',1300);svgShow('s1_leg_b',1300);
+    // packet travels from A toward B, gets lost in middle
+    movePkt('s1_pkt',70,56,183,56,1600,400);
+    svgShow('s1_qm',2100);
+    svgShow('s1_fail',2350);
+    show('s1_term',2800);
+    showEl('t1l1',3000);showEl('t1l2',3300);showEl('t1l3',3600);
+    showEl('t1l4',4000);showEl('t1l5',4350);showEl('t1l6',4700);showEl('t1l7',5100);
+    show('s1_warn',5500);
+  }
+
+  if(n===2){
+    show('s2_diag',200);
+    // nodes appear
+    svgShow('s2_ca',350);svgShow('s2_ca_t1',500);svgShow('s2_ca_t2',500);svgShow('s2_ca_t3',500);
+    svgShow('s2_dns',700);svgShow('s2_dns_t1',850);svgShow('s2_dns_t2',850);svgShow('s2_dns_t3',850);
+    svgShow('s2_cb',1050);svgShow('s2_cb_t1',1200);svgShow('s2_cb_t2',1200);svgShow('s2_cb_t3',1200);
+    // step 1: query app-a → DNS (y=90)
+    svgShow('s2_s1bg',1500);svgShow('s2_s1lbl',1500);
+    svgShow('s2_a1',1650);svgShow('s2_a1l',1650);
+    movePkt('s2_pkt_q',104,90,129,90,1750,380);
+    // step 2: DNS internal lookup → app-b (y=118)
+    svgShow('s2_s2bg',2250);svgShow('s2_s2lbl',2250);
+    svgShow('s2_a2',2400);svgShow('s2_a2l',2400);
+    // step 3: DNS replies to app-a (y=148)
+    svgShow('s2_s3bg',2900);svgShow('s2_s3lbl',2900);
+    svgShow('s2_a3',3050);svgShow('s2_a3l',3050);
+    movePkt('s2_pkt_r',129,148,106,148,3150,380);
+    // step 4: app-a connects directly to app-b (y=180)
+    svgShow('s2_s4bg',3700);svgShow('s2_s4lbl',3700);
+    svgShow('s2_direct',3850);svgShow('s2_direct_l',3850);
+    movePkt('s2_pkt_d',104,180,258,180,3950,550);
+    // resolv.conf box
+    svgShow('s2_res',4700);svgShow('s2_res_div',4800);svgShow('s2_res_t0',4800);
+    svgShow('s2_res_t1',5000);svgShow('s2_res_t2',5200);
+    svgShow('s2_res_t3',5400);svgShow('s2_res_t4',5600);
+    show('s2_c1',6100);
+    show('s2_c2',6800);
+  }
+
+  if(n===3){
+    show('s3_cmp',300);
+    show('s3_term',1100);
+    showEl('t3l1',1300);showEl('t3l2',1650);showEl('t3l3',2000);showEl('t3l4',2350);
+    showEl('t3l5',2700);showEl('t3l6',3100);showEl('t3l7',3450);showEl('t3l8',3800);showEl('t3l9',4150);
+    show('s3_note',4600);
+  }
+
+  if(n===4){
+    show('s4_link',200);
+    showEl('t4l1',400);showEl('t4l2',650);showEl('t4l3',900);showEl('t4l4',1150);
+    showEl('t4l5',1400);showEl('t4l6',1650);showEl('t4l7',1900);showEl('t4l8',2200);
+    show('s4_alias',2700);
+    showEl('t4a1',2900);showEl('t4a2',3100);showEl('t4a3',3300);showEl('t4a4',3500);
+    showEl('t4a5',3700);showEl('t4a6',3900);showEl('t4a7',4150);showEl('t4a8',4400);
+    showEl('t4a9',4650);showEl('t4a10',4900);
+    show('s4_use',5300);
+  }
+
+  if(n===5){
+    show('s5_tbl',300);
+    showEl('tr1',600);showEl('tr2',900);showEl('tr3',1200);showEl('tr4',1500);showEl('tr5',1800);
+    show('s5_cmds',2200);
+    showEl('c1',2400);showEl('c2',2700);showEl('c3',3000);showEl('c4',3300);
+    showEl('c5',3600);showEl('c6',3900);showEl('c7',4200);
+    show('s5_model',4700);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

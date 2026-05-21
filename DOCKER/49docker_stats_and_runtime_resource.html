@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Runtime Inspection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+/* live bar animation */
+@keyframes barPulse{0%{width:42%}25%{width:71%}50%{width:55%}75%{width:83%}100%{width:42%}}
+@keyframes barPulse2{0%{width:58%}25%{width:34%}50%{width:67%}75%{width:45%}100%{width:58%}}
+@keyframes barPulse3{0%{width:28%}25%{width:52%}50%{width:38%}75%{width:61%}100%{width:28%}}
+.bar-live{animation:barPulse 3s ease-in-out infinite}
+.bar-live2{animation:barPulse2 3.4s ease-in-out infinite}
+.bar-live3{animation:barPulse3 2.8s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ════════════════════════════ SCENE 1: docker stats — live metrics -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">docker stats</div>
+    <div class="hdr-sub">LIVE CPU, MEMORY, NET & BLOCK I/O</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">LIVE STREAM</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">FIRST COMMAND</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Command -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker stats</span></div>
+          <div id="s1l1" class="tline" style="color:#555;font-size:5.5px">CONTAINER   CPU%  MEM USAGE/LIMIT   NET I/O       BLOCK I/O</div>
+        </div>
+      </div>
+
+      <!-- Live stats dashboard -->
+      <div id="s1dash" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#001018;border-bottom:1px solid #0d2030;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:6px;color:#4ec9e1">LIVE METRICS</span>
+          <span id="s1live" style="font-size:5.5px;color:#e85050;opacity:0">● STREAMING</span>
+        </div>
+
+        <!-- Container 1: nginx -->
+        <div style="padding:8px 10px;border-bottom:1px solid #0a1520">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:6px;color:#4ec9e1">nginx</span>
+            <span id="s1cpulbl1" style="font-size:6px;color:#4eff9a;opacity:0">2.4%</span>
+          </div>
+          <div id="s1cpurow1" style="opacity:0">
+            <div style="font-size:5px;color:#555;margin-bottom:3px">CPU</div>
+            <div style="background:#001018;border-radius:2px;height:8px;overflow:hidden;margin-bottom:5px">
+              <div class="bar-live" style="height:100%;background:#4eff9a;border-radius:2px;width:42%"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">MEM</div>
+                <div style="font-size:6px;color:#4ec9e1">48MB / 512MB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">NET I/O</div>
+                <div style="font-size:6px;color:#e8a020">1.2MB / 400KB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">BLOCK I/O</div>
+                <div style="font-size:6px;color:#aaa">0B / 8KB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Container 2: api — HIGH CPU -->
+        <div style="padding:8px 10px;border-bottom:1px solid #0a1520">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:6px;color:#e85050">api ⚠ HIGH</span>
+            <span id="s1cpulbl2" style="font-size:6px;color:#e85050;opacity:0">87.3%</span>
+          </div>
+          <div id="s1cpurow2" style="opacity:0">
+            <div style="font-size:5px;color:#555;margin-bottom:3px">CPU</div>
+            <div style="background:#001018;border-radius:2px;height:8px;overflow:hidden;margin-bottom:5px">
+              <div class="bar-live2" style="height:100%;background:#e85050;border-radius:2px;width:58%"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+              <div style="background:#1a0008;padding:3px 5px;border-radius:2px;border:1px solid #2d0010">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">MEM</div>
+                <div style="font-size:6px;color:#e85050">490MB / 512MB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">NET I/O</div>
+                <div style="font-size:6px;color:#e8a020">56MB / 12MB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">BLOCK I/O</div>
+                <div style="font-size:6px;color:#aaa">2GB / 1GB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Container 3: postgres -->
+        <div style="padding:8px 10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+            <span style="font-size:6px;color:#a080ff">postgres</span>
+            <span id="s1cpulbl3" style="font-size:6px;color:#4eff9a;opacity:0">0.8%</span>
+          </div>
+          <div id="s1cpurow3" style="opacity:0">
+            <div style="font-size:5px;color:#555;margin-bottom:3px">CPU</div>
+            <div style="background:#001018;border-radius:2px;height:8px;overflow:hidden;margin-bottom:5px">
+              <div class="bar-live3" style="height:100%;background:#a080ff;border-radius:2px;width:28%"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">MEM</div>
+                <div style="font-size:6px;color:#a080ff">128MB / 1GB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">NET I/O</div>
+                <div style="font-size:6px;color:#e8a020">8MB / 2MB</div>
+              </div>
+              <div style="background:#001018;padding:3px 5px;border-radius:2px">
+                <div style="font-size:5px;color:#555;margin-bottom:2px">BLOCK I/O</div>
+                <div style="font-size:6px;color:#aaa">400MB / 200MB</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Flags card -->
+      <div id="s1flags" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">USEFUL FLAGS</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:6px;font-size:6px;align-items:start">
+            <span style="color:#e8a020">--no-stream</span>
+            <span style="color:#aaa;line-height:1.8">Print once and exit. Good for scripting / snapshots.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:6px;font-size:6px;align-items:start">
+            <span style="color:#e8a020">--format</span>
+            <span style="color:#aaa;line-height:1.8">Go template output. e.g. <span style="color:#4eff9a">'{{.Name}} {{.CPUPerc}}'</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:110px 1fr;gap:6px;font-size:6px;align-items:start">
+            <span style="color:#e8a020">[container]</span>
+            <span style="color:#aaa;line-height:1.8">Watch one container: <span style="color:#4eff9a">docker stats api</span></span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">docker stats streams live metrics — refreshes every second.</div>
+    <div class="ih">High MEM near limit = OOM kill risk. High CPU = needs profiling.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">live</div><div class="sl">STREAMING<br>METRICS</div></div>
+    <div class="sc"><div class="sv am">CPU%</div><div class="sl">MEM<br>NET/BLK</div></div>
+    <div class="sc"><div class="sv gn">3</div><div class="sl">CONTAINERS<br>AT ONCE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════ SCENE 2: docker top — processes inside -->
+<div class="scene" id="s2" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">docker top</div>
+    <div class="hdr-sub">PROCESSES INSIDE THE CONTAINER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">PROCESS VIEW</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">NO EXEC NEEDED</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- docker top output -->
+      <div style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4eff9a">docker top</span> api</div>
+          <div id="s2l1" class="tline" style="color:#555;font-size:5.5px">UID   PID    PPID   CMD</div>
+          <div id="s2l2" class="tline" style="color:#4eff9a">root  14821  14800  node server.js</div>
+          <div id="s2l3" class="tline" style="color:#aaa">root  14900  14821  node worker.js</div>
+          <div id="s2l4" class="tline" style="color:#aaa">root  14901  14821  node worker.js</div>
+          <div id="s2l5" class="tline" style="color:#e85050">root  15201  14821  sh -c while true</div>
+          <div id="s2l6" class="tline" style="color:#e85050">root  15210  15201  sleep 0</div>
+        </div>
+      </div>
+
+      <!-- What to look for diagram -->
+      <div id="s2diag" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#002010;border-bottom:1px solid #1a2810;font-size:6px;color:#4eff9a;text-align:center">READING THE PROCESS TREE</div>
+        <svg width="100%" height="156" viewBox="0 0 366 156" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="greenArr6" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="redArr5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- PID 1 — entrypoint -->
+          <rect id="s2p1" x="6" y="12" width="354" height="28" rx="3" fill="#002010" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s2p1t" x="183" y="23" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">PID 14821 (PID 1 inside container) — node server.js</text>
+          <text id="s2p1t2" x="183" y="35" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">PPID = 14800 (container runtime) — this is the entrypoint</text>
+
+          <!-- workers — normal -->
+          <rect id="s2p2" x="6" y="50" width="170" height="44" rx="3" fill="#001508" stroke="#1a2810" stroke-width="1" opacity="0"/>
+          <text id="s2p2t" x="91" y="66" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">PID 14900, 14901</text>
+          <text id="s2p2t2" x="91" y="80" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">node worker.js ✓</text>
+          <text id="s2p2t3" x="91" y="90" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">expected children</text>
+          <line id="s2a1" x1="91" y1="42" x2="91" y2="48" stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#greenArr6)"/>
+
+          <!-- zombie/unexpected process — red -->
+          <rect id="s2p3" x="190" y="50" width="170" height="44" rx="3" fill="#1a0008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s2p3t" x="275" y="66" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">PID 15201, 15210</text>
+          <text id="s2p3t2" x="275" y="80" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">sh -c while true ✗</text>
+          <text id="s2p3t3" x="275" y="90" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⚠ unexpected!</text>
+          <line id="s2a2" x1="275" y1="42" x2="275" y2="48" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#redArr5)"/>
+
+          <!-- tips row -->
+          <rect id="s2tip1" x="6" y="106" width="170" height="40" rx="3" fill="#001508" stroke="#1a2810" stroke-width="1" opacity="0"/>
+          <text id="s2tip1t" x="91" y="121" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">PPID matches parent</text>
+          <text id="s2tip1t2" x="91" y="136" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">= expected child process</text>
+          <rect id="s2tip2" x="190" y="106" width="170" height="40" rx="3" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s2tip2t" x="275" y="121" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">unknown CMD or PID</text>
+          <text id="s2tip2t2" x="275" y="136" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">= investigate ASAP</text>
+        </svg>
+      </div>
+
+      <!-- Tip card -->
+      <div id="s2card" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">WHY docker top</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">See every process without entering the container. Spot zombie processes, unexpected shells, or runaway loops that explain high CPU in <span style="color:#4eff9a">docker stats</span>. Pass ps flags for more detail: <span style="color:#4ec9e1">docker top api aux</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">docker top lists processes inside the container — no exec needed.</div>
+    <div class="ih">Unexpected processes explain mystery CPU spikes from docker stats.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">top</div><div class="sl">SEE ALL<br>PROCESSES</div></div>
+    <div class="sc"><div class="sv am">PID</div><div class="sl">PROCESS<br>TREE</div></div>
+    <div class="sc"><div class="sv rd">⚠</div><div class="sl">SPOT<br>ZOMBIES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════ SCENE 3: docker inspect — the full truth -->
+<div class="scene" id="s3" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #1a1040">
+    <div class="hdr-title" style="color:#a080ff">docker inspect</div>
+    <div class="hdr-sub">FULL JSON CONFIG — THE SOURCE OF TRUTH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">DEEP DIVE</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">RAW CONFIG</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- inspect command + key fields -->
+      <div style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0820;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#a080ff">docker inspect</span> api</div>
+          <div id="s3l1" class="tline" style="color:#aaa">[{</div>
+          <div id="s3l2" class="tline" style="color:#e8a020;padding-left:12px">"State": {"Status": "running",</div>
+          <div id="s3l3" class="tline" style="color:#e8a020;padding-left:24px">"RestartCount": 4 },</div>
+          <div id="s3l4" class="tline" style="color:#4eff9a;padding-left:12px">"Mounts": [{"Source":"/data",</div>
+          <div id="s3l5" class="tline" style="color:#4eff9a;padding-left:24px">"Destination":"/app/data"}],</div>
+          <div id="s3l6" class="tline" style="color:#4ec9e1;padding-left:12px">"NetworkSettings": {"IPAddress":</div>
+          <div id="s3l7" class="tline" style="color:#4ec9e1;padding-left:24px">"172.18.0.3", "Ports": {...}},</div>
+          <div id="s3l8" class="tline" style="color:#a080ff;padding-left:12px">"Config":{"Env":["NODE_ENV=prod",</div>
+          <div id="s3l9" class="tline" style="color:#a080ff;padding-left:24px">"DB_URL=postgres://..."]}</div>
+          <div id="s3l10" class="tline" style="color:#aaa">}]</div>
+        </div>
+      </div>
+
+      <!-- What each section tells you -->
+      <div id="s3cards" class="panel" style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0820;padding:5px 10px;border-bottom:1px solid #1a1040;font-size:6.5px;color:#a080ff;text-align:center">KEY SECTIONS IN INSPECT OUTPUT</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #10082a;align-items:start">
+            <span style="font-size:6px;color:#e8a020">State</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">Running/exited status, exit code, restart count, OOM killed flag. <span style="color:#e85050">RestartCount &gt; 0</span> means it's been crashing.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #10082a;align-items:start">
+            <span style="font-size:6px;color:#4eff9a">Mounts</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">Every volume/bind mount. Source on host → Destination in container. Verify the right directories are wired up.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #10082a;align-items:start">
+            <span style="font-size:6px;color:#4ec9e1">NetworkSettings</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">Container IP, port bindings, network membership. Confirm exposed ports are mapped correctly.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr;gap:8px;padding:7px 4px;align-items:start">
+            <span style="font-size:6px;color:#a080ff">Config.Env</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">All env vars the container sees. Debug missing vars, wrong DB URLs, or leaked secrets.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- grep tip -->
+      <div id="s3grep" class="panel" style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0820;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">surgical inspect — use --format</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3g1" class="tline" style="color:#888">$ <span style="color:#a080ff">docker inspect</span> api \</div>
+          <div id="s3g2" class="tline" style="color:#888">  --format <span style="color:#4eff9a">'{{.State.RestartCount}}'</span></div>
+          <div id="s3g3" class="tline" style="color:#e85050">4</div>
+          <div id="s3g4" class="tline" style="color:#888;margin-top:4px">$ <span style="color:#a080ff">docker inspect</span> api \</div>
+          <div id="s3g5" class="tline" style="color:#888">  --format <span style="color:#4eff9a">'{{.NetworkSettings.IPAddress}}'</span></div>
+          <div id="s3g6" class="tline" style="color:#4eff9a">172.18.0.3</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">docker inspect returns the complete JSON config Docker actually used.</div>
+    <div class="ih pu">RestartCount, env vars, mounts, IP — all without entering the container.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">4</div><div class="sl">RESTART<br>COUNT</div></div>
+    <div class="sc"><div class="sv pu">env</div><div class="sl">VARS<br>VISIBLE</div></div>
+    <div class="sc"><div class="sv gn">IP</div><div class="sl">NETWORK<br>CONFIG</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════ SCENE 4: Debug workflow — putting it together -->
+<div class="scene" id="s4" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">DEBUG WORKFLOW</div>
+    <div class="hdr-sub">WHICH COMMAND, WHEN — AND WHY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">RUNBOOK</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CHEATSHEET</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Decision flowchart -->
+      <div id="s4flow" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#120008;border-bottom:1px solid #2d0010;font-size:6px;color:#e85050;text-align:center">CONTAINER MISBEHAVING — WHAT TO RUN</div>
+        <svg width="100%" height="196" viewBox="0 0 366 196" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="wArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#aaa" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="cArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="gArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="pArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- Step 1: stats -->
+          <rect id="s4n1" x="110" y="8" width="146" height="30" rx="4" fill="#001018" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s4n1t" x="183" y="21" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">① docker stats</text>
+          <text id="s4n1t2" x="183" y="33" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">CPU? Memory? I/O?</text>
+          <line id="s4a1" x1="183" y1="40" x2="183" y2="56" stroke="#aaa" stroke-width="1.5" opacity="0" marker-end="url(#wArr)"/>
+
+          <!-- Branch decision -->
+          <text id="s4dec" x="183" y="67" text-anchor="middle" font-size="5.5" fill="#777" font-family="'Press Start 2P',monospace" opacity="0">HIGH CPU?</text>
+
+          <!-- Yes branch → docker top -->
+          <line id="s4a2" x1="130" y1="72" x2="70" y2="96" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#wArr)"/>
+          <text id="s4a2lbl" x="80" y="85" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">YES</text>
+          <rect id="s4n2" x="8" y="100" width="122" height="30" rx="4" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s4n2t" x="69" y="113" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">② docker top</text>
+          <text id="s4n2t2" x="69" y="125" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">runaway process?</text>
+
+          <!-- No / config issue branch → inspect -->
+          <line id="s4a3" x1="236" y1="72" x2="296" y2="96" stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#wArr)"/>
+          <text id="s4a3lbl" x="280" y="85" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">CONFIG?</text>
+          <rect id="s4n3" x="236" y="100" width="122" height="30" rx="4" fill="#0a0020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s4n3t" x="297" y="113" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">③ docker inspect</text>
+          <text id="s4n3t2" x="297" y="125" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">env? mounts? IP?</text>
+
+          <!-- Converge to logs -->
+          <line id="s4a4" x1="69" y1="132" x2="130" y2="158" stroke="#aaa" stroke-width="1.5" opacity="0" marker-end="url(#wArr)"/>
+          <line id="s4a5" x1="297" y1="132" x2="238" y2="158" stroke="#aaa" stroke-width="1.5" opacity="0" marker-end="url(#wArr)"/>
+          <rect id="s4n4" x="100" y="160" width="166" height="30" rx="4" fill="#100006" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s4n4t" x="183" y="173" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">④ docker logs</text>
+          <text id="s4n4t2" x="183" y="185" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">stderr tells the real story</text>
+        </svg>
+      </div>
+
+      <!-- Quick ref card -->
+      <div id="s4ref" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;border-bottom:1px solid #2d0010;font-size:6.5px;color:#e8a020;text-align:center">QUICK REFERENCE</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:6px;padding:6px 4px;border-bottom:1px solid #1a0010;align-items:center">
+            <span style="font-size:6px;color:#4ec9e1">docker stats</span>
+            <span style="font-size:5.5px;color:#888;line-height:1.8">Live CPU/mem/net — first stop for "it's slow"</span>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:6px;padding:6px 4px;border-bottom:1px solid #1a0010;align-items:center">
+            <span style="font-size:6px;color:#4eff9a">docker top</span>
+            <span style="font-size:5.5px;color:#888;line-height:1.8">What's running inside — no exec required</span>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:6px;padding:6px 4px;border-bottom:1px solid #1a0010;align-items:center">
+            <span style="font-size:6px;color:#a080ff">docker inspect</span>
+            <span style="font-size:5.5px;color:#888;line-height:1.8">Full config truth: env, mounts, IP, restarts</span>
+          </div>
+          <div style="display:grid;grid-template-columns:96px 1fr;gap:6px;padding:6px 4px;align-items:center">
+            <span style="font-size:6px;color:#e85050">docker logs</span>
+            <span style="font-size:5.5px;color:#888;line-height:1.8">stderr/stdout — always check after the above</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">stats → top → inspect → logs. This order solves 80% of issues.</div>
+    <div class="ih rd">None of these require entering the container. Debug from outside.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1;font-size:9px">stats</div><div class="sl">WHAT'S<br>SLOW</div></div>
+    <div class="sc"><div class="sv gn;font-size:9px" style="color:#4eff9a;font-size:9px">top</div><div class="sl">WHAT'S<br>RUNNING</div></div>
+    <div class="sc"><div class="sv pu;font-size:9px" style="color:#a080ff;font-size:9px">inspect</div><div class="sl">HOW IT'S<br>CONFIGURED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n; reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hideEl('s1l1'); hideEl('s1live');
+    hide('s1dash'); hide('s1flags');
+    ['s1cpulbl1','s1cpurow1','s1cpulbl2','s1cpurow2','s1cpulbl3','s1cpurow3'].forEach(id=>hideEl(id));
+  }
+  if(n===2){
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6'].forEach(id=>hideEl(id));
+    hide('s2diag'); hide('s2card');
+    ['s2p1','s2p1t','s2p1t2','s2p2','s2p2t','s2p2t2','s2p2t3','s2a1',
+     's2p3','s2p3t','s2p3t2','s2p3t3','s2a2',
+     's2tip1','s2tip1t','s2tip1t2','s2tip2','s2tip2t','s2tip2t2'].forEach(id=>svgHide(id));
+  }
+  if(n===3){
+    ['s3l1','s3l2','s3l3','s3l4','s3l5','s3l6','s3l7','s3l8','s3l9','s3l10'].forEach(id=>hideEl(id));
+    hide('s3cards'); hide('s3grep');
+    ['s3g1','s3g2','s3g3','s3g4','s3g5','s3g6'].forEach(id=>hideEl(id));
+  }
+  if(n===4){
+    hide('s4flow'); hide('s4ref');
+    ['s4n1','s4n1t','s4n1t2','s4a1','s4dec',
+     's4a2','s4a2lbl','s4n2','s4n2t','s4n2t2',
+     's4a3','s4a3lbl','s4n3','s4n3t','s4n3t2',
+     's4a4','s4a5','s4n4','s4n4t','s4n4t2'].forEach(id=>svgHide(id));
+  }
+}
+
+function play(n){
+  if(n===1){
+    showEl('s1l1',300);
+    show('s1dash',500);
+    showEl('s1live',700);
+    showEl('s1cpulbl1',800); showEl('s1cpurow1',950);
+    showEl('s1cpulbl2',1300); showEl('s1cpurow2',1450);
+    showEl('s1cpulbl3',1900); showEl('s1cpurow3',2050);
+    show('s1flags',2500);
+  }
+  if(n===2){
+    showEl('s2l1',200); showEl('s2l2',500); showEl('s2l3',800);
+    showEl('s2l4',1100); showEl('s2l5',1500); showEl('s2l6',1800);
+    show('s2diag',700);
+    svgShow('s2p1',900); svgShow('s2p1t',1050); svgShow('s2p1t2',1200);
+    svgShow('s2a1',1400); svgShow('s2a2',1400);
+    svgShow('s2p2',1600); svgShow('s2p2t',1750); svgShow('s2p2t2',1900); svgShow('s2p2t3',2050);
+    svgShow('s2p3',1600); svgShow('s2p3t',1750); svgShow('s2p3t2',1900); svgShow('s2p3t3',2050);
+    svgShow('s2tip1',2400); svgShow('s2tip1t',2550); svgShow('s2tip1t2',2700);
+    svgShow('s2tip2',2400); svgShow('s2tip2t',2550); svgShow('s2tip2t2',2700);
+    show('s2card',3000);
+  }
+  if(n===3){
+    showEl('s3l1',200); showEl('s3l2',450); showEl('s3l3',700);
+    showEl('s3l4',950); showEl('s3l5',1200); showEl('s3l6',1450);
+    showEl('s3l7',1700); showEl('s3l8',1950); showEl('s3l9',2200); showEl('s3l10',2450);
+    show('s3cards',1000);
+    show('s3grep',2700);
+    showEl('s3g1',2900); showEl('s3g2',3100); showEl('s3g3',3400);
+    showEl('s3g4',3700); showEl('s3g5',3900); showEl('s3g6',4200);
+  }
+  if(n===4){
+    show('s4flow',200);
+    svgShow('s4n1',400); svgShow('s4n1t',550); svgShow('s4n1t2',700);
+    svgShow('s4a1',900); svgShow('s4dec',1000);
+    svgShow('s4a2',1200); svgShow('s4a2lbl',1300);
+    svgShow('s4a3',1200); svgShow('s4a3lbl',1300);
+    svgShow('s4n2',1500); svgShow('s4n2t',1650); svgShow('s4n2t2',1800);
+    svgShow('s4n3',1500); svgShow('s4n3t',1650); svgShow('s4n3t2',1800);
+    svgShow('s4a4',2100); svgShow('s4a5',2100);
+    svgShow('s4n4',2400); svgShow('s4n4t',2550); svgShow('s4n4t2',2700);
+    show('s4ref',3000);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

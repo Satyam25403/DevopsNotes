@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390px, initial-scale=1">
+<title>Wireshark — Security Filters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0a1a0a}
+.hdr-title{font-size:11px;color:#4ade80;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#555;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0a1a0a;transition:background .2s}
+.dot.active{background:#4ade80}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ade80;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#f87171}.info.cy{border-color:#22d3ee}
+.il{color:#888}.ih{color:#4ade80}.ih.am{color:#e8a020}.ih.rd{color:#f87171}.ih.cy{color:#22d3ee}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#050f05;border:1px solid #0a1a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:9px;color:#4ade80;text-align:center;line-height:1.4}
+.sv.am{color:#e8a020}.sv.rd{color:#f87171}.sv.cy{color:#22d3ee}
+.sl{font-size:6px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ade80;background:transparent;color:#4ade80;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ade8020}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+
+/* ── Wireshark mock UI ── */
+.ws-window{background:#1e1e2e;border:2px solid #2a3a2a;border-radius:3px;overflow:hidden}
+.ws-titlebar{background:#2a3a2a;padding:5px 8px;display:flex;align-items:center;gap:6px}
+.ws-dot{width:8px;height:8px;border-radius:50%}
+.ws-title{font-size:6px;color:#888;flex:1;text-align:center}
+.ws-filter-bar{background:#0d1a0d;padding:5px 8px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a2a1a}
+.ws-filter-label{font-size:5px;color:#4ade80;flex-shrink:0}
+.ws-filter-input{flex:1;background:#050f05;border:1px solid #4ade80;padding:3px 5px;font-family:'Press Start 2P',monospace;font-size:5px;color:#4ade80;border-radius:2px;word-break:break-all;line-height:1.6}
+.ws-filter-input.active{border-color:#4eff9a;background:#04100a}
+.ws-apply{font-family:'Press Start 2P',monospace;font-size:5px;padding:3px 5px;border:1px solid #4ade80;background:transparent;color:#4ade80;cursor:pointer;border-radius:2px;flex-shrink:0}
+
+/* ── packet list ── */
+.ws-pkt-header{display:flex;gap:2px;padding:3px 6px;background:#0a160a;font-size:5px;color:#2a4a2a;border-bottom:1px solid #0a1a0a}
+.ws-pkt-row{display:flex;gap:2px;padding:3px 6px;font-size:5px;border-bottom:1px solid #0a1a0a;cursor:pointer;transition:all 0.2s;opacity:0;transform:translateY(2px)}
+.ws-pkt-row.show{opacity:1;transform:translateY(0);transition:opacity 0.2s,transform 0.2s}
+.ws-pkt-row:hover{background:#0d1a0d}
+.ws-pkt-row.selected{background:#0d2a0d}
+.ws-pkt-row.highlight{background:#0a2a0a;border-left:2px solid #4eff9a}
+.ws-pkt-row.alert-row{background:#1a0a0a;border-left:2px solid #f87171}
+.ws-pkt-row.warn-row{background:#140e04;border-left:2px solid #e8a020}
+.p-no{min-width:26px;color:#555}
+.p-time{min-width:44px;color:#555}
+.p-src{flex:1;color:#22d3ee}
+.p-dst{flex:1;color:#a78bfa}
+.p-proto{min-width:36px;text-align:center;font-size:5px;padding:0 2px;border-radius:1px}
+.p-info{flex:2;color:#888;word-break:break-all;line-height:1.4}
+
+/* protocol colours */
+.pr-tcp{background:#0d2a1a;color:#4ade80}
+.pr-udp{background:#0a1a2a;color:#22d3ee}
+.pr-dns{background:#1a0a2a;color:#a78bfa}
+.pr-http{background:#2a1a0a;color:#e8a020}
+.pr-tls{background:#0a1a0a;color:#4ade80}
+.pr-icmp{background:#1a0a0a;color:#f87171}
+
+/* ── filter card ── */
+.filter-card{opacity:0;transition:opacity 0.4s;background:#050f05;border:1px solid #0a1a0a;padding:8px 10px;border-radius:2px;margin-bottom:5px}
+.filter-card.show{opacity:1}
+.fc-filter{font-size:6px;color:#4eff9a;background:#020802;padding:5px 7px;border-radius:2px;border:1px solid #0a2a0a;word-break:break-all;line-height:1.8;margin-bottom:5px;font-family:'Press Start 2P',monospace}
+.fc-title{font-size:7px;margin-bottom:4px}
+.fc-desc{font-size:6px;color:#666;line-height:1.8}
+.fc-use{font-size:5px;color:#4ade80;margin-top:4px;line-height:1.6}
+
+/* ── category badges ── */
+.cat-badge{font-size:5px;padding:2px 5px;border:1px solid;border-radius:2px;display:inline-block;margin-right:4px;margin-bottom:3px}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fadeUp{animation:fadeUp 0.3s ease forwards}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — SCAN DETECTION FILTERS
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">WIRESHARK FILTERS</div>
+    <div class="hdr-sub">FIND SCANS · CREDS · C2 · TUNNELING</div>
+    <div class="dots">
+      <div class="dot active"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#f87171">PORT SCAN DETECTION</span>
+    <span class="sbadge" style="color:#f87171;border-color:#f87171">SYN · XMAS · NULL</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <!-- Wireshark mock -->
+      <div class="ws-window">
+        <div class="ws-titlebar">
+          <div class="ws-dot" style="background:#f87171"></div>
+          <div class="ws-dot" style="background:#e8a020"></div>
+          <div class="ws-dot" style="background:#4ade80"></div>
+          <div class="ws-title">capture.pcap — Wireshark</div>
+        </div>
+        <div class="ws-filter-bar">
+          <div class="ws-filter-label">Filter:</div>
+          <div class="ws-filter-input active" id="s1-filter">tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0</div>
+          <button class="ws-apply">▶</button>
+        </div>
+        <div class="ws-pkt-header">
+          <div class="p-no">No.</div><div class="p-time">Time</div>
+          <div class="p-src">Source</div><div class="p-dst">Dest</div>
+          <div class="p-proto">Proto</div><div class="p-info">Info</div>
+        </div>
+        <div id="s1-packets" style="max-height:120px;overflow:hidden"></div>
+      </div>
+
+      <!-- filter cards -->
+      <div class="filter-card" id="fc-syn">
+        <div class="fc-title" style="color:#f87171">① SYN SCAN DETECTION</div>
+        <div class="fc-filter">tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0</div>
+        <div class="fc-desc">captures every SYN-only packet — connection initiations.<br>burst from one source IP = port scan or SYN flood.</div>
+        <div class="fc-use">🔍 USE CASE: nmap -sS (stealth scan) detection, DDoS triage</div>
+      </div>
+
+      <div class="filter-card" id="fc-xmas">
+        <div class="fc-title" style="color:#f87171">② XMAS SCAN</div>
+        <div class="fc-filter">tcp.flags==0x029</div>
+        <div class="fc-desc">FIN + PSH + URG all set simultaneously — never legitimate.<br>used by nmap -sX to fingerprint closed vs open ports.</div>
+        <div class="fc-use">🔍 USE CASE: hostile reconnaissance, evasion attempts</div>
+      </div>
+
+      <div class="filter-card" id="fc-null">
+        <div class="fc-title" style="color:#e8a020">③ NULL SCAN</div>
+        <div class="fc-filter">tcp.flags==0x000</div>
+        <div class="fc-desc">all TCP flags cleared — never occurs in normal traffic.<br>used to evade stateless firewalls and IDS/IPS rules.</div>
+        <div class="fc-use">🔍 USE CASE: firewall evasion detection, IDS bypass attempts</div>
+      </div>
+
+      <div class="filter-card" id="fc-rst">
+        <div class="fc-title" style="color:#e8a020">④ RST STORM — SCAN RESPONSE PATTERN</div>
+        <div class="fc-filter">tcp.flags.reset==1</div>
+        <div class="fc-desc">high RST volume from target = many closed ports being probed.<br>combine with source filter to confirm scanner IP.</div>
+        <div class="fc-use">🔍 USE CASE: confirm port scan victim, measure scan scope</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0</div>
+    <div class="ih rd">SYN-only = connection attempt with no prior handshake.<br>100+ in 1s from one host = port scan. alert immediately.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">SYN</div><div class="sl">STEALTH<br>SCAN</div></div>
+    <div class="sc"><div class="sv rd">0x029</div><div class="sl">XMAS<br>SCAN</div></div>
+    <div class="sc"><div class="sv am">0x000</div><div class="sl">NULL<br>SCAN</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — CREDENTIAL HUNTING FILTERS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">WIRESHARK FILTERS</div>
+    <div class="hdr-sub">CREDENTIAL HUNTING IN CLEARTEXT</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot active"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CREDENTIAL FILTERS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">HTTP · FTP · TELNET</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="ws-window">
+        <div class="ws-titlebar">
+          <div class="ws-dot" style="background:#f87171"></div>
+          <div class="ws-dot" style="background:#e8a020"></div>
+          <div class="ws-dot" style="background:#4ade80"></div>
+          <div class="ws-title">internal_traffic.pcap — Wireshark</div>
+        </div>
+        <div class="ws-filter-bar">
+          <div class="ws-filter-label">Filter:</div>
+          <div class="ws-filter-input active" id="s2-filter">http contains "password"</div>
+          <button class="ws-apply">▶</button>
+        </div>
+        <div class="ws-pkt-header">
+          <div class="p-no">No.</div><div class="p-time">Time</div>
+          <div class="p-src">Source</div><div class="p-dst">Dest</div>
+          <div class="p-proto">Proto</div><div class="p-info">Info</div>
+        </div>
+        <div id="s2-packets" style="max-height:100px;overflow:hidden"></div>
+      </div>
+
+      <div class="filter-card" id="fc-httppass">
+        <div class="fc-title" style="color:#e8a020">① HTTP CREDENTIAL SEARCH</div>
+        <div class="fc-filter">http contains "password"</div>
+        <div class="fc-desc">matches any HTTP packet with "password" in payload.<br>catches login forms, config uploads, API key leaks over HTTP.</div>
+        <div class="fc-use">🔍 USE CASE: internal audit for unencrypted auth, forensics</div>
+      </div>
+
+      <div class="filter-card" id="fc-tcppass">
+        <div class="fc-title" style="color:#e8a020">② FTP / TELNET PASS COMMAND</div>
+        <div class="fc-filter">tcp contains "PASS"</div>
+        <div class="fc-desc">FTP sends "PASS &lt;password&gt;" in plaintext. Telnet too.<br>any result here = credentials transmitted cleartext.</div>
+        <div class="fc-use">🔍 USE CASE: legacy protocol audit, FTP server security review</div>
+      </div>
+
+      <div class="filter-card" id="fc-post">
+        <div class="fc-title" style="color:#e8a020">③ HTTP POST — FORM SUBMISSIONS</div>
+        <div class="fc-filter">http.request.method == "POST"</div>
+        <div class="fc-desc">POST requests carry form data — login fields, search queries,<br>file uploads. over HTTP (not HTTPS) all payload is readable.</div>
+        <div class="fc-use">🔍 USE CASE: HTTP site audit, credential exposure during IR</div>
+      </div>
+
+      <div class="filter-card" id="fc-basic">
+        <div class="fc-title" style="color:#f87171">④ HTTP BASIC AUTH (BASE64)</div>
+        <div class="fc-filter">http.authbasic</div>
+        <div class="fc-desc">HTTP Basic Auth sends Base64(user:pass) in every request header.<br>not encrypted — trivially decoded. still used on printers, NAS.</div>
+        <div class="fc-use">🔍 USE CASE: legacy device audit, finding exposed admin panels</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">http contains "password" || tcp contains "PASS"</div>
+    <div class="ih am">any result = credential exposed in cleartext on the wire.<br>in 2025 this still happens on internal networks. audit first.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">HTTP</div><div class="sl">CLEARTEXT<br>LOGIN</div></div>
+    <div class="sc"><div class="sv am">FTP</div><div class="sl">PASS<br>COMMAND</div></div>
+    <div class="sc"><div class="sv rd">BASIC</div><div class="sl">BASE64<br>HEADERS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — DNS TUNNELING + C2 DETECTION
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">WIRESHARK FILTERS</div>
+    <div class="hdr-sub">DNS TUNNELING · C2 TRAFFIC</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot active"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#a78bfa">C2 DETECTION</span>
+    <span class="sbadge" style="color:#a78bfa;border-color:#a78bfa">DNS · BEACONING</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:7px">
+
+      <div class="ws-window">
+        <div class="ws-titlebar">
+          <div class="ws-dot" style="background:#f87171"></div>
+          <div class="ws-dot" style="background:#e8a020"></div>
+          <div class="ws-dot" style="background:#4ade80"></div>
+          <div class="ws-title">dns_capture.pcap — Wireshark</div>
+        </div>
+        <div class="ws-filter-bar">
+          <div class="ws-filter-label">Filter:</div>
+          <div class="ws-filter-input active" id="s3-filter">dns.qry.name.len &gt; 40</div>
+          <button class="ws-apply">▶</button>
+        </div>
+        <div class="ws-pkt-header">
+          <div class="p-no">No.</div><div class="p-time">Time</div>
+          <div class="p-src">Source</div><div class="p-dst">Dest</div>
+          <div class="p-proto">Proto</div><div class="p-info">Info</div>
+        </div>
+        <div id="s3-packets" style="max-height:90px;overflow:hidden"></div>
+      </div>
+
+      <div class="filter-card" id="fc-dnstun">
+        <div class="fc-title" style="color:#a78bfa">① DNS TUNNELING — LONG QUERIES</div>
+        <div class="fc-filter">dns.qry.name.len &gt; 40</div>
+        <div class="fc-desc">normal DNS hostnames are short (15–30 chars).<br>DNS tunneling encodes data in subdomains → very long names.<br>tools like dnscat2, iodine generate queries like<br>"aGVsbG8gd29ybGQ.evil.com" (base64 data).</div>
+        <div class="fc-use">🔍 USE CASE: C2 exfil detection, firewall bypass identification</div>
+      </div>
+
+      <div class="filter-card" id="fc-dnsfreq">
+        <div class="fc-title" style="color:#a78bfa">② DNS BEACONING — HIGH FREQUENCY</div>
+        <div class="fc-filter">dns &amp;&amp; ip.src == 192.168.1.50</div>
+        <div class="fc-desc">combine with Statistics → IO Graph to visualize query rate.<br>regular interval queries (every 30s, 60s) = C2 heartbeat.<br>malware "checks in" via DNS to avoid IDS/firewall rules.</div>
+        <div class="fc-use">🔍 USE CASE: Cobalt Strike beacon, RAT C2 channel detection</div>
+      </div>
+
+      <div class="filter-card" id="fc-c2http">
+        <div class="fc-title" style="color:#22d3ee">③ HTTP C2 — BEACON INTERVALS</div>
+        <div class="fc-filter">http.request &amp;&amp; http.user_agent contains "Mozilla/4.0"</div>
+        <div class="fc-desc">outdated User-Agent strings are a Cobalt Strike default.<br>regular outbound GETs to same external host = beacon.<br>check: Statistics → Conversations for interval patterns.</div>
+        <div class="fc-use">🔍 USE CASE: Cobalt Strike default profile detection</div>
+      </div>
+
+      <div class="filter-card" id="fc-nonstandard">
+        <div class="fc-title" style="color:#22d3ee">④ NON-STANDARD PORTS</div>
+        <div class="fc-filter">tcp.port != 80 &amp;&amp; tcp.port != 443 &amp;&amp; tcp.port != 53</div>
+        <div class="fc-desc">C2 frameworks often use unusual ports to blend or evade.<br>filter out known-good ports → inspect what remains.<br>common C2 ports: 4444, 8080, 1234, 31337.</div>
+        <div class="fc-use">🔍 USE CASE: RAT detection, reverse shell hunting, pivot channels</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info cy">
+    <div class="il">dns.qry.name.len &gt; 40 → likely DNS tunneling</div>
+    <div class="ih cy">legitimate DNS names rarely exceed 30 chars. data-over-DNS<br>encodes payloads in subdomains. look for base64 patterns.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a78bfa">&gt;40</div><div class="sl">DNS NAME<br>LEN ALERT</div></div>
+    <div class="sc"><div class="sv cy">BEACON</div><div class="sl">REGULAR<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv am">4444</div><div class="sl">COMMON<br>C2 PORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — CHEAT SHEET: ALL FILTERS
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#060d06">
+  <div class="hdr" style="background:#060d06">
+    <div class="hdr-title">WIRESHARK FILTERS</div>
+    <div class="hdr-sub">COMPLETE CHEAT SHEET — 12 FILTERS</div>
+    <div class="dots">
+      <div class="dot done"></div><div class="dot done"></div>
+      <div class="dot done"></div><div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ade80">CHEAT SHEET</span>
+    <span class="sbadge" style="color:#4ade80;border-color:#4ade80">SAVE THIS</span>
+  </div>
+
+  <div class="anim" style="background:#060d06">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:5px">
+
+      <!-- grouped filter cards compact -->
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-2px">▸ SCAN DETECTION</div>
+      <div id="ch1" style="opacity:0;transition:opacity 0.4s;background:#050f05;border:1px solid #0a1a0a;padding:7px;border-radius:2px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:5px;color:#f87171;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp.flags.syn==1 &amp;&amp; tcp.flags.ack==0 <span style="color:#2a3a2a">← SYN scan</span></div>
+          <div style="font-size:5px;color:#f87171;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp.flags==0x029 <span style="color:#2a3a2a">← Xmas scan (FIN+PSH+URG)</span></div>
+          <div style="font-size:5px;color:#f87171;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp.flags==0x000 <span style="color:#2a3a2a">← NULL scan (all flags off)</span></div>
+          <div style="font-size:5px;color:#e8a020;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp.flags.reset==1 <span style="color:#2a3a2a">← RST storm = scan responses</span></div>
+        </div>
+      </div>
+
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-2px">▸ CREDENTIAL HUNTING</div>
+      <div id="ch2" style="opacity:0;transition:opacity 0.4s;background:#050f05;border:1px solid #0a1a0a;padding:7px;border-radius:2px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:5px;color:#e8a020;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">http contains "password" <span style="color:#2a3a2a">← login form over HTTP</span></div>
+          <div style="font-size:5px;color:#e8a020;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp contains "PASS" <span style="color:#2a3a2a">← FTP / Telnet password</span></div>
+          <div style="font-size:5px;color:#e8a020;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">http.request.method == "POST" <span style="color:#2a3a2a">← form submissions</span></div>
+          <div style="font-size:5px;color:#e8a020;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">http.authbasic <span style="color:#2a3a2a">← Basic Auth (base64 creds)</span></div>
+        </div>
+      </div>
+
+      <div style="font-size:7px;color:#1a3a1a;margin-bottom:-2px">▸ C2 &amp; TUNNELING</div>
+      <div id="ch3" style="opacity:0;transition:opacity 0.4s;background:#050f05;border:1px solid #0a1a0a;padding:7px;border-radius:2px">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div style="font-size:5px;color:#a78bfa;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">dns.qry.name.len &gt; 40 <span style="color:#2a3a2a">← DNS tunneling</span></div>
+          <div style="font-size:5px;color:#a78bfa;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">dns &amp;&amp; ip.src==&lt;host&gt; <span style="color:#2a3a2a">← DNS beaconing source</span></div>
+          <div style="font-size:5px;color:#22d3ee;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">http.user_agent contains "Mozilla/4.0" <span style="color:#2a3a2a">← CS default UA</span></div>
+          <div style="font-size:5px;color:#22d3ee;background:#020802;padding:4px 6px;border-radius:2px;border:1px solid #1a0808;word-break:break-all;line-height:1.7">tcp.port!=80 &amp;&amp; tcp.port!=443 &amp;&amp; tcp.port!=53 <span style="color:#2a3a2a">← odd ports</span></div>
+        </div>
+      </div>
+
+      <!-- pro tips -->
+      <div id="ch4" style="opacity:0;transition:opacity 0.5s;background:#050f05;border:2px solid #4ade80;padding:9px;border-radius:2px">
+        <div style="font-size:7px;color:#4ade80;margin-bottom:6px">PRO TIPS</div>
+        <div style="font-size:6px;color:#666;line-height:1.9">
+          <span style="color:#4ade80">Follow Stream</span>: right-click → Follow TCP/HTTP/DNS Stream<br>
+          to see full session in human-readable form.<br><br>
+          <span style="color:#4ade80">tshark CLI</span>: tshark -r file.pcap -Y "dns.qry.name.len&gt;40"<br>
+          for scripted analysis and SIEM pipeline integration.<br><br>
+          <span style="color:#4ade80">Export Objects</span>: File → Export Objects → HTTP<br>
+          to extract files transferred over HTTP from pcap.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">12 filters · 3 categories · one cheat sheet</div>
+    <div class="ih">scan → credential → C2. cover these in order during IR.<br>tshark -Y runs any display filter from the command line.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">12</div><div class="sl">FILTERS<br>COVERED</div></div>
+    <div class="sc"><div class="sv gn">tshark</div><div class="sl">CLI<br>VERSION</div></div>
+    <div class="sc"><div class="sv am">OSCP</div><div class="sl">CTF<br>IR READY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playS4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let timers=[];
+function clearT(){timers.forEach(clearTimeout);timers=[];}
+function T(fn,ms){timers.push(setTimeout(fn,ms));}
+function goScene(n){
+  clearT();
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  [playS1,playS2,playS3,playS4][n-1]();
+}
+
+function makeRow(no, time, src, dst, proto, protoClass, info, rowClass=''){
+  return `<div class="ws-pkt-row ${rowClass}">
+    <div class="p-no">${no}</div>
+    <div class="p-time">${time}</div>
+    <div class="p-src">${src}</div>
+    <div class="p-dst">${dst}</div>
+    <div class="p-proto ${protoClass}">${proto}</div>
+    <div class="p-info">${info}</div>
+  </div>`;
+}
+
+// ── SCENE 1: SCAN DETECTION ───────────────────
+function playS1(){
+  clearT();
+  ['fc-syn','fc-xmas','fc-null','fc-rst'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+  });
+  const pkt=document.getElementById('s1-packets');
+  pkt.innerHTML='';
+  document.getElementById('s1-filter').textContent='tcp.flags.syn==1 && tcp.flags.ack==0';
+
+  const rows=[
+    makeRow(1,'0.000','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 22 [SYN] Seq=0','alert-row'),
+    makeRow(2,'0.001','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 80 [SYN] Seq=0','alert-row'),
+    makeRow(3,'0.001','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 443 [SYN] Seq=0','alert-row'),
+    makeRow(4,'0.002','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 3389 [SYN] Seq=0','alert-row'),
+    makeRow(5,'0.002','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 8080 [SYN] Seq=0','alert-row'),
+    makeRow(6,'0.003','10.10.10.5','192.168.1.1','TCP','pr-tcp','47832 → 1433 [SYN] Seq=0','alert-row'),
+  ];
+  rows.forEach(r=>{ pkt.innerHTML+=r; });
+
+  Array.from(pkt.children).forEach((row,i)=>{
+    T(()=>{ row.classList.add('show'); }, 300+i*200);
+  });
+
+  T(()=>{ document.getElementById('fc-syn').classList.add('show'); },1700);
+  T(()=>{
+    document.getElementById('s1-filter').textContent='tcp.flags==0x029';
+    document.getElementById('fc-xmas').classList.add('show');
+  },2800);
+  T(()=>{
+    document.getElementById('s1-filter').textContent='tcp.flags==0x000';
+    document.getElementById('fc-null').classList.add('show');
+  },3900);
+  T(()=>{ document.getElementById('fc-rst').classList.add('show'); },4800);
+}
+
+// ── SCENE 2: CREDENTIALS ──────────────────────
+function playS2(){
+  clearT();
+  ['fc-httppass','fc-tcppass','fc-post','fc-basic'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+  });
+  const pkt=document.getElementById('s2-packets');
+  pkt.innerHTML='';
+  document.getElementById('s2-filter').textContent='http contains "password"';
+
+  const rows=[
+    makeRow(14,'1.204','192.168.1.42','10.0.0.5','HTTP','pr-http','POST /login HTTP/1.1 (application/x-www-form-urlencoded)','alert-row'),
+    makeRow(15,'1.205','192.168.1.42','10.0.0.5','HTTP','pr-http','username=admin&password=Welcome1!','alert-row'),
+    makeRow(23,'2.110','192.168.1.88','10.0.0.5','HTTP','pr-http','POST /admin/config (password=S3cret)','alert-row'),
+    makeRow(31,'3.001','192.168.1.15','10.0.0.9','HTTP','pr-http','GET /api?token=abc&password=test123','warn-row'),
+  ];
+  rows.forEach(r=>{ pkt.innerHTML+=r; });
+  Array.from(pkt.children).forEach((row,i)=>{
+    T(()=>{ row.classList.add('show'); }, 300+i*250);
+  });
+
+  T(()=>{ document.getElementById('fc-httppass').classList.add('show'); },1600);
+  T(()=>{
+    document.getElementById('s2-filter').textContent='tcp contains "PASS"';
+    document.getElementById('fc-tcppass').classList.add('show');
+  },2700);
+  T(()=>{
+    document.getElementById('s2-filter').textContent='http.request.method == "POST"';
+    document.getElementById('fc-post').classList.add('show');
+  },3700);
+  T(()=>{ document.getElementById('fc-basic').classList.add('show'); },4700);
+}
+
+// ── SCENE 3: C2 / DNS ─────────────────────────
+function playS3(){
+  clearT();
+  ['fc-dnstun','fc-dnsfreq','fc-c2http','fc-nonstandard'].forEach(id=>{
+    document.getElementById(id).classList.remove('show');
+  });
+  const pkt=document.getElementById('s3-packets');
+  pkt.innerHTML='';
+  document.getElementById('s3-filter').textContent='dns.qry.name.len > 40';
+
+  const rows=[
+    makeRow(3,'0.423','192.168.1.55','8.8.8.8','DNS','pr-dns','Standard query A aGVsbG8gd29ybGQ.c2server.io','alert-row'),
+    makeRow(7,'0.891','192.168.1.55','8.8.8.8','DNS','pr-dns','Standard query A dGhpcyBpcyBleGZpbA.evil-domain.com','alert-row'),
+    makeRow(11,'1.234','192.168.1.55','8.8.8.8','DNS','pr-dns','Standard query TXT bG9uZyBkbnMgbmFtZSBmb3IgdHVubmVsaW5n.attacker.net','alert-row'),
+  ];
+  rows.forEach(r=>{ pkt.innerHTML+=r; });
+  Array.from(pkt.children).forEach((row,i)=>{
+    T(()=>{ row.classList.add('show'); }, 300+i*300);
+  });
+
+  T(()=>{ document.getElementById('fc-dnstun').classList.add('show'); },1600);
+  T(()=>{
+    document.getElementById('s3-filter').textContent='dns && ip.src == 192.168.1.55';
+    document.getElementById('fc-dnsfreq').classList.add('show');
+  },2800);
+  T(()=>{
+    document.getElementById('s3-filter').textContent='http.user_agent contains "Mozilla/4.0"';
+    document.getElementById('fc-c2http').classList.add('show');
+  },3900);
+  T(()=>{ document.getElementById('fc-nonstandard').classList.add('show'); },4900);
+}
+
+// ── SCENE 4: CHEAT SHEET ──────────────────────
+function playS4(){
+  clearT();
+  ['ch1','ch2','ch3','ch4'].forEach(id=>{ document.getElementById(id).style.opacity='0'; });
+  T(()=>{ document.getElementById('ch1').style.opacity='1'; },400);
+  T(()=>{ document.getElementById('ch2').style.opacity='1'; },1200);
+  T(()=>{ document.getElementById('ch3').style.opacity='1'; },2000);
+  T(()=>{ document.getElementById('ch4').style.opacity='1'; },2800);
+}
+
+window.addEventListener('load',()=>playS1());
+</script>
+</body>
+</html>

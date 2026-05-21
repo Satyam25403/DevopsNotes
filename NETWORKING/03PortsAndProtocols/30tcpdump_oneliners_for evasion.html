@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>tcpdump — Credential Hunting & Scan Detection</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;
+  font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.7}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}
+.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}
+.info.rd{border-color:#e85050}
+.il{color:#ccc}
+.ih{color:#4eff9a}
+.ih.am{color:#e8a020}
+.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:10px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}
+.sv.gn{color:#4eff9a}
+.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px;background:inherit}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:#4ec9e130}
+.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}
+.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}
+.btn.am:hover{background:#e8a02020}
+
+/* ── terminal ── */
+.term{background:#050a05;border:1px solid #1a2a1a;border-radius:3px;padding:8px 10px;font-size:7px;line-height:2.2;position:relative;overflow:hidden}
+.term.dark{background:#060810;border-color:#1a1a2a}
+.t-prompt{color:#4eff9a}
+.t-root{color:#e85050}
+.t-cmd{color:#e8a020}
+.t-out{color:#aaa}
+.t-cred{color:#e85050;font-weight:bold}
+.t-hit{color:#ff8c00}
+.t-syn{color:#4ec9e1}
+.t-comment{color:#444}
+.t-flag{color:#b07fff}
+.term-line{opacity:0;transition:opacity .22s}
+.blink{display:inline-block;width:7px;height:11px;background:#4eff9a;vertical-align:middle;animation:bl .7s step-end infinite}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ── flag table ── */
+.flag-row{display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border-radius:3px;background:#130d1e;opacity:0;transition:opacity .35s;border-left:3px solid #2a1f3d}
+.flag-row.info{border-color:#4ec9e1}
+.flag-row.rd{border-color:#e85050}
+.flag-row.am{border-color:#e8a020}
+.flag-row.gn{border-color:#4eff9a}
+.flag-kw{font-size:7px;min-width:32px;flex-shrink:0;color:#4ec9e1}
+.flag-txt{font-size:7px;color:#ccc;line-height:1.9}
+
+/* ── cheatsheet lines ── */
+.cs-line{font-size:7px;padding:5px 8px;background:#050a05;border-left:3px solid #4ec9e1;margin-bottom:4px;opacity:0;transition:opacity .3s;line-height:1.9;color:#aaa;border-radius:0 2px 2px 0;word-break:break-all}
+.cs-line.rd{border-color:#e85050}
+.cs-line.am{border-color:#e8a020}
+.cs-line.gn{border-color:#4eff9a}
+.cs-line.pu{border-color:#b07fff}
+.ck{color:#4ec9e1}
+.cv{color:#4eff9a}
+.cr{color:#e8a020}
+.ce{color:#e85050}
+.cp{color:#b07fff}
+
+/* ── scrolling output sim ── */
+.scroll-term{background:#050a05;border:1px solid #1a2a1a;border-radius:3px;padding:6px 10px;font-size:6px;line-height:2;max-height:90px;overflow:hidden;position:relative}
+.scroll-inner{transition:transform .4s ease-out}
+.pkt-line{color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;transition:opacity .2s}
+.pkt-line.cred-line{color:#e85050}
+.pkt-line.syn-line{color:#4ec9e1}
+</style>
+</head>
+<body>
+
+<!-- ══════ SCENE 1: Cleartext Credential Capture ══════ -->
+<div class="scene active" id="s1" style="background:#071007">
+  <div class="hdr" style="background:#071007">
+    <div class="hdr-title">TCPDUMP ONE-LINERS</div>
+    <div class="hdr-sub">CREDENTIAL HUNTING ON THE WIRE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CLEARTEXT CAPTURE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">FTP / TELNET</span>
+  </div>
+
+  <div class="anim" style="background:#071007">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">FTP and Telnet transmit credentials in cleartext. One command captures them all.</div>
+
+      <!-- FTP capture -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">CAPTURE FTP SESSION (PORT 21)</div>
+      <div class="term">
+        <div class="term-line" id="f0"><span class="t-root">root@box</span><span class="t-prompt">:~# </span><span class="t-cmd">tcpdump -i eth0 -A port 21</span></div>
+        <div class="term-line" id="f1"><span class="t-out">tcpdump: verbose output suppressed, use -v for full</span></div>
+        <div class="term-line" id="f2"><span class="t-out">listening on eth0, link-type EN10MB (Ethernet)</span></div>
+        <div class="term-line" id="f3"><span class="t-out">10:42:01.123 IP 10.0.0.5.52341 &gt; 10.0.0.1.21</span></div>
+        <div class="term-line" id="f4"><span class="t-out">E..&lt;..@.@..........USER </span><span class="t-cred">admin</span></div>
+        <div class="term-line" id="f5"><span class="t-out">10:42:01.456 IP 10.0.0.5.52341 &gt; 10.0.0.1.21</span></div>
+        <div class="term-line" id="f6"><span class="t-out">E..&lt;..@.@..........PASS </span><span class="t-cred">s3cr3tP@ss!</span></div>
+        <div class="term-line" id="f7"><span class="t-comment"># Username and password captured in plaintext ^^^</span></div>
+      </div>
+
+      <!-- Telnet capture -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">CAPTURE TELNET SESSION (PORT 23)</div>
+      <div class="term">
+        <div class="term-line" id="t0"><span class="t-root">root@box</span><span class="t-prompt">:~# </span><span class="t-cmd">tcpdump -i eth0 -A port 23</span></div>
+        <div class="term-line" id="t1"><span class="t-out">10:43:12.001 IP 192.168.1.10 &gt; 192.168.1.1</span></div>
+        <div class="term-line" id="t2"><span class="t-cred">login: root</span></div>
+        <div class="term-line" id="t3"><span class="t-cred">Password: admin123</span></div>
+        <div class="term-line" id="t4"><span class="t-comment"># Full Telnet session in cleartext — every keystroke</span></div>
+      </div>
+
+      <!-- grep pipeline -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">GREP FOR CREDS ACROSS ALL CLEARTEXT</div>
+      <div class="term">
+        <div class="term-line" id="g0"><span class="t-root">root@box</span><span class="t-prompt">:~# </span><span class="t-cmd">tcpdump -A -s0 port 21 or port 23 or port 80 \</span></div>
+        <div class="term-line" id="g1"><span class="t-cmd">&nbsp;&nbsp;| egrep -i 'pass=|password=|user=|login='</span></div>
+        <div class="term-line" id="g2"><span class="t-hit">pass=hunter2&amp;user=alice</span></div>
+        <div class="term-line" id="g3"><span class="t-hit">password=letmein</span></div>
+        <div class="term-line" id="g4"><span class="t-hit">PASS s3cr3tP@ss!</span></div>
+      </div>
+
+      <!-- key flags -->
+      <div style="display:flex;flex-direction:column;gap:4px" id="s1_flags">
+        <div class="flag-row am" id="fl0">
+          <div class="flag-kw">-A</div>
+          <div class="flag-txt">print packet payload in ASCII — see cleartext content</div>
+        </div>
+        <div class="flag-row info" id="fl1">
+          <div class="flag-kw">-s0</div>
+          <div class="flag-txt">snaplen 0 = capture full packet, not just first 68 bytes</div>
+        </div>
+        <div class="flag-row gn" id="fl2">
+          <div class="flag-kw">-i</div>
+          <div class="flag-txt">specify interface: eth0, any, lo — use 'any' for all</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">tcpdump -A prints packet payload as ASCII. Cleartext protocols expose everything.</div>
+    <div class="ih am">FTP USER/PASS, Telnet keystrokes, HTTP form POSTs — all captured in one command.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">FTP</div><div class="sl">PORT 21<br>CLEARTEXT</div></div>
+    <div class="sc"><div class="sv rd">TELNET</div><div class="sl">PORT 23<br>ALL KEYS</div></div>
+    <div class="sc"><div class="sv am">egrep</div><div class="sl">FILTER<br>PASS=</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn am play" onclick="playS1()">▶ PLAY</button>
+    <button class="btn" onclick="nav(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 2: Scan Detection ══════ -->
+<div class="scene" id="s2" style="background:#070a12">
+  <div class="hdr" style="background:#070a12">
+    <div class="hdr-title">TCPDUMP ONE-LINERS</div>
+    <div class="hdr-sub">SCAN DETECTION — CATCH THE RECON</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">SYN SCAN DETECTION</span>
+    <span class="sbadge" style="color:#b07fff;border-color:#b07fff">TCP FLAGS</span>
+  </div>
+
+  <div class="anim" style="background:#070a12">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">nmap SYN scan sends SYN-only packets to every port. tcpdump can catch it in real time.</div>
+
+      <!-- SYN scan detection -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">DETECT ALL SYN PACKETS (PORT SCANS)</div>
+      <div class="term dark">
+        <div class="term-line" id="sy0"><span class="t-root">root@box</span><span class="t-prompt">:~# </span><span class="t-cmd">tcpdump -i eth0 'tcp[tcpflags] & tcp-syn != 0'</span></div>
+        <div class="term-line" id="sy1"><span class="t-out">listening on eth0 ...</span></div>
+        <div class="term-line" id="sy2"><span class="t-syn">10:51:01 IP 10.0.0.99.54321 &gt; 10.0.0.1.22: Flags [S]</span></div>
+        <div class="term-line" id="sy3"><span class="t-syn">10:51:01 IP 10.0.0.99.54322 &gt; 10.0.0.1.80: Flags [S]</span></div>
+        <div class="term-line" id="sy4"><span class="t-syn">10:51:01 IP 10.0.0.99.54323 &gt; 10.0.0.1.443: Flags [S]</span></div>
+        <div class="term-line" id="sy5"><span class="t-syn">10:51:01 IP 10.0.0.99.54324 &gt; 10.0.0.1.3306: Flags [S]</span></div>
+        <div class="term-line" id="sy6"><span class="t-syn">10:51:01 IP 10.0.0.99.54325 &gt; 10.0.0.1.8080: Flags [S]</span></div>
+        <div class="term-line" id="sy7"><span class="t-comment"># Same source, many ports, no SYN-ACK = nmap -sS scan</span></div>
+      </div>
+
+      <!-- SYN-only filter (no replies) -->
+      <div style="font-size:7px;color:#444;letter-spacing:1px">FILTER OUT LEGITIMATE HANDSHAKES</div>
+      <div class="term dark">
+        <div class="term-line" id="h0"><span class="t-root">root@box</span><span class="t-prompt">:~# </span><span class="t-cmd">tcpdump -i eth0 \</span></div>
+        <div class="term-line" id="h1"><span class="t-cmd">&nbsp;&nbsp;'tcp[tcpflags] == tcp-syn'</span></div>
+        <div class="term-line" id="h2"><span class="t-comment"># tcp-syn ONLY (no ACK bit) = half-open scan packets</span></div>
+        <div class="term-line" id="h3"><span class="t-comment"># Legitimate clients send SYN then SYN+ACK — this is stealth</span></div>
+      </div>
+
+      <!-- TCP flags cheatsheet -->
+      <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px;margin-bottom:2px">TCP FLAG REFERENCE</div>
+      <div style="display:flex;flex-direction:column;gap:4px">
+        <div class="flag-row info" id="fl_s">
+          <div class="flag-kw" style="color:#4ec9e1">[S]</div>
+          <div class="flag-txt">SYN — connection initiation. Scanner sends thousands of these.</div>
+        </div>
+        <div class="flag-row gn" id="fl_sa">
+          <div class="flag-kw" style="color:#4eff9a">[S.]</div>
+          <div class="flag-txt">SYN-ACK — server reply. Confirms port is open.</div>
+        </div>
+        <div class="flag-row rd" id="fl_r">
+          <div class="flag-kw" style="color:#e85050">[R]</div>
+          <div class="flag-txt">RST — port closed. Scanner gets this back for closed ports.</div>
+        </div>
+        <div class="flag-row am" id="fl_f">
+          <div class="flag-kw" style="color:#b07fff">[F]</div>
+          <div class="flag-txt">FIN — used in FIN scan to bypass some firewall rules.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">tcp[tcpflags] & tcp-syn != 0 captures every SYN. Same source + many ports = scan.</div>
+    <div class="ih">SYN-only (no ACK) is nmap -sS stealth scan. Visible to tcpdump, invisible to some firewalls.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">SYN</div><div class="sl">FLAG<br>FILTER</div></div>
+    <div class="sc"><div class="sv rd">SAME SRC</div><div class="sl">MANY PORTS<br>= SCAN</div></div>
+    <div class="sc"><div class="sv" style="color:#b07fff">tcp[]</div><div class="sl">BPF<br>SYNTAX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(1)">◀ PREV</button>
+    <button class="btn play" onclick="playS2()">▶ PLAY</button>
+    <button class="btn" onclick="nav(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════ SCENE 3: Save / Read pcap + Cheatsheet ══════ -->
+<div class="scene" id="s3" style="background:#070c12">
+  <div class="hdr" style="background:#070c12">
+    <div class="hdr-title">TCPDUMP ONE-LINERS</div>
+    <div class="hdr-sub">SAVE PCAP & FULL CHEATSHEET</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">-w / -r PCAP FILES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CHEATSHEET</span>
+  </div>
+
+  <div class="anim" style="background:#070c12">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <div style="font-size:8px;color:#888;line-height:1.8">Capture to file, analyse later in Wireshark. Essential for IR and forensics.</div>
+
+      <!-- write pcap -->
+      <div class="cs-line" id="cs0" style="border-color:#4ec9e1">
+        <span style="color:#444"># Capture to pcap file for Wireshark</span><br>
+        <span class="ck">tcpdump</span> -i eth0 -w <span class="cv">capture.pcap</span><br>
+        <span style="color:#444;font-size:6px"># Ctrl+C to stop. File grows until stopped.</span>
+      </div>
+
+      <!-- read pcap -->
+      <div class="cs-line" id="cs1" style="border-color:#4eff9a">
+        <span style="color:#444"># Read pcap back (offline analysis)</span><br>
+        <span class="ck">tcpdump</span> -r capture.pcap -A <span class="cr">port 21</span><br>
+        <span class="ck">tcpdump</span> -r capture.pcap <span class="cr">| egrep -i 'pass='</span>
+      </div>
+
+      <!-- ring buffer capture -->
+      <div class="cs-line" id="cs2" style="border-color:#e8a020">
+        <span style="color:#444"># Ring buffer: 10 files of 100MB each</span><br>
+        <span class="ck">tcpdump</span> -i eth0 -w cap.pcap -W <span class="cv">10</span> -C <span class="cv">100</span><br>
+        <span style="color:#444;font-size:6px"># Overwrites oldest when full — continuous capture</span>
+      </div>
+
+      <!-- full cheatsheet -->
+      <div id="s3_sheet" style="opacity:0;transition:opacity .4s;display:flex;flex-direction:column;gap:5px">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">QUICK REFERENCE</div>
+
+        <div class="cs-line" id="cs3" style="border-color:#e85050">
+          <span style="color:#444"># FTP cred hunt</span><br>
+          <span class="ck">tcpdump</span> -A -s0 <span class="cr">port 21</span> | grep -i <span class="cv">'PASS'</span>
+        </div>
+
+        <div class="cs-line" id="cs4" style="border-color:#e85050">
+          <span style="color:#444"># HTTP POST bodies (login forms)</span><br>
+          <span class="ck">tcpdump</span> -A -s0 <span class="cr">port 80</span> | grep -i <span class="cv">'pass=\|user='</span>
+        </div>
+
+        <div class="cs-line" id="cs5" style="border-color:#4ec9e1">
+          <span style="color:#444"># SYN scan detection</span><br>
+          <span class="ck">tcpdump</span> <span class="cv">'tcp[tcpflags] == tcp-syn'</span>
+        </div>
+
+        <div class="cs-line" id="cs6" style="border-color:#b07fff">
+          <span style="color:#444"># Capture specific host only</span><br>
+          <span class="ck">tcpdump</span> -i eth0 host <span class="cv">10.0.0.5</span> -w host.pcap
+        </div>
+
+        <div class="cs-line" id="cs7" style="border-color:#4eff9a">
+          <span style="color:#444"># DNS queries (spot exfil / C2 domains)</span><br>
+          <span class="ck">tcpdump</span> -i eth0 <span class="cr">port 53</span> -A | grep -i <span class="cv">'A?'</span>
+        </div>
+
+        <div style="background:#0d1a0d;border-left:3px solid #4eff9a;padding:8px 10px;border-radius:0 3px 3px 0;opacity:0;transition:opacity .4s" id="s3_tip">
+          <div style="font-size:7px;color:#4eff9a;margin-bottom:4px">DEFENCE TIP</div>
+          <div style="font-size:7px;color:#ccc;line-height:2">
+            Run tcpdump on your own servers periodically. If you see FTP or Telnet — kill them. If you see DNS queries to random domains from an app server — investigate immediately. Packet capture doesn't lie.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">-w saves pcap for Wireshark. -r reads offline. -C/-W for ring buffer rotation.</div>
+    <div class="ih">tcpdump is on every Linux server. You don't need Wireshark to find cleartext creds.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">-w</div><div class="sl">WRITE<br>PCAP</div></div>
+    <div class="sc"><div class="sv">-r</div><div class="sl">READ<br>PCAP</div></div>
+    <div class="sc"><div class="sv gn">-C -W</div><div class="sl">RING<br>BUFFER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="nav(2)">◀ PREV</button>
+    <button class="btn play" onclick="playS3()">▶ PLAY</button>
+    <button class="btn am" onclick="nav(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+var timers=[];
+function clearAll(){timers.forEach(function(t){clearTimeout(t);clearInterval(t);});timers=[];}
+function delay(fn,ms){var t=setTimeout(fn,ms);timers.push(t);}
+function show(id){var e=document.getElementById(id);if(e)e.style.opacity='1';}
+function hide(id){var e=document.getElementById(id);if(e)e.style.opacity='0';}
+
+function nav(n){
+  clearAll();
+  document.querySelectorAll('.scene').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('s'+n).classList.add('active');
+  if(n===1)playS1();
+  if(n===2)playS2();
+  if(n===3)playS3();
+}
+
+/* ─── SCENE 1 ─── */
+function playS1(){
+  clearAll();
+  ['f0','f1','f2','f3','f4','f5','f6','f7',
+   't0','t1','t2','t3','t4',
+   'g0','g1','g2','g3','g4',
+   'fl0','fl1','fl2'].forEach(hide);
+
+  var ftp=['f0','f1','f2','f3','f4','f5','f6','f7'];
+  ftp.forEach(function(id,i){delay(function(){show(id);},300+i*300);});
+
+  var tel=['t0','t1','t2','t3','t4'];
+  tel.forEach(function(id,i){delay(function(){show(id);},300+8*300+300+i*320);});
+
+  var grp=['g0','g1','g2','g3','g4'];
+  var gbase=300+8*300+300+5*320+300;
+  grp.forEach(function(id,i){delay(function(){show(id);},gbase+i*350);});
+
+  var flbase=gbase+5*350+300;
+  ['fl0','fl1','fl2'].forEach(function(id,i){
+    delay(function(){show(id);},flbase+i*350);
+  });
+}
+
+/* ─── SCENE 2 ─── */
+function playS2(){
+  clearAll();
+  ['sy0','sy1','sy2','sy3','sy4','sy5','sy6','sy7',
+   'h0','h1','h2','h3',
+   'fl_s','fl_sa','fl_r','fl_f'].forEach(hide);
+
+  var syn=['sy0','sy1','sy2','sy3','sy4','sy5','sy6','sy7'];
+  syn.forEach(function(id,i){delay(function(){show(id);},300+i*300);});
+
+  var hbase=300+8*300+300;
+  ['h0','h1','h2','h3'].forEach(function(id,i){
+    delay(function(){show(id);},hbase+i*320);
+  });
+
+  var fbase=hbase+4*320+300;
+  ['fl_s','fl_sa','fl_r','fl_f'].forEach(function(id,i){
+    delay(function(){show(id);},fbase+i*350);
+  });
+}
+
+/* ─── SCENE 3 ─── */
+function playS3(){
+  clearAll();
+  ['cs0','cs1','cs2','cs3','cs4','cs5','cs6','cs7'].forEach(hide);
+  hide('s3_sheet');
+  hide('s3_tip');
+
+  delay(function(){show('cs0');},300);
+  delay(function(){show('cs1');},1000);
+  delay(function(){show('cs2');},1700);
+  delay(function(){show('s3_sheet');},2400);
+  ['cs3','cs4','cs5','cs6','cs7'].forEach(function(id,i){
+    delay(function(){show(id);},2500+i*400);
+  });
+  delay(function(){show('s3_tip');},4700);
+}
+
+playS1();
+</script>
+</body>
+</html>

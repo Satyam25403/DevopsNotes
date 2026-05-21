@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>exec vs attach</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* terminal pane */
+.term{border:2px solid;border-radius:4px;overflow:hidden}
+.term-bar{padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a1a2e}
+.term-dot{width:8px;height:8px;border-radius:50%}
+.term-title{font-size:7px;color:#888;margin-left:4px}
+.term-body{background:#0a0a14;padding:8px 10px;font-size:7px;font-family:'Press Start 2P',monospace;line-height:2.1;min-height:80px}
+.term-prompt{color:#4eff9a}
+.term-cmd{color:#ccc}
+.term-out{color:#888}
+.term-err{color:#e85050}
+.term-warn{color:#e8a020}
+
+/* process tree inside container diagram */
+.container-box{border:2px solid;border-radius:4px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;transition:all .4s}
+.proc-row{display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:2px;font-size:7px;font-family:'Press Start 2P',monospace}
+.proc-pid{width:40px;flex-shrink:0}
+.proc-cmd{flex:1}
+.proc-badge{font-size:6px;padding:2px 6px;border:1px solid;border-radius:10px;flex-shrink:0}
+
+/* arrow beam */
+.beam-h{height:3px;width:0;border-radius:1px;transition:width .7s ease-out}
+
+/* connection line */
+.conn-line{display:flex;align-items:center;gap:6px;padding:4px 0}
+.conn-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.conn-bar{flex:1;height:2px;background:#2a1f3d;border-radius:1px;position:relative;overflow:hidden}
+.conn-fill{height:100%;width:0;border-radius:1px;transition:width .6s ease-out;position:absolute;top:0;left:0}
+
+/* ctrl+c death animation */
+@keyframes redflash{0%,100%{background:transparent}50%{background:#e8505030}}
+.dying{animation:redflash .3s ease 3}
+@keyframes fadeout-box{0%{opacity:1}100%{opacity:.15;border-color:#333}}
+.dead{animation:fadeout-box .6s ease .9s forwards}
+
+/* comparison table */
+.cmp-table{display:flex;flex-direction:column;gap:0;border:1px solid #2a1f3d;border-radius:3px;overflow:hidden}
+.cmp-hdr{display:flex;background:#130d1e}
+.cmp-hdr-cell{flex:1;padding:6px 8px;font-size:7px;text-align:center}
+.cmp-body-row{display:flex;border-top:1px solid #1a1a2e}
+.cmp-body-cell{flex:1;padding:6px 8px;font-size:6px;color:#aaa;line-height:1.7;border-right:1px solid #1a1a2e}
+.cmp-body-cell:last-child{border-right:none}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.cursor{animation:blink 1s step-end infinite;color:#4eff9a}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — THE FOOTGUN: attach + Ctrl+C
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">exec vs attach</div>
+    <div class="hdr-sub">THE CTRL+C TRAP EVERY DEV FALLS INTO</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE FOOTGUN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DAY-ONE BUG</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- container running fine -->
+      <div class="fade" id="s1e1">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px;letter-spacing:1px">● CONTAINER RUNNING HAPPILY</div>
+        <div class="container-box" id="cbox_s1" style="border-color:#4ec9e1;background:#04101a">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:2px">🐳 api-server (running)</div>
+          <div class="proc-row" style="background:#041820">
+            <span class="proc-pid" style="color:#4eff9a">PID 1</span>
+            <span class="proc-cmd" style="color:#fff">node server.js</span>
+            <span class="proc-badge" style="color:#4eff9a;border-color:#4eff9a">MAIN</span>
+          </div>
+          <div class="proc-row">
+            <span class="proc-pid" style="color:#888">PID 23</span>
+            <span class="proc-cmd" style="color:#888">npm worker</span>
+            <span class="proc-badge" style="color:#888;border-color:#333">child</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- dev attaches -->
+      <div class="fade" id="s1e2">
+        <div class="term" style="border-color:#e8a020">
+          <div class="term-bar" style="background:#1a1208">
+            <div class="term-dot" style="background:#e85050"></div>
+            <div class="term-dot" style="background:#e8a020"></div>
+            <div class="term-dot" style="background:#4eff9a"></div>
+            <span class="term-title">terminal — dev wants to "check logs"</span>
+          </div>
+          <div class="term-body">
+            <div><span class="term-prompt">$ </span><span class="term-cmd">docker attach api-server</span></div>
+            <div id="attach_out1" style="opacity:0;transition:opacity .4s"><span class="term-warn"># connected to PID 1 stdout</span></div>
+            <div id="attach_out2" style="opacity:0;transition:opacity .4s"><span class="term-out">GET /health 200 — 2ms</span></div>
+            <div id="attach_out3" style="opacity:0;transition:opacity .4s"><span class="term-out">GET /api/users 200 — 18ms</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ctrl+C pressed -->
+      <div class="fade" id="s1e3">
+        <div style="font-size:7px;color:#e85050;text-align:center;margin-bottom:6px">⌨️ DEV PRESSES Ctrl+C TO "EXIT LOGS"</div>
+        <div class="term" id="term_kill" style="border-color:#e85050">
+          <div class="term-bar" style="background:#1a0808">
+            <div class="term-dot" style="background:#e85050"></div>
+            <span class="term-title" style="color:#e85050">terminal — oops</span>
+          </div>
+          <div class="term-body" style="background:#0f0508">
+            <div><span class="term-prompt" style="color:#e85050">$ </span><span class="term-cmd">docker attach api-server</span></div>
+            <div><span class="term-out">GET /health 200 — 2ms</span></div>
+            <div id="ctrlc_line" style="opacity:0;transition:opacity .3s"><span style="color:#e85050">^C</span></div>
+            <div id="kill_line" style="opacity:0;transition:opacity .4s"><span class="term-err">SIGINT → PID 1 → container stopped 💀</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- container is dead -->
+      <div class="fade" id="s1e4">
+        <div class="container-box" id="cbox_dead" style="border-color:#e85050;background:#1a0808;opacity:.5">
+          <div style="font-size:7px;color:#e85050;margin-bottom:2px">💀 api-server (exited)</div>
+          <div class="proc-row">
+            <span class="proc-pid" style="color:#e85050">PID 1</span>
+            <span class="proc-cmd" style="color:#555">node server.js</span>
+            <span class="proc-badge" style="color:#e85050;border-color:#e85050">KILLED</span>
+          </div>
+          <div style="font-size:7px;color:#e85050;text-align:center;margin-top:4px">production is down. you did this.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">docker attach connects to PID 1's stdin/stdout.</div>
+    <div class="ih rd">Ctrl+C sends SIGINT to PID 1 → container dies.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">attach</div><div class="sl">hijacks PID 1</div></div>
+    <div class="sc"><div class="sv rd">Ctrl+C</div><div class="sl">kills container</div></div>
+    <div class="sc"><div class="sv am">trap</div><div class="sl">every beginner</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — THE FIX: docker exec -it
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">docker exec -it</div>
+    <div class="hdr-sub">NEW PROCESS — SAFE TO Ctrl+C</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">THE RIGHT WAY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SAFE</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- container running -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px;letter-spacing:1px">● SAME CONTAINER STILL RUNNING</div>
+        <div class="container-box" id="cbox_s2" style="border-color:#4ec9e1;background:#04101a">
+          <div style="font-size:7px;color:#4ec9e1;margin-bottom:2px">🐳 api-server (running)</div>
+          <div class="proc-row" style="background:#041820">
+            <span class="proc-pid" style="color:#4eff9a">PID 1</span>
+            <span class="proc-cmd" style="color:#fff">node server.js</span>
+            <span class="proc-badge" style="color:#4eff9a;border-color:#4eff9a">MAIN</span>
+          </div>
+          <div class="proc-row" id="exec_proc" style="opacity:0;transition:opacity .4s;background:#041a0a">
+            <span class="proc-pid" style="color:#4eff9a">PID 47</span>
+            <span class="proc-cmd" style="color:#4eff9a">bash ← exec</span>
+            <span class="proc-badge" style="color:#4eff9a;border-color:#4eff9a">NEW</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- exec command -->
+      <div class="fade" id="s2e2">
+        <div class="term" style="border-color:#4eff9a">
+          <div class="term-bar" style="background:#04140a">
+            <div class="term-dot" style="background:#e85050"></div>
+            <div class="term-dot" style="background:#e8a020"></div>
+            <div class="term-dot" style="background:#4eff9a"></div>
+            <span class="term-title">terminal — the correct way</span>
+          </div>
+          <div class="term-body">
+            <div><span class="term-prompt">$ </span><span class="term-cmd">docker exec <span style="color:#e8a020">-it</span> api-server bash</span></div>
+            <div id="exec_out1" style="opacity:0;transition:opacity .4s"><span class="term-warn"># spawns NEW process PID 47</span></div>
+            <div id="exec_out2" style="opacity:0;transition:opacity .4s"><span class="term-prompt">root@a1b2c3:/app# </span><span class="cursor">▌</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ctrl+C is safe now -->
+      <div class="fade" id="s2e3" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">✅ Ctrl+C IS NOW SAFE</div>
+        <div class="term" style="border-color:#2a1f3d">
+          <div class="term-body" style="background:#0a0a14">
+            <div><span class="term-prompt">root@a1b2c3:/app# </span><span class="term-cmd">tail -f /var/log/app.log</span></div>
+            <div><span class="term-out">INFO: request processed</span></div>
+            <div id="exec_ctrlc" style="opacity:0;transition:opacity .4s"><span style="color:#e8a020">^C</span></div>
+            <div id="exec_safe" style="opacity:0;transition:opacity .4s"><span class="term-warn"># only kills PID 47 (bash). PID 1 untouched.</span></div>
+            <div id="exec_back" style="opacity:0;transition:opacity .4s"><span class="term-prompt">root@a1b2c3:/app# </span><span class="cursor">▌</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what -i and -t mean -->
+      <div class="fade" id="s2e4" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#888;letter-spacing:1px">THE -it FLAGS EXPLAINED</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#e8a020;width:20px;flex-shrink:0;font-family:'Press Start 2P',monospace">-i</span>
+            <span style="color:#ccc;line-height:1.7">Keep stdin open — lets you type commands</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#e8a020;width:20px;flex-shrink:0;font-family:'Press Start 2P',monospace">-t</span>
+            <span style="color:#ccc;line-height:1.7">Allocate a pseudo-TTY — proper terminal behaviour, arrow keys, colours</span>
+          </div>
+          <div style="display:flex;gap:8px;font-size:7px">
+            <span style="color:#4eff9a;width:20px;flex-shrink:0;font-family:'Press Start 2P',monospace">-it</span>
+            <span style="color:#ccc;line-height:1.7">Always use both together for interactive shells</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">exec spawns a fresh process. PID 1 keeps running.</div>
+    <div class="ih" style="color:#4eff9a">Ctrl+C only kills the exec'd process. Container survives.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">new PID</div><div class="sl">separate process</div></div>
+    <div class="sc"><div class="sv gn">safe</div><div class="sl">Ctrl+C ok</div></div>
+    <div class="sc"><div class="sv am">-it</div><div class="sl">always use both</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — ATTACH SAFELY + DETACH KEY
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">WHEN TO USE ATTACH</div>
+    <div class="hdr-sub">THE DETACH SEQUENCE THAT SAVES YOU</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ATTACH SAFELY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">READ THIS</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- detach key sequence -->
+      <div class="fade" id="s3e1" style="border:2px solid #4eff9a;border-radius:3px;padding:12px 14px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">🔑 THE ESCAPE SEQUENCE — MEMORISE THIS</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
+          <div style="border:2px solid #4eff9a;border-radius:3px;padding:8px 10px;font-size:11px;color:#4eff9a;font-family:'Press Start 2P',monospace">Ctrl+P</div>
+          <div style="font-size:10px;color:#888">then</div>
+          <div style="border:2px solid #4eff9a;border-radius:3px;padding:8px 10px;font-size:11px;color:#4eff9a;font-family:'Press Start 2P',monospace">Ctrl+Q</div>
+        </div>
+        <div style="font-size:7px;color:#ccc;text-align:center;line-height:1.9">
+          Detaches from the container <span style="color:#4eff9a">without</span> sending SIGINT.<br>
+          Container keeps running. You're free.
+        </div>
+      </div>
+
+      <!-- demo: safe attach + detach -->
+      <div class="fade" id="s3e2">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">SAFE ATTACH WORKFLOW</div>
+        <div class="term" style="border-color:#4ec9e1">
+          <div class="term-bar" style="background:#04101a">
+            <div class="term-dot" style="background:#e85050"></div>
+            <div class="term-dot" style="background:#e8a020"></div>
+            <div class="term-dot" style="background:#4eff9a"></div>
+            <span class="term-title">terminal</span>
+          </div>
+          <div class="term-body">
+            <div><span class="term-prompt">$ </span><span class="term-cmd">docker attach api-server</span></div>
+            <div id="a2_l1" style="opacity:0;transition:opacity .4s"><span class="term-out">INFO: server ready on :3000</span></div>
+            <div id="a2_l2" style="opacity:0;transition:opacity .4s"><span class="term-out">GET /health 200 4ms</span></div>
+            <div id="a2_l3" style="opacity:0;transition:opacity .4s"><span style="color:#4ec9e1"># to exit safely: Ctrl+P then Ctrl+Q</span></div>
+            <div id="a2_l4" style="opacity:0;transition:opacity .4s"><span style="color:#4eff9a">read escape sequence — detached</span></div>
+            <div id="a2_l5" style="opacity:0;transition:opacity .4s"><span class="term-prompt">$ </span><span class="term-warn"># back at host shell. container still running ✓</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- when attach actually makes sense -->
+      <div class="fade" id="s3e3" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">✅ THE RARE CASE WHERE ATTACH IS RIGHT</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div style="display:flex;gap:8px">
+            <span style="color:#4eff9a;flex-shrink:0">→</span>
+            <span style="color:#ccc;line-height:1.7">Your app reads from stdin (interactive CLI app, REPL)</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="color:#4eff9a;flex-shrink:0">→</span>
+            <span style="color:#ccc;line-height:1.7">You want to send actual keystrokes to PID 1 directly</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="color:#4eff9a;flex-shrink:0">→</span>
+            <span style="color:#ccc;line-height:1.7">Container was started with <span style="color:#e8a020">-it</span> flags</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- noHUP tip -->
+      <div class="fade" id="s3e4" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">⚠ ALSO AVOID: Ctrl+C ON docker logs -f</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9;font-family:'Press Start 2P',monospace">
+          <span style="color:#4ec9e1">docker logs -f</span> api-server<br>
+          <span style="color:#888"># Ctrl+C here is SAFE — it only stops</span><br>
+          <span style="color:#888"># the log stream, not the container.</span><br>
+          <span style="color:#4eff9a">Use logs -f instead of attach for logs.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Ctrl+P then Ctrl+Q detaches without killing PID 1.</div>
+    <div class="ih am">For logs: use docker logs -f, not docker attach.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">Ctrl+P+Q</div><div class="sl">safe detach</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">logs -f</div><div class="sl">for log tailing</div></div>
+    <div class="sc"><div class="sv am">-it</div><div class="sl">needed for attach</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — FULL COMPARISON + CHEATSHEET
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">SIDE BY SIDE</div>
+    <div class="hdr-sub">exec vs attach — THE FULL COMPARISON</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- comparison table -->
+      <div class="cmp-table fade" id="s4e1">
+        <div class="cmp-hdr">
+          <div class="cmp-hdr-cell" style="color:#888">property</div>
+          <div class="cmp-hdr-cell" style="color:#4eff9a">exec -it</div>
+          <div class="cmp-hdr-cell" style="color:#e85050">attach</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr1">
+          <div class="cmp-body-cell" style="color:#888">connects to</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">new process</div>
+          <div class="cmp-body-cell" style="color:#e85050">PID 1 stdio</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr2">
+          <div class="cmp-body-cell" style="color:#888">Ctrl+C effect</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">kills exec'd proc only</div>
+          <div class="cmp-body-cell" style="color:#e85050">kills container 💀</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr3">
+          <div class="cmp-body-cell" style="color:#888">exit safely</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">Ctrl+C or exit</div>
+          <div class="cmp-body-cell" style="color:#e8a020">Ctrl+P then Ctrl+Q</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr4">
+          <div class="cmp-body-cell" style="color:#888">use for</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">debug, shell, run cmds</div>
+          <div class="cmp-body-cell" style="color:#888">stdin-driven apps only</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr5">
+          <div class="cmp-body-cell" style="color:#888">multiple users</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">yes, independent</div>
+          <div class="cmp-body-cell" style="color:#e85050">no, shared stream</div>
+        </div>
+        <div class="cmp-body-row fade" id="cr6">
+          <div class="cmp-body-cell" style="color:#888">for logs</div>
+          <div class="cmp-body-cell" style="color:#4eff9a">exec tail -f or logs -f</div>
+          <div class="cmp-body-cell" style="color:#e85050">don't use this</div>
+        </div>
+      </div>
+
+      <!-- common exec patterns -->
+      <div class="fade" id="s4e2" style="border:2px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px;letter-spacing:1px">✅ COMMON exec PATTERNS</div>
+        <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.4">
+          <span style="color:#888"># shell into container</span><br>
+          <span style="color:#4ec9e1">docker exec -it</span> myc <span style="color:#4eff9a">bash</span><br>
+          <span style="color:#888"># run one command</span><br>
+          <span style="color:#4ec9e1">docker exec</span> myc <span style="color:#4eff9a">cat /etc/hosts</span><br>
+          <span style="color:#888"># tail logs inside container</span><br>
+          <span style="color:#4ec9e1">docker exec -it</span> myc <span style="color:#4eff9a">tail -f /var/log/app.log</span><br>
+          <span style="color:#888"># run as specific user</span><br>
+          <span style="color:#4ec9e1">docker exec -it</span> <span style="color:#e8a020">-u root</span> myc <span style="color:#4eff9a">bash</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">exec = always safe. attach = footgun unless you know why.</div>
+    <div class="ih" style="color:#4eff9a">Default to exec -it. Forget attach exists.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">exec</div><div class="sl">always use this</div></div>
+    <div class="sc"><div class="sv rd">attach</div><div class="sl">Ctrl+C = dead</div></div>
+    <div class="sc"><div class="sv am">logs -f</div><div class="sl">for log tailing</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1','s3e2','s3e3','s3e4'],
+    4:['s4e1','s4e2','cr1','cr2','cr3','cr4','cr5','cr6']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  // reset inline opacity elements for scene 1
+  ['attach_out1','attach_out2','attach_out3','ctrlc_line','kill_line'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='0';
+  });
+  // reset scene 2 inline elements
+  ['exec_proc','exec_out1','exec_out2','exec_ctrlc','exec_safe','exec_back'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='0';
+  });
+  // reset scene 3 inline elements
+  ['a2_l1','a2_l2','a2_l3','a2_l4','a2_l5'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='0';
+  });
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function showInline(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='1';
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1100);
+  showInline('attach_out1',1600);
+  showInline('attach_out2',2000);
+  showInline('attach_out3',2400);
+  show('s1e3',2900);
+  showInline('ctrlc_line',3200);
+  showInline('kill_line',3600);
+  show('s1e4',4200);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  show('s2e2',1100);
+  showInline('exec_out1',1600);
+  showInline('exec_out2',2000);
+  showInline('exec_proc',1400);
+  show('s2e3',2500);
+  showInline('exec_ctrlc',3000);
+  showInline('exec_safe',3400);
+  showInline('exec_back',3800);
+  show('s2e4',4200);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  show('s3e2',1200);
+  showInline('a2_l1',1700);
+  showInline('a2_l2',2100);
+  showInline('a2_l3',2500);
+  showInline('a2_l4',3100);
+  showInline('a2_l5',3500);
+  show('s3e3',4000);
+  show('s3e4',4900);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  ['cr1','cr2','cr3','cr4','cr5','cr6'].forEach((id,i)=>show(id,500+i*220));
+  show('s4e2',2000);
+}
+
+play1();
+</script>
+</body>
+</html>

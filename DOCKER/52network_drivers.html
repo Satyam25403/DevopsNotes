@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Network Drivers</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:7px}
+.dot{width:10px;height:10px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#b47eff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.cy{color:#4ec9e1}.ih.pu{color:#b47eff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:9px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#b47eff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* traffic beam */
+.beam{height:4px;width:0;border-radius:2px;transition:width .6s ease-out;position:absolute}
+.beam-v{width:4px;height:0;border-radius:2px;transition:height .6s ease-out;position:absolute}
+
+/* network node box */
+.nbox{border:2px solid;border-radius:3px;padding:7px 8px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.nbox-icon{font-size:18px}
+.nbox-label{font-size:6px;text-align:center;line-height:1.5;font-family:'Press Start 2P',monospace}
+
+/* driver card */
+.driver-card{border:2px solid;border-radius:3px;padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+.driver-name{font-size:9px;letter-spacing:.5px}
+.driver-sub{font-size:6px;color:#888;line-height:1.7}
+.driver-use{font-size:6px;line-height:1.7}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px;background:#0a0a14}
+.cmd-prompt{font-size:6px;color:#555;margin-bottom:3px}
+.cmd-line{font-size:7px;font-family:'Press Start 2P',monospace;line-height:2.1;color:#ccc}
+
+/* traffic packet animation */
+@keyframes pktmove{0%{left:0;opacity:1}90%{opacity:1}100%{left:calc(100% - 8px);opacity:0}}
+@keyframes pktmove-r{0%{right:0;opacity:1}90%{opacity:1}100%{right:calc(100% - 8px);opacity:0}}
+.pkt{width:8px;height:8px;border-radius:1px;position:absolute;top:50%;transform:translateY(-50%)}
+.pkt.go{animation:pktmove .8s ease-in-out infinite}
+.pkt.back{animation:pktmove-r .8s ease-in-out .4s infinite}
+
+/* topology diagram container */
+.topo{position:relative;width:100%;border:1px solid #2a1f3d;border-radius:3px;background:#0a0a14;overflow:hidden}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 1 — BRIDGE (default)
+═══════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">DOCKER NETWORK DRIVERS</div>
+    <div class="hdr-sub">BRIDGE · HOST · OVERLAY · MACVLAN</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">BRIDGE — DEFAULT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">MOST COMMON</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- bridge topology -->
+      <div class="fade" id="s1e1">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">TRAFFIC FLOW — CONTAINER → BRIDGE → NAT → INTERNET</div>
+        <!-- host box wrapping everything -->
+        <div style="border:1px solid #2a1f3d;border-radius:3px;padding:8px 8px;background:#0d0d18">
+          <div style="font-size:6px;color:#555;margin-bottom:6px;letter-spacing:1px">HOST MACHINE</div>
+
+          <!-- containers row -->
+          <div style="display:flex;justify-content:space-around;margin-bottom:0">
+            <div class="nbox" style="border-color:#4ec9e1;background:#04101a;width:78px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#4ec9e1">container A<br><span style="color:#4eff9a">172.17.0.2</span></div>
+            </div>
+            <div class="nbox" style="border-color:#4ec9e1;background:#04101a;width:78px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#4ec9e1">container B<br><span style="color:#4eff9a">172.17.0.3</span></div>
+            </div>
+          </div>
+
+          <!-- arrows DOWN from containers to bridge -->
+          <div style="display:flex;justify-content:space-around;height:22px;position:relative;margin:0">
+            <!-- left arrow down -->
+            <div style="width:78px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+              <div id="b1_left" style="width:3px;height:0;background:#4ec9e1;border-radius:1px;transition:height .55s ease-out"></div>
+              <div id="b1_left_arrow" style="font-size:8px;color:#4ec9e1;opacity:0;transition:opacity .3s;line-height:1">▼</div>
+            </div>
+            <!-- right arrow down -->
+            <div style="width:78px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px">
+              <div id="b1_right" style="width:3px;height:0;background:#4ec9e1;border-radius:1px;transition:height .55s ease-out"></div>
+              <div id="b1_right_arrow" style="font-size:8px;color:#4ec9e1;opacity:0;transition:opacity .3s;line-height:1">▼</div>
+            </div>
+          </div>
+
+          <!-- bridge row -->
+          <div style="display:flex;justify-content:center;margin-bottom:0">
+            <div style="border:2px solid #e8a020;border-radius:3px;padding:5px 16px;background:#1a1208;flex-shrink:0">
+              <div style="font-size:6px;color:#e8a020;text-align:center">docker0 bridge — 172.17.0.1</div>
+            </div>
+          </div>
+
+          <!-- arrow DOWN from bridge to NAT -->
+          <div style="display:flex;justify-content:center;height:18px;align-items:flex-start;padding-top:2px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+              <div id="b1_to_nat" style="width:3px;height:0;background:#e8a020;border-radius:1px;transition:height .5s ease-out"></div>
+              <div id="b1_to_nat_arrow" style="font-size:8px;color:#e8a020;opacity:0;transition:opacity .3s;line-height:1">▼</div>
+            </div>
+          </div>
+
+          <!-- NAT box -->
+          <div style="display:flex;justify-content:center;margin-bottom:0">
+            <div style="border:1px solid #e8a020;border-radius:2px;padding:4px 12px;background:#1a1208">
+              <div style="font-size:6px;color:#e8a020">iptables NAT (MASQUERADE)</div>
+            </div>
+          </div>
+
+          <!-- arrow DOWN from NAT out of host -->
+          <div style="display:flex;justify-content:center;height:18px;align-items:flex-start;padding-top:2px">
+            <div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+              <div id="b1_nat" style="width:3px;height:0;background:#4eff9a;border-radius:1px;transition:height .5s ease-out"></div>
+              <div id="b1_nat_arrow" style="font-size:8px;color:#4eff9a;opacity:0;transition:opacity .3s;line-height:1">▼</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- internet below host box -->
+        <div style="display:flex;justify-content:center;margin-top:2px">
+          <div class="nbox" style="border-color:#4eff9a;background:#04140a;width:90px">
+            <div class="nbox-icon">🌐</div>
+            <div class="nbox-label" style="color:#4eff9a">internet<br>public IP</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- how it works -->
+      <div class="fade" id="s1e2" style="border:1px solid #4ec9e1;border-radius:3px;padding:8px 10px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">HOW BRIDGE WORKS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Each container gets a private IP on <span style="color:#4eff9a">172.17.0.0/16</span>.<br>
+          Outbound traffic is NATted via <span style="color:#e8a020">iptables</span>.<br>
+          Containers on same bridge can talk directly.<br>
+          Expose ports with <span style="color:#4eff9a">-p 8080:80</span> to reach from host.
+        </div>
+      </div>
+
+      <!-- commands -->
+      <div class="cmd-block fade" id="s1e3">
+        <div class="cmd-prompt">BRIDGE COMMANDS</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#888"># default bridge (automatic)</span><br>
+          <span style="color:#4ec9e1">docker run</span> -p <span style="color:#4eff9a">8080:80</span> nginx<br>
+          <span style="color:#888"># custom bridge (recommended)</span><br>
+          <span style="color:#4ec9e1">docker network create</span> <span style="color:#e8a020">--driver bridge</span> mynet<br>
+          <span style="color:#4ec9e1">docker run</span> <span style="color:#e8a020">--network mynet</span> nginx
+        </div>
+      </div>
+
+      <!-- tip: custom > default bridge -->
+      <div class="fade" id="s1e4" style="border:1px solid #e8a020;border-radius:3px;padding:8px 10px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:4px">💡 CUSTOM BRIDGE &gt; DEFAULT BRIDGE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.8">
+          Custom bridges get <span style="color:#4eff9a">automatic DNS</span> — containers reach<br>
+          each other by name. Default bridge needs<br>
+          --link (deprecated) or manual IPs.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Bridge = NAT-based private network per host.</div>
+    <div class="ih cy">Custom bridges get DNS. Default bridge does not.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">bridge</div><div class="sl">default driver</div></div>
+    <div class="sc"><div class="sv am">NAT</div><div class="sl">iptables masq.</div></div>
+    <div class="sc"><div class="sv gn">DNS</div><div class="sl">custom only</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 2 — HOST + NONE
+═══════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">HOST & NONE</div>
+    <div class="hdr-sub">BYPASS THE BRIDGE — OR ALL NETWORKING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">HOST & NONE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PERFORMANCE</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- host network topology -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px;letter-spacing:1px">HOST NETWORK — SHARES HOST STACK DIRECTLY</div>
+        <div style="border:1px solid #e8a020;border-radius:3px;padding:8px;background:#1a1208;position:relative">
+          <div style="font-size:6px;color:#e8a020;margin-bottom:5px">HOST MACHINE + CONTAINER (same namespace)</div>
+          <div style="display:flex;align-items:center;gap:8px;justify-content:center">
+            <div class="nbox" style="border-color:#e8a020;background:#0d0a04;width:90px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#e8a020">container<br><span style="color:#4eff9a">= host IP</span><br>no NAT</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">
+              <div style="font-size:6px;color:#4eff9a;text-align:center">direct</div>
+              <div style="height:3px;width:0;background:#4eff9a;border-radius:1px;transition:width .7s ease-out" id="host_beam"></div>
+            </div>
+            <div class="nbox" style="border-color:#4eff9a;background:#04140a;width:90px">
+              <div class="nbox-icon">🌐</div>
+              <div class="nbox-label" style="color:#4eff9a">internet<br>no overhead<br>fastest</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- host perf comparison -->
+      <div class="fade" id="s2e2">
+        <div style="font-size:7px;color:#888;margin-bottom:5px;letter-spacing:1px">LATENCY COMPARISON</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:52px;font-size:6px;color:#4ec9e1;flex-shrink:0">bridge</div>
+            <div style="flex:1;height:16px;background:#0a0a14;border:1px solid #2a1f3d;border-radius:2px;overflow:hidden">
+              <div id="lat_bridge" style="width:0;height:100%;background:#4ec9e1;transition:width 1s ease-out;display:flex;align-items:center;padding-left:5px">
+                <span style="font-size:6px;color:#000;font-family:'Press Start 2P',monospace">~0.3ms NAT overhead</span>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="width:52px;font-size:6px;color:#e8a020;flex-shrink:0">host</div>
+            <div style="flex:1;height:16px;background:#0a0a14;border:1px solid #2a1f3d;border-radius:2px;overflow:hidden">
+              <div id="lat_host" style="width:0;height:100%;background:#4eff9a;transition:width 1s ease-out;display:flex;align-items:center;padding-left:5px">
+                <span style="font-size:6px;color:#000;font-family:'Press Start 2P',monospace">no overhead ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- host commands + caveat -->
+      <div class="cmd-block fade" id="s2e3" style="border-color:#e8a020">
+        <div class="cmd-prompt">HOST NETWORK — LINUX ONLY</div>
+        <div class="cmd-line" style="line-height:2.2">
+          <span style="color:#4ec9e1">docker run</span> <span style="color:#e8a020">--network host</span> nginx<br>
+          <span style="color:#888"># nginx listens on host's :80 directly</span><br>
+          <span style="color:#888"># -p flag is ignored with host network</span><br>
+          <span style="color:#e85050"># NOT supported on Docker Desktop (Mac/Win)</span>
+        </div>
+      </div>
+
+      <!-- none network -->
+      <div class="fade" id="s2e4" style="border:2px solid #555;border-radius:3px;padding:8px 10px;background:#0a0a14">
+        <div style="font-size:7px;color:#888;margin-bottom:6px">NONE — COMPLETE NETWORK ISOLATION</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <div class="nbox" style="border-color:#333;background:#0a0a0a;width:90px">
+            <div class="nbox-icon">🔇</div>
+            <div class="nbox-label" style="color:#555">container<br>only loopback<br>no eth0</div>
+          </div>
+          <div style="flex:1;text-align:center;font-size:10px;color:#333">✕</div>
+          <div class="nbox" style="border-color:#333;background:#0a0a0a;width:90px">
+            <div class="nbox-icon" style="filter:grayscale(1);opacity:.3">🌐</div>
+            <div class="nbox-label" style="color:#333">no access<br>to anything<br>ever</div>
+          </div>
+        </div>
+        <div style="font-size:6px;color:#888;line-height:1.8">
+          Use for: batch jobs that process files with no network<br>
+          needs, security-sensitive workloads.
+        </div>
+        <div class="cmd-line" style="font-size:7px;margin-top:6px">
+          <span style="color:#4ec9e1">docker run</span> <span style="color:#555">--network none</span> my-batch-job
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Host = share host network stack, zero NAT overhead.</div>
+    <div class="ih am">Linux only. None = full isolation, loopback only.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">0ms</div><div class="sl">host overhead</div></div>
+    <div class="sc"><div class="sv rd">Linux</div><div class="sl">host only</div></div>
+    <div class="sc"><div class="sv" style="color:#555">none</div><div class="sl">no network</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 3 — OVERLAY (Swarm multi-host)
+═══════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OVERLAY NETWORK</div>
+    <div class="hdr-sub">MULTI-HOST — SWARM & CROSS-NODE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b47eff">OVERLAY</span>
+    <span class="sbadge" style="color:#b47eff;border-color:#b47eff">MULTI-HOST</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- overlay topology: 2 hosts, containers talking -->
+      <div class="fade" id="s3e1">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">CONTAINERS ON DIFFERENT HOSTS — SAME SUBNET</div>
+        <div style="display:flex;gap:8px">
+          <!-- host 1 -->
+          <div style="flex:1;border:1px solid #b47eff;border-radius:3px;padding:7px 7px;background:#0d0820">
+            <div style="font-size:6px;color:#b47eff;margin-bottom:5px">HOST 1</div>
+            <div class="nbox" style="border-color:#b47eff;background:#1a0a30;width:100%;margin-bottom:5px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#b47eff">svc-A<br><span style="color:#4eff9a">10.0.0.2</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:center">vxlan0</div>
+          </div>
+          <!-- tunnel beam -->
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:50px;flex-shrink:0">
+            <div style="font-size:6px;color:#888;text-align:center">VXLAN<br>tunnel</div>
+            <div style="width:100%;height:3px;background:#2a1f3d;border-radius:1px;position:relative;overflow:hidden">
+              <div id="ov_beam" style="height:100%;width:0;background:#b47eff;border-radius:1px;transition:width .7s ease-out;position:absolute;top:0;left:0"></div>
+            </div>
+            <div style="font-size:6px;color:#555">UDP 4789</div>
+          </div>
+          <!-- host 2 -->
+          <div style="flex:1;border:1px solid #b47eff;border-radius:3px;padding:7px 7px;background:#0d0820">
+            <div style="font-size:6px;color:#b47eff;margin-bottom:5px">HOST 2</div>
+            <div class="nbox" style="border-color:#b47eff;background:#1a0a30;width:100%;margin-bottom:5px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#b47eff">svc-B<br><span style="color:#4eff9a">10.0.0.3</span></div>
+            </div>
+            <div style="font-size:6px;color:#555;text-align:center">vxlan0</div>
+          </div>
+        </div>
+        <div style="margin-top:5px;font-size:6px;color:#888;text-align:center">both on overlay subnet 10.0.0.0/24 — talk as if on same LAN</div>
+      </div>
+
+      <!-- what VXLAN does -->
+      <div class="fade" id="s3e2" style="border:1px solid #b47eff;border-radius:3px;padding:8px 10px;background:#0d0820">
+        <div style="font-size:7px;color:#b47eff;margin-bottom:5px">HOW VXLAN ENCAPSULATION WORKS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Container packet → wrapped in <span style="color:#b47eff">VXLAN header</span><br>
+          → sent as UDP over physical network →<br>
+          unwrapped on destination host → delivered<br>
+          to container. Transparent to the app.
+        </div>
+      </div>
+
+      <!-- overlay commands -->
+      <div class="cmd-block fade" id="s3e3" style="border-color:#b47eff">
+        <div class="cmd-prompt">OVERLAY — REQUIRES SWARM MODE</div>
+        <div class="cmd-line" style="line-height:2.2">
+          <span style="color:#888"># init swarm first</span><br>
+          <span style="color:#4ec9e1">docker swarm init</span><br>
+          <span style="color:#888"># create overlay network</span><br>
+          <span style="color:#4ec9e1">docker network create</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--driver overlay</span> myoverlay<br>
+          <span style="color:#888"># deploy service on it</span><br>
+          <span style="color:#4ec9e1">docker service create</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--network myoverlay</span> nginx
+        </div>
+      </div>
+
+      <!-- when to use overlay -->
+      <div class="fade" id="s3e4" style="border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px;background:#0a0a14">
+        <div style="font-size:7px;color:#888;margin-bottom:5px;letter-spacing:1px">USE OVERLAY WHEN</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          ✓ Running Docker Swarm services<br>
+          ✓ Containers span multiple physical hosts<br>
+          ✓ Need service discovery across nodes<br>
+          ✗ Single host → use bridge instead
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Overlay tunnels container traffic across hosts via VXLAN.</div>
+    <div class="ih pu">Requires Swarm mode. Uses UDP port 4789.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">VXLAN</div><div class="sl">tunnel protocol</div></div>
+    <div class="sc"><div class="sv pu">swarm</div><div class="sl">required</div></div>
+    <div class="sc"><div class="sv gn">DNS</div><div class="sl">service discovery</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     SCENE 4 — MACVLAN + IPVLAN + COMPARISON
+═══════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">MACVLAN & IPVLAN</div>
+    <div class="hdr-sub">CONTAINER APPEARS AS PHYSICAL DEVICE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#ff9f43">MACVLAN & IPVLAN</span>
+    <span class="sbadge" style="color:#ff9f43;border-color:#ff9f43">ADVANCED</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- macvlan topology -->
+      <div class="fade" id="s4e1">
+        <div style="font-size:7px;color:#ff9f43;margin-bottom:6px;letter-spacing:1px">MACVLAN — OWN MAC + IP ON PHYSICAL NET</div>
+        <div style="border:1px solid #ff9f43;border-radius:3px;padding:8px;background:#1a0e04">
+          <div style="display:flex;align-items:center;gap:6px;justify-content:center">
+            <!-- network switch -->
+            <div class="nbox" style="border-color:#888;background:#0a0a14;width:60px">
+              <div class="nbox-icon">🔀</div>
+              <div class="nbox-label" style="color:#888">switch<br>192.168.1.0/24</div>
+            </div>
+            <!-- beam left -->
+            <div style="flex:1;height:3px;background:#2a1f3d;position:relative;overflow:hidden">
+              <div id="mv_beam" style="height:100%;width:0;background:#ff9f43;transition:width .7s ease-out;position:absolute;top:0;left:0"></div>
+            </div>
+            <!-- container gets real IP -->
+            <div class="nbox" style="border-color:#ff9f43;background:#1a0e04;width:80px">
+              <div class="nbox-icon">🐳</div>
+              <div class="nbox-label" style="color:#ff9f43">container<br><span style="color:#4eff9a">192.168.1.50</span><br>own MAC</div>
+            </div>
+          </div>
+          <div style="margin-top:6px;font-size:6px;color:#888;text-align:center">switch sees container as physical device — no NAT</div>
+        </div>
+      </div>
+
+      <!-- macvlan vs ipvlan -->
+      <div class="fade" id="s4e2" style="display:flex;gap:6px">
+        <div class="driver-card" style="border-color:#ff9f43;flex:1">
+          <div class="driver-name" style="color:#ff9f43">macvlan</div>
+          <div class="driver-sub">Own MAC address<br>Own IP from subnet<br>Promiscuous mode needed</div>
+          <div class="driver-use" style="color:#4eff9a">✓ legacy net integration<br>✓ IoT devices<br>✓ need own MAC</div>
+        </div>
+        <div class="driver-card" style="border-color:#4ec9e1;flex:1">
+          <div class="driver-name" style="color:#4ec9e1">ipvlan</div>
+          <div class="driver-sub">Shares host MAC<br>Own IP from subnet<br>No promiscuous mode</div>
+          <div class="driver-use" style="color:#4eff9a">✓ cloud VMs (no prom.)<br>✓ need own IP only<br>✓ lower overhead</div>
+        </div>
+      </div>
+
+      <!-- full driver comparison table -->
+      <div class="fade" id="s4e3" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:5px 10px;font-size:7px;color:#888;letter-spacing:1px">ALL DRIVERS CHEATSHEET</div>
+        <div style="padding:6px 10px;display:flex;flex-direction:column;gap:4px">
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px;padding-bottom:3px;border-bottom:1px solid #1a1a2e">
+            <span style="color:#888;flex:1">driver</span>
+            <span style="color:#888;flex:2">use when</span>
+            <span style="color:#888;flex:1;text-align:right">NAT</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr1">
+            <span style="color:#4ec9e1;flex:1">bridge</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">single host, most apps</span>
+            <span style="color:#e8a020;flex:1;text-align:right">yes</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr2">
+            <span style="color:#e8a020;flex:1">host</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">max perf, Linux only</span>
+            <span style="color:#4eff9a;flex:1;text-align:right">no</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr3">
+            <span style="color:#b47eff;flex:1">overlay</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">multi-host Swarm</span>
+            <span style="color:#e8a020;flex:1;text-align:right">yes</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr4">
+            <span style="color:#ff9f43;flex:1">macvlan</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">real IP on phys. net</span>
+            <span style="color:#4eff9a;flex:1;text-align:right">no</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr5">
+            <span style="color:#4ec9e1;flex:1">ipvlan</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">cloud/VM, share MAC</span>
+            <span style="color:#4eff9a;flex:1;text-align:right">no</span>
+          </div>
+          <div style="display:flex;gap:6px;justify-content:space-between;font-size:6px" class="fade" id="tr6">
+            <span style="color:#555;flex:1">none</span>
+            <span style="color:#ccc;flex:2;line-height:1.6">zero network access</span>
+            <span style="color:#555;flex:1;text-align:right">—</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#ff9f43">
+    <div class="il">macvlan = own MAC+IP. ipvlan = own IP, share MAC.</div>
+    <div class="ih" style="color:#ff9f43">Use for IoT, legacy nets, or when container needs real LAN IP.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#ff9f43">macvlan</div><div class="sl">own MAC+IP</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">ipvlan</div><div class="sl">share MAC</div></div>
+    <div class="sc"><div class="sv gn">6</div><div class="sl">total drivers</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1','s3e2','s3e3','s3e4'],
+    4:['s4e1','s4e2','s4e3','tr1','tr2','tr3','tr4','tr5','tr6']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  ['b1_left','b1_right','b1_nat','host_beam','ov_beam','mv_beam','lat_bridge','lat_host'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    if(el.style.height!==undefined && el.tagName!=='DIV') el.style.height='0';
+    else el.style.width='0';
+  });
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function animW(id,w,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width=w;
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  animW('b1_left','100%',600);
+  animW('b1_right','100%',600);
+  animW('b1_nat','60px',1200);
+  show('s1e2',1600);
+  show('s1e3',2500);
+  show('s1e4',3400);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  animW('host_beam','100%',700);
+  show('s2e2',1100);
+  animW('lat_bridge','85%',1300);
+  animW('lat_host','22%',1600);
+  show('s2e3',2300);
+  show('s2e4',3200);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  animW('ov_beam','100%',700);
+  show('s3e2',1200);
+  show('s3e3',2100);
+  show('s3e4',3100);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  animW('mv_beam','100%',700);
+  show('s4e2',1200);
+  show('s4e3',2000);
+  ['tr1','tr2','tr3','tr4','tr5','tr6'].forEach((id,i)=>show(id,2200+i*180));
+}
+
+play1();
+</script>
+</body>
+</html>

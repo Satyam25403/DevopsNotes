@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Inter-Container Communication Patterns</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:12px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:8px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:12px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════ SCENE 1: SAME HOST, SAME NETWORK ══════════ -->
+<div class="scene active" id="s1" style="background:#000d04">
+  <div class="hdr" style="background:#000d04;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">① SAME HOST · SAME NET</div>
+    <div class="hdr-sub">CONTAINER NAME = HOSTNAME — EASIEST CASE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d04">
+    <span class="slabel" style="color:#4eff9a">SCENARIO 1</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SIMPLEST</span>
+  </div>
+  <div class="anim" style="background:#000d04">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Topology diagram -->
+      <div id="s1_diag" class="panel" style="background:#010a02;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#021005;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#4eff9a;text-align:center">single host · user-defined bridge network</div>
+        <svg width="100%" height="178" viewBox="0 0 366 178" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f1g" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="m1g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+
+          <!-- host machine border -->
+          <rect id="s1_host" x="8" y="8" width="350" height="162" rx="5"
+                fill="#001008" stroke="#0d3018" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
+          <text id="s1_host_l" x="183" y="22" text-anchor="middle" font-size="5.5"
+                fill="#1a3a1a" font-family="'Press Start 2P',monospace" opacity="0">HOST MACHINE</text>
+
+          <!-- network zone -->
+          <rect id="s1_net" x="20" y="30" width="326" height="108" rx="4"
+                fill="#001a08" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s1_net_l" x="183" y="44" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">mynet (user-defined bridge) · DNS: 127.0.0.11</text>
+
+          <!-- web container -->
+          <rect id="s1_web" x="32" y="52" width="90" height="72" rx="3"
+                fill="#002010" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+          <text id="s1_web_t1" x="77" y="72" text-anchor="middle" font-size="6.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">web</text>
+          <text id="s1_web_t2" x="77" y="86" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">nginx:80</text>
+          <text id="s1_web_t3" x="77" y="100" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">172.20.0.2</text>
+          <text id="s1_web_t4" x="77" y="114" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">--name web</text>
+
+          <!-- api container -->
+          <rect id="s1_api" x="138" y="52" width="90" height="72" rx="3"
+                fill="#002010" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s1_api_t1" x="183" y="72" text-anchor="middle" font-size="6.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api</text>
+          <text id="s1_api_t2" x="183" y="86" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">express:3000</text>
+          <text id="s1_api_t3" x="183" y="100" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">172.20.0.3</text>
+          <text id="s1_api_t4" x="183" y="114" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">--name api</text>
+
+          <!-- db container -->
+          <rect id="s1_db" x="244" y="52" width="90" height="72" rx="3"
+                fill="#002010" stroke="#a080ff" stroke-width="2" opacity="0"/>
+          <text id="s1_db_t1" x="289" y="72" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">db</text>
+          <text id="s1_db_t2" x="289" y="86" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">postgres:5432</text>
+          <text id="s1_db_t3" x="289" y="100" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">172.20.0.4</text>
+          <text id="s1_db_t4" x="289" y="114" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">--name db</text>
+
+          <!-- arrows -->
+          <line id="s1_arr1" x1="122" y1="88" x2="136" y2="88"
+                stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#m1g)"/>
+          <line id="s1_arr2" x1="228" y1="88" x2="242" y2="88"
+                stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#m1g)"/>
+
+          <!-- animated packets -->
+          <circle id="s1_pkt1" cx="122" cy="88" r="4" fill="#4eff9a" opacity="0" filter="url(#f1g)"/>
+          <circle id="s1_pkt2" cx="228" cy="88" r="4" fill="#4ec9e1" opacity="0" filter="url(#f1g)"/>
+
+          <!-- DNS label -->
+          <text id="s1_dns_lbl" x="183" y="153" text-anchor="middle" font-size="5.5"
+                fill="#2a5a2a" font-family="'Press Start 2P',monospace" opacity="0">curl http://api:3000  ←  name resolves via 127.0.0.11</text>
+        </svg>
+      </div>
+
+      <!-- Terminal -->
+      <div id="s1_term" class="panel" style="background:#020f04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#031208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">commands</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t1l1" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker network create</span> mynet</div>
+          <div id="t1l2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --network mynet --name web nginx</div>
+          <div id="t1l3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --network mynet --name api express</div>
+          <div id="t1l4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d --network mynet --name db postgres</div>
+          <div id="t1l5" class="tline" style="color:#555"># reach any container by its --name:</div>
+          <div id="t1l6" class="tline" style="color:#4eff9a">$ docker exec web curl http://api:3000  ✓</div>
+          <div id="t1l7" class="tline" style="color:#4eff9a">$ docker exec api psql postgres://db:5432  ✓</div>
+        </div>
+      </div>
+
+      <!-- Rule card -->
+      <div id="s1_rule" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">✓ THE RULE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Same user-defined network = <span style="color:#4eff9a">container name is hostname</span>. Port is the internal port, NOT the published one. No IPs needed. Compose does this automatically for every service.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Same network = container name resolves automatically via 127.0.0.11.</div>
+    <div class="ih">Use the internal port (3000, 5432) — not the published host port.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">name</div><div class="sl">IS THE<br>HOSTNAME</div></div>
+    <div class="sc"><div class="sv gn">1</div><div class="sl">NETWORK<br>NEEDED</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">auto</div><div class="sl">IN COMPOSE<br>= FREE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 2: SAME HOST, DIFFERENT NETWORKS ══════════ -->
+<div class="scene" id="s2" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">② SAME HOST · DIFF NETS</div>
+    <div class="hdr-sub">docker network connect — THE BRIDGE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">SCENARIO 2</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CROSS-NET</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Cross-network topology -->
+      <div id="s2_diag" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;text-align:center">same host · two isolated networks · one bridging container</div>
+        <svg width="100%" height="205" viewBox="0 0 366 205" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f2c" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="m2c" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+            <marker id="m2g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+            <marker id="m2r" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+          </defs>
+
+          <!-- net-A zone (left) -->
+          <rect id="s2_netA" x="8" y="10" width="148" height="185" rx="4"
+                fill="#00040f" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_netA_l" x="82" y="24" text-anchor="middle" font-size="5.5"
+                fill="#1a3a4a" font-family="'Press Start 2P',monospace" opacity="0">net-A (frontend)</text>
+
+          <!-- net-B zone (right) -->
+          <rect id="s2_netB" x="210" y="10" width="148" height="185" rx="4"
+                fill="#001008" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_netB_l" x="284" y="24" text-anchor="middle" font-size="5.5"
+                fill="#1a3a2a" font-family="'Press Start 2P',monospace" opacity="0">net-B (backend)</text>
+
+          <!-- frontend container (net-A only) -->
+          <rect id="s2_fe" x="18" y="32" width="88" height="62" rx="3"
+                fill="#001020" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s2_fe_t1" x="62" y="52" text-anchor="middle" font-size="6.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">frontend</text>
+          <text id="s2_fe_t2" x="62" y="66" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">net-A only</text>
+          <text id="s2_fe_t3" x="62" y="80" text-anchor="middle" font-size="5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">react:3000</text>
+
+          <!-- api container (BOTH networks — straddles the gap) -->
+          <rect id="s2_api" x="139" y="32" width="88" height="62" rx="3"
+                fill="#001a0a" stroke="#4ec9e1" stroke-width="2.5" opacity="0"/>
+          <text id="s2_api_t1" x="183" y="52" text-anchor="middle" font-size="7"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api</text>
+          <text id="s2_api_t2" x="183" y="65" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">net-A + net-B</text>
+          <text id="s2_api_t3" x="183" y="78" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">gatekeeper</text>
+
+          <!-- db container (net-B only) -->
+          <rect id="s2_db" x="260" y="32" width="88" height="62" rx="3"
+                fill="#0a0020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s2_db_t1" x="304" y="52" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">database</text>
+          <text id="s2_db_t2" x="304" y="66" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">net-B only</text>
+          <text id="s2_db_t3" x="304" y="80" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">postgres:5432</text>
+
+          <!-- OK arrow: fe → api -->
+          <line id="s2_arr1" x1="106" y1="63" x2="137" y2="63"
+                stroke="#4ec9e1" stroke-width="1.5" opacity="0" marker-end="url(#m2c)"/>
+          <!-- OK arrow: api → db -->
+          <line id="s2_arr2" x1="227" y1="63" x2="258" y2="63"
+                stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#m2g)"/>
+
+          <!-- BLOCKED: fe → db direct -->
+          <path id="s2_blk" d="M 62 95 Q 183 145 304 95"
+                stroke="#e85050" stroke-width="1.5" fill="none" stroke-dasharray="4,3" opacity="0"/>
+          <text id="s2_blk_x" x="183" y="143" text-anchor="middle" font-size="12"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">✕</text>
+          <text id="s2_blk_l" x="183" y="158" text-anchor="middle" font-size="5.5"
+                fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">no route — different network</text>
+
+          <!-- animated packets -->
+          <circle id="s2_pkt1" cx="106" cy="63" r="4" fill="#4ec9e1" opacity="0" filter="url(#f2c)"/>
+          <circle id="s2_pkt2" cx="227" cy="63" r="4" fill="#4eff9a" opacity="0" filter="url(#f2c)"/>
+
+          <!-- network connect command label -->
+          <text id="s2_cmd_l" x="183" y="175" text-anchor="middle" font-size="5.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">docker network connect net-A api</text>
+          <text id="s2_cmd_l2" x="183" y="189" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">docker network connect net-B api</text>
+        </svg>
+      </div>
+
+      <!-- Terminal -->
+      <div id="s2_term" class="panel" style="background:#020810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#040f18;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker network connect</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t2l1" class="tline" style="color:#555"># API already on net-B with db</div>
+          <div id="t2l2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker network connect</span> net-A api</div>
+          <div id="t2l3" class="tline" style="color:#4eff9a">api now has TWO IP addresses ✓</div>
+          <div id="t2l4" class="tline" style="color:#555"># verify both networks attached:</div>
+          <div id="t2l5" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker inspect</span> api --format \</div>
+          <div id="t2l6" class="tline" style="color:#888" style="padding-left:12px">'{{json .NetworkSettings.Networks}}'</div>
+          <div id="t2l7" class="tline" style="color:#4eff9a">{"net-A":{...}, "net-B":{...}}  ← both!</div>
+        </div>
+      </div>
+
+      <!-- Key point -->
+      <div id="s2_tip" class="panel" style="background:#001020;border-left:4px solid #a080ff;border-top:1px solid #1a1030;border-right:1px solid #1a1030;border-bottom:1px solid #1a1030;padding:10px 12px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:5px">💡 HOW IT WORKS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">A container joined to two networks gets a <span style="color:#4ec9e1">separate IP on each</span>. It can route traffic between them. This is how docker compose implements the API-as-gatekeeper pattern — frontend-net and backend-net with api on both.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">docker network connect adds a second NIC + IP to a running container.</div>
+    <div class="ih" style="color:#4ec9e1">The gatekeeper container sees both networks. Others see only one.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">connect</div><div class="sl">THE<br>COMMAND</div></div>
+    <div class="sc"><div class="sv gn">2 IPs</div><div class="sl">ON THE<br>BRIDGE CTR</div></div>
+    <div class="sc"><div class="sv pu">live</div><div class="sl">NO RESTART<br>NEEDED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 3: MULTI-HOST WITHOUT SWARM ══════════ -->
+<div class="scene" id="s3" style="background:#0a0305">
+  <div class="hdr" style="background:#0a0305;border-bottom:1px solid #2a1500">
+    <div class="hdr-title" style="color:#e8a020">③ MULTI-HOST · NO SWARM</div>
+    <div class="hdr-sub">HOST NET + CONSUL / ETCD SERVICE DISCOVERY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0305">
+    <span class="slabel" style="color:#e8a020">SCENARIO 3</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">ADVANCED</span>
+  </div>
+  <div class="anim" style="background:#0a0305">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Multi-host topology -->
+      <div id="s3_diag" class="panel" style="background:#050101;border:2px solid #2a1500;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0200;padding:5px 10px;border-bottom:1px solid #2a1500;font-size:6.5px;color:#e8a020;text-align:center">two separate hosts · external service registry</div>
+        <svg width="100%" height="218" viewBox="0 0 366 218" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f3a" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="m3a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e8a020" stroke-width="1.5"/>
+            </marker>
+            <marker id="m3g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+
+          <!-- Host A box -->
+          <rect id="s3_hA" x="8" y="8" width="155" height="130" rx="4"
+                fill="#0a0200" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s3_hA_l" x="85" y="22" text-anchor="middle" font-size="5.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">HOST A  (192.168.1.10)</text>
+
+          <!-- app container on Host A using --network host -->
+          <rect id="s3_app" x="18" y="30" width="135" height="96" rx="3"
+                fill="#1a0800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s3_app_t1" x="85" y="50" text-anchor="middle" font-size="6.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">app-container</text>
+          <text id="s3_app_t2" x="85" y="64" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">--network host</text>
+          <text id="s3_app_t3" x="85" y="78" text-anchor="middle" font-size="5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">IP = host IP</text>
+          <text id="s3_app_t4" x="85" y="92" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">192.168.1.10:8080</text>
+          <text id="s3_app_t5" x="85" y="106" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">registers→Consul on start</text>
+          <text id="s3_app_t6" x="85" y="118" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">deregisters on stop</text>
+
+          <!-- Host B box -->
+          <rect id="s3_hB" x="203" y="8" width="155" height="130" rx="4"
+                fill="#0a0200" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s3_hB_l" x="280" y="22" text-anchor="middle" font-size="5.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">HOST B  (192.168.1.11)</text>
+
+          <!-- db container on Host B -->
+          <rect id="s3_db" x="213" y="30" width="135" height="96" rx="3"
+                fill="#1a0800" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s3_db_t1" x="280" y="50" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">db-container</text>
+          <text id="s3_db_t2" x="280" y="64" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">--network host</text>
+          <text id="s3_db_t3" x="280" y="78" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">192.168.1.11:5432</text>
+          <text id="s3_db_t4" x="280" y="92" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">registers→Consul on start</text>
+
+          <!-- Consul / service registry box (middle bottom) -->
+          <rect id="s3_consul" x="100" y="152" width="166" height="58" rx="4"
+                fill="#001828" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="s3_consul_t1" x="183" y="170" text-anchor="middle" font-size="6.5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">CONSUL / etcd</text>
+          <text id="s3_consul_t2" x="183" y="184" text-anchor="middle" font-size="5.5"
+                fill="#888" font-family="'Press Start 2P',monospace" opacity="0">service registry</text>
+          <text id="s3_consul_t3" x="183" y="198" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">app=192.168.1.10:8080  db=192.168.1.11:5432</text>
+
+          <!-- app → Consul register -->
+          <line id="s3_reg1" x1="85" y1="127" x2="120" y2="152"
+                stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="3,2" opacity="0" marker-end="url(#m3g)"/>
+          <!-- db → Consul register -->
+          <line id="s3_reg2" x1="280" y1="127" x2="246" y2="152"
+                stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="3,2" opacity="0" marker-end="url(#m3g)"/>
+
+          <!-- app queries Consul for db address -->
+          <line id="s3_qry" x1="130" y1="162" x2="106" y2="150"
+                stroke="#e8a020" stroke-width="1.5" opacity="0" marker-end="url(#m3a)"/>
+          <text id="s3_qry_l" x="93" y="147" text-anchor="middle" font-size="5.5"
+                fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">where is db?</text>
+
+          <!-- direct connection after discovery -->
+          <line id="s3_direct" x1="163" y1="80" x2="211" y2="80"
+                stroke="#4eff9a" stroke-width="2" stroke-dasharray="5,3" opacity="0" marker-end="url(#m3g)"/>
+          <text id="s3_direct_l" x="187" y="74" text-anchor="middle" font-size="5.5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">direct TCP</text>
+          <text id="s3_direct_l2" x="187" y="86" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">physical network</text>
+
+          <!-- animated packet -->
+          <circle id="s3_pkt" cx="163" cy="80" r="4" fill="#4eff9a" opacity="0" filter="url(#f3a)"/>
+        </svg>
+      </div>
+
+      <!-- Consul registration flow terminal -->
+      <div id="s3_term" class="panel" style="background:#050101;border:2px solid #2a1500;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0200;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#555"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">consul registration pattern</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t3l1" class="tline" style="color:#555"># on container start (entrypoint script)</div>
+          <div id="t3l2" class="tline" style="color:#888"><span style="color:#4ec9e1">curl</span> -X PUT http://consul:8500/v1/agent/service/register \</div>
+          <div id="t3l3" class="tline" style="color:#e8a020">  -d '{"Name":"db","Address":"192.168.1.11","Port":5432}'</div>
+          <div id="t3l4" class="tline" style="color:#555"># app resolves db address at runtime:</div>
+          <div id="t3l5" class="tline" style="color:#888">DB_ADDR=$(<span style="color:#4ec9e1">curl</span> consul:8500/v1/catalog/service/db \</div>
+          <div id="t3l6" class="tline" style="color:#4eff9a">  | jq -r '.[0].ServiceAddress+":"+.[0].ServicePort')</div>
+          <div id="t3l7" class="tline" style="color:#4eff9a">→ DB_ADDR=192.168.1.11:5432  ← discovered!</div>
+        </div>
+      </div>
+
+      <!-- Trade-off card -->
+      <div id="s3_tradeoff" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#100008;border:1px solid #e85050;border-radius:2px;padding:8px 9px">
+          <div style="font-size:6px;color:#e85050;margin-bottom:5px">DOWNSIDES</div>
+          <div style="font-size:5.8px;color:#aaa;line-height:2.0">
+            Manual registration<br>--network host = less isolated<br>Need Consul infra<br>Complex setup
+          </div>
+        </div>
+        <div style="background:#001508;border:1px solid #4eff9a;border-radius:2px;padding:8px 9px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">UPSIDES</div>
+          <div style="font-size:5.8px;color:#aaa;line-height:2.0">
+            No Swarm needed<br>Works any infra<br>Health checks built-in<br>K8s-compatible
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">No overlay, no Swarm — containers use host IPs, Consul resolves locations.</div>
+    <div class="ih am">Register on start, deregister on stop. Query Consul at runtime for peers.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">--host</div><div class="sl">NETWORK<br>MODE</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">Consul</div><div class="sl">SERVICE<br>REGISTRY</div></div>
+    <div class="sc"><div class="sv gn">host IP</div><div class="sl">FOR DIRECT<br>CONNECT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════ SCENE 4: MULTI-HOST WITH SWARM + OVERLAY ══════════ -->
+<div class="scene" id="s4" style="background:#0a000f">
+  <div class="hdr" style="background:#0a000f;border-bottom:1px solid #2a0040">
+    <div class="hdr-title" style="color:#a080ff">④ MULTI-HOST · SWARM</div>
+    <div class="hdr-sub">OVERLAY NETWORK · AUTOMATIC DNS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a000f">
+    <span class="slabel" style="color:#a080ff">SCENARIO 4</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION</span>
+  </div>
+  <div class="anim" style="background:#0a000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Swarm overlay topology -->
+      <div id="s4_diag" class="panel" style="background:#060010;border:2px solid #2a0040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;border-bottom:1px solid #2a0040;font-size:6.5px;color:#a080ff;text-align:center">docker swarm · overlay network · VXLAN tunnels</div>
+        <svg width="100%" height="222" viewBox="0 0 366 222" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="f4p" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <marker id="m4p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5"/>
+            </marker>
+            <marker id="m4g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+
+          <!-- Overlay network virtual zone (spans all hosts) -->
+          <rect id="s4_overlay" x="8" y="8" width="350" height="210" rx="5"
+                fill="#06000f" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
+          <text id="s4_overlay_l" x="183" y="22" text-anchor="middle" font-size="5.5"
+                fill="#3a1a5a" font-family="'Press Start 2P',monospace" opacity="0">my-overlay  (10.0.1.0/24) — spans all hosts</text>
+
+          <!-- Host A box -->
+          <rect id="s4_hA" x="16" y="28" width="155" height="115" rx="4"
+                fill="#0a0018" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="s4_hA_l" x="93" y="41" text-anchor="middle" font-size="5"
+                fill="#2a3a4a" font-family="'Press Start 2P',monospace" opacity="0">WORKER NODE A</text>
+
+          <!-- service replica on A -->
+          <rect id="s4_svc1" x="26" y="48" width="135" height="86" rx="3"
+                fill="#100030" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="s4_svc1_t1" x="93" y="67" text-anchor="middle" font-size="6.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">web.1</text>
+          <text id="s4_svc1_t2" x="93" y="80" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">service: web</text>
+          <text id="s4_svc1_t3" x="93" y="93" text-anchor="middle" font-size="5"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">10.0.1.3</text>
+          <text id="s4_svc1_t4" x="93" y="107" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">curl http://api  ← works!</text>
+          <text id="s4_svc1_t5" x="93" y="121" text-anchor="middle" font-size="5"
+                fill="#555" font-family="'Press Start 2P',monospace" opacity="0">DNS → VIP → any api replica</text>
+
+          <!-- Host B box -->
+          <rect id="s4_hB" x="195" y="28" width="163" height="115" rx="4"
+                fill="#0a0018" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="s4_hB_l" x="276" y="41" text-anchor="middle" font-size="5"
+                fill="#2a3a4a" font-family="'Press Start 2P',monospace" opacity="0">WORKER NODE B</text>
+
+          <!-- api replicas on B -->
+          <rect id="s4_svc2a" x="205" y="48" width="66" height="86" rx="3"
+                fill="#001828" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s4_s2a_t1" x="238" y="67" text-anchor="middle" font-size="6"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api.1</text>
+          <text id="s4_s2a_t2" x="238" y="80" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">10.0.1.4</text>
+          <text id="s4_s2a_t3" x="238" y="94" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">replica 1</text>
+
+          <rect id="s4_svc2b" x="281" y="48" width="66" height="86" rx="3"
+                fill="#001828" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s4_s2b_t1" x="314" y="67" text-anchor="middle" font-size="6"
+                fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">api.2</text>
+          <text id="s4_s2b_t2" x="314" y="80" text-anchor="middle" font-size="5"
+                fill="#666" font-family="'Press Start 2P',monospace" opacity="0">10.0.1.5</text>
+          <text id="s4_s2b_t3" x="314" y="94" text-anchor="middle" font-size="5"
+                fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">replica 2</text>
+
+          <!-- VIP label -->
+          <text id="s4_vip" x="276" y="148" text-anchor="middle" font-size="5.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">api VIP: 10.0.1.10 (load-balanced)</text>
+
+          <!-- VXLAN tunnel indicator -->
+          <rect id="s4_tunnel" x="160" y="148" width="48" height="22" rx="3"
+                fill="#1a0030" stroke="#a080ff" stroke-width="1" opacity="0"/>
+          <text id="s4_tunnel_l" x="184" y="162" text-anchor="middle" font-size="5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">VXLAN</text>
+
+          <!-- Arrows web → VIP, VIP → api.1 & api.2 -->
+          <line id="s4_arr1" x1="161" y1="90" x2="198" y2="90"
+                stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#m4p)"/>
+          <text id="s4_arr1_l" x="180" y="84" text-anchor="middle" font-size="5.5"
+                fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">http://api</text>
+
+          <!-- VIP fans out to replicas -->
+          <line id="s4_fan1" x1="270" y1="80" x2="280" y2="80"
+                stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="2,2" opacity="0" marker-end="url(#m4g)"/>
+          <line id="s4_fan2" x1="270" y1="100" x2="280" y2="100"
+                stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="2,2" opacity="0" marker-end="url(#m4g)"/>
+
+          <!-- animated packets -->
+          <circle id="s4_pkt1" cx="161" cy="90" r="4" fill="#a080ff" opacity="0" filter="url(#f4p)"/>
+          <circle id="s4_pkt2" cx="270" cy="80" r="4" fill="#4eff9a" opacity="0" filter="url(#f4p)"/>
+
+          <!-- DNS round-robin label -->
+          <text id="s4_dns_l" x="183" y="183" text-anchor="middle" font-size="5.5"
+                fill="#3a1a5a" font-family="'Press Start 2P',monospace" opacity="0">DNS resolves "api" → VIP → round-robin LB</text>
+          <text id="s4_dns_l2" x="183" y="196" text-anchor="middle" font-size="5.5"
+                fill="#3a1a5a" font-family="'Press Start 2P',monospace" opacity="0">VXLAN encrypts all inter-host traffic</text>
+          <text id="s4_dns_l3" x="183" y="210" text-anchor="middle" font-size="5.5"
+                fill="#3a1a5a" font-family="'Press Start 2P',monospace" opacity="0">zero config — Swarm handles everything</text>
+        </svg>
+      </div>
+
+      <!-- Swarm commands -->
+      <div id="s4_term" class="panel" style="background:#060010;border:2px solid #2a0040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker swarm setup</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="t4l1" class="tline" style="color:#888">$ <span style="color:#a080ff">docker swarm init</span>   <span style="color:#555"># on manager node</span></div>
+          <div id="t4l2" class="tline" style="color:#888">$ <span style="color:#a080ff">docker swarm join</span> --token ... nodeB</div>
+          <div id="t4l3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker network create</span> \</div>
+          <div id="t4l4" class="tline" style="color:#4ec9e1" style="padding-left:12px">    --driver overlay my-overlay</div>
+          <div id="t4l5" class="tline" style="color:#888">$ <span style="color:#a080ff">docker service create</span> \</div>
+          <div id="t4l6" class="tline" style="color:#a080ff">    --network my-overlay --name api \</div>
+          <div id="t4l7" class="tline" style="color:#a080ff">    --replicas 2 my-api-image</div>
+          <div id="t4l8" class="tline" style="color:#4eff9a"># "api" resolves from ANY node ✓</div>
+        </div>
+      </div>
+
+      <!-- Comparison of all 4 methods -->
+      <div id="s4_cmp" class="panel" style="background:#060010;border:1px solid #2a0040;border-radius:3px;padding:10px 12px">
+        <div style="font-size:6.5px;color:#a080ff;margin-bottom:7px">◈ PATTERN DECISION GUIDE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.3">
+          <div><span style="color:#4eff9a">①</span> same net → container name (always start here)</div>
+          <div><span style="color:#4ec9e1">②</span> diff nets → <span style="color:#4ec9e1">docker network connect</span></div>
+          <div><span style="color:#e8a020">③</span> multi-host, no Swarm → host net + Consul/etcd</div>
+          <div><span style="color:#a080ff">④</span> multi-host, Swarm → overlay + service DNS</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Swarm overlay = virtual L2 network across all hosts. DNS is automatic.</div>
+    <div class="ih pu">Service name resolves to a VIP. Swarm load-balances across all replicas.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">overlay</div><div class="sl">NETWORK<br>DRIVER</div></div>
+    <div class="sc"><div class="sv gn">VIP</div><div class="sl">VIRTUAL<br>IP + LB</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">VXLAN</div><div class="sl">ENCRYPTED<br>TUNNEL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)" style="font-size:8px">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);
+      d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+    }
+    af(16,step);
+  });
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('s1_diag');hide('s1_term');hide('s1_rule');
+    ['s1_host','s1_host_l','s1_net','s1_net_l',
+     's1_web','s1_web_t1','s1_web_t2','s1_web_t3','s1_web_t4',
+     's1_api','s1_api_t1','s1_api_t2','s1_api_t3','s1_api_t4',
+     's1_db','s1_db_t1','s1_db_t2','s1_db_t3','s1_db_t4',
+     's1_arr1','s1_arr2','s1_pkt1','s1_pkt2','s1_dns_lbl'].forEach(svgHide);
+    ['t1l1','t1l2','t1l3','t1l4','t1l5','t1l6','t1l7'].forEach(hideEl);
+  }
+  if(n===2){
+    hide('s2_diag');hide('s2_term');hide('s2_tip');
+    ['s2_netA','s2_netA_l','s2_netB','s2_netB_l',
+     's2_fe','s2_fe_t1','s2_fe_t2','s2_fe_t3',
+     's2_api','s2_api_t1','s2_api_t2','s2_api_t3',
+     's2_db','s2_db_t1','s2_db_t2','s2_db_t3',
+     's2_arr1','s2_arr2','s2_blk','s2_blk_x','s2_blk_l',
+     's2_pkt1','s2_pkt2','s2_cmd_l','s2_cmd_l2'].forEach(svgHide);
+    ['t2l1','t2l2','t2l3','t2l4','t2l5','t2l6','t2l7'].forEach(hideEl);
+  }
+  if(n===3){
+    hide('s3_diag');hide('s3_term');hide('s3_tradeoff');
+    ['s3_hA','s3_hA_l','s3_app','s3_app_t1','s3_app_t2','s3_app_t3','s3_app_t4','s3_app_t5','s3_app_t6',
+     's3_hB','s3_hB_l','s3_db','s3_db_t1','s3_db_t2','s3_db_t3','s3_db_t4',
+     's3_consul','s3_consul_t1','s3_consul_t2','s3_consul_t3',
+     's3_reg1','s3_reg2','s3_qry','s3_qry_l',
+     's3_direct','s3_direct_l','s3_direct_l2','s3_pkt'].forEach(svgHide);
+    ['t3l1','t3l2','t3l3','t3l4','t3l5','t3l6','t3l7'].forEach(hideEl);
+  }
+  if(n===4){
+    hide('s4_diag');hide('s4_term');hide('s4_cmp');
+    ['s4_overlay','s4_overlay_l',
+     's4_hA','s4_hA_l','s4_svc1','s4_svc1_t1','s4_svc1_t2','s4_svc1_t3','s4_svc1_t4','s4_svc1_t5',
+     's4_hB','s4_hB_l',
+     's4_svc2a','s4_s2a_t1','s4_s2a_t2','s4_s2a_t3',
+     's4_svc2b','s4_s2b_t1','s4_s2b_t2','s4_s2b_t3',
+     's4_vip','s4_tunnel','s4_tunnel_l',
+     's4_arr1','s4_arr1_l','s4_fan1','s4_fan2',
+     's4_pkt1','s4_pkt2',
+     's4_dns_l','s4_dns_l2','s4_dns_l3'].forEach(svgHide);
+    ['t4l1','t4l2','t4l3','t4l4','t4l5','t4l6','t4l7','t4l8'].forEach(hideEl);
+  }
+}
+
+function play(n){
+  clr();
+
+  if(n===1){
+    show('s1_diag',200);
+    svgShow('s1_host',350);svgShow('s1_host_l',450);
+    svgShow('s1_net',650);svgShow('s1_net_l',750);
+    svgShow('s1_web',950);svgShow('s1_web_t1',1100);svgShow('s1_web_t2',1100);svgShow('s1_web_t3',1100);svgShow('s1_web_t4',1100);
+    svgShow('s1_api',1300);svgShow('s1_api_t1',1450);svgShow('s1_api_t2',1450);svgShow('s1_api_t3',1450);svgShow('s1_api_t4',1450);
+    svgShow('s1_db',1650);svgShow('s1_db_t1',1800);svgShow('s1_db_t2',1800);svgShow('s1_db_t3',1800);svgShow('s1_db_t4',1800);
+    svgShow('s1_arr1',2100);svgShow('s1_arr2',2250);
+    // packets bounce web→api then api→db, loop twice
+    function pktFlow(off){
+      movePkt('s1_pkt1',122,88,136,88,off,280);
+      movePkt('s1_pkt2',228,88,242,88,off+450,280);
+    }
+    pktFlow(2400);pktFlow(3200);
+    svgShow('s1_dns_lbl',3900);
+    show('s1_term',4300);
+    showEl('t1l1',4500);showEl('t1l2',4800);showEl('t1l3',5100);showEl('t1l4',5400);
+    showEl('t1l5',5700);showEl('t1l6',6000);showEl('t1l7',6350);
+    show('s1_rule',6800);
+  }
+
+  if(n===2){
+    show('s2_diag',200);
+    svgShow('s2_netA',350);svgShow('s2_netA_l',450);
+    svgShow('s2_netB',500);svgShow('s2_netB_l',600);
+    svgShow('s2_fe',800);svgShow('s2_fe_t1',950);svgShow('s2_fe_t2',950);svgShow('s2_fe_t3',950);
+    svgShow('s2_api',1150);svgShow('s2_api_t1',1300);svgShow('s2_api_t2',1300);svgShow('s2_api_t3',1300);
+    svgShow('s2_db',1500);svgShow('s2_db_t1',1650);svgShow('s2_db_t2',1650);svgShow('s2_db_t3',1650);
+    // show commands on diagram
+    svgShow('s2_cmd_l',1900);svgShow('s2_cmd_l2',2200);
+    // ok arrows
+    svgShow('s2_arr1',2600);svgShow('s2_arr2',2750);
+    // packets
+    movePkt('s2_pkt1',106,63,137,63,2900,300);
+    movePkt('s2_pkt2',227,63,258,63,3350,300);
+    // blocked arc
+    svgShow('s2_blk',3800);svgShow('s2_blk_x',4100);svgShow('s2_blk_l',4200);
+    show('s2_term',4700);
+    showEl('t2l1',4900);showEl('t2l2',5200);showEl('t2l3',5600);
+    showEl('t2l4',5950);showEl('t2l5',6250);showEl('t2l6',6500);showEl('t2l7',6850);
+    show('s2_tip',7300);
+  }
+
+  if(n===3){
+    show('s3_diag',200);
+    svgShow('s3_hA',350);svgShow('s3_hA_l',450);
+    svgShow('s3_app',650);
+    svgShow('s3_app_t1',800);svgShow('s3_app_t2',800);svgShow('s3_app_t3',800);svgShow('s3_app_t4',800);
+    svgShow('s3_hB',1000);svgShow('s3_hB_l',1100);
+    svgShow('s3_db',1300);
+    svgShow('s3_db_t1',1450);svgShow('s3_db_t2',1450);svgShow('s3_db_t3',1450);
+    svgShow('s3_consul',1700);svgShow('s3_consul_t1',1850);svgShow('s3_consul_t2',1850);
+    // both containers register
+    svgShow('s3_reg1',2100);svgShow('s3_reg2',2100);
+    svgShow('s3_app_t5',2300);svgShow('s3_app_t6',2300);svgShow('s3_db_t4',2300);
+    svgShow('s3_consul_t3',2600);
+    // app queries consul
+    svgShow('s3_qry',3000);svgShow('s3_qry_l',3000);
+    // direct connection
+    svgShow('s3_direct',3600);svgShow('s3_direct_l',3600);svgShow('s3_direct_l2',3700);
+    movePkt('s3_pkt',163,80,211,80,3750,450);
+    show('s3_term',4400);
+    showEl('t3l1',4600);showEl('t3l2',4900);showEl('t3l3',5200);showEl('t3l4',5550);
+    showEl('t3l5',5850);showEl('t3l6',6150);showEl('t3l7',6500);
+    show('s3_tradeoff',6900);
+  }
+
+  if(n===4){
+    show('s4_diag',200);
+    svgShow('s4_overlay',350);svgShow('s4_overlay_l',500);
+    svgShow('s4_hA',700);svgShow('s4_hA_l',800);
+    svgShow('s4_svc1',1000);svgShow('s4_svc1_t1',1150);svgShow('s4_svc1_t2',1150);svgShow('s4_svc1_t3',1150);svgShow('s4_svc1_t4',1150);svgShow('s4_svc1_t5',1150);
+    svgShow('s4_hB',1350);svgShow('s4_hB_l',1450);
+    svgShow('s4_svc2a',1600);svgShow('s4_s2a_t1',1750);svgShow('s4_s2a_t2',1750);svgShow('s4_s2a_t3',1750);
+    svgShow('s4_svc2b',1900);svgShow('s4_s2b_t1',2050);svgShow('s4_s2b_t2',2050);svgShow('s4_s2b_t3',2050);
+    svgShow('s4_tunnel',2300);svgShow('s4_tunnel_l',2400);
+    svgShow('s4_vip',2600);
+    // web → api via overlay
+    svgShow('s4_arr1',2900);svgShow('s4_arr1_l',2900);
+    movePkt('s4_pkt1',161,90,198,90,3050,380);
+    // VIP fans to replicas
+    svgShow('s4_fan1',3600);svgShow('s4_fan2',3700);
+    movePkt('s4_pkt2',270,80,280,80,3800,250);
+    svgShow('s4_dns_l',4300);svgShow('s4_dns_l2',4500);svgShow('s4_dns_l3',4700);
+    show('s4_term',5100);
+    showEl('t4l1',5300);showEl('t4l2',5600);showEl('t4l3',5900);showEl('t4l4',6100);
+    showEl('t4l5',6400);showEl('t4l6',6650);showEl('t4l7',6900);showEl('t4l8',7200);
+    show('s4_cmp',7700);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>
