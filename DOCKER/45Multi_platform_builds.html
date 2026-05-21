@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Multi-platform Builds</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.or{border-color:#ff9f43}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.or{color:#ff9f43}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.or{color:#ff9f43}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* arch chip */
+.arch-chip{border:2px solid;border-radius:4px;padding:10px 10px;display:flex;flex-direction:column;gap:6px;flex:1}
+.arch-chip-top{display:flex;align-items:center;gap:6px}
+.arch-icon{font-size:22px}
+.arch-name{font-size:9px;letter-spacing:.5px}
+.arch-detail{font-size:6px;color:#888;line-height:1.7}
+
+/* manifest box */
+.manifest{border:2px solid #4eff9a;border-radius:4px;padding:10px 12px;background:#04140a}
+.manifest-title{font-size:8px;color:#4eff9a;margin-bottom:8px;letter-spacing:.5px}
+.manifest-entry{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #1a3a1a;border-radius:2px;margin-bottom:4px;font-size:7px;font-family:'Press Start 2P',monospace}
+.manifest-entry:last-child{margin-bottom:0}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:8px;font-family:'Press Start 2P',monospace;line-height:2.2;color:#ccc}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* pull routing */
+.machine-box{border:2px solid;border-radius:3px;padding:8px 8px;display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;transition:border-color .4s,background .4s}
+.machine-box.lit{background:#04140a}
+
+/* beam */
+.beam-wrap{flex:1;position:relative;height:3px;margin-top:1px}
+.beam-line{height:100%;width:0;border-radius:1px;transition:width .7s ease-out;position:absolute;top:0;left:0}
+
+/* qemu diagram */
+.qemu-row{display:flex;align-items:center;gap:0;width:100%}
+.qbox{border:2px solid;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+.qbox-label{font-size:7px;text-align:center;line-height:1.5}
+.qarrow{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px}
+.qarrow-line{height:3px;width:0;border-radius:1px;transition:width .7s ease-out}
+.qarrow-label{font-size:6px;color:#888;white-space:nowrap;text-align:center}
+
+/* error vs success */
+.err-box{border:2px solid #e85050;border-radius:3px;padding:10px 12px;background:#1a0808}
+.ok-box{border:2px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a}
+
+/* step list */
+.step-item{display:flex;gap:8px;align-items:flex-start;padding:5px 0;font-size:7px}
+.step-num{color:#ff9f43;flex-shrink:0;width:14px}
+.step-text{color:#ccc;line-height:1.8}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — THE PROBLEM: arm64 vs amd64
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">MULTI-PLATFORM BUILDS</div>
+    <div class="hdr-sub">ONE IMAGE FOR ARM AND x86</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">THE MISMATCH PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">BROKEN CI</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- two arch chips -->
+      <div class="fade" id="s1e1" style="display:flex;gap:8px">
+        <div class="arch-chip" style="border-color:#ff9f43">
+          <div class="arch-chip-top">
+            <div class="arch-icon">💻</div>
+            <div>
+              <div class="arch-name" style="color:#ff9f43">M1 / M2 Mac</div>
+            </div>
+          </div>
+          <div class="arch-detail">
+            CPU: ARM64<br>
+            linux/arm64<br>
+            Apple Silicon
+          </div>
+        </div>
+        <div class="arch-chip" style="border-color:#4ec9e1">
+          <div class="arch-chip-top">
+            <div class="arch-icon">🖥️</div>
+            <div>
+              <div class="arch-name" style="color:#4ec9e1">CI / Cloud</div>
+            </div>
+          </div>
+          <div class="arch-detail">
+            CPU: x86_64<br>
+            linux/amd64<br>
+            AWS / GCP / GitHub
+          </div>
+        </div>
+      </div>
+
+      <!-- the failure -->
+      <div class="fade" id="s1e2">
+        <div class="err-box">
+          <div style="font-size:7px;color:#e85050;margin-bottom:7px">❌ CLASSIC FAILURE — NO MULTI-PLATFORM BUILD</div>
+          <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.2">
+            <span style="color:#888"># Mac dev builds image locally</span><br>
+            <span style="color:#4ec9e1">docker build</span> -t my-app .<br>
+            <span style="color:#888"># → linux/arm64 image</span><br><br>
+            <span style="color:#888"># CI pulls and runs it</span><br>
+            <span style="color:#4ec9e1">docker run</span> my-app<br>
+            <span style="color:#e85050">exec format error</span> 💀
+          </div>
+        </div>
+      </div>
+
+      <!-- why it breaks -->
+      <div class="fade" id="s1e3" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">⚠ WHY IT BREAKS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          A binary compiled for <span style="color:#ff9f43">ARM64</span> cannot run<br>
+          on an <span style="color:#4ec9e1">x86_64</span> CPU. Different instruction sets.<br>
+          Docker images are <span style="color:#e8a020">architecture-specific</span><br>
+          unless you explicitly build for multiple targets.
+        </div>
+      </div>
+
+      <!-- solution teaser -->
+      <div class="fade" id="s1e4" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">💡 THE FIX — buildx + --platform</div>
+        <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.1">
+          <span style="color:#4ec9e1">docker buildx build</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--platform</span> \<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">linux/amd64,linux/arm64</span> \<br>
+          &nbsp;&nbsp;-t my-app --push .
+        </div>
+        <div style="margin-top:6px;font-size:7px;color:#888">one command → two images → one manifest</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">arm64 binary + x86 machine = exec format error.</div>
+    <div class="ih rd">"Works on my machine" = arm64 vs amd64 mismatch.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv or">arm64</div><div class="sl">M1/M2 Mac</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">amd64</div><div class="sl">CI / cloud</div></div>
+    <div class="sc"><div class="sv rd">crash</div><div class="sl">wrong arch</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — HOW BUILDX + QEMU WORKS
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">BUILDX + QEMU</div>
+    <div class="hdr-sub">HOW CROSS-COMPILATION WORKS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">UNDER THE HOOD</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">EMULATION</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- setup buildx builder -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">STEP 1 — CREATE A MULTI-PLATFORM BUILDER</div>
+        <div class="cmd-block" style="border-color:#e8a020">
+          <div class="cmd-prompt">one-time setup</div>
+          <div class="cmd-line" style="line-height:2.3">
+            <span style="color:#4ec9e1">docker buildx create</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--name</span> multi \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--driver</span> docker-container \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--use</span><br>
+            <span style="color:#4ec9e1">docker buildx inspect</span> <span style="color:#e8a020">--bootstrap</span>
+          </div>
+          <div class="cmd-out"><span style="color:#4eff9a">Platforms: linux/amd64, linux/arm64, linux/arm/v7…</span></div>
+        </div>
+      </div>
+
+      <!-- qemu diagram -->
+      <div class="fade" id="s2e2">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">STEP 2 — QEMU EMULATES THE TARGET CPU</div>
+        <div class="qemu-row">
+          <!-- host -->
+          <div class="qbox" style="border-color:#4ec9e1;width:70px">
+            <div style="font-size:16px">🖥️</div>
+            <div class="qbox-label" style="color:#4ec9e1">HOST<br>amd64</div>
+          </div>
+          <!-- arrow 1 -->
+          <div class="qarrow">
+            <div style="width:100%;position:relative;height:14px">
+              <div id="qa1" class="qarrow-line" style="background:#e8a020;top:5px"></div>
+            </div>
+            <div class="qarrow-label">QEMU<br>emulates</div>
+          </div>
+          <!-- qemu box -->
+          <div class="qbox" style="border-color:#e8a020;width:74px">
+            <div style="font-size:16px">⚙️</div>
+            <div class="qbox-label" style="color:#e8a020">QEMU<br>arm64<br>layer</div>
+          </div>
+          <!-- arrow 2 -->
+          <div class="qarrow">
+            <div style="width:100%;position:relative;height:14px">
+              <div id="qa2" class="qarrow-line" style="background:#ff9f43;top:5px"></div>
+            </div>
+            <div class="qarrow-label">builds<br>arm64</div>
+          </div>
+          <!-- output -->
+          <div class="qbox" style="border-color:#ff9f43;width:70px">
+            <div style="font-size:16px">📦</div>
+            <div class="qbox-label" style="color:#ff9f43">IMAGE<br>arm64</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- what happens internally -->
+      <div class="fade" id="s2e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">WHAT buildx DOES INTERNALLY</div>
+        <div style="display:flex;flex-direction:column;gap:0">
+          <div class="step-item">
+            <span class="step-num">1.</span>
+            <span class="step-text">Spawns a build container per platform (amd64, arm64)</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">2.</span>
+            <span class="step-text">QEMU translates arm64 instructions → runs on x86 host</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">3.</span>
+            <span class="step-text">Each platform produces its own image layer set</span>
+          </div>
+          <div class="step-item">
+            <span class="step-num">4.</span>
+            <span class="step-text">A <span style="color:#4eff9a">manifest list</span> wraps both → pushed as one tag</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- note on speed -->
+      <div class="fade" id="s2e4" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:5px">⚠ QEMU IS SLOWER THAN NATIVE</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Emulating arm64 on amd64 is <span style="color:#e8a020">4–10× slower</span>.<br>
+          For production CI, use <span style="color:#4eff9a">native ARM runners</span><br>
+          (GitHub has arm64 runners) to avoid this.<br>
+          QEMU is fine for occasional local builds.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">buildx uses QEMU to emulate foreign CPU architectures.</div>
+    <div class="ih am">Each platform builds independently → joined in manifest.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">QEMU</div><div class="sl">CPU emulator</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">buildx</div><div class="sl">multi-builder</div></div>
+    <div class="sc"><div class="sv or">4–10×</div><div class="sl">emulation cost</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — MANIFEST LIST + AUTO-PULL
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE MANIFEST LIST</div>
+    <div class="hdr-sub">DOCKER PICKS THE RIGHT VARIANT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">MULTI-ARCH MANIFEST</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">AUTO-ROUTING</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- manifest structure -->
+      <div class="fade" id="s3e1">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">ONE TAG — TWO IMAGE VARIANTS</div>
+        <div class="manifest">
+          <div class="manifest-title">🗂 myuser/my-app:1.0.0 (manifest list)</div>
+          <div class="manifest-entry" id="me1" style="opacity:.4;transition:opacity .4s">
+            <span style="font-size:12px">📦</span>
+            <div style="flex:1">
+              <div style="color:#4ec9e1">linux/amd64</div>
+              <div style="font-size:6px;color:#555;margin-top:2px">sha256:a3f9c1b… — x86_64 layers</div>
+            </div>
+            <span style="color:#888;font-size:6px">195 MB</span>
+          </div>
+          <div class="manifest-entry" id="me2" style="opacity:.4;transition:opacity .4s">
+            <span style="font-size:12px">📦</span>
+            <div style="flex:1">
+              <div style="color:#ff9f43">linux/arm64</div>
+              <div style="font-size:6px;color:#555;margin-top:2px">sha256:d7e2f4a… — ARM64 layers</div>
+            </div>
+            <span style="color:#888;font-size:6px">188 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- inspect manifest -->
+      <div class="fade" id="s3e2">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">INSPECT THE MANIFEST LIST</div>
+        <div class="cmd-block">
+          <div class="cmd-prompt">$ docker buildx imagetools inspect myuser/my-app:1.0.0</div>
+          <div class="cmd-out" style="color:#ccc">
+            Name: myuser/my-app:1.0.0<br>
+            MediaType: application/vnd.oci.image.index<br><br>
+            Manifests:<br>
+            &nbsp;&nbsp;Name: …@sha256:a3f9…<br>
+            &nbsp;&nbsp;Platform: <span style="color:#4ec9e1">linux/amd64</span><br><br>
+            &nbsp;&nbsp;Name: …@sha256:d7e2…<br>
+            &nbsp;&nbsp;Platform: <span style="color:#ff9f43">linux/arm64</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- auto-routing diagram -->
+      <div class="fade" id="s3e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">DOCKER PULLS CORRECT VARIANT AUTOMATICALLY</div>
+        <!-- hub in center -->
+        <div style="display:flex;align-items:center;justify-content:center;gap:0">
+          <!-- left machine -->
+          <div class="machine-box" id="mb_mac" style="border-color:#ff9f43;width:80px">
+            <div style="font-size:18px">💻</div>
+            <div style="font-size:6px;color:#ff9f43;text-align:center">M2 Mac<br>arm64</div>
+            <div style="font-size:6px;color:#555;text-align:center" id="ms_mac">idle</div>
+          </div>
+          <!-- left arrow -->
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:6px;color:#ff9f43;text-align:center">arm64</div>
+            <div style="width:100%;position:relative;height:14px">
+              <div id="arr_mac" style="height:3px;background:#ff9f43;width:0;transition:width .6s ease-out;position:absolute;top:5px"></div>
+            </div>
+          </div>
+          <!-- hub -->
+          <div style="border:2px solid #4eff9a;border-radius:3px;padding:8px 6px;display:flex;flex-direction:column;align-items:center;gap:3px;width:72px;flex-shrink:0;background:#04140a">
+            <div style="font-size:18px">🐳</div>
+            <div style="font-size:6px;color:#4eff9a;text-align:center">Docker<br>Hub</div>
+          </div>
+          <!-- right arrow -->
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:6px;color:#4ec9e1;text-align:center">amd64</div>
+            <div style="width:100%;position:relative;height:14px">
+              <div id="arr_ci" style="height:3px;background:#4ec9e1;width:0;transition:width .6s ease-out;position:absolute;top:5px"></div>
+            </div>
+          </div>
+          <!-- right machine -->
+          <div class="machine-box" id="mb_ci" style="border-color:#4ec9e1;width:80px">
+            <div style="font-size:18px">☁️</div>
+            <div style="font-size:6px;color:#4ec9e1;text-align:center">CI / AWS<br>amd64</div>
+            <div style="font-size:6px;color:#555;text-align:center" id="ms_ci">idle</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- same tag, right image -->
+      <div class="fade" id="s3e4" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">✅ SAME COMMAND. RIGHT BINARY. ALWAYS.</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9;font-family:'Press Start 2P',monospace">
+          <span style="color:#888"># exact same command on both machines</span><br>
+          <span style="color:#4ec9e1">docker run</span> myuser/my-app:<span style="color:#4eff9a">1.0.0</span><br>
+          <span style="color:#888"># M2 Mac → gets arm64 build ✓</span><br>
+          <span style="color:#888"># AWS x86 → gets amd64 build ✓</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">One tag points to a manifest list of arch variants.</div>
+    <div class="ih cy">Docker reads your CPU and pulls the matching image.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">manifest</div><div class="sl">wraps both</div></div>
+    <div class="sc"><div class="sv gn">auto</div><div class="sl">right arch pulled</div></div>
+    <div class="sc"><div class="sv gn">same tag</div><div class="sl">everywhere</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — FULL COMMAND + CI PATTERN
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">THE FULL COMMAND</div>
+    <div class="hdr-sub">COMPLETE PATTERN FOR CI/CD</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL GUIDE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- the full build command -->
+      <div class="cmd-block fade" id="s4e1" style="border-color:#4eff9a">
+        <div class="cmd-prompt">COMPLETE buildx COMMAND</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker buildx build</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--platform</span> <span style="color:#4eff9a">linux/amd64,linux/arm64</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--tag</span> <span style="color:#ff9f43">myuser/my-app:1.0.0</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--tag</span> <span style="color:#ff9f43">myuser/my-app:latest</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--push</span> .
+        </div>
+        <div class="cmd-out"><span style="color:#888">--push is required for multi-platform (no local load)</span></div>
+      </div>
+
+      <!-- GitHub Actions snippet -->
+      <div class="cmd-block fade" id="s4e2" style="border-color:#4ec9e1">
+        <div class="cmd-prompt">GITHUB ACTIONS — CI PATTERN</div>
+        <div class="cmd-line" style="line-height:2.3;color:#ccc">
+          <span style="color:#888">- name:</span> Set up buildx<br>
+          &nbsp;&nbsp;<span style="color:#888">uses:</span> <span style="color:#4eff9a">docker/setup-buildx-action@v3</span><br><br>
+          <span style="color:#888">- name:</span> Build and push<br>
+          &nbsp;&nbsp;<span style="color:#888">uses:</span> <span style="color:#4eff9a">docker/build-push-action@v5</span><br>
+          &nbsp;&nbsp;<span style="color:#888">with:</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4ec9e1">platforms:</span> <span style="color:#4eff9a">linux/amd64,linux/arm64</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4ec9e1">push:</span> <span style="color:#ff9f43">true</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4ec9e1">tags:</span> <span style="color:#4eff9a">myuser/my-app:1.0.0</span>
+        </div>
+      </div>
+
+      <!-- gotchas -->
+      <div class="fade" id="s4e3" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:7px;letter-spacing:1px">⚠ GOTCHAS TO KNOW</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;gap:8px;align-items:flex-start;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7"><span style="color:#e8a020">--load</span> doesn't work with multi-platform — use <span style="color:#4eff9a">--push</span></span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;font-size:7px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Base image must also support your target platforms</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;font-size:7px">
+            <span style="color:#e8a020;flex-shrink:0">!</span>
+            <span style="color:#ccc;line-height:1.7">Use <span style="color:#4eff9a">--platform=$BUILDPLATFORM</span> in FROM for build tools</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start;font-size:7px">
+            <span style="color:#e8a020;flex-shrink:0">!</span>
+            <span style="color:#ccc;line-height:1.7">Native runners are faster — GitHub arm64 runners avoid QEMU</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- platform ARG pattern -->
+      <div class="cmd-block fade" id="s4e4" style="border-color:#ff9f43">
+        <div class="cmd-prompt">DOCKERFILE — NATIVE BUILD TOOLS PATTERN</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#888"># use host arch for build stage</span><br>
+          <span style="color:#ff9f43">FROM</span> <span style="color:#e8a020">--platform=$BUILDPLATFORM</span> \<br>
+          &nbsp;&nbsp;node:18 <span style="color:#888">AS builder</span><br>
+          <span style="color:#888">RUN</span> npm ci && npm run build<br><br>
+          <span style="color:#888"># target arch for runtime stage</span><br>
+          <span style="color:#ff9f43">FROM</span> node:18-slim<br>
+          <span style="color:#888">COPY --from=builder</span> /app/dist .
+        </div>
+        <div class="cmd-out"><span style="color:#4eff9a">build tools run native → output runs on target ✓</span></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">buildx + --platform + --push = multi-arch manifest.</div>
+    <div class="ih" style="color:#4eff9a">Use $BUILDPLATFORM for build tools, target arch for runtime.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">buildx</div><div class="sl">extended build</div></div>
+    <div class="sc"><div class="sv gn">--push</div><div class="sl">required flag</div></div>
+    <div class="sc"><div class="sv or">$BUILTP</div><div class="sl">native tools</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4'],
+    3:['s3e1','s3e2','s3e3','s3e4'],
+    4:['s4e1','s4e2','s4e3','s4e4']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  // reset qemu arrows
+  ['qa1','qa2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+  // reset manifest entries
+  ['me1','me2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.opacity='.4';
+  });
+  // reset routing arrows & machines
+  ['arr_mac','arr_ci'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+  ['mb_mac','mb_ci'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.className='machine-box '+({mb_mac:'style="border-color:#ff9f43"',mb_ci:'style="border-color:#4ec9e1"'}[id]||'');
+  });
+  const msmac=document.getElementById('ms_mac');
+  const msci=document.getElementById('ms_ci');
+  if(msmac){msmac.textContent='idle';msmac.style.color='#555';}
+  if(msci){msci.textContent='idle';msci.style.color='#555';}
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1100);
+  show('s1e3',2000);
+  show('s1e4',2900);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  show('s2e2',1200);
+  setTimeout(()=>{
+    const a1=document.getElementById('qa1');
+    if(a1) a1.style.width='100%';
+  },1400);
+  setTimeout(()=>{
+    const a2=document.getElementById('qa2');
+    if(a2) a2.style.width='100%';
+  },2000);
+  show('s2e3',2700);
+  show('s2e4',3600);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  // light up manifest entries
+  setTimeout(()=>{
+    const m1=document.getElementById('me1');
+    if(m1) m1.style.opacity='1';
+  },600);
+  setTimeout(()=>{
+    const m2=document.getElementById('me2');
+    if(m2) m2.style.opacity='1';
+  },1000);
+  show('s3e2',1400);
+  show('s3e3',2300);
+  // animate arrows + machine states
+  setTimeout(()=>{
+    const am=document.getElementById('arr_mac');
+    if(am) am.style.width='100%';
+    const msmac=document.getElementById('ms_mac');
+    if(msmac){msmac.textContent='pulling…';msmac.style.color='#ff9f43';}
+  },2500);
+  setTimeout(()=>{
+    const ac=document.getElementById('arr_ci');
+    if(ac) ac.style.width='100%';
+    const msci=document.getElementById('ms_ci');
+    if(msci){msci.textContent='pulling…';msci.style.color='#4ec9e1';}
+  },3000);
+  setTimeout(()=>{
+    const msmac=document.getElementById('ms_mac');
+    if(msmac){msmac.textContent='arm64 ✓';msmac.style.color='#4eff9a';}
+    const msci=document.getElementById('ms_ci');
+    if(msci){msci.textContent='amd64 ✓';msci.style.color='#4eff9a';}
+  },3700);
+  show('s3e4',4300);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  show('s4e2',1200);
+  show('s4e3',2200);
+  show('s4e4',3200);
+}
+
+play1();
+</script>
+</body>
+</html>

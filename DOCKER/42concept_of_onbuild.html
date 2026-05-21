@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker ONBUILD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+/* FIX: panel starts invisible; .vis makes it visible */
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+/* FIX: tline starts invisible; inline style showEl/hideEl controls visibility */
+.tline{opacity:0;transition:opacity .3s}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ════════════ SCENE 1: The mystery ════════════ -->
+<div class="scene active" id="s1" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #1a1040">
+    <div class="hdr-title" style="color:#a080ff">MAGIC DOCKERFILE</div>
+    <div class="hdr-sub">INSTRUCTIONS THAT AREN'T THERE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">THE MYSTERY</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">ONBUILD</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0820;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">my-app/Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#a080ff">FROM company-node:20</div>
+          <div id="s1l1" class="tline" style="color:#888"># that's it. one line.</div>
+          <div id="s1l2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker build</span> -t my-app .</div>
+          <div id="s1l3" class="tline" style="color:#aaa">Step 1/1 : FROM company-node:20</div>
+          <div id="s1l4" class="tline" style="color:#e8a020"> ---&gt; Running ONBUILD triggers…</div>
+          <div id="s1l5" class="tline" style="color:#4eff9a"> ---&gt; COPY . /app</div>
+          <div id="s1l6" class="tline" style="color:#4eff9a"> ---&gt; RUN npm ci</div>
+          <div id="s1l7" class="tline" style="color:#4eff9a">Successfully built a1b2c3d4</div>
+        </div>
+      </div>
+
+      <div id="s1diag" class="panel" style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#0a0820;border-bottom:1px solid #1a1040;font-size:6px;color:#a080ff;text-align:center">WHERE DID THOSE INSTRUCTIONS COME FROM?</div>
+        <svg width="100%" height="150" viewBox="0 0 366 150" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="purpArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <filter id="glow1">
+              <feGaussianBlur stdDeviation="2" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+
+          <rect x="6" y="16" width="148" height="120" rx="4" fill="#0a0020" stroke="#2a1f5d" stroke-width="1.5"/>
+          <text x="80" y="34" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace">company-node:20</text>
+          <text x="80" y="46" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">(parent image)</text>
+
+          <rect id="s1ob1" x="16" y="56" width="128" height="20" rx="2" fill="#160030" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s1ob1t" x="80" y="70" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">⏳ ONBUILD COPY . /app</text>
+          <rect id="s1ob2" x="16" y="82" width="128" height="20" rx="2" fill="#160030" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s1ob2t" x="80" y="96" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">⏳ ONBUILD RUN npm ci</text>
+          <text id="s1ob3" x="80" y="128" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">stored, not yet run</text>
+
+          <line id="s1arr" x1="156" y1="75" x2="208" y2="75" stroke="#a080ff" stroke-width="2" opacity="0" marker-end="url(#purpArr)"/>
+          <text id="s1arrlbl" x="182" y="68" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">FROM fires</text>
+          <text id="s1arrlbl2" x="182" y="86" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">triggers</text>
+
+          <rect x="212" y="16" width="148" height="120" rx="4" fill="#0a0020" stroke="#2a1f3d" stroke-width="1.5"/>
+          <text x="286" y="34" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace">my-app</text>
+          <text x="286" y="46" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">(child image)</text>
+
+          <rect id="s1ch1" x="222" y="56" width="128" height="20" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s1ch1t" x="286" y="70" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ COPY . /app</text>
+          <rect id="s1ch2" x="222" y="82" width="128" height="20" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s1ch2t" x="286" y="96" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ RUN npm ci</text>
+          <text id="s1ch3" x="286" y="128" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">auto-injected ✓</text>
+
+          <circle id="s1pkt" cx="156" cy="75" r="4" fill="#a080ff" opacity="0" filter="url(#glow1)"/>
+        </svg>
+      </div>
+
+      <div id="s1card" class="panel" style="background:#0a0020;border-left:4px solid #a080ff;border-top:1px solid #1a1040;border-right:1px solid #1a1040;border-bottom:1px solid #1a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">THE ANSWER: ONBUILD</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">ONBUILD stores instructions inside a parent image. They do nothing when the parent is built. They fire automatically the moment any child image uses that parent as its FROM base.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">ONBUILD instructions sleep inside the parent image.</div>
+    <div class="ih pu">They wake up the instant a child image runs FROM parent.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">sleep</div><div class="sl">IN PARENT<br>BUILD</div></div>
+    <div class="sc"><div class="sv pu">→</div><div class="sl">CHILD USES<br>FROM</div></div>
+    <div class="sc"><div class="sv gn">fire</div><div class="sl">AUTO<br>EXECUTE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 2: Parent Dockerfile ════════════ -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">THE PARENT IMAGE</div>
+    <div class="hdr-sub">HOW A PLATFORM TEAM WRITES IT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <!-- BUG FIX: was </div> instead of </span> -->
+    <span class="slabel" style="color:#4ec9e1">PARENT BUILD</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">RUNS ONCE</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">company-node/Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555"># Platform team writes this once</div>
+          <div id="s2l1" class="tline" style="color:#4ec9e1">FROM node:20-alpine</div>
+          <div id="s2l2" class="tline" style="color:#4ec9e1">WORKDIR /app</div>
+          <div id="s2l3" class="tline" style="color:#555"># These run NOW, in the parent build:</div>
+          <div id="s2l4" class="tline" style="color:#4ec9e1">RUN apk add --no-cache curl</div>
+          <div id="s2l5" class="tline" style="color:#4ec9e1">ENV NODE_ENV=production</div>
+          <div id="s2l6" class="tline" style="color:#555"># These are DEFERRED to child builds:</div>
+          <div id="s2l7" class="tline" style="color:#a080ff">ONBUILD COPY package*.json ./</div>
+          <div id="s2l8" class="tline" style="color:#a080ff">ONBUILD RUN npm ci --only=prod</div>
+          <div id="s2l9" class="tline" style="color:#a080ff">ONBUILD COPY . .</div>
+          <div id="s2l10" class="tline" style="color:#4ec9e1">CMD ["node","server.js"]</div>
+        </div>
+      </div>
+
+      <div id="s2timeline" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#001018;border-bottom:1px solid #0d2030;font-size:6px;color:#4ec9e1;text-align:center">WHEN PLATFORM TEAM RUNS: docker build -t company-node:20 .</div>
+        <svg width="100%" height="128" viewBox="0 0 366 128" xmlns="http://www.w3.org/2000/svg">
+          <line id="s2tl" x1="30" y1="64" x2="336" y2="64" stroke="#0d2030" stroke-width="1.5" opacity="0"/>
+
+          <circle id="s2n1" cx="60" cy="64" r="10" fill="#001018" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2n1t" x="60" y="68" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">1</text>
+          <text id="s2n1l" x="60" y="88" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">FROM</text>
+          <text id="s2n1l2" x="60" y="98" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">runs ✓</text>
+
+          <circle id="s2n2" cx="128" cy="64" r="10" fill="#001018" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2n2t" x="128" y="68" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">2</text>
+          <text id="s2n2l" x="128" y="88" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">RUN apk</text>
+          <text id="s2n2l2" x="128" y="98" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">runs ✓</text>
+
+          <circle id="s2n3" cx="196" cy="64" r="10" fill="#001018" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s2n3t" x="196" y="68" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">3</text>
+          <text id="s2n3l" x="196" y="88" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">ENV</text>
+          <text id="s2n3l2" x="196" y="98" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">runs ✓</text>
+
+          <circle id="s2n4" cx="300" cy="64" r="14" fill="#0a0020" stroke="#a080ff" stroke-width="2" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s2n4t" x="300" y="60" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">ON</text>
+          <text id="s2n4t2" x="300" y="72" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">BUILD</text>
+          <text id="s2n4l" x="300" y="92" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">stored</text>
+          <text id="s2n4l2" x="300" y="102" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">not run ⏳</text>
+
+          <text id="s2lbl" x="183" y="24" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">regular instructions execute immediately</text>
+          <text id="s2lbl2" x="300" y="14" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">deferred →</text>
+        </svg>
+      </div>
+
+      <div id="s2inspect" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">inspect stored triggers</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker inspect</span> company-node:20 \</div>
+          <div style="color:#888">  | grep -A5 OnBuild</div>
+          <div id="s2il1" class="tline" style="color:#a080ff">"OnBuild": [</div>
+          <div id="s2il2" class="tline" style="color:#a080ff">  "COPY package*.json ./",</div>
+          <div id="s2il3" class="tline" style="color:#a080ff">  "RUN npm ci --only=prod",</div>
+          <div id="s2il4" class="tline" style="color:#a080ff">  "COPY . ."</div>
+          <div id="s2il5" class="tline" style="color:#a080ff">]</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Regular instructions run during the parent build and are baked in.</div>
+    <div class="ih">ONBUILD instructions are stored in image metadata — not executed yet.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">RUN</div><div class="sl">EXECUTES<br>NOW</div></div>
+    <div class="sc"><div class="sv pu">ON<br>BUILD</div><div class="sl">STORED<br>FOR LATER</div></div>
+    <div class="sc"><div class="sv am">meta</div><div class="sl">IN IMAGE<br>METADATA</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 3: Child build — triggers fire ════════════ -->
+<div class="scene" id="s3" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">THE CHILD BUILD</div>
+    <div class="hdr-sub">FROM FIRES THE STORED TRIGGERS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">CHILD BUILD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">AUTO-INJECT</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">my-service/Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888"># The whole Dockerfile. No kidding.</div>
+          <div id="s3l1" class="tline" style="color:#4eff9a">FROM company-node:20</div>
+          <div id="s3l2" class="tline" style="color:#555"># ONBUILD triggers inject automatically:</div>
+          <div id="s3l3" class="tline" style="color:#a080ff"># → COPY package*.json ./  (auto)</div>
+          <div id="s3l4" class="tline" style="color:#a080ff"># → RUN npm ci --only=prod (auto)</div>
+          <div id="s3l5" class="tline" style="color:#a080ff"># → COPY . .               (auto)</div>
+        </div>
+      </div>
+
+      <div id="s3buildout" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker build output</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker build</span> -t my-service .</div>
+          <div id="s3o1" class="tline" style="color:#aaa">Step 1/1 : FROM company-node:20</div>
+          <div id="s3o2" class="tline" style="color:#e8a020"> ---&gt; Executing 3 build triggers…</div>
+          <div id="s3o3" class="tline" style="color:#a080ff"> ---&gt; [1/3] COPY package*.json ./</div>
+          <div id="s3o4" class="tline" style="color:#a080ff"> ---&gt; [2/3] RUN npm ci --only=prod</div>
+          <div id="s3o5" class="tline" style="color:#a080ff"> ---&gt; [3/3] COPY . .</div>
+          <div id="s3o6" class="tline" style="color:#4eff9a">Successfully built f9e8d7c6</div>
+          <div id="s3o7" class="tline" style="color:#4eff9a">Successfully tagged my-service:latest</div>
+        </div>
+      </div>
+
+      <div id="s3layers" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#002010;border-bottom:1px solid #1a2810;font-size:6px;color:#4eff9a;text-align:center">RESULTING IMAGE LAYERS</div>
+        <svg width="100%" height="118" viewBox="0 0 366 118" xmlns="http://www.w3.org/2000/svg">
+          <rect id="s3lay1" x="8" y="36" width="72" height="52" rx="3" fill="#001018" stroke="#0d2030" stroke-width="1.5" opacity="0"/>
+          <text id="s3lay1t" x="44" y="58" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">node:20</text>
+          <text id="s3lay1t2" x="44" y="72" text-anchor="middle" font-size="5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">base</text>
+
+          <rect id="s3lay2" x="86" y="28" width="72" height="60" rx="3" fill="#001018" stroke="#0d2030" stroke-width="1.5" opacity="0"/>
+          <text id="s3lay2t" x="122" y="54" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">company-</text>
+          <text id="s3lay2t2" x="122" y="66" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">node:20</text>
+          <text id="s3lay2t3" x="122" y="78" text-anchor="middle" font-size="5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">curl, ENV</text>
+
+          <rect id="s3lay3" x="164" y="20" width="72" height="68" rx="3" fill="#001508" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <text id="s3lay3t" x="200" y="46" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">ONBUILD</text>
+          <text id="s3lay3t2" x="200" y="60" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">pkgs copied</text>
+          <text id="s3lay3t3" x="200" y="72" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">npm ci done</text>
+          <text id="s3lay3t4" x="200" y="84" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">src copied</text>
+
+          <rect id="s3lay4" x="242" y="12" width="116" height="76" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3lay4t" x="300" y="36" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">my-service</text>
+          <text id="s3lay4t2" x="300" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">ready to ship</text>
+          <text id="s3lay4t3" x="300" y="66" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ node_modules</text>
+          <text id="s3lay4t4" x="300" y="80" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ source code</text>
+
+          <text id="s3a1" x="82" y="66" font-size="8" fill="#1a3040" font-family="'Press Start 2P',monospace" opacity="0">+</text>
+          <text id="s3a2" x="160" y="66" font-size="8" fill="#1a3040" font-family="'Press Start 2P',monospace" opacity="0">+</text>
+          <text id="s3a3" x="238" y="66" font-size="8" fill="#1a3040" font-family="'Press Start 2P',monospace" opacity="0">+</text>
+
+          <text id="s3laybottom" x="183" y="112" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">all from one line: FROM company-node:20</text>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">The child build executes all ONBUILD triggers before its own steps.</div>
+    <div class="ih">One FROM line produces a fully-built, production-ready image.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">3</div><div class="sl">TRIGGERS<br>FIRED</div></div>
+    <div class="sc"><div class="sv gn">auto</div><div class="sl">ZERO CHILD<br>BOILERPLATE</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">PROD-READY<br>IMAGE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════ SCENE 4: Rules, gotchas ════════════ -->
+<div class="scene" id="s4" style="background:#0f0900">
+  <div class="hdr" style="background:#0f0900;border-bottom:1px solid #2d1800">
+    <div class="hdr-title" style="color:#e8a020">RULES & GOTCHAS</div>
+    <div class="hdr-sub">WHAT TO KNOW BEFORE YOU USE IT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0900">
+    <span class="slabel" style="color:#e8a020">GOTCHAS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">READ THIS</span>
+  </div>
+
+  <div class="anim" style="background:#0f0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4tbl" class="panel" style="background:#0a0800;border:2px solid #2d1800;border-radius:3px;overflow:hidden">
+        <div style="background:#120d00;padding:6px 10px;border-bottom:1px solid #2d1800;font-size:7px;color:#e8a020;text-align:center">ONBUILD RULES</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div id="s4r1" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #201400;opacity:0;transition:opacity .3s">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:6px;color:#4eff9a;margin-bottom:3px">FIRES ON DIRECT CHILDREN ONLY</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">ONBUILD does NOT chain. Grandchildren (FROM child-image) do not inherit grandparent's ONBUILD triggers.</div></div>
+          </div>
+          <div id="s4r2" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #201400;opacity:0;transition:opacity .3s">
+            <span style="color:#e85050;font-size:8px;flex-shrink:0">✕</span>
+            <div><div style="font-size:6px;color:#e85050;margin-bottom:3px">CANNOT ONBUILD an ONBUILD</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">Nesting ONBUILD inside ONBUILD is not allowed and will error at build time.</div></div>
+          </div>
+          <div id="s4r3" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #201400;opacity:0;transition:opacity .3s">
+            <span style="color:#e85050;font-size:8px;flex-shrink:0">✕</span>
+            <div><div style="font-size:6px;color:#e85050;margin-bottom:3px">NO FROM or MAINTAINER</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">FROM and MAINTAINER are not allowed as ONBUILD targets. Everything else (COPY, RUN, ENV, CMD…) is fair game.</div></div>
+          </div>
+          <div id="s4r4" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;opacity:0;transition:opacity .3s">
+            <span style="color:#e8a020;font-size:8px;flex-shrink:0">⚠</span>
+            <div><div style="font-size:6px;color:#e8a020;margin-bottom:3px">INVISIBLE TO CHILD AUTHORS</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">Triggers are hidden from the child Dockerfile. Always document ONBUILD behaviour in the parent image's README.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s4cmp" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ USE IT WHEN</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#aaa;line-height:2.1">
+            Platform team building standardized base images.<br><br>
+            Same build steps repeated across 10+ services.<br><br>
+            Want to enforce conventions automatically.
+          </div>
+        </div>
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✕ AVOID WHEN</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#aaa;line-height:2.1">
+            Only 1–2 services use the base image.<br><br>
+            Child teams need to understand what's happening.<br><br>
+            Using Docker Compose or multi-stage builds instead.
+          </div>
+        </div>
+      </div>
+
+      <div id="s4tip" class="panel" style="background:#0a0020;border-left:4px solid #a080ff;border-top:1px solid #1a1040;border-right:1px solid #1a1040;border-bottom:1px solid #1a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">★ ALWAYS INSPECT UNKNOWN BASE IMAGES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Before using a corporate base image, run <span style="color:#a080ff">docker inspect &lt;image&gt; | grep -A10 OnBuild</span> to see what triggers are hiding inside.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">ONBUILD only fires in direct children — not grandchildren. No chaining.</div>
+    <div class="ih am">Always document ONBUILD triggers — they're invisible to child authors.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">direct</div><div class="sl">CHILD ONLY<br>NO CHAIN</div></div>
+    <div class="sc"><div class="sv rd">niche</div><div class="sl">PLATFORM<br>TEAMS ONLY</div></div>
+    <div class="sc"><div class="sv pu">inspect</div><div class="sl">ALWAYS<br>CHECK FIRST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1, T=[];
+
+function clr(){ T.forEach(t=>clearTimeout(t)); T=[]; }
+function af(ms,fn){ T.push(setTimeout(fn,ms)); }
+
+/* opacity helpers — inline style wins over CSS class */
+function showEl(id,ms){ af(ms,()=>{ const e=document.getElementById(id); if(e) e.style.opacity='1'; }); }
+function hideEl(id){ const e=document.getElementById(id); if(e) e.style.opacity='0'; }
+
+/* panel helpers — use both inline style and .vis class */
+function showPanel(id,ms){ af(ms,()=>{ const e=document.getElementById(id); if(e){ e.style.opacity='1'; e.classList.add('vis'); } }); }
+function hidePanel(id){ const e=document.getElementById(id); if(e){ e.style.opacity='0'; e.classList.remove('vis'); } }
+
+/* SVG element attribute opacity */
+function svgShow(id,ms){ af(ms,()=>{ const e=document.getElementById(id); if(e) e.setAttribute('opacity','1'); }); }
+function svgHide(id){ const e=document.getElementById(id); if(e) e.setAttribute('opacity','0'); }
+
+/* animated packet that moves from (x1,y1) to (x2,y2) over dur ms */
+function animPkt(id,x1,y1,x2,y2,dur){
+  const d=document.getElementById(id); if(!d) return;
+  d.setAttribute('cx',x1); d.setAttribute('cy',y1); d.setAttribute('opacity','1');
+  const frames=Math.max(1,Math.round(dur/16)); let f=0;
+  function step(){
+    f++; const p=Math.min(f/frames,1);
+    d.setAttribute('cx', x1+(x2-x1)*p);
+    d.setAttribute('cy', y1+(y2-y1)*p);
+    if(f<frames) af(16,step); else d.setAttribute('opacity','0');
+  }
+  af(16,step);
+}
+
+/* slide to scene n */
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight; /* force reflow */
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n)); /* start animation after slide settles */
+}
+
+/* reset all animated elements in scene n to their initial hidden state */
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3','s1l4','s1l5','s1l6','s1l7'].forEach(hideEl);
+    hidePanel('s1diag'); hidePanel('s1card');
+    ['s1ob1','s1ob1t','s1ob2','s1ob2t','s1ob3',
+     's1arr','s1arrlbl','s1arrlbl2','s1pkt',
+     's1ch1','s1ch1t','s1ch2','s1ch2t','s1ch3'].forEach(svgHide);
+  }
+  if(n===2){
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6',
+     's2l7','s2l8','s2l9','s2l10'].forEach(hideEl);
+    hidePanel('s2timeline'); hidePanel('s2inspect');
+    ['s2tl','s2n1','s2n1t','s2n1l','s2n1l2',
+     's2n2','s2n2t','s2n2l','s2n2l2',
+     's2n3','s2n3t','s2n3l','s2n3l2',
+     's2n4','s2n4t','s2n4t2','s2n4l','s2n4l2',
+     's2lbl','s2lbl2'].forEach(svgHide);
+    ['s2il1','s2il2','s2il3','s2il4','s2il5'].forEach(hideEl);
+  }
+  if(n===3){
+    ['s3l1','s3l2','s3l3','s3l4','s3l5',
+     's3o1','s3o2','s3o3','s3o4','s3o5','s3o6','s3o7'].forEach(hideEl);
+    hidePanel('s3buildout'); hidePanel('s3layers');
+    ['s3lay1','s3lay1t','s3lay1t2',
+     's3lay2','s3lay2t','s3lay2t2','s3lay2t3',
+     's3lay3','s3lay3t','s3lay3t2','s3lay3t3','s3lay3t4',
+     's3lay4','s3lay4t','s3lay4t2','s3lay4t3','s3lay4t4',
+     's3a1','s3a2','s3a3','s3laybottom'].forEach(svgHide);
+  }
+  if(n===4){
+    hidePanel('s4tbl'); hidePanel('s4cmp'); hidePanel('s4tip');
+    ['s4r1','s4r2','s4r3','s4r4'].forEach(hideEl);
+  }
+}
+
+/* BUG FIX: play() now always calls clr() + reset() first so
+   pressing PLAY multiple times never stacks animations */
+function play(n){
+  clr(); reset(n);
+
+  if(n===1){
+    showEl('s1l1',300); showEl('s1l2',700);
+    showEl('s1l3',1100); showEl('s1l4',1400);
+    showEl('s1l5',1800); showEl('s1l6',2100); showEl('s1l7',2400);
+
+    showPanel('s1diag',500);
+    svgShow('s1ob1',700);   svgShow('s1ob1t',850);
+    svgShow('s1ob2',1050);  svgShow('s1ob2t',1200);
+    svgShow('s1ob3',1400);
+    svgShow('s1arr',1700);  svgShow('s1arrlbl',1850); svgShow('s1arrlbl2',1950);
+    af(1800,()=>animPkt('s1pkt',156,75,210,75,400));
+    svgShow('s1ch1',2100);  svgShow('s1ch1t',2250);
+    svgShow('s1ch2',2400);  svgShow('s1ch2t',2550);
+    svgShow('s1ch3',2750);
+    showPanel('s1card',3000);
+  }
+
+  if(n===2){
+    showEl('s2l1',200);  showEl('s2l2',450);  showEl('s2l3',700);
+    showEl('s2l4',950);  showEl('s2l5',1200); showEl('s2l6',1450);
+    showEl('s2l7',1700); showEl('s2l8',1950); showEl('s2l9',2200); showEl('s2l10',2450);
+
+    showPanel('s2timeline',800);
+    svgShow('s2tl',900); svgShow('s2lbl',1000);
+    svgShow('s2n1',1100); svgShow('s2n1t',1100); svgShow('s2n1l',1200); svgShow('s2n1l2',1300);
+    svgShow('s2n2',1500); svgShow('s2n2t',1500); svgShow('s2n2l',1600); svgShow('s2n2l2',1700);
+    svgShow('s2n3',1900); svgShow('s2n3t',1900); svgShow('s2n3l',2000); svgShow('s2n3l2',2100);
+    svgShow('s2lbl2',2200);
+    svgShow('s2n4',2300); svgShow('s2n4t',2400); svgShow('s2n4t2',2400);
+    svgShow('s2n4l',2550); svgShow('s2n4l2',2650);
+
+    showPanel('s2inspect',2800);
+    showEl('s2il1',3000); showEl('s2il2',3200);
+    showEl('s2il3',3400); showEl('s2il4',3600); showEl('s2il5',3800);
+  }
+
+  if(n===3){
+    showEl('s3l1',200); showEl('s3l2',500);
+    showEl('s3l3',800); showEl('s3l4',1050); showEl('s3l5',1300);
+
+    showPanel('s3buildout',600);
+    showEl('s3o1',700);  showEl('s3o2',1000);
+    showEl('s3o3',1400); showEl('s3o4',1800); showEl('s3o5',2200);
+    showEl('s3o6',2600); showEl('s3o7',2900);
+
+    showPanel('s3layers',2400);
+    svgShow('s3lay1',2600);  svgShow('s3lay1t',2700);  svgShow('s3lay1t2',2800);
+    svgShow('s3a1',2850);
+    svgShow('s3lay2',2900);  svgShow('s3lay2t',3000);  svgShow('s3lay2t2',3050); svgShow('s3lay2t3',3100);
+    svgShow('s3a2',3150);
+    svgShow('s3lay3',3200);  svgShow('s3lay3t',3300);  svgShow('s3lay3t2',3400);
+    svgShow('s3lay3t3',3500); svgShow('s3lay3t4',3600);
+    svgShow('s3a3',3650);
+    svgShow('s3lay4',3700);  svgShow('s3lay4t',3800);  svgShow('s3lay4t2',3900);
+    svgShow('s3lay4t3',4000); svgShow('s3lay4t4',4100);
+    svgShow('s3laybottom',4300);
+  }
+
+  if(n===4){
+    showPanel('s4tbl',200);
+    showEl('s4r1',400); showEl('s4r2',900); showEl('s4r3',1400); showEl('s4r4',1900);
+    showPanel('s4cmp',2400);
+    showPanel('s4tip',3200);
+  }
+}
+
+window.addEventListener('load',()=>{ af(150,()=>play(1)); });
+</script>
+</body>
+</html>

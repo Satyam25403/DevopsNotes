@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ARG vs ENV — Build-time vs Runtime Variables</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #0d1a2e}
+.hdr-title{font-size:10px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.6}
+.hdr-sub{font-size:7px;color:#555;text-align:center;letter-spacing:1px;line-height:1.6}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#0d1a2e;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.gn{border-color:#4eff9a}.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}
+.il{color:#aaa}.ih{color:#4ec9e1}.ih.gn{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#060810;border:1px solid #0d1a2e;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.gn{color:#4eff9a}.sv.am{color:#e8a020}.sv.rd{color:#e85050}
+.sl{font-size:7px;color:#555;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e120}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.am{border-color:#e8a020;color:#e8a020}.btn.am:hover{background:#e8a02020}
+.btn.rd{border-color:#e85050;color:#e85050}.btn.rd:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+
+.step-block{
+  display:flex;align-items:flex-start;gap:10px;padding:10px;
+  border:1px solid #0d1a2e;border-radius:2px;border-left:3px solid #4ec9e1;
+  opacity:0;transform:translateY(8px);
+  transition:opacity .35s ease,transform .35s ease;
+}
+.step-block.visible{opacity:1;transform:translateY(0)}
+.step-block.gn{border-left-color:#4eff9a}
+.step-block.am{border-left-color:#e8a020}
+.step-block.rd{border-left-color:#e85050}
+.step-num{font-size:9px;color:#4ec9e1;flex-shrink:0;width:16px;text-align:center;padding-top:1px}
+.step-num.gn{color:#4eff9a}.step-num.am{color:#e8a020}.step-num.rd{color:#e85050}
+.step-text{font-size:7px;color:#ccc;line-height:1.9;flex:1}
+.cy{color:#4ec9e1}.gn{color:#4eff9a}.am{color:#e8a020}.rd{color:#e85050}
+
+/* Timeline phases */
+.phase-block{
+  opacity:0;transform:scaleX(.6);transform-origin:left;
+  transition:opacity .4s ease,transform .4s ease;
+}
+.phase-block.visible{opacity:1;transform:scaleX(1)}
+
+/* var row */
+.var-row{
+  opacity:0;transform:translateX(-8px);
+  transition:opacity .3s ease,transform .3s ease;
+}
+.var-row.visible{opacity:1;transform:translateX(0)}
+
+/* terminal line */
+.tl{opacity:0;transition:opacity .25s}
+.tl.visible{opacity:1}
+
+/* scope beam */
+.scope-beam{stroke-dasharray:300;stroke-dashoffset:300;transition:stroke-dashoffset .8s ease-out}
+.scope-beam.go{stroke-dashoffset:0}
+
+/* warning card */
+.warn-card{
+  opacity:0;transform:scale(.93);
+  transition:opacity .4s ease,transform .4s ease;
+}
+.warn-card.visible{opacity:1;transform:scale(1)}
+
+/* history leak flash */
+@keyframes leakFlash{
+  0%,100%{background:#200808;border-color:#e85050}
+  50%{background:#3a1010;border-color:#ff6060}
+}
+.leak-flash{animation:leakFlash .8s ease 3}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.blink{animation:blink 1s step-end infinite}
+
+/* evaporate */
+@keyframes evaporate{
+  0%{opacity:1;transform:translateY(0)}
+  100%{opacity:0;transform:translateY(-12px)}
+}
+.evaporate{animation:evaporate .6s ease forwards}
+
+/* persist glow */
+@keyframes persistGlow{
+  0%,100%{box-shadow:0 0 0 0 rgba(78,255,154,0)}
+  50%{box-shadow:0 0 0 5px rgba(78,255,154,.2)}
+}
+.persist-glow{animation:persistGlow 1.4s ease-in-out 3}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ SCENE 1: HOOK + CONCEPT ════════════════ -->
+<div class="scene active" id="s1" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title">ARG vs ENV</div>
+    <div class="hdr-sub">BUILD-TIME vs RUNTIME VARIABLES</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">CONCEPT</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">MUST KNOW</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- lifecycle timeline -->
+      <div id="s1-timeline" style="border:2px solid #4ec9e1;border-radius:3px;padding:12px;opacity:0;transition:opacity .5s;background:#04060c">
+        <div style="font-size:7px;color:#4ec9e1;letter-spacing:2px;margin-bottom:10px;text-align:center">DOCKER LIFECYCLE — WHERE EACH LIVES</div>
+
+        <!-- timeline bar -->
+        <div style="display:flex;gap:0;margin-bottom:8px;height:32px">
+          <div class="phase-block" id="ph-build" style="flex:1;background:#0d0a18;border:2px solid #e8a020;border-radius:3px 0 0 3px;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:7px;color:#e8a020">BUILD TIME</span>
+          </div>
+          <div class="phase-block" id="ph-image" style="width:16px;background:#0a0810;border-top:2px solid #555;border-bottom:2px solid #555;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:6px;color:#333">→</span>
+          </div>
+          <div class="phase-block" id="ph-run" style="flex:1;background:#040c04;border:2px solid #4eff9a;border-radius:0 3px 3px 0;display:flex;align-items:center;justify-content:center">
+            <span style="font-size:7px;color:#4eff9a">RUNTIME</span>
+          </div>
+        </div>
+
+        <!-- ARG scope indicator -->
+        <div style="margin-bottom:6px">
+          <div id="s1-arg-bar" style="height:20px;background:#0d0a18;border:1px solid #e8a020;border-radius:2px;width:0%;transition:width .8s ease-out;display:flex;align-items:center;padding:0 6px;overflow:hidden;max-width:50%">
+            <span style="font-size:6px;color:#e8a020;white-space:nowrap">ARG — build only</span>
+          </div>
+        </div>
+        <!-- ENV scope indicator -->
+        <div>
+          <div id="s1-env-bar" style="height:20px;background:#040c04;border:1px solid #4eff9a;border-radius:2px;width:0%;transition:width .8s .2s ease-out;display:flex;align-items:center;padding:0 6px;overflow:hidden">
+            <span style="font-size:6px;color:#4eff9a;white-space:nowrap">ENV — persists into container</span>
+          </div>
+        </div>
+
+        <!-- labels below bar -->
+        <div style="display:flex;justify-content:space-between;margin-top:5px">
+          <div style="font-size:6px;color:#555">docker build</div>
+          <div style="font-size:6px;color:#555">image created</div>
+          <div style="font-size:6px;color:#555">docker run</div>
+        </div>
+      </div>
+
+      <!-- side-by-side quick compare -->
+      <div id="s1-compare" style="opacity:0;transition:opacity .5s;display:flex;gap:8px">
+        <div style="flex:1;border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0c0800">
+          <div style="font-size:9px;color:#e8a020;margin-bottom:6px">ARG</div>
+          <div style="font-size:6px;color:#888;line-height:1.9">
+            Build-time only<br>
+            Gone after build<br>
+            --build-arg to set<br>
+            ⚠ Visible in history
+          </div>
+          <div style="margin-top:7px;font-size:7px;color:#e8a020;border:1px solid #e8a020;border-radius:2px;padding:3px 5px">
+            ARG NODE_ENV=prod
+          </div>
+        </div>
+        <div style="flex:1;border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#040c04">
+          <div style="font-size:9px;color:#4eff9a;margin-bottom:6px">ENV</div>
+          <div style="font-size:6px;color:#888;line-height:1.9">
+            Runtime persistent<br>
+            Lives in container<br>
+            -e or --env-file<br>
+            ✓ Process sees it
+          </div>
+          <div style="margin-top:7px;font-size:7px;color:#4eff9a;border:1px solid #4eff9a;border-radius:2px;padding:3px 5px">
+            ENV NODE_ENV=prod
+          </div>
+        </div>
+      </div>
+
+      <!-- the handoff pattern preview -->
+      <div id="s1-handoff" style="opacity:0;transition:opacity .5s;border:1px solid #1a1a3a;border-radius:3px;padding:10px;background:#04060c;text-align:center">
+        <div style="font-size:7px;color:#555;letter-spacing:1px;margin-bottom:6px">THE PATTERN YOU'LL SEE EVERYWHERE</div>
+        <div style="font-size:7px;line-height:2.2">
+          <span style="color:#e8a020">ARG</span> NODE_ENV=production<br>
+          <span style="color:#4eff9a">ENV</span> NODE_ENV=<span style="color:#e8a020">$NODE_ENV</span>
+        </div>
+        <div style="font-size:6px;color:#555;margin-top:5px">ARG captures build-time value → ENV hands it to runtime</div>
+      </div>
+
+      <div id="s1-cta" style="text-align:center;font-size:7px;color:#333;letter-spacing:1px;opacity:0;transition:opacity .5s">
+        TAP NEXT ▶ TO SEE HOW EACH WORKS
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">KEY DISTINCTION</div>
+    <div class="ih">ARG = build ingredient. ENV = container environment.</div>
+    <div class="il" style="font-size:7px">ARG evaporates when the image is built. ENV bakes into the image and is visible to every process that runs inside the container. Wrong choice = either broken config or a secret leak.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">ARG</div><div class="sl">build-time<br>only</div></div>
+    <div class="sc"><div class="sv gn">ENV</div><div class="sl">runtime<br>persistent</div></div>
+    <div class="sc"><div class="sv rd">secret?</div><div class="sl">use neither<br>use secrets</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="playScene(1)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 2: ARG DEEP DIVE ════════════════ -->
+<div class="scene" id="s2" style="background:#0d0800">
+  <div class="hdr" style="background:#0d0800">
+    <div class="hdr-title" style="color:#e8a020">ARG — BUILD-TIME VARIABLE</div>
+    <div class="hdr-sub">SCOPE · --build-arg · DOCKER HISTORY LEAK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">ARG</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">BUILD-TIME</span>
+  </div>
+
+  <div class="anim" style="background:#0d0800">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ARG scope diagram -->
+      <div id="s2-diag" style="border:2px solid #e8a020;border-radius:3px;padding:10px;background:#0c0800;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e8a020;letter-spacing:1px;margin-bottom:8px;text-align:center">ARG SCOPE — AVAILABLE ONLY DURING BUILD</div>
+        <svg width="330" height="130" viewBox="0 0 330 130">
+          <!-- Build phase -->
+          <rect x="4" y="4" width="160" height="122" rx="4" fill="#0c0800" stroke="#e8a020" stroke-width="2"/>
+          <text x="84" y="18" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4">BUILD PHASE</text>
+
+          <!-- ARG value in scope -->
+          <rect id="s2-arg-box" x="12" y="26" width="144" height="24" rx="3" fill="#150a00" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s2-arg-t1" x="84" y="37" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">ARG NODE_ENV=prod</text>
+          <text id="s2-arg-t2" x="84" y="46" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">available to RUN commands</text>
+
+          <!-- RUN can use it -->
+          <rect id="s2-run-box" x="12" y="56" width="144" height="18" rx="2" fill="#100800" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="s2-run-t" x="84" y="68" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">RUN echo $NODE_ENV ✓</text>
+
+          <!-- EVAPORATE indicator -->
+          <text id="s2-evap" x="84" y="98" text-anchor="middle" fill="#e8a020" font-family="'Press Start 2P'" font-size="4" opacity="0">evaporates here ↓</text>
+          <line id="s2-evap-line" x1="84" y1="102" x2="84" y2="118" stroke="#e8a020" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+
+          <!-- barrier -->
+          <rect id="s2-barrier" x="164" y="4" width="16" height="122" rx="0" fill="#060608" stroke="#555" stroke-width="1" opacity="0"/>
+          <text id="s2-barrier-t" x="172" y="66" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="3" transform="rotate(-90,172,66)" opacity="0">IMAGE BUILT</text>
+
+          <!-- Runtime phase -->
+          <rect x="180" y="4" width="146" height="122" rx="4" fill="#080606" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+          <text x="253" y="18" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4">RUNTIME PHASE</text>
+
+          <!-- ARG gone -->
+          <rect id="s2-gone" x="188" y="26" width="130" height="24" rx="3" fill="#100808" stroke="#333" stroke-width="1" opacity="0"/>
+          <text id="s2-gone-t1" x="253" y="37" text-anchor="middle" fill="#333" font-family="'Press Start 2P'" font-size="4" opacity="0">ARG NODE_ENV = ???</text>
+          <text id="s2-gone-t2" x="253" y="46" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="3" opacity="0">undefined — GONE</text>
+
+          <!-- process can't see it -->
+          <rect id="s2-proc" x="188" y="56" width="130" height="18" rx="2" fill="#0a0606" stroke="#333" stroke-width="1" opacity="0"/>
+          <text id="s2-proc-t" x="253" y="68" text-anchor="middle" fill="#555" font-family="'Press Start 2P'" font-size="4" opacity="0">printenv NODE_ENV → empty</text>
+
+          <!-- X cross -->
+          <text id="s2-x" x="253" y="88" text-anchor="middle" fill="#e85050" font-family="'Press Start 2P'" font-size="14" opacity="0">✕</text>
+        </svg>
+      </div>
+
+      <!-- build-arg terminal -->
+      <div id="s2-term" style="border:1px solid #1a1000;border-radius:3px;background:#0c0800;padding:9px;opacity:0;transition:opacity .5s;font-size:6px;line-height:2.1">
+        <div class="tl" id="a1" style="color:#555"># Dockerfile: declare ARG with optional default</div>
+        <div class="tl" id="a2" style="color:#e8a020">ARG NODE_ENV=development</div>
+        <div class="tl" id="a3" style="color:#e8a020">ARG BUILD_VERSION</div>
+        <div style="margin:3px 0"></div>
+        <div class="tl" id="a4" style="color:#555"># Use during build</div>
+        <div class="tl" id="a5" style="color:#e8a020">RUN echo "Building for $NODE_ENV"</div>
+        <div style="margin:3px 0"></div>
+        <div class="tl" id="a6" style="color:#555"># Pass value at build time:</div>
+        <div class="tl" id="a7" style="color:#4ec9e1">docker build --build-arg NODE_ENV=production .</div>
+        <div class="tl" id="a8" style="color:#4ec9e1">docker build --build-arg BUILD_VERSION=1.2.3 .</div>
+      </div>
+
+      <div class="step-block am" id="s2-s1">
+        <div class="step-num am">01</div>
+        <div class="step-text"><span class="am">ARG</span> is only available between the ARG instruction and the end of the build stage. If you try to use it in the container (<span class="rd">docker exec, CMD, ENTRYPOINT</span>), it's gone — undefined.</div>
+      </div>
+      <div class="step-block am" id="s2-s2">
+        <div class="step-num am">02</div>
+        <div class="step-text">Pre-defined ARGs (no declaration needed): <span class="am">HTTP_PROXY, HTTPS_PROXY, FTP_PROXY, NO_PROXY, http_proxy, https_proxy</span>. Also <span class="am">TARGETPLATFORM, BUILDPLATFORM</span> for multi-arch builds.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">ARG SCOPE</div>
+    <div class="ih am">Available only from ARG instruction to end of build stage</div>
+    <div class="il" style="font-size:7px">ARG before FROM = global. ARG after FROM = scoped to that stage. In multi-stage, each stage needs its own ARG declaration even if the name is the same.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">--build-arg</div><div class="sl">pass at<br>build time</div></div>
+    <div class="sc"><div class="sv rd">✕</div><div class="sl">not in<br>container</div></div>
+    <div class="sc"><div class="sv gn">default</div><div class="sl">fallback if<br>not passed</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(2)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 3: ENV DEEP DIVE ════════════════ -->
+<div class="scene" id="s3" style="background:#040c04">
+  <div class="hdr" style="background:#040c04">
+    <div class="hdr-title" style="color:#4eff9a">ENV — RUNTIME VARIABLE</div>
+    <div class="hdr-sub">PERSISTS INTO CONTAINER · -e FLAG · PROCESS ENV</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">ENV</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">RUNTIME</span>
+  </div>
+
+  <div class="anim" style="background:#040c04">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ENV diagram -->
+      <div id="s3-diag" style="border:2px solid #4eff9a;border-radius:3px;padding:10px;background:#020804;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:8px;text-align:center">ENV SCOPE — BAKED INTO IMAGE, VISIBLE AT RUNTIME</div>
+        <svg width="330" height="130" viewBox="0 0 330 130">
+          <!-- Build phase -->
+          <rect x="4" y="4" width="145" height="122" rx="4" fill="#040c04" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="76" y="18" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">BUILD PHASE</text>
+
+          <rect id="s3-env-box" x="12" y="26" width="129" height="24" rx="3" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-et1" x="76" y="37" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">ENV NODE_ENV=prod</text>
+          <text id="s3-et2" x="76" y="46" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">baked into image layer</text>
+
+          <!-- bakes in -->
+          <text id="s3-bake" x="76" y="68" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">bakes into image ↓</text>
+
+          <!-- transition arrow -->
+          <path id="s3-arr" d="M149,65 L179,65" stroke="#4eff9a" stroke-width="2" fill="none" stroke-dasharray="200" stroke-dashoffset="200" marker-end="url(#arrG3)"/>
+
+          <!-- Runtime phase -->
+          <rect x="179" y="4" width="147" height="122" rx="4" fill="#020804" stroke="#4eff9a" stroke-width="2"/>
+          <text x="252" y="18" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4">RUNTIME PHASE</text>
+
+          <!-- ENV available -->
+          <rect id="s3-renv" x="187" y="26" width="131" height="24" rx="3" fill="#0a1a0d" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s3-rt1" x="252" y="37" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">NODE_ENV=prod ✓</text>
+          <text id="s3-rt2" x="252" y="46" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">in process environment</text>
+
+          <!-- process can read it -->
+          <rect id="s3-proc" x="187" y="58" width="131" height="18" rx="2" fill="#040c04" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s3-pt" x="252" y="70" text-anchor="middle" fill="#4eff9a" font-family="'Press Start 2P'" font-size="4" opacity="0">process.env.NODE_ENV ✓</text>
+
+          <!-- override with -e -->
+          <rect id="s3-override" x="187" y="84" width="131" height="34" rx="2" fill="#080e08" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="s3-ot1" x="252" y="96" text-anchor="middle" fill="#4ec9e1" font-family="'Press Start 2P'" font-size="4" opacity="0">OVERRIDABLE with -e</text>
+          <text id="s3-ot2" x="252" y="107" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">docker run -e NODE_ENV=dev</text>
+          <text id="s3-ot3" x="252" y="116" text-anchor="middle" fill="#888" font-family="'Press Start 2P'" font-size="3" opacity="0">overrides the baked value</text>
+
+          <defs>
+            <marker id="arrG3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M1 1L9 5L1 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+      <!-- ENV usage patterns -->
+      <div id="s3-term" style="border:1px solid #0d2010;border-radius:3px;background:#020804;padding:9px;opacity:0;transition:opacity .5s;font-size:6px;line-height:2.1">
+        <div class="tl" id="e1" style="color:#555"># set in Dockerfile</div>
+        <div class="tl" id="e2" style="color:#4eff9a">ENV NODE_ENV=production PORT=3000</div>
+        <div class="tl" id="e3" style="color:#555;margin-top:3px"># override at docker run</div>
+        <div class="tl" id="e4" style="color:#4ec9e1">docker run -e NODE_ENV=development myapp</div>
+        <div class="tl" id="e5" style="color:#555;margin-top:3px"># or use an env file</div>
+        <div class="tl" id="e6" style="color:#4ec9e1">docker run --env-file=.env.production myapp</div>
+        <div class="tl" id="e7" style="color:#555;margin-top:3px"># inspect what ENV vars are baked in:</div>
+        <div class="tl" id="e8" style="color:#4ec9e1">docker inspect myapp --format '{{"{{"}}json .Config.Env{{"}}"}}'</div>
+      </div>
+
+      <div class="step-block gn" id="s3-s1">
+        <div class="step-num gn">✓</div>
+        <div class="step-text">ENV is baked into the image as a layer. Every container started from that image inherits the value. But <span class="gn">-e at docker run</span> or <span class="gn">environment: in compose</span> overrides it at runtime.</div>
+      </div>
+      <div class="step-block gn" id="s3-s2">
+        <div class="step-num gn">!</div>
+        <div class="step-text">ENV values are visible in <span class="rd">docker inspect</span> and in <span class="rd">docker history</span>. <span class="rd">Never put secrets in ENV.</span> Use Docker Secrets, Vault, or build-time --secret mount instead.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">ENV PERSISTENCE</div>
+    <div class="ih gn">Baked into the image. Override with -e at runtime.</div>
+    <div class="il" style="font-size:7px">ENV is the right place for: PORT, NODE_ENV, DATABASE_URL structure, LOG_LEVEL. Never for passwords, API keys, or tokens — those are visible in docker inspect and history.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">baked in</div><div class="sl">every container<br>inherits</div></div>
+    <div class="sc"><div class="sv cy">-e</div><div class="sl">override at<br>docker run</div></div>
+    <div class="sc"><div class="sv rd">inspect</div><div class="sl">visible in<br>docker inspect</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(3)">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ════════════════ SCENE 4: ARG→ENV + SECRETS WARNING ════════════════ -->
+<div class="scene" id="s4" style="background:#06080f">
+  <div class="hdr" style="background:#06080f">
+    <div class="hdr-title" style="color:#4ec9e1">THE ARG→ENV PATTERN + SECRETS</div>
+    <div class="hdr-sub">HANDOFF PATTERN · HISTORY LEAK · WHAT TO USE INSTEAD</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">PATTERN + WARN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">⚠ SECRETS</span>
+  </div>
+
+  <div class="anim" style="background:#06080f">
+    <div style="padding:10px 14px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ARG→ENV handoff code -->
+      <div id="s4-code" style="border:2px solid #4ec9e1;border-radius:3px;background:#04060c;opacity:0;transition:opacity .5s">
+        <div style="padding:6px 10px;border-bottom:1px solid #0a1a2e;font-size:6px;color:#4ec9e1">ARG→ENV Handoff Pattern — Dockerfile</div>
+        <div style="padding:8px 12px;font-size:7px;line-height:2.2">
+          <div class="tl" id="h1" style="color:#555"># 1. Declare ARG (build-time input)</div>
+          <div class="tl" id="h2" style="color:#e8a020">ARG NODE_ENV=production</div>
+          <div class="tl" id="h3" style="color:#e8a020">ARG APP_VERSION</div>
+          <div style="margin:3px 0"></div>
+          <div class="tl" id="h4" style="color:#555"># 2. Bake into ENV (runtime output)</div>
+          <div class="tl" id="h5" style="color:#4eff9a">ENV NODE_ENV=<span style="color:#e8a020">$NODE_ENV</span></div>
+          <div class="tl" id="h6" style="color:#4eff9a">ENV APP_VERSION=<span style="color:#e8a020">$APP_VERSION</span></div>
+          <div style="margin:3px 0"></div>
+          <div class="tl" id="h7" style="color:#555"># Now: override at build, available at runtime</div>
+          <div class="tl" id="h8" style="color:#4ec9e1">docker build --build-arg NODE_ENV=staging .</div>
+          <div class="tl" id="h9" style="color:#4ec9e1">docker run myapp  # NODE_ENV=staging in process</div>
+        </div>
+      </div>
+
+      <!-- DANGER: secrets in ARG leak to history -->
+      <div id="s4-danger" style="border:2px solid #e85050;border-radius:3px;padding:10px;background:#0d0404;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#e85050;letter-spacing:1px;margin-bottom:8px">⚠ CRITICAL: ARG VALUES LEAK TO docker history</div>
+
+        <div style="background:#080202;border:1px solid #2a0808;border-radius:2px;padding:7px;font-size:6px;line-height:2;margin-bottom:8px">
+          <div style="color:#555"># BAD — this leaks to docker history!</div>
+          <div style="color:#e85050">ARG DB_PASSWORD=supersecret</div>
+          <div style="color:#e85050">RUN ./setup.sh</div>
+        </div>
+
+        <div style="font-size:6px;color:#555;margin-bottom:5px">Running docker history shows:</div>
+        <div id="s4-history" style="background:#060202;border:1px solid #3a0808;border-radius:2px;padding:7px;font-size:6px;line-height:2">
+          <div class="var-row" id="hr1">
+            <span style="color:#555">IMAGE       CREATED BY</span>
+          </div>
+          <div class="var-row" id="hr2" style="display:flex;gap:6px">
+            <span style="color:#555;width:60px;flex-shrink:0">a4f2...</span>
+            <span style="color:#e85050">|1 DB_PASSWORD=supersecret /bin/sh -c ./setup.sh</span>
+          </div>
+          <div class="var-row" id="hr3" style="color:#e8a020">↑ your secret is permanently visible to anyone with the image</div>
+        </div>
+      </div>
+
+      <!-- correct approach: --secret -->
+      <div id="s4-fix" style="border:1px solid #0d2010;border-radius:3px;padding:10px;background:#040c04;opacity:0;transition:opacity .5s">
+        <div style="font-size:7px;color:#4eff9a;letter-spacing:1px;margin-bottom:7px">✓ CORRECT: BuildKit --secret mount</div>
+        <div style="background:#020804;border:1px solid #0d2010;border-radius:2px;padding:7px;font-size:6px;line-height:2">
+          <div class="tl" id="s1t" style="color:#555"># Dockerfile: mount secret, use in RUN, leaves no trace</div>
+          <div class="tl" id="s2t" style="color:#4eff9a">RUN --mount=type=secret,id=db_password \</div>
+          <div class="tl" id="s3t" style="color:#4eff9a">&nbsp;&nbsp;DB_PASS=$(cat /run/secrets/db_password) ./setup.sh</div>
+          <div style="margin:3px 0"></div>
+          <div class="tl" id="s4t" style="color:#555"># Build:</div>
+          <div class="tl" id="s5t" style="color:#4ec9e1">docker build --secret id=db_password,src=.db_password .</div>
+          <div style="margin:3px 0"></div>
+          <div class="tl" id="s6t" style="color:#555"># Secret never appears in docker history ✓</div>
+        </div>
+      </div>
+
+      <div class="step-block rd" id="s4-s1">
+        <div class="step-num rd">⚠</div>
+        <div class="step-text"><span class="rd">ARG in docker history is permanent</span>. Even if you overwrite the ARG in a later layer, the original value is in the layer cache. Anyone who pulls your image can run docker history and see it.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">SECRETS RULE</div>
+    <div class="ih rd">Never put secrets in ARG or ENV. Use --secret.</div>
+    <div class="il" style="font-size:7px">ARG leaks in docker history. ENV leaks in docker inspect. For real secrets: BuildKit --secret (build-time), Docker Secrets (runtime), or external vaults (Vault, AWS Secrets Manager).</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">history</div><div class="sl">ARG visible<br>forever</div></div>
+    <div class="sc"><div class="sv rd">inspect</div><div class="sl">ENV visible<br>in config</div></div>
+    <div class="sc"><div class="sv gn">--secret</div><div class="sl">no trace<br>in history</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="playScene(4)">▶ PLAY</button>
+    <button class="btn am" onclick="goScene(1)">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+let currentScene=1;
+let timers=[];
+function clearTimers(){timers.forEach(t=>clearTimeout(t));timers=[];}
+function delay(fn,ms){timers.push(setTimeout(fn,ms));}
+function setOp(id,v){const el=document.getElementById(id);if(el)el.style.opacity=v;}
+function addV(id){const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function rmV(id){const el=document.getElementById(id);if(el)el.classList.remove('visible');}
+function svgOp(id,v){const el=document.getElementById(id);if(el)el.setAttribute('opacity',v);}
+const tl=id=>{const el=document.getElementById(id);if(el)el.classList.add('visible');}
+function goBeam(id,ms){
+  const el=document.getElementById(id);
+  if(el){el.style.transition=`stroke-dashoffset ${ms}ms ease-out`;el.style.strokeDashoffset='0';}
+}
+function resetBeam(id){
+  const el=document.getElementById(id);
+  if(el){el.style.transition='none';el.style.strokeDashoffset='200';}
+}
+
+function goScene(n){
+  clearTimers();
+  document.getElementById('s'+currentScene).classList.remove('active');
+  currentScene=n;
+  document.getElementById('s'+n).classList.add('active');
+  resetScene(n);
+  playScene(n);
+}
+
+function resetScene(n){
+  if(n===1){
+    ['s1-timeline','s1-compare','s1-handoff','s1-cta'].forEach(id=>setOp(id,'0'));
+    ['ph-build','ph-image','ph-run'].forEach(id=>rmV(id));
+    const ab=document.getElementById('s1-arg-bar');if(ab){ab.style.transition='none';ab.style.width='0%';}
+    const eb=document.getElementById('s1-env-bar');if(eb){eb.style.transition='none';eb.style.width='0%';}
+  }
+  if(n===2){
+    setOp('s2-diag','0'); setOp('s2-term','0');
+    ['s2-s1','s2-s2'].forEach(id=>rmV(id));
+    ['s2-arg-box','s2-arg-t1','s2-arg-t2','s2-run-box','s2-run-t',
+     's2-evap','s2-evap-line','s2-barrier','s2-barrier-t',
+     's2-gone','s2-gone-t1','s2-gone-t2','s2-proc','s2-proc-t','s2-x'].forEach(id=>svgOp(id,'0'));
+    for(let i=1;i<=8;i++){const el=document.getElementById('a'+i);if(el)el.classList.remove('visible');}
+  }
+  if(n===3){
+    setOp('s3-diag','0'); setOp('s3-term','0');
+    ['s3-s1','s3-s2'].forEach(id=>rmV(id));
+    ['s3-env-box','s3-et1','s3-et2','s3-bake','s3-renv','s3-rt1','s3-rt2',
+     's3-proc','s3-pt','s3-override','s3-ot1','s3-ot2','s3-ot3'].forEach(id=>svgOp(id,'0'));
+    resetBeam('s3-arr');
+    for(let i=1;i<=8;i++){const el=document.getElementById('e'+i);if(el)el.classList.remove('visible');}
+  }
+  if(n===4){
+    setOp('s4-code','0'); setOp('s4-danger','0'); setOp('s4-fix','0');
+    rmV('s4-s1');
+    ['hr1','hr2','hr3'].forEach(id=>rmV(id));
+    for(let i=1;i<=9;i++){const el=document.getElementById('h'+i);if(el)el.classList.remove('visible');}
+    for(let i=1;i<=6;i++){const el=document.getElementById('s'+i+'t');if(el)el.classList.remove('visible');}
+  }
+}
+
+function playScene(n){
+  clearTimers();resetScene(n);
+
+  if(n===1){
+    delay(()=>{
+      setOp('s1-timeline','1');
+      ['ph-build','ph-image','ph-run'].forEach((id,i)=>delay(()=>addV(id),i*200));
+      delay(()=>{
+        const ab=document.getElementById('s1-arg-bar');
+        const eb=document.getElementById('s1-env-bar');
+        if(ab){ab.style.transition='width .8s ease-out';ab.style.width='50%';}
+        if(eb){eb.style.transition='width .8s .2s ease-out';eb.style.width='100%';}
+      },600);
+    },200);
+    delay(()=>setOp('s1-compare','1'),1400);
+    delay(()=>setOp('s1-handoff','1'),2100);
+    delay(()=>setOp('s1-cta','1'),2800);
+  }
+
+  if(n===2){
+    delay(()=>setOp('s2-diag','1'),200);
+    // build side
+    delay(()=>{ svgOp('s2-arg-box','1'); svgOp('s2-arg-t1','1'); svgOp('s2-arg-t2','1'); },600);
+    delay(()=>{ svgOp('s2-run-box','1'); svgOp('s2-run-t','1'); },1000);
+    delay(()=>{ svgOp('s2-evap','1'); svgOp('s2-evap-line','1'); },1300);
+    // barrier
+    delay(()=>{ svgOp('s2-barrier','1'); svgOp('s2-barrier-t','1'); },1600);
+    // runtime side: gone
+    delay(()=>{ svgOp('s2-gone','1'); svgOp('s2-gone-t1','1'); svgOp('s2-gone-t2','1'); },1900);
+    delay(()=>{ svgOp('s2-proc','1'); svgOp('s2-proc-t','1'); svgOp('s2-x','1'); },2200);
+    delay(()=>{
+      setOp('s2-term','1');
+      for(let i=1;i<=8;i++) delay(()=>tl('a'+i),i*180);
+    },1200);
+    delay(()=>addV('s2-s1'),700);
+    delay(()=>addV('s2-s2'),2400);
+  }
+
+  if(n===3){
+    delay(()=>setOp('s3-diag','1'),200);
+    // build side
+    delay(()=>{ svgOp('s3-env-box','1'); svgOp('s3-et1','1'); svgOp('s3-et2','1'); },600);
+    delay(()=>svgOp('s3-bake','1'),1000);
+    // arrow crossing
+    delay(()=>goBeam('s3-arr',600),1300);
+    // runtime side
+    delay(()=>{ svgOp('s3-renv','1'); svgOp('s3-rt1','1'); svgOp('s3-rt2','1'); },1900);
+    delay(()=>{ svgOp('s3-proc','1'); svgOp('s3-pt','1'); },2200);
+    delay(()=>{ svgOp('s3-override','1'); svgOp('s3-ot1','1'); svgOp('s3-ot2','1'); svgOp('s3-ot3','1'); },2600);
+    delay(()=>{
+      setOp('s3-term','1');
+      for(let i=1;i<=8;i++) delay(()=>tl('e'+i),i*180);
+    },1400);
+    delay(()=>addV('s3-s1'),700);
+    delay(()=>addV('s3-s2'),2400);
+  }
+
+  if(n===4){
+    delay(()=>setOp('s4-code','1'),200);
+    for(let i=1;i<=9;i++) delay(()=>tl('h'+i),400+i*200);
+    delay(()=>{
+      setOp('s4-danger','1');
+      delay(()=>{
+        ['hr1','hr2','hr3'].forEach((id,i)=>delay(()=>addV(id),i*300));
+        // flash the danger box
+        delay(()=>document.getElementById('s4-danger')?.classList.add('leak-flash'),600);
+      },200);
+    },2400);
+    delay(()=>{
+      setOp('s4-fix','1');
+      for(let i=1;i<=6;i++) delay(()=>tl('s'+i+'t'),i*200);
+    },3400);
+    delay(()=>addV('s4-s1'),2200);
+  }
+}
+
+window.addEventListener('load',()=>playScene(1));
+</script>
+</body>
+</html>

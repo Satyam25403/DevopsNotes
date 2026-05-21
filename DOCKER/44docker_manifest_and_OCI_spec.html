@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0">
+<title>Docker Image Manifest & OCI Spec</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════ SCENE 1 ═══════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#00050f">
+  <div class="hdr" style="background:#00050f;border-bottom:1px solid #001030">
+    <div class="hdr-title" style="color:#4ec9e1;font-size:11px;line-height:1.6">IMAGE ANATOMY</div>
+    <div class="hdr-sub">MANIFEST · CONFIG · LAYERS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00050f">
+    <span class="slabel" style="color:#4ec9e1">STRUCTURE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OCI SPEC</span>
+  </div>
+
+  <div class="anim" style="background:#00050f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Structure diagram SVG -->
+      <div style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;border-bottom:1px solid #001830;text-align:center">
+          <span style="font-size:6px;color:#4ec9e1">WHAT docker pull ACTUALLY FETCHES</span>
+        </div>
+        <svg width="100%" height="186" viewBox="0 0 366 186" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gC"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- Registry label -->
+          <rect id="reg" x="6" y="8" width="354" height="170" rx="3" fill="none" stroke="#0d1a30" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+          <text id="regl" x="18" y="20" font-size="5" fill="#1a2840" font-family="'Press Start 2P',monospace" opacity="0">CONTAINER REGISTRY</text>
+
+          <!-- Manifest box -->
+          <rect id="mbox" x="14" y="26" width="108" height="140" rx="2" fill="#000d20" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="mboxt" x="68" y="42" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">MANIFEST</text>
+          <text id="mboxs" x="68" y="53" text-anchor="middle" font-size="5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">image.json</text>
+
+          <!-- Manifest fields -->
+          <rect id="mf1" x="20" y="60" width="96" height="13" rx="1" fill="#001828" opacity="0"/>
+          <text id="mf1t" x="26" y="70" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">schemaVersion: 2</text>
+
+          <rect id="mf2" x="20" y="76" width="96" height="13" rx="1" fill="#001828" opacity="0"/>
+          <text id="mf2t" x="26" y="86" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">config: sha256:...</text>
+
+          <rect id="mf3" x="20" y="92" width="96" height="13" rx="1" fill="#001828" opacity="0"/>
+          <text id="mf3t" x="26" y="102" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">layers: [ ]</text>
+
+          <rect id="mf4" x="20" y="108" width="96" height="13" rx="1" fill="#001828" opacity="0"/>
+          <text id="mf4t" x="26" y="118" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">mediaType: oci...</text>
+
+          <rect id="mf5" x="20" y="126" width="96" height="26" rx="1" fill="#000d18" opacity="0"/>
+          <text id="mf5t" x="26" y="138" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">digest:</text>
+          <text id="mf5t2" x="26" y="149" font-size="4.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">sha256:a3f...</text>
+
+          <!-- Arrow to config -->
+          <line id="ca" x1="122" y1="78" x2="154" y2="78" stroke="#a080ff" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="cah" points="157,78 151,75 151,81" fill="#a080ff" opacity="0"/>
+
+          <!-- Config blob -->
+          <rect id="cfgbox" x="158" y="56" width="96" height="80" rx="2" fill="#0d0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="cfgt" x="206" y="70" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">CONFIG</text>
+          <text id="cfgs" x="206" y="81" text-anchor="middle" font-size="5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">blob</text>
+          <text id="cfg1" x="163" y="95" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">Env, Cmd, User</text>
+          <text id="cfg2" x="163" y="107" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">ExposedPorts</text>
+          <text id="cfg3" x="163" y="119" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">layer diff IDs</text>
+          <text id="cfg4" x="163" y="131" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">architecture</text>
+
+          <!-- Arrow to layers -->
+          <line id="la" x1="122" y1="110" x2="154" y2="138" stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="lah" points="157,140 150,134 155,129" fill="#4eff9a" opacity="0"/>
+
+          <!-- Layer stack -->
+          <rect id="l3" x="158" y="143" width="96" height="16" rx="1" fill="#001408" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="l3t" x="206" y="154" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">layer N (top)</text>
+
+          <rect id="l2" x="160" y="161" width="92" height="14" rx="1" fill="#001008" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="l2t" x="206" y="171" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">layer N-1</text>
+
+          <!-- Layer label -->
+          <text id="ltitle" x="206" y="132" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">LAYERS</text>
+          <text id="lsub" x="206" y="142" text-anchor="middle" font-size="4.5" fill="#333" font-family="'Press Start 2P',monospace" opacity="0">tarballs</text>
+
+          <!-- Packet -->
+          <circle id="pkt1" cx="122" cy="78" r="4" fill="#a080ff" opacity="0" filter="url(#gC)"/>
+          <circle id="pkt2" cx="122" cy="110" r="4" fill="#4eff9a" opacity="0" filter="url(#gC)"/>
+        </svg>
+      </div>
+
+      <!-- Manifest JSON snippet -->
+      <div id="mjson" class="panel" style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #001830">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">OCI IMAGE MANIFEST (simplified)</div>
+        </div>
+        <div style="padding:9px 12px;font-size:6px;line-height:2.2">
+          <div id="j1" class="tline" style="color:#555">{</div>
+          <div id="j2" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"schemaVersion"</span>: 2,</div>
+          <div id="j3" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"config"</span>: {</div>
+          <div id="j4" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#555">"mediaType"</span>: <span style="color:#4ec9e1">"application/vnd.oci.image.config.v1+json"</span>,</div>
+          <div id="j5" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#555">"digest"</span>: <span style="color:#a080ff">"sha256:3b4f..."</span> },</div>
+          <div id="j6" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"layers"</span>: [</div>
+          <div id="j7" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#555">"digest"</span>: <span style="color:#4eff9a">"sha256:1a2b..."</span>, <span style="color:#555">"size"</span>: 31367296 },</div>
+          <div id="j8" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#555">"digest"</span>: <span style="color:#4eff9a">"sha256:c3d4..."</span>, <span style="color:#555">"size"</span>: 4096     }]</div>
+          <div id="j9" class="tline" style="color:#555">}</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">A Docker image is not a single file — it's a JSON manifest referencing blobs by digest.</div>
+    <div class="ih">Pull = fetch manifest → fetch config → fetch each layer tarball in parallel.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">1</div><div class="sl">MANIFEST<br>JSON</div></div>
+    <div class="sc"><div class="sv pu">1</div><div class="sl">CONFIG<br>BLOB</div></div>
+    <div class="sc"><div class="sv gn">N</div><div class="sl">LAYER<br>TARBALLS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 2 ═══════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060010">
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff;font-size:11px;line-height:1.6">LAYERS DEEP DIVE</div>
+    <div class="hdr-sub">UNION FILESYSTEM + COPY-ON-WRITE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#a080ff">LAYERS</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">OVERLAY FS</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Layer stack SVG -->
+      <div style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#06000f;padding:5px 10px;border-bottom:1px solid #1a0838;text-align:center">
+          <span style="font-size:6px;color:#a080ff">OVERLAYFS LAYER STACK (bottom → top)</span>
+        </div>
+        <svg width="100%" height="198" viewBox="0 0 366 198" xmlns="http://www.w3.org/2000/svg">
+          <defs><filter id="gP"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+
+          <!-- Container RW layer -->
+          <rect id="lyrC" x="14" y="10" width="260" height="28" rx="2" fill="#1a0010" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <text id="lyrCt" x="22" y="22" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">CONTAINER LAYER</text>
+          <text id="lyrCs" x="22" y="33" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">read-write, ephemeral, lost on rm</text>
+          <rect id="lyrCbadge" x="280" y="16" width="76" height="16" rx="2" fill="#300000" opacity="0"/>
+          <text id="lyrCbt" x="318" y="27" text-anchor="middle" font-size="4.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">rw / tmpfs</text>
+
+          <!-- Image layer N (top) -->
+          <rect id="lyrN" x="14" y="46" width="260" height="28" rx="2" fill="#0d001a" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="lyrNt" x="22" y="58" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">LAYER 3  — app binary</text>
+          <text id="lyrNs" x="22" y="69" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:e5f6...  · 8.2MB tarball</text>
+          <text id="lyrNbadge" x="280" y="52" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">RUN COPY</text>
+
+          <!-- Image layer N-1 -->
+          <rect id="lyr2" x="14" y="82" width="260" height="28" rx="2" fill="#0d001a" stroke="#a080ff" stroke-width="1.2" opacity="0"/>
+          <text id="lyr2t" x="22" y="94" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">LAYER 2  — deps installed</text>
+          <text id="lyr2s" x="22" y="105" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:c3d4...  · 42MB tarball</text>
+          <text id="lyr2badge" x="280" y="88" font-size="4.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">RUN apt</text>
+
+          <!-- Image layer 1 (base) -->
+          <rect id="lyr1" x="14" y="118" width="260" height="28" rx="2" fill="#0d001a" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="lyr1t" x="22" y="130" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">LAYER 1  — base OS (ubuntu:22.04)</text>
+          <text id="lyr1s" x="22" y="141" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:1a2b...  · 29MB tarball</text>
+          <text id="lyr1badge" x="280" y="124" font-size="4.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">FROM</text>
+
+          <!-- Shared layer callout -->
+          <rect id="shareBox" x="14" y="154" width="338" height="36" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,3" opacity="0"/>
+          <text id="shareTxt" x="183" y="167" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">LAYER CACHING — shared across images</text>
+          <text id="shareTxt2" x="183" y="181" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">If sha256 matches → reuse from local cache, skip download</text>
+
+          <!-- Arrows between layers -->
+          <text id="arr1" x="290" y="44" text-anchor="middle" font-size="10" fill="#333" font-family="monospace" opacity="0">↑</text>
+          <text id="arr2" x="290" y="80" text-anchor="middle" font-size="10" fill="#333" font-family="monospace" opacity="0">↑</text>
+          <text id="arr3" x="290" y="116" text-anchor="middle" font-size="10" fill="#333" font-family="monospace" opacity="0">↑</text>
+        </svg>
+      </div>
+
+      <!-- What each layer contains -->
+      <div id="lyrdesc" class="panel" style="background:#040008;border-left:4px solid #a080ff;border-top:1px solid #1a0838;border-right:1px solid #1a0838;border-bottom:1px solid #1a0838;padding:10px 12px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:7px">▸ EACH LAYER IS A tar.gz DIFF</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          Each <span style="color:#a080ff">Dockerfile instruction</span> that changes the filesystem<br>
+          (RUN, COPY, ADD) creates a new layer containing only<br>
+          the <span style="color:#4ec9e1">delta</span> — added, modified, or whiteout-deleted files.<br>
+          OverlayFS merges them into a single unified view at runtime.
+        </div>
+      </div>
+
+      <!-- Layer optimization tip -->
+      <div id="opttip" class="panel" style="background:#040008;border-left:4px solid #4eff9a;border-top:1px solid #0a2010;border-right:1px solid #0a2010;border-bottom:1px solid #0a2010;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">▸ ORDERING MATTERS FOR CACHE</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:6px;line-height:2.0">
+          <div>
+            <div style="color:#e85050;margin-bottom:4px">✗ BAD ORDER</div>
+            <div style="color:#aaa">COPY . /<br>RUN apt install<br><span style="color:#555">← code change<br>busts apt cache</span></div>
+          </div>
+          <div>
+            <div style="color:#4eff9a;margin-bottom:4px">✓ GOOD ORDER</div>
+            <div style="color:#aaa">RUN apt install<br>COPY . /<br><span style="color:#555">← apt layer<br>reused always</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Layers are content-addressed — same sha256 digest = same bytes, cached everywhere.</div>
+    <div class="ih pu">Order Dockerfile instructions from least-to-most frequently changed to maximise cache hits.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">tar.gz</div><div class="sl">LAYER<br>FORMAT</div></div>
+    <div class="sc"><div class="sv gn">sha256</div><div class="sl">CONTENT<br>ADDRESS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">OverlayFS</div><div class="sl">UNION<br>MOUNT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 3 ═══════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0a0500">
+  <div class="hdr" style="background:#0a0500;border-bottom:1px solid #2a1500">
+    <div class="hdr-title" style="color:#e8a020;font-size:11px;line-height:1.6">TAGS vs DIGESTS</div>
+    <div class="hdr-sub">MUTABLE POINTERS vs IMMUTABLE IDs</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0500">
+    <span class="slabel" style="color:#e8a020">IDENTITY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SUPPLY CHAIN</span>
+  </div>
+
+  <div class="anim" style="background:#0a0500">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Tag mutation diagram -->
+      <div style="background:#060200;border:2px solid #1a0d00;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0400;padding:5px 10px;border-bottom:1px solid #1a0d00;text-align:center">
+          <span style="font-size:6px;color:#e8a020">TAGS ARE MUTABLE — "latest" can point anywhere</span>
+        </div>
+        <svg width="100%" height="160" viewBox="0 0 366 160" xmlns="http://www.w3.org/2000/svg">
+          <defs><filter id="gA"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+
+          <!-- Tag label -->
+          <rect id="tagbox" x="10" y="20" width="88" height="30" rx="2" fill="#1a0800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="tagt" x="54" y="33" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">nginx:latest</text>
+          <text id="tags" x="54" y="45" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">mutable tag</text>
+
+          <!-- Monday arrow (points to v1) -->
+          <line id="ma1" x1="98" y1="30" x2="152" y2="50" stroke="#e8a020" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="ma1h" points="155,52 148,46 153,41" fill="#e8a020" opacity="0"/>
+          <text id="ma1l" x="108" y="26" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">Monday</text>
+
+          <!-- Wednesday arrow (points to v2) -->
+          <line id="ma2" x1="98" y1="42" x2="152" y2="108" stroke="#e85050" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="ma2h" points="155,110 148,104 153,99" fill="#e85050" opacity="0"/>
+          <text id="ma2l" x="108" y="56" font-size="4.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">Wednesday →</text>
+
+          <!-- Manifest v1 -->
+          <rect id="mv1" x="156" y="36" width="108" height="38" rx="2" fill="#0a0800" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="mv1t" x="210" y="51" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">sha256:aabb...</text>
+          <text id="mv1s" x="210" y="65" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">nginx 1.25.3 (Mon)</text>
+
+          <!-- Manifest v2 -->
+          <rect id="mv2" x="156" y="92" width="108" height="38" rx="2" fill="#1a0000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="mv2t" x="210" y="107" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">sha256:ccdd...</text>
+          <text id="mv2s" x="210" y="121" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">nginx 1.25.4 (Wed)</text>
+
+          <!-- Warning -->
+          <rect id="warnbox" x="270" y="36" width="90" height="94" rx="2" fill="#0d0400" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text id="warnt" x="315" y="52" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">⚠ PROBLEM</text>
+          <text id="warn1" x="315" y="68" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">same image:</text>
+          <text id="warn2" x="315" y="80" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">tag, different</text>
+          <text id="warn3" x="315" y="92" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">bytes each</text>
+          <text id="warn4" x="315" y="104" text-anchor="middle" font-size="4.5" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">day you pull.</text>
+          <text id="warn5" x="315" y="120" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">Not repro-</text>
+          <text id="warn6" x="315" y="132" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ducible.</text>
+
+          <!-- Digest anchor -->
+          <rect id="digbox" x="10" y="140" width="340" height="16" rx="2" fill="#001408" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="digt" x="183" y="151" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">nginx@sha256:aabb... ← digest pin: always the same image, forever</text>
+        </svg>
+      </div>
+
+      <!-- Pinning terminal -->
+      <div id="pinterm" class="panel" style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#06000f;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0838">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">GET THE DIGEST — then pin it</div>
+        </div>
+        <div style="padding:9px 12px;font-size:6px;line-height:2.3">
+          <div id="p1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker inspect</span> --format='{{index .RepoDigests 0}}' nginx</div>
+          <div id="p2" class="tline" style="color:#4eff9a">nginx@sha256:a484819eb60abb8...</div>
+          <div id="p3" class="tline" style="color:#555">&nbsp;</div>
+          <div id="p4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker pull</span> nginx@sha256:a484819eb60abb8...</div>
+          <div id="p5" class="tline" style="color:#4eff9a">&#35; always fetches exact same bytes, regardless of tag</div>
+          <div id="p6" class="tline" style="color:#555">&nbsp;</div>
+          <div id="p7" class="tline" style="color:#888"># Dockerfile digest pin:</div>
+          <div id="p8" class="tline" style="color:#e8a020">FROM nginx@sha256:a484819eb60abb8...</div>
+        </div>
+      </div>
+
+      <!-- Tag vs digest comparison -->
+      <div id="cmpbox" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6px;color:#e85050">TAG — mutable</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            nginx:latest<br>
+            nginx:1.25<br>
+            <span style="color:#555">Can be overwritten<br>Not reproducible<br>Bad for security</span>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6px;color:#4eff9a">DIGEST — immutable</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            nginx@sha256:...<br>
+            <span style="color:#555">Content-addressed<br>Fully reproducible<br>Use for prod/CI</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">A tag is just a label stored in the registry — any push can move it silently.</div>
+    <div class="ih am">For supply chain security, always pin to digest in production Dockerfiles and CI.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">TAG</div><div class="sl">MUTABLE<br>POINTER</div></div>
+    <div class="sc"><div class="sv gn">sha256</div><div class="sl">IMMUTABLE<br>DIGEST</div></div>
+    <div class="sc"><div class="sv am">@</div><div class="sl">PIN<br>SYNTAX</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ SCENE 4 ═══════════════════════════════ -->
+<div class="scene" id="s4" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #001830">
+    <div class="hdr-title" style="color:#4ec9e1;font-size:11px;line-height:1.6">MANIFEST LIST</div>
+    <div class="hdr-sub">MULTI-ARCH + docker manifest inspect</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">MULTI-ARCH</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OCI INDEX</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Manifest list diagram -->
+      <div style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;border-bottom:1px solid #001830;text-align:center">
+          <span style="font-size:6px;color:#4ec9e1">OCI IMAGE INDEX (manifest list)</span>
+        </div>
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <defs><filter id="gB"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+
+          <!-- Index box -->
+          <rect id="idxbox" x="120" y="10" width="126" height="50" rx="2" fill="#000d20" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+          <text id="idxt" x="183" y="27" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">IMAGE INDEX</text>
+          <text id="idxs" x="183" y="38" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">nginx:latest → this</text>
+          <text id="idxs2" x="183" y="50" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">manifest list</text>
+
+          <!-- amd64 -->
+          <line id="la64" x1="152" y1="60" x2="80" y2="98" stroke="#a080ff" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="la64h" points="77,100 83,93 89,98" fill="#a080ff" opacity="0"/>
+          <rect id="a64box" x="12" y="100" width="110" height="46" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="a64t" x="67" y="116" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">linux/amd64</text>
+          <text id="a64s" x="67" y="129" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:1122...</text>
+          <text id="a64s2" x="67" y="140" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">x86 servers</text>
+
+          <!-- arm64 -->
+          <line id="larm" x1="183" y1="60" x2="183" y2="98" stroke="#4eff9a" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="larmh" points="183,101 179,94 187,94" fill="#4eff9a" opacity="0"/>
+          <rect id="armbox" x="128" y="100" width="110" height="46" rx="2" fill="#001008" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="armt" x="183" y="116" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">linux/arm64</text>
+          <text id="arms" x="183" y="129" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:3344...</text>
+          <text id="arms2" x="183" y="140" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">Apple M-series</text>
+
+          <!-- arm/v7 -->
+          <line id="lv7" x1="214" y1="60" x2="286" y2="98" stroke="#e8a020" stroke-width="1.2" stroke-dasharray="3,3" opacity="0"/>
+          <polygon id="lv7h" points="289,100 281,95 286,89" fill="#e8a020" opacity="0"/>
+          <rect id="v7box" x="244" y="100" width="110" height="46" rx="2" fill="#080500" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="v7t" x="299" y="116" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">linux/arm/v7</text>
+          <text id="v7s" x="299" y="129" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">sha256:5566...</text>
+          <text id="v7s2" x="299" y="140" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">Raspberry Pi</text>
+
+          <!-- Auto-select label -->
+          <rect id="autobox" x="10" y="152" width="346" height="14" rx="2" fill="#001018" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+          <text id="autot" x="183" y="162" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">docker pull auto-selects correct manifest for host architecture</text>
+        </svg>
+      </div>
+
+      <!-- docker manifest inspect terminal -->
+      <div id="inspterm" class="panel" style="background:#000508;border:2px solid #001830;border-radius:3px;overflow:hidden">
+        <div style="background:#00040d;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #001830">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6px;color:#555">docker manifest inspect</div>
+        </div>
+        <div style="padding:9px 12px;font-size:6px;line-height:2.2">
+          <div id="i1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker manifest inspect</span> nginx:latest</div>
+          <div id="i2" class="tline" style="color:#555">{</div>
+          <div id="i3" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"schemaVersion"</span>: 2,</div>
+          <div id="i4" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"mediaType"</span>: <span style="color:#4ec9e1">"application/vnd.docker.distribution.manifest.list.v2+json"</span>,</div>
+          <div id="i5" class="tline" style="color:#aaa">&nbsp;&nbsp;<span style="color:#a080ff">"manifests"</span>: [</div>
+          <div id="i6" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#555">"platform"</span>: { <span style="color:#a080ff">"os"</span>: <span style="color:#4eff9a">"linux"</span>, <span style="color:#a080ff">"arch"</span>: <span style="color:#4eff9a">"amd64"</span> },</div>
+          <div id="i7" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#555">"digest"</span>: <span style="color:#a080ff">"sha256:1122..."</span> },</div>
+          <div id="i8" class="tline" style="color:#aaa">&nbsp;&nbsp;&nbsp;&nbsp;{ <span style="color:#555">"platform"</span>: { <span style="color:#e8a020">"os"</span>: <span style="color:#4eff9a">"linux"</span>, <span style="color:#e8a020">"arch"</span>: <span style="color:#4eff9a">"arm64"</span> }, <span style="color:#555">...</span> }</div>
+          <div id="i9" class="tline" style="color:#555">] }</div>
+        </div>
+      </div>
+
+      <!-- OCI spec callout -->
+      <div id="ocibox" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #001830;border-right:1px solid #001830;border-bottom:1px solid #001830;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:7px">▸ OCI vs DOCKER SPEC</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          OCI Image Spec (opencontainers.org) is the open standard.<br>
+          Docker's format predates it but is now aligned.<br>
+          <span style="color:#4ec9e1">MediaType tells you which spec</span> a manifest uses:<br>
+          <span style="color:#a080ff">vnd.oci.*</span> = OCI · <span style="color:#e8a020">vnd.docker.*</span> = Docker legacy
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">One tag can point to an index containing per-arch manifests — transparent to the user.</div>
+    <div class="ih">Use digest pinning per-arch in CI to guarantee reproducibility across platforms.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#a080ff">amd64</div><div class="sl">x86<br>SERVER</div></div>
+    <div class="sc"><div class="sv gn">arm64</div><div class="sl">APPLE M<br>SERIES</div></div>
+    <div class="sc"><div class="sv am">arm/v7</div><div class="sl">RASPI<br>PI</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['reg','regl','mbox','mboxt','mboxs','mf1','mf1t','mf2','mf2t','mf3','mf3t',
+     'mf4','mf4t','mf5','mf5t','mf5t2','ca','cah','cfgbox','cfgt','cfgs',
+     'cfg1','cfg2','cfg3','cfg4','la','lah','ltitle','lsub',
+     'l3','l3t','l2','l2t','pkt1','pkt2'].forEach(id => svgHide(id));
+    hide('mjson');
+    ['j1','j2','j3','j4','j5','j6','j7','j8','j9'].forEach(id => hideEl(id));
+  }
+  if (n === 2) {
+    ['lyrC','lyrCt','lyrCs','lyrCbadge','lyrCbt',
+     'lyrN','lyrNt','lyrNs','lyrNbadge',
+     'lyr2','lyr2t','lyr2s','lyr2badge',
+     'lyr1','lyr1t','lyr1s','lyr1badge',
+     'shareBox','shareTxt','shareTxt2','arr1','arr2','arr3'].forEach(id => svgHide(id));
+    hide('lyrdesc'); hide('opttip');
+  }
+  if (n === 3) {
+    ['tagbox','tagt','tags','ma1','ma1h','ma1l','ma2','ma2h','ma2l',
+     'mv1','mv1t','mv1s','mv2','mv2t','mv2s',
+     'warnbox','warnt','warn1','warn2','warn3','warn4','warn5','warn6',
+     'digbox','digt'].forEach(id => svgHide(id));
+    hide('pinterm'); hide('cmpbox');
+    ['p1','p2','p3','p4','p5','p6','p7','p8'].forEach(id => hideEl(id));
+  }
+  if (n === 4) {
+    ['idxbox','idxt','idxs','idxs2',
+     'la64','la64h','a64box','a64t','a64s','a64s2',
+     'larm','larmh','armbox','armt','arms','arms2',
+     'lv7','lv7h','v7box','v7t','v7s','v7s2',
+     'autobox','autot'].forEach(id => svgHide(id));
+    hide('inspterm'); hide('ocibox');
+    ['i1','i2','i3','i4','i5','i6','i7','i8','i9'].forEach(id => hideEl(id));
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // Registry border
+    svgShow('reg', 200); svgShow('regl', 250);
+    // Manifest box
+    svgShow('mbox', 400); svgShow('mboxt', 460); svgShow('mboxs', 520);
+    // Manifest fields
+    svgShow('mf1', 650); svgShow('mf1t', 700);
+    svgShow('mf2', 800); svgShow('mf2t', 850);
+    svgShow('mf3', 950); svgShow('mf3t', 1000);
+    svgShow('mf4', 1100); svgShow('mf4t', 1150);
+    svgShow('mf5', 1250); svgShow('mf5t', 1300); svgShow('mf5t2', 1350);
+    // Config arrow + box
+    svgShow('ca', 1500); svgShow('cah', 1550);
+    movePkt('pkt1', 122, 86, 154, 86, 1600, 350);
+    svgShow('cfgbox', 1950); svgShow('cfgt', 2000); svgShow('cfgs', 2050);
+    svgShow('cfg1', 2150); svgShow('cfg2', 2220); svgShow('cfg3', 2290); svgShow('cfg4', 2360);
+    // Layers arrow + stack
+    svgShow('la', 2500); svgShow('lah', 2550);
+    movePkt('pkt2', 122, 110, 154, 142, 2600, 400);
+    svgShow('ltitle', 3000); svgShow('lsub', 3050);
+    svgShow('l3', 3100); svgShow('l3t', 3150);
+    svgShow('l2', 3250); svgShow('l2t', 3300);
+    // JSON panel
+    show('mjson', 3600);
+    showEl('j1', 3900); showEl('j2', 4100); showEl('j3', 4250);
+    showEl('j4', 4400); showEl('j5', 4550); showEl('j6', 4700);
+    showEl('j7', 4850); showEl('j8', 5000); showEl('j9', 5150);
+  }
+
+  if (n === 2) {
+    // Layers appear bottom-to-top
+    svgShow('lyr1', 200); svgShow('lyr1t', 280); svgShow('lyr1s', 350); svgShow('lyr1badge', 400);
+    svgShow('arr3', 600);
+    svgShow('lyr2', 700); svgShow('lyr2t', 780); svgShow('lyr2s', 850); svgShow('lyr2badge', 900);
+    svgShow('arr2', 1100);
+    svgShow('lyrN', 1200); svgShow('lyrNt', 1280); svgShow('lyrNs', 1350); svgShow('lyrNbadge', 1400);
+    svgShow('arr1', 1600);
+    svgShow('lyrC', 1700); svgShow('lyrCt', 1780); svgShow('lyrCs', 1850);
+    svgShow('lyrCbadge', 1900); svgShow('lyrCbt', 1950);
+    // Shared layer callout
+    svgShow('shareBox', 2300); svgShow('shareTxt', 2400); svgShow('shareTxt2', 2500);
+    // Info panels
+    show('lyrdesc', 2900);
+    show('opttip', 3700);
+  }
+
+  if (n === 3) {
+    // Tag + arrows
+    svgShow('tagbox', 200); svgShow('tagt', 280); svgShow('tags', 340);
+    svgShow('mv1', 600); svgShow('mv1t', 660); svgShow('mv1s', 720);
+    svgShow('ma1', 800); svgShow('ma1h', 850); svgShow('ma1l', 900);
+    // Second manifest + warning
+    svgShow('mv2', 1200); svgShow('mv2t', 1280); svgShow('mv2s', 1340);
+    svgShow('ma2', 1400); svgShow('ma2h', 1450); svgShow('ma2l', 1500);
+    svgShow('warnbox', 1700); svgShow('warnt', 1780);
+    svgShow('warn1', 1900); svgShow('warn2', 1980); svgShow('warn3', 2060);
+    svgShow('warn4', 2140); svgShow('warn5', 2220); svgShow('warn6', 2300);
+    // Digest anchor
+    svgShow('digbox', 2600); svgShow('digt', 2700);
+    // Pin terminal
+    show('pinterm', 3100);
+    showEl('p1', 3400); showEl('p2', 3700);
+    showEl('p3', 3900); showEl('p4', 4000); showEl('p5', 4400);
+    showEl('p6', 4600); showEl('p7', 4700); showEl('p8', 5000);
+    // Comparison
+    show('cmpbox', 5500);
+  }
+
+  if (n === 4) {
+    // Index box
+    svgShow('idxbox', 200); svgShow('idxt', 280); svgShow('idxs', 340); svgShow('idxs2', 400);
+    // amd64
+    svgShow('la64', 700); svgShow('la64h', 750);
+    svgShow('a64box', 900); svgShow('a64t', 960); svgShow('a64s', 1020); svgShow('a64s2', 1080);
+    // arm64
+    svgShow('larm', 1100); svgShow('larmh', 1150);
+    svgShow('armbox', 1300); svgShow('armt', 1360); svgShow('arms', 1420); svgShow('arms2', 1480);
+    // arm/v7
+    svgShow('lv7', 1500); svgShow('lv7h', 1550);
+    svgShow('v7box', 1700); svgShow('v7t', 1760); svgShow('v7s', 1820); svgShow('v7s2', 1880);
+    // Auto-select
+    svgShow('autobox', 2100); svgShow('autot', 2200);
+    // Terminal
+    show('inspterm', 2600);
+    showEl('i1', 2900); showEl('i2', 3150); showEl('i3', 3300);
+    showEl('i4', 3450); showEl('i5', 3600); showEl('i6', 3750);
+    showEl('i7', 3900); showEl('i8', 4050); showEl('i9', 4200);
+    // OCI callout
+    show('ocibox', 4700);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

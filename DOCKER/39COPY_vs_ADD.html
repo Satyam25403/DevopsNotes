@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker COPY vs ADD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════════════ SCENE 1: COPY — simple, transparent -->
+<div class="scene active" id="s1" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">COPY</div>
+    <div class="hdr-sub">SIMPLE. EXPLICIT. TRANSPARENT.</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">THE SAFE ONE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PREFER THIS</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Dockerfile snippet -->
+      <div style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555">FROM node:20-alpine</div>
+          <div style="color:#555">WORKDIR /app</div>
+          <div id="s1l1" class="tline" style="color:#4eff9a">COPY package.json .</div>
+          <div id="s1l2" class="tline" style="color:#4eff9a">COPY src/ ./src/</div>
+          <div id="s1l3" class="tline" style="color:#555">RUN npm install</div>
+        </div>
+      </div>
+
+      <!-- COPY flow diagram -->
+      <div id="s1diag" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#002010;border-bottom:1px solid #1a2810;font-size:6px;color:#4eff9a;text-align:center">COPY: BUILD CONTEXT → IMAGE LAYER</div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="greenArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- Build context box -->
+          <rect x="8" y="18" width="130" height="116" rx="4" fill="#001508" stroke="#1a2810" stroke-width="1.5"/>
+          <text x="73" y="36" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">BUILD CONTEXT</text>
+          <text x="73" y="50" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace">your project folder</text>
+
+          <!-- files in context -->
+          <rect id="s1f1" x="18" y="60" width="110" height="20" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s1f1t" x="73" y="74" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">📄 package.json</text>
+          <rect id="s1f2" x="18" y="86" width="110" height="20" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s1f2t" x="73" y="100" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">📁 src/</text>
+          <rect id="s1f3" x="18" y="112" width="110" height="16" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s1f3t" x="73" y="124" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">📄 Dockerfile</text>
+
+          <!-- Arrow -->
+          <line id="s1arrow" x1="140" y1="76" x2="194" y2="76" stroke="#4eff9a" stroke-width="2" opacity="0" marker-end="url(#greenArr)"/>
+          <text id="s1arrlbl" x="167" y="69" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">COPY</text>
+          <text id="s1arrlbl2" x="167" y="90" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">exact copy</text>
+
+          <!-- Image layer box -->
+          <rect x="198" y="18" width="160" height="116" rx="4" fill="#001508" stroke="#0a4020" stroke-width="1.5"/>
+          <text x="278" y="36" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">IMAGE LAYER</text>
+
+          <!-- files in image -->
+          <rect id="s1i1" x="210" y="50" width="136" height="20" rx="2" fill="#002010" stroke="#0a4020" stroke-width="1" opacity="0"/>
+          <text id="s1i1t" x="278" y="64" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">📄 package.json ✓</text>
+          <rect id="s1i2" x="210" y="76" width="136" height="20" rx="2" fill="#002010" stroke="#0a4020" stroke-width="1" opacity="0"/>
+          <text id="s1i2t" x="278" y="90" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">📁 src/ ✓</text>
+
+          <!-- cache label -->
+          <rect id="s1cache" x="210" y="104" width="136" height="22" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+          <text id="s1cachet" x="278" y="119" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ CACHE FRIENDLY</text>
+
+          <!-- packet -->
+          <circle id="s1pkt" cx="140" cy="76" r="4" fill="#4eff9a" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- What COPY does -->
+      <div id="s1card" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">WHAT COPY DOES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Takes files or directories from your build context and places them into the image. That's it. No surprises. What you see is what you get — and Docker can cache it reliably.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">COPY src dst — copies files from build context into the image.</div>
+    <div class="ih">Explicit, predictable, cache-friendly. Always prefer COPY.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1</div><div class="sl">SOURCE<br>ONLY</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">CACHE<br>WORKS</div></div>
+    <div class="sc"><div class="sv gn">SAFE</div><div class="sl">NO<br>SURPRISES</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ SCENE 2: ADD — the hidden powers -->
+<div class="scene" id="s2" style="background:#0f0900">
+  <div class="hdr" style="background:#0f0900;border-bottom:1px solid #2d1800">
+    <div class="hdr-title" style="color:#e8a020">ADD</div>
+    <div class="hdr-sub">MORE POWER. MORE HIDDEN BEHAVIOUR.</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0900">
+    <span class="slabel" style="color:#e8a020">THE TRICKY ONE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ANTI-PATTERN</span>
+  </div>
+
+  <div class="anim" style="background:#0f0900">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- ADD superpowers diagram -->
+      <div id="s2diag" class="panel" style="background:#0a0800;border:2px solid #2d1800;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#120d00;border-bottom:1px solid #2d1800;font-size:6px;color:#e8a020;text-align:center">ADD: THREE BEHAVIOURS IN ONE COMMAND</div>
+        <svg width="100%" height="182" viewBox="0 0 366 182" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="amberArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e8a020" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="redArr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="greenArr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- IMAGE layer destination -->
+          <rect x="248" y="12" width="110" height="158" rx="4" fill="#0a0800" stroke="#2d1800" stroke-width="1.5"/>
+          <text x="303" y="30" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">IMAGE LAYER</text>
+
+          <!-- ① Local file -->
+          <rect id="s2b1" x="8" y="14" width="156" height="38" rx="3" fill="#0f0900" stroke="#2d1800" stroke-width="1" opacity="0"/>
+          <text id="s2b1t" x="86" y="29" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">① local file / dir</text>
+          <text id="s2b1t2" x="86" y="43" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">ADD src/ ./src/</text>
+          <line id="s2a1" x1="166" y1="33" x2="246" y2="55" stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#greenArr3)"/>
+          <text id="s2i1" x="303" y="52" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">📁 src/ ✓</text>
+
+          <!-- ② tar extraction -->
+          <rect id="s2b2" x="8" y="72" width="156" height="38" rx="3" fill="#120800" stroke="#3d2000" stroke-width="1" opacity="0"/>
+          <text id="s2b2t" x="86" y="87" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">② .tar.gz archive</text>
+          <text id="s2b2t2" x="86" y="101" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">ADD app.tar.gz /opt/</text>
+          <line id="s2a2" x1="166" y1="91" x2="246" y2="91" stroke="#e8a020" stroke-width="1.5" opacity="0" marker-end="url(#amberArr)"/>
+          <text id="s2i2" x="303" y="84" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">📦 app.tar.gz</text>
+          <text id="s2i2b" x="303" y="100" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">→ auto-extracted</text>
+
+          <!-- ③ remote URL -->
+          <rect id="s2b3" x="8" y="130" width="156" height="38" rx="3" fill="#1a0000" stroke="#3d0808" stroke-width="1" opacity="0"/>
+          <text id="s2b3t" x="86" y="145" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">③ remote URL</text>
+          <text id="s2b3t2" x="86" y="159" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">ADD https://… /opt/</text>
+          <line id="s2a3" x1="166" y1="149" x2="246" y2="130" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0" marker-end="url(#redArr2)"/>
+          <text id="s2i3" x="303" y="130" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⚠ fetched live</text>
+          <text id="s2i3b" x="303" y="146" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">no cache</text>
+        </svg>
+      </div>
+
+      <!-- Dockerfile examples -->
+      <div id="s2term" class="panel" style="background:#050002;border:2px solid #2d1800;border-radius:3px;overflow:hidden">
+        <div style="background:#120800;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile — ADD examples</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2tl1" class="tline" style="color:#4eff9a"># ① like COPY (fine but unnecessary)</div>
+          <div id="s2tl2" class="tline" style="color:#aaa">ADD src/ ./src/</div>
+          <div id="s2tl3" class="tline" style="color:#e8a020;margin-top:2px"># ② auto-extracts archive (hidden!)</div>
+          <div id="s2tl4" class="tline" style="color:#aaa">ADD app.tar.gz /opt/app/</div>
+          <div id="s2tl5" class="tline" style="color:#e85050;margin-top:2px"># ③ fetches URL — BUSTS CACHE!</div>
+          <div id="s2tl6" class="tline" style="color:#aaa">ADD https://example.com/file /opt/</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">ADD does three things: copy files, auto-extract tars, fetch URLs.</div>
+    <div class="ih am">The extra powers hide intent and break the build cache.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">copy</div><div class="sl">LIKE<br>COPY</div></div>
+    <div class="sc"><div class="sv am">tar</div><div class="sl">AUTO<br>EXTRACT</div></div>
+    <div class="sc"><div class="sv rd">URL</div><div class="sl">FETCH<br>LIVE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ SCENE 3: The cache-busting danger -->
+<div class="scene" id="s3" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">CACHE BUSTED</div>
+    <div class="hdr-sub">WHY ADD + URL IS AN ANTI-PATTERN</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE DANGER</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Cache comparison diagram -->
+      <div id="s3diag" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#120008;border-bottom:1px solid #2d0010;font-size:6px;color:#555;text-align:center">BUILD CACHE BEHAVIOUR</div>
+        <svg width="100%" height="168" viewBox="0 0 366 168" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="greenArr4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="redArr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- COPY side -->
+          <text x="91" y="18" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">COPY</text>
+          <rect x="8" y="26" width="166" height="130" rx="4" fill="#001508" stroke="#0a4020" stroke-width="1.5"/>
+
+          <!-- build 1 -->
+          <rect id="s3c1" x="18" y="36" width="146" height="26" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s3c1t" x="91" y="48" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">build #1</text>
+          <text id="s3c1t2" x="91" y="58" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">reads local file → cached</text>
+
+          <!-- build 2 -->
+          <rect id="s3c2" x="18" y="70" width="146" height="26" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s3c2t" x="91" y="82" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">build #2 (no change)</text>
+          <text id="s3c2t2" x="91" y="92" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">file unchanged → cache HIT ✓</text>
+
+          <!-- build 3 -->
+          <rect id="s3c3" x="18" y="104" width="146" height="26" rx="2" fill="#002010" stroke="#1a3010" stroke-width="1" opacity="0"/>
+          <text id="s3c3t" x="91" y="116" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">build #3 (file changed)</text>
+          <text id="s3c3t2" x="91" y="126" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">hash changed → rebuild ✓</text>
+          <text id="s3c3t3" x="91" y="146" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">predictable ✓</text>
+
+          <!-- ADD URL side -->
+          <text x="275" y="18" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace">ADD url</text>
+          <rect x="192" y="26" width="166" height="130" rx="4" fill="#100006" stroke="#3d0010" stroke-width="1.5"/>
+
+          <!-- build 1 red -->
+          <rect id="s3r1" x="202" y="36" width="146" height="26" rx="2" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s3r1t" x="275" y="48" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">build #1</text>
+          <text id="s3r1t2" x="275" y="58" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">fetches URL live</text>
+
+          <!-- build 2 red -->
+          <rect id="s3r2" x="202" y="70" width="146" height="26" rx="2" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s3r2t" x="275" y="82" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">build #2 (no change)</text>
+          <text id="s3r2t2" x="275" y="92" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">fetches URL AGAIN ✗</text>
+
+          <!-- build 3 red -->
+          <rect id="s3r3" x="202" y="104" width="146" height="26" rx="2" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s3r3t" x="275" y="116" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">URL returns diff file</text>
+          <text id="s3r3t2" x="275" y="126" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">silent image change ✗</text>
+          <text id="s3r3t3" x="275" y="146" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">unpredictable ✗</text>
+        </svg>
+      </div>
+
+      <!-- tar gotcha card -->
+      <div id="s3tarcard" class="panel" style="background:#0f0900;border-left:4px solid #e8a020;border-top:1px solid #2d1800;border-right:1px solid #2d1800;border-bottom:1px solid #2d1800;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ TAR GOTCHA TOO</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#e8a020">ADD archive.tar.gz /opt/</span> looks like a simple copy but silently extracts the archive. A reader has no idea what ends up in /opt/ without inspecting the tar. Hidden behaviour = harder to review.</div>
+      </div>
+
+      <!-- Fix card -->
+      <div id="s3fix" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">✓ THE FIX FOR URLs</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Use <span style="color:#4eff9a">RUN curl -fsSL URL -o /opt/file</span> instead. The layer is explicit, the intent is clear, and caching behaves correctly based on the Dockerfile instruction itself.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">ADD with a URL fetches live on every build — no cache ever hits.</div>
+    <div class="ih rd">Silent URL fetches = unreproducible, unauditable images.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">∞</div><div class="sl">FETCHES<br>EVERY BUILD</div></div>
+    <div class="sc"><div class="sv rd">✕</div><div class="sl">CACHE<br>NEVER HITS</div></div>
+    <div class="sc"><div class="sv am">curl</div><div class="sl">USE THIS<br>INSTEAD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════ SCENE 4: The golden rule + cheatsheet -->
+<div class="scene" id="s4" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">THE RULE</div>
+    <div class="hdr-sub">WHEN TO USE WHICH — ALWAYS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">CHEATSHEET</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">REFERENCE</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Decision table -->
+      <div id="s4tbl" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:6px 10px;border-bottom:1px solid #0d2030;font-size:7px;color:#4ec9e1;text-align:center">DECISION TABLE</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div style="display:grid;grid-template-columns:1fr 60px 70px;gap:6px;padding:5px 4px;border-bottom:1px solid #0d1820;font-size:5.5px;color:#555">
+            <span>YOU WANT TO…</span><span style="text-align:center">USE</span><span style="text-align:right">CACHE?</span>
+          </div>
+          <div id="s4r1" style="display:grid;grid-template-columns:1fr 60px 70px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1820;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#aaa">Copy local files/dirs</span>
+            <span style="color:#4eff9a;text-align:center">COPY</span>
+            <span style="color:#4eff9a;text-align:right">✓ yes</span>
+          </div>
+          <div id="s4r2" style="display:grid;grid-template-columns:1fr 60px 70px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1820;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#aaa">Extract a tar archive</span>
+            <span style="color:#e8a020;text-align:center">ADD</span>
+            <span style="color:#e8a020;text-align:right">✓ yes</span>
+          </div>
+          <div id="s4r3" style="display:grid;grid-template-columns:1fr 60px 70px;gap:6px;padding:7px 4px;border-bottom:1px solid #0d1820;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#aaa">Fetch a remote URL</span>
+            <span style="color:#4eff9a;text-align:center">RUN curl</span>
+            <span style="color:#4eff9a;text-align:right">✓ yes</span>
+          </div>
+          <div id="s4r4" style="display:grid;grid-template-columns:1fr 60px 70px;gap:6px;padding:7px 4px;font-size:6px;align-items:center;opacity:0;transition:opacity .3s">
+            <span style="color:#e85050">Fetch URL with ADD</span>
+            <span style="color:#e85050;text-align:center">ADD</span>
+            <span style="color:#e85050;text-align:right">✗ NEVER</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Golden rule box -->
+      <div id="s4rule" class="panel" style="background:#000810;border:2px solid #4ec9e1;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;text-align:center;margin-bottom:8px">THE GOLDEN RULE</div>
+        <div style="background:#001018;border:1px solid #0d2030;border-radius:3px;padding:8px 10px;text-align:center;margin-bottom:8px">
+          <div style="font-size:8px;color:#4eff9a">Use COPY by default.</div>
+          <div style="font-size:6px;color:#666;margin-top:6px;line-height:1.9">Reach for ADD only when you need<br>automatic tar extraction.</div>
+        </div>
+        <div style="font-size:6px;color:#666;text-align:center;line-height:1.9">Never ADD a URL. Use RUN curl/wget instead.</div>
+      </div>
+
+      <!-- Correct Dockerfile -->
+      <div id="s4term" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">correct Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s4tl1" class="tline" style="color:#4eff9a"># ✓ files — always COPY</div>
+          <div id="s4tl2" class="tline" style="color:#aaa">COPY package.json src/ ./</div>
+          <div id="s4tl3" class="tline" style="color:#e8a020;margin-top:2px"># ✓ tar — ADD is fine here</div>
+          <div id="s4tl4" class="tline" style="color:#aaa">ADD node.tar.gz /usr/local/</div>
+          <div id="s4tl5" class="tline" style="color:#4eff9a;margin-top:2px"># ✓ URL — use curl, not ADD</div>
+          <div id="s4tl6" class="tline" style="color:#aaa">RUN curl -fsSL https://… -o /opt/f</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Default to COPY. ADD only for tar. Never ADD a URL.</div>
+    <div class="ih">Explicit Dockerfiles are auditable, cacheable, reproducible.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">COPY</div><div class="sl">DEFAULT<br>CHOICE</div></div>
+    <div class="sc"><div class="sv am">ADD</div><div class="sl">TAR ONLY<br>EXCEPTION</div></div>
+    <div class="sc"><div class="sv gn">curl</div><div class="sl">FOR<br>URLS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function animPkt(id,x1,y1,x2,y2,dur){
+  const d=document.getElementById(id);if(!d)return;
+  d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+  const frames=Math.max(1,Math.round(dur/16));let f=0;
+  function step(){
+    f++;const p=Math.min(f/frames,1);
+    d.setAttribute('cx',x1+(x2-x1)*p);
+    d.setAttribute('cy',y1+(y2-y1)*p);
+    if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+  }
+  af(16,step);
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3'].forEach(id=>hideEl(id));
+    hide('s1diag');hide('s1card');
+    ['s1f1','s1f1t','s1f2','s1f2t','s1f3','s1f3t',
+     's1arrow','s1arrlbl','s1arrlbl2','s1i1','s1i1t','s1i2','s1i2t',
+     's1cache','s1cachet','s1pkt'].forEach(id=>svgHide(id));
+  }
+  if(n===2){
+    hide('s2diag');hide('s2term');
+    ['s2b1','s2b1t','s2b1t2','s2a1','s2i1',
+     's2b2','s2b2t','s2b2t2','s2a2','s2i2','s2i2b',
+     's2b3','s2b3t','s2b3t2','s2a3','s2i3','s2i3b'].forEach(id=>svgHide(id));
+    ['s2tl1','s2tl2','s2tl3','s2tl4','s2tl5','s2tl6'].forEach(id=>hideEl(id));
+  }
+  if(n===3){
+    hide('s3diag');hide('s3tarcard');hide('s3fix');
+    ['s3c1','s3c1t','s3c1t2','s3c2','s3c2t','s3c2t2','s3c3','s3c3t','s3c3t2','s3c3t3',
+     's3r1','s3r1t','s3r1t2','s3r2','s3r2t','s3r2t2','s3r3','s3r3t','s3r3t2','s3r3t3'].forEach(id=>svgHide(id));
+  }
+  if(n===4){
+    hide('s4tbl');hide('s4rule');hide('s4term');
+    ['s4r1','s4r2','s4r3','s4r4','s4tl1','s4tl2','s4tl3','s4tl4','s4tl5','s4tl6'].forEach(id=>hideEl(id));
+  }
+}
+
+function play(n){
+  if(n===1){
+    showEl('s1l1',300);showEl('s1l2',600);showEl('s1l3',900);
+    show('s1diag',400);
+    svgShow('s1f1',600);svgShow('s1f1t',700);
+    svgShow('s1f2',900);svgShow('s1f2t',1000);
+    svgShow('s1f3',1200);svgShow('s1f3t',1300);
+    svgShow('s1arrow',1500);svgShow('s1arrlbl',1600);svgShow('s1arrlbl2',1700);
+    af(1600,()=>animPkt('s1pkt',140,76,198,76,400));
+    svgShow('s1i1',1800);svgShow('s1i1t',1900);
+    svgShow('s1i2',2100);svgShow('s1i2t',2200);
+    svgShow('s1cache',2500);svgShow('s1cachet',2650);
+    show('s1card',2900);
+  }
+  if(n===2){
+    show('s2diag',200);
+    svgShow('s2b1',400);svgShow('s2b1t',550);svgShow('s2b1t2',700);
+    svgShow('s2a1',900);svgShow('s2i1',1050);
+    svgShow('s2b2',1200);svgShow('s2b2t',1350);svgShow('s2b2t2',1500);
+    svgShow('s2a2',1700);svgShow('s2i2',1850);svgShow('s2i2b',2000);
+    svgShow('s2b3',2200);svgShow('s2b3t',2350);svgShow('s2b3t2',2500);
+    svgShow('s2a3',2700);svgShow('s2i3',2850);svgShow('s2i3b',3000);
+    show('s2term',2000);
+    showEl('s2tl1',2200);showEl('s2tl2',2500);
+    showEl('s2tl3',2800);showEl('s2tl4',3100);
+    showEl('s2tl5',3400);showEl('s2tl6',3700);
+  }
+  if(n===3){
+    show('s3diag',200);
+    svgShow('s3c1',400);svgShow('s3c1t',550);svgShow('s3c1t2',700);
+    svgShow('s3r1',400);svgShow('s3r1t',550);svgShow('s3r1t2',700);
+    svgShow('s3c2',1000);svgShow('s3c2t',1150);svgShow('s3c2t2',1300);
+    svgShow('s3r2',1000);svgShow('s3r2t',1150);svgShow('s3r2t2',1300);
+    svgShow('s3c3',1700);svgShow('s3c3t',1850);svgShow('s3c3t2',2000);svgShow('s3c3t3',2200);
+    svgShow('s3r3',1700);svgShow('s3r3t',1850);svgShow('s3r3t2',2000);svgShow('s3r3t3',2200);
+    show('s3tarcard',2600);
+    show('s3fix',3300);
+  }
+  if(n===4){
+    show('s4tbl',200);
+    showEl('s4r1',400);showEl('s4r2',800);showEl('s4r3',1200);showEl('s4r4',1600);
+    show('s4rule',2000);
+    show('s4term',2700);
+    showEl('s4tl1',2900);showEl('s4tl2',3100);
+    showEl('s4tl3',3300);showEl('s4tl4',3500);
+    showEl('s4tl5',3700);showEl('s4tl6',3900);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

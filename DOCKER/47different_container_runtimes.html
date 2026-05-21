@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Container Runtimes — Docker vs containerd vs CRI-O</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — The Docker Stack (CLI → dockerd → containerd → runc)
+═══════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#00060f">
+
+  <div class="hdr" style="background:#00060f;border-bottom:1px solid #0a1530">
+    <div class="hdr-title" style="color:#4ec9e1">CONTAINER RUNTIMES</div>
+    <div class="hdr-sub">THE DOCKER STACK UNPACKED</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00060f">
+    <span class="slabel" style="color:#4ec9e1">PART 1 OF 4</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">LAYERS</span>
+  </div>
+
+  <div class="anim" style="background:#00060f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1-intro" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #0a2040;border-right:1px solid #0a2040;border-bottom:1px solid #0a2040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">🐳 DOCKER IS NOT ONE THING</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">When you type <span style="color:#4eff9a">docker run</span>, you trigger a chain of 4 separate components. Most developers only see the top layer. Let's follow the call all the way down to where the container process actually starts.</div>
+      </div>
+
+      <!-- the layer stack diagram -->
+      <div id="s1-stack" class="panel" style="background:#00070f;border:2px solid #0a2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4ec9e1">DOCKER RUNTIME STACK — TOP TO BOTTOM</div>
+        </div>
+        <div style="padding:8px 10px 10px">
+          <svg width="100%" height="282" viewBox="0 0 366 282" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-down-c" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
+                <path d="M1,0 L7,0 L4,6 z" fill="#4ec9e1"/>
+              </marker>
+              <marker id="arr-down-g" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
+                <path d="M1,0 L7,0 L4,6 z" fill="#4eff9a"/>
+              </marker>
+              <filter id="glow-c"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              <filter id="glow-g"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+
+            <!-- Layer 1: docker CLI -->
+            <rect id="l1-box" x="40" y="8" width="286" height="46" rx="3" fill="#001525" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+            <text id="l1-t1" x="183" y="26" text-anchor="middle" font-size="8" fill="#4ec9e1" opacity="0">docker CLI</text>
+            <text id="l1-t2" x="183" y="40" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">docker run / build / push — the UX layer</text>
+            <!-- badge -->
+            <rect id="l1-badge" x="272" y="10" width="50" height="14" rx="2" fill="#001525" stroke="#4ec9e1" stroke-width="1" opacity="0"/>
+            <text id="l1-badge-t" x="297" y="20" text-anchor="middle" font-size="5" fill="#4ec9e1" opacity="0">YOU ARE HERE</text>
+
+            <!-- arrow 1 -->
+            <line id="arr1" x1="183" y1="58" x2="183" y2="70" stroke="#4ec9e1" stroke-width="1.5" marker-end="url(#arr-down-c)" opacity="0"/>
+            <text id="arr1-t" x="210" y="66" font-size="5" fill="#555" opacity="0">REST API call</text>
+
+            <!-- Layer 2: dockerd -->
+            <rect id="l2-box" x="40" y="74" width="286" height="46" rx="3" fill="#001025" stroke="#a080ff" stroke-width="2" opacity="0"/>
+            <text id="l2-t1" x="183" y="92" text-anchor="middle" font-size="8" fill="#a080ff" opacity="0">dockerd</text>
+            <text id="l2-t2" x="183" y="106" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">Docker daemon — images, volumes, API server</text>
+
+            <!-- arrow 2 -->
+            <line id="arr2" x1="183" y1="124" x2="183" y2="136" stroke="#a080ff" stroke-width="1.5" marker-end="url(#arr-down-c)" opacity="0"/>
+            <text id="arr2-t" x="210" y="132" font-size="5" fill="#555" opacity="0">gRPC (containerd API)</text>
+
+            <!-- Layer 3: containerd -->
+            <rect id="l3-box" x="40" y="140" width="286" height="46" rx="3" fill="#001a10" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+            <text id="l3-t1" x="183" y="158" text-anchor="middle" font-size="8" fill="#4eff9a" opacity="0">containerd</text>
+            <text id="l3-t2" x="183" y="172" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">manages snapshots, image pull, lifecycle</text>
+            <!-- CNCF badge -->
+            <rect id="l3-badge" x="272" y="142" width="50" height="14" rx="2" fill="#001a10" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+            <text id="l3-badge-t" x="297" y="152" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">CNCF project</text>
+
+            <!-- arrow 3 -->
+            <line id="arr3" x1="183" y1="190" x2="183" y2="202" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arr-down-g)" opacity="0"/>
+            <text id="arr3-t" x="210" y="198" font-size="5" fill="#555" opacity="0">OCI bundle + shim</text>
+
+            <!-- Layer 4: runc -->
+            <rect id="l4-box" x="40" y="206" width="286" height="46" rx="3" fill="#180800" stroke="#e8a020" stroke-width="2" opacity="0"/>
+            <text id="l4-t1" x="183" y="224" text-anchor="middle" font-size="8" fill="#e8a020" opacity="0">runc</text>
+            <text id="l4-t2" x="183" y="238" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">OCI runtime — calls Linux kernel, spawns process</text>
+            <!-- OCI badge -->
+            <rect id="l4-badge" x="272" y="208" width="50" height="14" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1" opacity="0"/>
+            <text id="l4-badge-t" x="297" y="218" text-anchor="middle" font-size="5" fill="#e8a020" opacity="0">OCI runtime</text>
+
+            <!-- kernel label at bottom -->
+            <text id="l4-kernel" x="183" y="268" text-anchor="middle" font-size="5.5" fill="#333" opacity="0">↓ Linux kernel (namespaces, cgroups) ↓</text>
+
+            <!-- animated packet flowing down -->
+            <circle id="s1-pkt" cx="183" cy="30" r="4" fill="#4ec9e1" opacity="0" filter="url(#glow-c)"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- one-liner cards -->
+      <div id="s1-cards" class="panel" style="display:flex;flex-direction:column;gap:6px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div id="s1-c1" class="panel" style="background:#001020;border:1px solid #1a3050;padding:7px 9px;border-radius:2px">
+            <div style="font-size:6px;color:#4ec9e1;margin-bottom:4px">docker CLI</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">UX wrapper. Talks to dockerd over a socket. You never skip this layer as a dev.</div>
+          </div>
+          <div id="s1-c2" class="panel" style="background:#050010;border:1px solid #1a0a35;padding:7px 9px;border-radius:2px">
+            <div style="font-size:6px;color:#a080ff;margin-bottom:4px">dockerd</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">The daemon. Handles networking, volumes, image management. Delegates to containerd.</div>
+          </div>
+          <div id="s1-c3" class="panel" style="background:#001508;border:1px solid #0a3015;padding:7px 9px;border-radius:2px">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:4px">containerd</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">The actual container runtime. Pulls images, manages lifecycle. CNCF graduated project.</div>
+          </div>
+          <div id="s1-c4" class="panel" style="background:#0d0400;border:1px solid #2a1500;padding:7px 9px;border-radius:2px">
+            <div style="font-size:6px;color:#e8a020;margin-bottom:4px">runc</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">Low-level OCI runtime. Calls clone(), setns(), pivot_root(). Spawns the PID 1 process.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">docker run triggers a 4-layer call chain before any process starts.</div>
+    <div class="ih">Most of Docker's "magic" lives in containerd and runc.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">4</div><div class="sl">LAYERS DEEP</div></div>
+    <div class="sc"><div class="sv gn">ctr'd</div><div class="sl">DOES THE WORK</div></div>
+    <div class="sc"><div class="sv am">runc</div><div class="sl">KERNEL CALLS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — What is CRI and why Kubernetes cares
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060010">
+
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff">THE CRI INTERFACE</div>
+    <div class="hdr-sub">HOW KUBERNETES TALKS TO RUNTIMES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#a080ff">PART 2 OF 4</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">CRI</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-intro" class="panel" style="background:#0a0018;border-left:4px solid #a080ff;border-top:1px solid #2a1040;border-right:1px solid #2a1040;border-bottom:1px solid #2a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">🔌 CONTAINER RUNTIME INTERFACE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">CRI is a gRPC API that Kubernetes kubelet uses to talk to container runtimes. It defines two services: <span style="color:#a080ff">RuntimeService</span> (pods, containers) and <span style="color:#a080ff">ImageService</span> (pull, list, remove). Any runtime that implements CRI can work with Kubernetes.</div>
+      </div>
+
+      <!-- CRI diagram -->
+      <div id="s2-diag" class="panel" style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#a080ff">KUBERNETES ↔ CRI ↔ RUNTIME</div>
+        </div>
+        <div style="padding:6px 4px 8px">
+          <svg width="100%" height="188" viewBox="0 0 366 188" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-pu" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#a080ff"/>
+              </marker>
+              <marker id="arr-pu-l" markerWidth="8" markerHeight="8" refX="2" refY="3" orient="auto">
+                <path d="M8,0 L8,6 L0,3 z" fill="#a080ff"/>
+              </marker>
+              <marker id="arr-gn2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-am" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e8a020"/>
+              </marker>
+              <filter id="glow-pu"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+
+            <!-- kubelet box -->
+            <rect id="s2-kub" x="8" y="70" width="96" height="48" rx="3" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s2-kub-t" x="56" y="90" text-anchor="middle" font-size="6" fill="#a080ff" opacity="0">kubelet</text>
+            <text id="s2-kub-t2" x="56" y="104" text-anchor="middle" font-size="5" fill="#555" opacity="0">K8s node agent</text>
+
+            <!-- CRI interface column -->
+            <rect id="s2-cri-bg" x="118" y="14" width="66" height="160" rx="3" fill="#0d0020" stroke="#a080ff" stroke-width="1.5" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s2-cri-t" x="151" y="30" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">CRI</text>
+            <text id="s2-cri-t2" x="151" y="42" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">gRPC API</text>
+            <!-- services -->
+            <rect id="s2-rs" x="124" y="52" width="54" height="22" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1" opacity="0"/>
+            <text id="s2-rs-t" x="151" y="60" text-anchor="middle" font-size="4.5" fill="#a080ff" opacity="0">Runtime</text>
+            <text id="s2-rs-t2" x="151" y="70" text-anchor="middle" font-size="4.5" fill="#a080ff" opacity="0">Service</text>
+            <rect id="s2-is" x="124" y="82" width="54" height="22" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1" opacity="0"/>
+            <text id="s2-is-t" x="151" y="90" text-anchor="middle" font-size="4.5" fill="#a080ff" opacity="0">Image</text>
+            <text id="s2-is-t2" x="151" y="100" text-anchor="middle" font-size="4.5" fill="#a080ff" opacity="0">Service</text>
+
+            <!-- arrow kubelet → CRI -->
+            <line id="s2-arr-kc" x1="106" y1="94" x2="116" y2="94" stroke="#a080ff" stroke-width="1.5" marker-end="url(#arr-pu)" opacity="0"/>
+
+            <!-- containerd box -->
+            <rect id="s2-ctrd" x="200" y="28" width="72" height="48" rx="3" fill="#001a10" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s2-ctrd-t" x="236" y="48" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">container</text>
+            <text id="s2-ctrd-t2" x="236" y="62" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">d</text>
+            <text id="s2-ctrd-cncf" x="236" y="72" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">CNCF</text>
+
+            <!-- CRI-O box -->
+            <rect id="s2-crio" x="200" y="90" width="72" height="48" rx="3" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s2-crio-t" x="236" y="110" text-anchor="middle" font-size="6" fill="#4ec9e1" opacity="0">CRI-O</text>
+            <text id="s2-crio-t2" x="236" y="126" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">CNCF / RedHat</text>
+
+            <!-- arrow CRI → runtimes -->
+            <line id="s2-arr-r1" x1="186" y1="52" x2="198" y2="52" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arr-gn2)" opacity="0"/>
+            <line id="s2-arr-r2" x1="186" y1="114" x2="198" y2="114" stroke="#4ec9e1" stroke-width="1.5" marker-end="url(#arr-pu)" opacity="0"/>
+
+            <!-- runc box (shared) -->
+            <rect id="s2-runc" x="290" y="60" width="70" height="48" rx="3" fill="#180800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s2-runc-t" x="325" y="80" text-anchor="middle" font-size="6" fill="#e8a020" opacity="0">runc</text>
+            <text id="s2-runc-t2" x="325" y="94" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">OCI runtime</text>
+
+            <!-- arrows to runc -->
+            <line id="s2-arr-rc1" x1="274" y1="52" x2="287" y2="72" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-am)" opacity="0"/>
+            <line id="s2-arr-rc2" x1="274" y1="114" x2="287" y2="100" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-am)" opacity="0"/>
+
+            <!-- container boxes at bottom -->
+            <rect id="s2-proc1" x="130" y="150" width="46" height="28" rx="2" fill="#001a10" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+            <text id="s2-proc1-t" x="153" y="162" text-anchor="middle" font-size="4.5" fill="#4eff9a" opacity="0">container</text>
+            <text id="s2-proc1-t2" x="153" y="172" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">process</text>
+            <rect id="s2-proc2" x="190" y="150" width="46" height="28" rx="2" fill="#001a10" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+            <text id="s2-proc2-t" x="213" y="162" text-anchor="middle" font-size="4.5" fill="#4eff9a" opacity="0">container</text>
+            <text id="s2-proc2-t2" x="213" y="172" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">process</text>
+
+            <text id="s2-proc-label" x="183" y="188" text-anchor="middle" font-size="4.5" fill="#333" opacity="0">↑ Linux namespaces + cgroups ↑</text>
+
+            <!-- animated packet -->
+            <circle id="s2-pkt" cx="56" cy="94" r="4" fill="#a080ff" opacity="0" filter="url(#glow-pu)"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- CRI-O vs containerd quick compare -->
+      <div id="s2-compare" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#001a10;border:1px solid #1a4a20;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">containerd</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.8">General purpose. Used by Docker AND Kubernetes. CNCF graduated. Plugin ecosystem.</div>
+        </div>
+        <div style="background:#00101a;border:1px solid #0a2a40;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:5px">CRI-O</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.8">Kubernetes-only runtime. Minimal, purpose-built. Default in OpenShift. RedHat backed.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">CRI is the gRPC contract between kubelet and any compliant runtime.</div>
+    <div class="ih pu">containerd and CRI-O both implement CRI. runc does the kernel work.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">CRI</div><div class="sl">gRPC CONTRACT</div></div>
+    <div class="sc"><div class="sv gn">ctr'd</div><div class="sl">GENERAL USE</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">CRI-O</div><div class="sl">K8S ONLY</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — Kubernetes 1.24: dockershim removal
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050">KUBERNETES 1.24</div>
+    <div class="hdr-sub">DOCKERSHIM REMOVED — WHY IT MATTERS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">PART 3 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">K8S 1.24</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-intro" class="panel" style="background:#180008;border-left:4px solid #e85050;border-top:1px solid #3a0015;border-right:1px solid #3a0015;border-bottom:1px solid #3a0015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">⚠ THE GREAT DOCKERSHIM PANIC</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">In May 2022, Kubernetes 1.24 removed <span style="color:#e85050">dockershim</span> — an adapter that let kubelet speak to Docker's non-CRI API. Many devs thought "Kubernetes dropped Docker". It didn't. It dropped the compatibility shim.</div>
+      </div>
+
+      <!-- before / after side by side -->
+      <div id="s3-ba" class="panel" style="background:#080002;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120005;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#e85050">BEFORE K8S 1.24 → AFTER K8S 1.24</div>
+        </div>
+        <div style="padding:6px 4px 8px">
+          <svg width="100%" height="222" viewBox="0 0 366 222" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-rd" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e85050"/>
+              </marker>
+              <marker id="arr-gn3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-pu2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#a080ff"/>
+              </marker>
+            </defs>
+
+            <!-- BEFORE column -->
+            <text id="s3-bl" x="84" y="16" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">BEFORE</text>
+            <!-- kubelet -->
+            <rect id="s3-b-kub" x="30" y="22" width="108" height="26" rx="2" fill="#180008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s3-b-kub-t" x="84" y="39" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">kubelet</text>
+            <!-- arrow down -->
+            <line id="s3-b-a1" x1="84" y1="50" x2="84" y2="60" stroke="#e85050" stroke-width="1" marker-end="url(#arr-rd)" opacity="0"/>
+            <!-- dockershim box -->
+            <rect id="s3-shim" x="30" y="62" width="108" height="26" rx="2" fill="#180008" stroke="#e85050" stroke-width="2" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s3-shim-t" x="84" y="75" text-anchor="middle" font-size="5.5" fill="#e85050" opacity="0">dockershim</text>
+            <text id="s3-shim-t2" x="84" y="84" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">CRI → Docker API shim</text>
+            <!-- arrow -->
+            <line id="s3-b-a2" x1="84" y1="90" x2="84" y2="100" stroke="#e85050" stroke-width="1" marker-end="url(#arr-rd)" opacity="0"/>
+            <!-- dockerd -->
+            <rect id="s3-b-dockerd" x="30" y="102" width="108" height="26" rx="2" fill="#0d0008" stroke="#888" stroke-width="1.5" opacity="0"/>
+            <text id="s3-b-dockerd-t" x="84" y="119" text-anchor="middle" font-size="6" fill="#888" opacity="0">dockerd</text>
+            <!-- arrow -->
+            <line id="s3-b-a3" x1="84" y1="130" x2="84" y2="140" stroke="#888" stroke-width="1" opacity="0"/>
+            <!-- containerd -->
+            <rect id="s3-b-ctrd" x="30" y="142" width="108" height="26" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s3-b-ctrd-t" x="84" y="159" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">containerd</text>
+            <!-- arrow -->
+            <line id="s3-b-a4" x1="84" y1="170" x2="84" y2="180" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+            <!-- runc -->
+            <rect id="s3-b-runc" x="30" y="182" width="108" height="26" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s3-b-runc-t" x="84" y="199" text-anchor="middle" font-size="6" fill="#e8a020" opacity="0">runc</text>
+            <!-- extra hops label -->
+            <text id="s3-b-hops" x="84" y="218" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">4 hops — slow &amp; complex</text>
+
+            <!-- divider -->
+            <line id="s3-div" x1="183" y1="8" x2="183" y2="214" stroke="#2a0010" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+
+            <!-- AFTER column -->
+            <text id="s3-al" x="283" y="16" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">AFTER</text>
+            <!-- kubelet -->
+            <rect id="s3-a-kub" x="228" y="22" width="108" height="26" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s3-a-kub-t" x="282" y="39" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">kubelet</text>
+            <!-- arrow down — direct -->
+            <line id="s3-a-a1" x1="282" y1="50" x2="282" y2="100" stroke="#4eff9a" stroke-width="2" marker-end="url(#arr-gn3)" opacity="0"/>
+            <text id="s3-a-cri" x="310" y="78" font-size="5" fill="#a080ff" opacity="0">via CRI</text>
+            <!-- containerd direct -->
+            <rect id="s3-a-ctrd" x="228" y="102" width="108" height="26" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+            <text id="s3-a-ctrd-t" x="282" y="119" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">containerd</text>
+            <!-- arrow -->
+            <line id="s3-a-a2" x1="282" y1="130" x2="282" y2="180" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arr-gn3)" opacity="0"/>
+            <!-- runc -->
+            <rect id="s3-a-runc" x="228" y="182" width="108" height="26" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s3-a-runc-t" x="282" y="199" text-anchor="middle" font-size="6" fill="#e8a020" opacity="0">runc</text>
+            <!-- fewer hops -->
+            <text id="s3-a-hops" x="282" y="218" text-anchor="middle" font-size="4.5" fill="#4eff9a" opacity="0">2 hops — clean &amp; fast</text>
+
+            <!-- X over dockershim in after column -->
+            <text id="s3-shim-x" x="282" y="90" text-anchor="middle" font-size="22" fill="#e85050" opacity="0">✗</text>
+            <text id="s3-shim-x2" x="282" y="100" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">dockershim gone</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- what this means for you -->
+      <div id="s3-means" class="panel" style="display:flex;flex-direction:column;gap:6px">
+        <div id="s3-m1" class="panel" style="background:#001a08;border-left:3px solid #4eff9a;padding:8px 10px">
+          <div style="font-size:6.5px;color:#4eff9a;margin-bottom:4px">✓ YOUR IMAGES STILL WORK</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.8">OCI images are OCI images. containerd pulls them the same way. Zero migration needed for image format.</div>
+        </div>
+        <div id="s3-m2" class="panel" style="background:#180008;border-left:3px solid #e85050;padding:8px 10px">
+          <div style="font-size:6.5px;color:#e85050;margin-bottom:4px">✗ docker.sock SCRIPTS BREAK</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.8">DaemonSets mounting /var/run/docker.sock for CI need updating. Use crictl or nerdctl instead.</div>
+        </div>
+        <div id="s3-m3" class="panel" style="background:#001020;border-left:3px solid #a080ff;padding:8px 10px">
+          <div style="font-size:6.5px;color:#a080ff;margin-bottom:4px">→ YOU STILL USE DOCKER LOCALLY</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.8">docker build / docker run on your laptop is unaffected. Only K8s node runtime changed.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">K8s dropped the dockershim adapter — not Docker images or Dockerfiles.</div>
+    <div class="ih rd">kubelet now talks directly to containerd via CRI. Cleaner, faster.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1.24</div><div class="sl">K8S VERSION</div></div>
+    <div class="sc"><div class="sv am">shim</div><div class="sl">REMOVED</div></div>
+    <div class="sc"><div class="sv gn">img</div><div class="sl">STILL WORKS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 4 — Full Picture + Standards (OCI)
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#00060a">
+
+  <div class="hdr" style="background:#00060a;border-bottom:1px solid #0a1a10">
+    <div class="hdr-title" style="color:#4eff9a">THE FULL PICTURE</div>
+    <div class="hdr-sub">OCI STANDARDS + RUNTIME LANDSCAPE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00060a">
+    <span class="slabel" style="color:#4eff9a">PART 4 OF 4</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">OCI</span>
+  </div>
+
+  <div class="anim" style="background:#00060a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- OCI explanation -->
+      <div id="s4-oci" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #0a3015;border-right:1px solid #0a3015;border-bottom:1px solid #0a3015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">📦 OCI — OPEN CONTAINER INITIATIVE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">OCI defines two standards: <span style="color:#4eff9a">image-spec</span> (what a container image looks like) and <span style="color:#4eff9a">runtime-spec</span> (how to run one). Docker, containerd, CRI-O all follow OCI. runc is the reference OCI runtime implementation.</div>
+      </div>
+
+      <!-- full landscape diagram -->
+      <div id="s4-land" class="panel" style="background:#00040a;border:2px solid #0a2818;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4eff9a">CONTAINER RUNTIME LANDSCAPE</div>
+        </div>
+        <div style="padding:8px 8px 10px">
+          <svg width="100%" height="228" viewBox="0 0 366 228" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-gn4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-c2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4ec9e1"/>
+              </marker>
+              <marker id="arr-pu3" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#a080ff"/>
+              </marker>
+              <marker id="arr-am2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e8a020"/>
+              </marker>
+            </defs>
+
+            <!-- USER TOOLS row -->
+            <text id="s4-row1-t" x="8" y="18" font-size="5" fill="#444" opacity="0">USER TOOLS</text>
+            <rect id="s4-docker-cli" x="8" y="22" width="80" height="28" rx="2" fill="#001525" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s4-docker-cli-t" x="48" y="34" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">docker CLI</text>
+            <text id="s4-docker-cli-t2" x="48" y="44" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">your terminal</text>
+
+            <rect id="s4-k8s" x="100" y="22" width="80" height="28" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s4-k8s-t" x="140" y="34" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">kubectl</text>
+            <text id="s4-k8s-t2" x="140" y="44" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">Kubernetes</text>
+
+            <rect id="s4-nerd" x="192" y="22" width="80" height="28" rx="2" fill="#001518" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s4-nerd-t" x="232" y="34" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">nerdctl</text>
+            <text id="s4-nerd-t2" x="232" y="44" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">containerd CLI</text>
+
+            <rect id="s4-crit" x="284" y="22" width="76" height="28" rx="2" fill="#100010" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s4-crit-t" x="322" y="34" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">crictl</text>
+            <text id="s4-crit-t2" x="322" y="44" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">CRI debug tool</text>
+
+            <!-- HIGH-LEVEL RUNTIMES row -->
+            <text id="s4-row2-t" x="8" y="72" font-size="5" fill="#444" opacity="0">HIGH-LEVEL RUNTIMES</text>
+            <rect id="s4-dockerd" x="8" y="76" width="80" height="28" rx="2" fill="#050018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s4-dockerd-t" x="48" y="94" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">dockerd</text>
+
+            <rect id="s4-ctrd2" x="100" y="76" width="80" height="28" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+            <text id="s4-ctrd2-t" x="140" y="88" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">containerd</text>
+            <text id="s4-ctrd2-t2" x="140" y="98" text-anchor="middle" font-size="4.5" fill="#4eff9a" opacity="0">CNCF ★</text>
+
+            <rect id="s4-crio2" x="192" y="76" width="80" height="28" rx="2" fill="#00101a" stroke="#4ec9e1" stroke-width="2" opacity="0"/>
+            <text id="s4-crio2-t" x="232" y="94" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">CRI-O</text>
+
+            <!-- CRI interface bar -->
+            <rect id="s4-cri-bar" x="88" y="114" width="192" height="18" rx="2" fill="#0d0020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s4-cri-bar-t" x="184" y="126" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">CRI — Container Runtime Interface</text>
+
+            <!-- OCI RUNTIMES row -->
+            <text id="s4-row3-t" x="8" y="148" font-size="5" fill="#444" opacity="0">OCI RUNTIMES</text>
+            <rect id="s4-runc2" x="60" y="152" width="80" height="28" rx="2" fill="#180800" stroke="#e8a020" stroke-width="2" opacity="0"/>
+            <text id="s4-runc2-t" x="100" y="164" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">runc</text>
+            <text id="s4-runc2-t2" x="100" y="174" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">reference impl</text>
+
+            <rect id="s4-kata" x="156" y="152" width="80" height="28" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s4-kata-t" x="196" y="164" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">kata-runtime</text>
+            <text id="s4-kata-t2" x="196" y="174" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">VM-based OCI</text>
+
+            <rect id="s4-gvisor" x="252" y="152" width="80" height="28" rx="2" fill="#180800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s4-gvisor-t" x="292" y="164" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">gVisor</text>
+            <text id="s4-gvisor-t2" x="292" y="174" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">sandbox OCI</text>
+
+            <!-- OCI spec bar at bottom -->
+            <rect id="s4-oci-bar" x="8" y="194" width="350" height="18" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s4-oci-bar-t" x="183" y="206" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">OCI — image-spec + runtime-spec (the shared standard)</text>
+
+            <!-- kernel -->
+            <text id="s4-kernel" x="183" y="222" text-anchor="middle" font-size="5" fill="#333" opacity="0">Linux kernel</text>
+
+            <!-- connection lines -->
+            <line id="s4-l1" x1="48" y1="52" x2="48" y2="74" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-pu3)" opacity="0"/>
+            <line id="s4-l2" x1="140" y1="52" x2="140" y2="74" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-gn4)" opacity="0"/>
+            <line id="s4-l3" x1="232" y1="52" x2="206" y2="74" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-gn4)" opacity="0"/>
+            <line id="s4-l4" x1="48" y1="106" x2="96" y2="114" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+            <line id="s4-l5" x1="140" y1="106" x2="140" y2="112" stroke="#4eff9a" stroke-width="1" marker-end="url(#arr-gn4)" opacity="0"/>
+            <line id="s4-l6" x1="232" y1="106" x2="232" y2="112" stroke="#4ec9e1" stroke-width="1" marker-end="url(#arr-c2)" opacity="0"/>
+            <line id="s4-l7" x1="140" y1="134" x2="100" y2="150" stroke="#4eff9a" stroke-width="1" stroke-dasharray="3,2" marker-end="url(#arr-am2)" opacity="0"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- crictl tip -->
+      <div id="s4-tip" class="panel" style="background:#001508;border:1px solid #0a3015;padding:9px 11px;border-radius:2px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">💡 AFTER DOCKERSHIM — USE CRICTL</div>
+        <div style="background:#000d04;border:1px solid #0a2010;padding:7px 9px;border-radius:2px;font-size:6px;line-height:2.3">
+          <div id="s4-cr1" class="tline" style="color:#888">$ <span style="color:#4eff9a">crictl ps</span>          <span style="color:#333"># list containers</span></div>
+          <div id="s4-cr2" class="tline" style="color:#888">$ <span style="color:#4eff9a">crictl images</span>       <span style="color:#333"># list images</span></div>
+          <div id="s4-cr3" class="tline" style="color:#888">$ <span style="color:#4eff9a">crictl logs &lt;id&gt;</span>    <span style="color:#333"># view logs</span></div>
+          <div id="s4-cr4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">nerdctl run nginx</span>   <span style="color:#333"># docker-like UX</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">OCI specs mean all these runtimes share the same image format.</div>
+    <div class="ih">Build once with Docker. Run anywhere: containerd, CRI-O, K8s.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">OCI</div><div class="sl">THE STANDARD</div></div>
+    <div class="sc"><div class="sv am">runc</div><div class="sl">REFERENCE IMPL</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">cri</div><div class="sl">K8S CONTRACT</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function hide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+function tshow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function thide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+function svgShow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); });
+}
+function svgHide(id) {
+  const e = document.getElementById(id); if (e) e.setAttribute('opacity','0');
+}
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-intro'); hide('s1-stack'); hide('s1-cards');
+    const svgEls = ['l1-box','l1-t1','l1-t2','l1-badge','l1-badge-t',
+      'arr1','arr1-t','l2-box','l2-t1','l2-t2',
+      'arr2','arr2-t','l3-box','l3-t1','l3-t2','l3-badge','l3-badge-t',
+      'arr3','arr3-t','l4-box','l4-t1','l4-t2','l4-badge','l4-badge-t','l4-kernel','s1-pkt'];
+    svgEls.forEach(svgHide);
+    ['s1-c1','s1-c2','s1-c3','s1-c4'].forEach(hide);
+  }
+  if (n === 2) {
+    hide('s2-intro'); hide('s2-diag'); hide('s2-compare');
+    const svgEls = ['s2-kub','s2-kub-t','s2-kub-t2','s2-cri-bg','s2-cri-t','s2-cri-t2',
+      's2-rs','s2-rs-t','s2-rs-t2','s2-is','s2-is-t','s2-is-t2',
+      's2-arr-kc','s2-ctrd','s2-ctrd-t','s2-ctrd-t2','s2-ctrd-cncf',
+      's2-crio','s2-crio-t','s2-crio-t2','s2-arr-r1','s2-arr-r2',
+      's2-runc','s2-runc-t','s2-runc-t2','s2-arr-rc1','s2-arr-rc2',
+      's2-proc1','s2-proc1-t','s2-proc1-t2','s2-proc2','s2-proc2-t','s2-proc2-t2',
+      's2-proc-label','s2-pkt'];
+    svgEls.forEach(svgHide);
+  }
+  if (n === 3) {
+    hide('s3-intro'); hide('s3-ba'); hide('s3-means');
+    const svgEls = ['s3-bl','s3-b-kub','s3-b-kub-t','s3-b-a1','s3-shim','s3-shim-t','s3-shim-t2',
+      's3-b-a2','s3-b-dockerd','s3-b-dockerd-t','s3-b-a3','s3-b-ctrd','s3-b-ctrd-t',
+      's3-b-a4','s3-b-runc','s3-b-runc-t','s3-b-hops',
+      's3-div','s3-al','s3-a-kub','s3-a-kub-t','s3-a-a1','s3-a-cri',
+      's3-a-ctrd','s3-a-ctrd-t','s3-a-a2','s3-a-runc','s3-a-runc-t','s3-a-hops',
+      's3-shim-x','s3-shim-x2'];
+    svgEls.forEach(svgHide);
+    ['s3-m1','s3-m2','s3-m3'].forEach(hide);
+  }
+  if (n === 4) {
+    hide('s4-oci'); hide('s4-land'); hide('s4-tip');
+    const svgEls = ['s4-row1-t','s4-docker-cli','s4-docker-cli-t','s4-docker-cli-t2',
+      's4-k8s','s4-k8s-t','s4-k8s-t2','s4-nerd','s4-nerd-t','s4-nerd-t2',
+      's4-crit','s4-crit-t','s4-crit-t2',
+      's4-row2-t','s4-dockerd','s4-dockerd-t','s4-ctrd2','s4-ctrd2-t','s4-ctrd2-t2',
+      's4-crio2','s4-crio2-t','s4-cri-bar','s4-cri-bar-t',
+      's4-row3-t','s4-runc2','s4-runc2-t','s4-runc2-t2',
+      's4-kata','s4-kata-t','s4-kata-t2','s4-gvisor','s4-gvisor-t','s4-gvisor-t2',
+      's4-oci-bar','s4-oci-bar-t','s4-kernel',
+      's4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6','s4-l7'];
+    svgEls.forEach(svgHide);
+    ['s4-cr1','s4-cr2','s4-cr3','s4-cr4'].forEach(thide);
+  }
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('s1-intro', 200);
+    show('s1-stack', 700);
+    // build layers top to bottom
+    svgShow('l1-box', 900); svgShow('l1-t1', 1000); svgShow('l1-t2', 1050); svgShow('l1-badge', 1000); svgShow('l1-badge-t', 1050);
+    svgShow('arr1', 1300); svgShow('arr1-t', 1350);
+    svgShow('l2-box', 1500); svgShow('l2-t1', 1600); svgShow('l2-t2', 1650);
+    svgShow('arr2', 1900); svgShow('arr2-t', 1950);
+    svgShow('l3-box', 2100); svgShow('l3-t1', 2200); svgShow('l3-t2', 2250); svgShow('l3-badge', 2200); svgShow('l3-badge-t', 2250);
+    svgShow('arr3', 2500); svgShow('arr3-t', 2550);
+    svgShow('l4-box', 2700); svgShow('l4-t1', 2800); svgShow('l4-t2', 2850); svgShow('l4-badge', 2800); svgShow('l4-badge-t', 2850);
+    svgShow('l4-kernel', 3100);
+    // animate packet flowing down through all layers
+    movePkt('s1-pkt', 183, 30, 183, 90, 3300, 350);
+    movePkt('s1-pkt', 183, 96, 183, 162, 3800, 350);
+    movePkt('s1-pkt', 183, 162, 183, 228, 4300, 350);
+    // cards
+    show('s1-cards', 3400);
+    ['s1-c1','s1-c2','s1-c3','s1-c4'].forEach((id, i) => show(id, 3600 + i * 200));
+  }
+
+  if (n === 2) {
+    show('s2-intro', 200);
+    show('s2-diag', 700);
+    svgShow('s2-kub', 900); svgShow('s2-kub-t', 1000); svgShow('s2-kub-t2', 1050);
+    svgShow('s2-cri-bg', 1200); svgShow('s2-cri-t', 1300); svgShow('s2-cri-t2', 1350);
+    svgShow('s2-rs', 1400); svgShow('s2-rs-t', 1450); svgShow('s2-rs-t2', 1480);
+    svgShow('s2-is', 1500); svgShow('s2-is-t', 1550); svgShow('s2-is-t2', 1580);
+    svgShow('s2-arr-kc', 1700);
+    svgShow('s2-ctrd', 1900); svgShow('s2-ctrd-t', 2000); svgShow('s2-ctrd-t2', 2050); svgShow('s2-ctrd-cncf', 2100);
+    svgShow('s2-crio', 1900); svgShow('s2-crio-t', 2000); svgShow('s2-crio-t2', 2050);
+    svgShow('s2-arr-r1', 2200); svgShow('s2-arr-r2', 2300);
+    svgShow('s2-runc', 2500); svgShow('s2-runc-t', 2600); svgShow('s2-runc-t2', 2650);
+    svgShow('s2-arr-rc1', 2700); svgShow('s2-arr-rc2', 2750);
+    svgShow('s2-proc1', 2900); svgShow('s2-proc1-t', 3000); svgShow('s2-proc1-t2', 3050);
+    svgShow('s2-proc2', 2900); svgShow('s2-proc2-t', 3000); svgShow('s2-proc2-t2', 3050);
+    svgShow('s2-proc-label', 3200);
+    // animate packet from kubelet through CRI to containerd
+    movePkt('s2-pkt', 56, 94, 151, 94, 3400, 500);
+    movePkt('s2-pkt', 151, 94, 236, 52, 4100, 400);
+    show('s2-compare', 3200);
+  }
+
+  if (n === 3) {
+    show('s3-intro', 200);
+    show('s3-ba', 700);
+    // build BEFORE column
+    svgShow('s3-bl', 900);
+    svgShow('s3-b-kub', 1000); svgShow('s3-b-kub-t', 1100);
+    svgShow('s3-b-a1', 1300);
+    svgShow('s3-shim', 1400); svgShow('s3-shim-t', 1500); svgShow('s3-shim-t2', 1550);
+    svgShow('s3-b-a2', 1700);
+    svgShow('s3-b-dockerd', 1800); svgShow('s3-b-dockerd-t', 1900);
+    svgShow('s3-b-a3', 2000);
+    svgShow('s3-b-ctrd', 2100); svgShow('s3-b-ctrd-t', 2200);
+    svgShow('s3-b-a4', 2300);
+    svgShow('s3-b-runc', 2400); svgShow('s3-b-runc-t', 2500);
+    svgShow('s3-b-hops', 2700);
+    // divider
+    svgShow('s3-div', 2900);
+    // build AFTER column
+    svgShow('s3-al', 3000);
+    svgShow('s3-a-kub', 3100); svgShow('s3-a-kub-t', 3200);
+    svgShow('s3-shim-x', 3300); svgShow('s3-shim-x2', 3400);
+    svgShow('s3-a-a1', 3500); svgShow('s3-a-cri', 3600);
+    svgShow('s3-a-ctrd', 3700); svgShow('s3-a-ctrd-t', 3800);
+    svgShow('s3-a-a2', 3900);
+    svgShow('s3-a-runc', 4000); svgShow('s3-a-runc-t', 4100);
+    svgShow('s3-a-hops', 4300);
+    // consequence cards
+    show('s3-means', 4500);
+    show('s3-m1', 4700); show('s3-m2', 5000); show('s3-m3', 5300);
+  }
+
+  if (n === 4) {
+    show('s4-oci', 200);
+    show('s4-land', 700);
+    // row 1 user tools
+    svgShow('s4-row1-t', 900);
+    svgShow('s4-docker-cli', 1000); svgShow('s4-docker-cli-t', 1100); svgShow('s4-docker-cli-t2', 1150);
+    svgShow('s4-k8s', 1000); svgShow('s4-k8s-t', 1100); svgShow('s4-k8s-t2', 1150);
+    svgShow('s4-nerd', 1100); svgShow('s4-nerd-t', 1200); svgShow('s4-nerd-t2', 1250);
+    svgShow('s4-crit', 1100); svgShow('s4-crit-t', 1200); svgShow('s4-crit-t2', 1250);
+    svgShow('s4-l1', 1400); svgShow('s4-l2', 1450); svgShow('s4-l3', 1500);
+    // row 2 high-level runtimes
+    svgShow('s4-row2-t', 1600);
+    svgShow('s4-dockerd', 1700); svgShow('s4-dockerd-t', 1800);
+    svgShow('s4-ctrd2', 1700); svgShow('s4-ctrd2-t', 1800); svgShow('s4-ctrd2-t2', 1850);
+    svgShow('s4-crio2', 1700); svgShow('s4-crio2-t', 1800);
+    svgShow('s4-l4', 2000); svgShow('s4-l5', 2050); svgShow('s4-l6', 2100);
+    // CRI bar
+    svgShow('s4-cri-bar', 2200); svgShow('s4-cri-bar-t', 2300);
+    // row 3 OCI runtimes
+    svgShow('s4-row3-t', 2500);
+    svgShow('s4-runc2', 2600); svgShow('s4-runc2-t', 2700); svgShow('s4-runc2-t2', 2750);
+    svgShow('s4-kata', 2700); svgShow('s4-kata-t', 2800); svgShow('s4-kata-t2', 2850);
+    svgShow('s4-gvisor', 2700); svgShow('s4-gvisor-t', 2800); svgShow('s4-gvisor-t2', 2850);
+    svgShow('s4-l7', 2900);
+    // OCI foundation bar
+    svgShow('s4-oci-bar', 3100); svgShow('s4-oci-bar-t', 3200);
+    svgShow('s4-kernel', 3300);
+    // crictl tip
+    show('s4-tip', 3600);
+    ['s4-cr1','s4-cr2','s4-cr3','s4-cr4'].forEach((id, i) => tshow(id, 3800 + i * 250));
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

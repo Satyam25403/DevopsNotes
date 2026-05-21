@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>LABEL Instruction</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pk{border-color:#ff79c6}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.pk{color:#ff79c6}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pk{color:#ff79c6}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* image card */
+.img-card{border:2px solid;border-radius:4px;overflow:hidden}
+.img-card-hdr{padding:6px 10px;display:flex;align-items:center;justify-content:space-between}
+.img-card-body{padding:8px 10px;display:flex;flex-direction:column;gap:3px}
+.img-card-row{display:flex;justify-content:space-between;font-size:7px;font-family:'Press Start 2P',monospace;padding:3px 0;border-bottom:1px solid #1a1a2e}
+.img-card-row:last-child{border-bottom:none}
+.lk{color:#ff79c6}
+.lv{color:#ccc}
+
+/* label tag pill */
+.ltag{display:inline-block;font-size:6px;padding:2px 7px;border-radius:10px;border:1px solid;margin:1px;font-family:'Press Start 2P',monospace}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:8px;font-family:'Press Start 2P',monospace;line-height:2.2;color:#ccc}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* inspect output */
+.inspect-block{border:1px solid #2a1f3d;border-radius:3px;background:#0a0a14;padding:8px 10px;font-size:7px;font-family:'Press Start 2P',monospace;line-height:2.1}
+
+/* filter results */
+.filter-row{display:flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid #2a1f3d;border-radius:2px;background:#0a0a14;margin-bottom:4px}
+.filter-img{font-size:7px;color:#4ec9e1;flex:1;font-family:'Press Start 2P',monospace}
+.filter-label{font-size:6px;padding:2px 6px;border-radius:10px;border:1px solid;flex-shrink:0}
+
+/* OCI label table */
+.oci-row{display:flex;gap:6px;align-items:flex-start;padding:5px 0;border-bottom:1px solid #1a1a2e;font-size:7px}
+.oci-row:last-child{border-bottom:none}
+.oci-key{color:#ff79c6;flex:3;font-family:'Press Start 2P',monospace;line-height:1.6;word-break:break-all}
+.oci-val{color:#aaa;flex:2;line-height:1.6}
+
+/* without/with comparison */
+.cmp-col{flex:1;border:2px solid;border-radius:3px;padding:8px 8px;display:flex;flex-direction:column;gap:5px}
+.cmp-title{font-size:7px;text-align:center;margin-bottom:2px}
+.cmp-item{font-size:7px;color:#ccc;line-height:1.8}
+
+/* beam */
+.beam{height:3px;width:0;border-radius:1px;transition:width .8s ease-out}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — WHAT LABEL DOES
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">LABEL INSTRUCTION</div>
+    <div class="hdr-sub">METADATA BAKED INTO YOUR IMAGE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#ff79c6">WHAT IS LABEL</span>
+    <span class="sbadge" style="color:#ff79c6;border-color:#ff79c6">METADATA</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- without labels chaos -->
+      <div class="fade" id="s1e1">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px;letter-spacing:1px">WITHOUT LABELS — AUDIT IS IMPOSSIBLE</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="filter-row">
+            <span class="filter-img">my-app:latest</span>
+            <span style="font-size:6px;color:#555">which commit? unknown</span>
+          </div>
+          <div class="filter-row">
+            <span class="filter-img">my-app:latest</span>
+            <span style="font-size:6px;color:#555">built when? unknown</span>
+          </div>
+          <div class="filter-row">
+            <span class="filter-img">my-app:latest</span>
+            <span style="font-size:6px;color:#555">who owns this? unknown</span>
+          </div>
+        </div>
+        <div style="font-size:7px;color:#e85050;text-align:center;margin-top:6px">🔥 prod is broken. which image is running?</div>
+      </div>
+
+      <!-- LABEL in dockerfile -->
+      <div class="fade" id="s1e2">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">LABEL IN YOUR DOCKERFILE</div>
+        <div class="cmd-block" style="border-color:#ff79c6">
+          <div class="cmd-prompt">Dockerfile</div>
+          <div class="cmd-line" style="line-height:2.4">
+            <span style="color:#ff79c6">LABEL</span> <span style="color:#4ec9e1">maintainer</span>=<span style="color:#4eff9a">"alice@corp.com"</span><br>
+            <span style="color:#ff79c6">LABEL</span> <span style="color:#4ec9e1">version</span>=<span style="color:#4eff9a">"1.0.0"</span><br>
+            <span style="color:#ff79c6">LABEL</span> <span style="color:#4ec9e1">git.commit</span>=<span style="color:#4eff9a">"a3f9c1b"</span><br>
+            <span style="color:#ff79c6">LABEL</span> <span style="color:#4ec9e1">build.date</span>=<span style="color:#4eff9a">"2025-05-21"</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- what it looks like baked in -->
+      <div class="fade" id="s1e3">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">LABELS ARE BAKED INTO THE IMAGE LAYER</div>
+        <div class="img-card" style="border-color:#ff79c6">
+          <div class="img-card-hdr" style="background:#1a0820">
+            <span style="font-size:7px;color:#ff79c6">🐳 my-app:1.0.0</span>
+            <span style="font-size:6px;color:#888">sha256:a3f9c1b…</span>
+          </div>
+          <div class="img-card-body" style="background:#0d0818">
+            <div class="img-card-row"><span class="lk">maintainer</span><span class="lv">alice@corp.com</span></div>
+            <div class="img-card-row"><span class="lk">version</span><span class="lv">1.0.0</span></div>
+            <div class="img-card-row"><span class="lk">git.commit</span><span class="lv">a3f9c1b</span></div>
+            <div class="img-card-row"><span class="lk">build.date</span><span class="lv">2025-05-21</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- key fact -->
+      <div class="fade" id="s1e4" style="border:1px solid #ff79c6;border-radius:3px;padding:10px 12px;background:#1a0820">
+        <div style="font-size:7px;color:#ff79c6;margin-bottom:6px">💡 THE KEY FACTS</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          LABEL adds no weight to the image.<br>
+          Labels survive <span style="color:#ff79c6">docker push</span> and <span style="color:#ff79c6">docker pull</span>.<br>
+          Readable via <span style="color:#4eff9a">docker inspect</span> and<br>
+          filterable via <span style="color:#4eff9a">docker images --filter</span>.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pk">
+    <div class="il">LABEL = key=value metadata baked into the image.</div>
+    <div class="ih pk">Zero size cost. Survives push/pull. Queryable.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pk">key=val</div><div class="sl">syntax</div></div>
+    <div class="sc"><div class="sv gn">zero</div><div class="sl">size added</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">inspect</div><div class="sl">how to read it</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — docker inspect + filtering
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">INSPECT & FILTER</div>
+    <div class="hdr-sub">QUERY LABELS AT THE COMMAND LINE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#ff79c6">QUERYING LABELS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">POWERFUL</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- docker inspect -->
+      <div class="fade" id="s2e1">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">READ ALL LABELS ON AN IMAGE</div>
+        <div class="cmd-block">
+          <div class="cmd-prompt">$ terminal</div>
+          <div class="cmd-line">
+            <span style="color:#4ec9e1">docker inspect</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--format</span> <span style="color:#4eff9a">'{{json .Config.Labels}}'</span> \<br>
+            &nbsp;&nbsp;my-app:1.0.0
+          </div>
+        </div>
+      </div>
+
+      <!-- inspect output -->
+      <div class="fade" id="s2e2">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">OUTPUT</div>
+        <div class="inspect-block">
+          <span style="color:#555">{</span><br>
+          &nbsp;&nbsp;<span style="color:#ff79c6">"maintainer"</span>: <span style="color:#4eff9a">"alice@corp.com"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#ff79c6">"version"</span>: <span style="color:#4eff9a">"1.0.0"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#ff79c6">"git.commit"</span>: <span style="color:#4eff9a">"a3f9c1b"</span>,<br>
+          &nbsp;&nbsp;<span style="color:#ff79c6">"build.date"</span>: <span style="color:#4eff9a">"2025-05-21"</span><br>
+          <span style="color:#555">}</span>
+        </div>
+      </div>
+
+      <!-- filter by label -->
+      <div class="fade" id="s2e3">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">FILTER IMAGES BY LABEL VALUE</div>
+        <div class="cmd-block" style="border-color:#4ec9e1">
+          <div class="cmd-prompt">$ find all images on version 1.0.0</div>
+          <div class="cmd-line">
+            <span style="color:#4ec9e1">docker images</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--filter</span> <span style="color:#4eff9a">label=version=1.0.0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- filter results -->
+      <div class="fade" id="s2e4">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">RESULTS — ONLY MATCHING IMAGES</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <div class="filter-row">
+            <span class="filter-img">my-app</span>
+            <span class="ltag" style="color:#4eff9a;border-color:#4eff9a">version=1.0.0 ✓</span>
+          </div>
+          <div class="filter-row">
+            <span class="filter-img">api-service</span>
+            <span class="ltag" style="color:#4eff9a;border-color:#4eff9a">version=1.0.0 ✓</span>
+          </div>
+          <div class="filter-row" style="opacity:.35">
+            <span class="filter-img" style="color:#555">worker</span>
+            <span class="ltag" style="color:#555;border-color:#555">version=2.1.0 ✗</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- filter just by key existence -->
+      <div class="fade" id="s2e5">
+        <div class="cmd-block" style="border-color:#ff79c6">
+          <div class="cmd-prompt">$ filter by key existence (any value)</div>
+          <div class="cmd-line">
+            <span style="color:#4ec9e1">docker images</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--filter</span> <span style="color:#4eff9a">label=git.commit</span>
+          </div>
+          <div class="cmd-out"><span style="color:#ff79c6">→ returns any image that has git.commit set</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">docker inspect reads labels. --filter queries them.</div>
+    <div class="ih cy">Filter by key alone or key=value for exact match.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pk">inspect</div><div class="sl">read all labels</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">--filter</div><div class="sl">find by value</div></div>
+    <div class="sc"><div class="sv gn">key only</div><div class="sl">existence check</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — OCI IMAGE SPEC STANDARD LABELS
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OCI STANDARD LABELS</div>
+    <div class="hdr-sub">org.opencontainers.image.*</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4ec9e1">OCI IMAGE SPEC</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">BEST PRACTICE</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- what OCI is -->
+      <div class="fade" id="s3e1" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">📋 OCI IMAGE SPEC — THE STANDARD</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          The Open Container Initiative defines <span style="color:#4ec9e1">standard</span><br>
+          label names under the prefix<br>
+          <span style="color:#ff79c6">org.opencontainers.image.*</span><br>
+          Tooling (registries, scanners, CI) understands these.
+        </div>
+      </div>
+
+      <!-- OCI labels table — staggered reveal -->
+      <div class="fade" id="s3e2" style="border:1px solid #2a1f3d;border-radius:3px;overflow:hidden">
+        <div style="background:#130d1e;padding:6px 10px;font-size:7px;color:#ff79c6;letter-spacing:1px">OCI STANDARD LABEL NAMES</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div class="oci-row fade" id="oci1">
+            <span class="oci-key">…image.title</span>
+            <span class="oci-val">human-readable name</span>
+          </div>
+          <div class="oci-row fade" id="oci2">
+            <span class="oci-key">…image.description</span>
+            <span class="oci-val">short description</span>
+          </div>
+          <div class="oci-row fade" id="oci3">
+            <span class="oci-key">…image.version</span>
+            <span class="oci-val">semver e.g. 1.0.0</span>
+          </div>
+          <div class="oci-row fade" id="oci4">
+            <span class="oci-key">…image.created</span>
+            <span class="oci-val">ISO 8601 build date</span>
+          </div>
+          <div class="oci-row fade" id="oci5">
+            <span class="oci-key">…image.revision</span>
+            <span class="oci-val">git commit SHA</span>
+          </div>
+          <div class="oci-row fade" id="oci6">
+            <span class="oci-key">…image.source</span>
+            <span class="oci-val">source repo URL</span>
+          </div>
+          <div class="oci-row fade" id="oci7">
+            <span class="oci-key">…image.authors</span>
+            <span class="oci-val">maintainer email</span>
+          </div>
+          <div class="oci-row fade" id="oci8">
+            <span class="oci-key">…image.licenses</span>
+            <span class="oci-val">SPDX identifier e.g. MIT</span>
+          </div>
+          <div class="oci-row fade" id="oci9">
+            <span class="oci-key">…image.url</span>
+            <span class="oci-val">image documentation URL</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- example with OCI labels -->
+      <div class="cmd-block fade" id="s3e3" style="border-color:#ff79c6">
+        <div class="cmd-prompt">DOCKERFILE WITH OCI LABELS</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#ff79c6">LABEL</span> \<br>
+          &nbsp;&nbsp;<span style="color:#4ec9e1">org.opencontainers.image.title</span>=<span style="color:#4eff9a">"my-app"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#4ec9e1">org.opencontainers.image.version</span>=<span style="color:#4eff9a">"1.0.0"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#4ec9e1">org.opencontainers.image.revision</span>=<span style="color:#4eff9a">"a3f9c1b"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#4ec9e1">org.opencontainers.image.created</span>=<span style="color:#4eff9a">"2025-05-21T10:00:00Z"</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Use org.opencontainers.image.* for portability.</div>
+    <div class="ih cy">Registries and scanners understand OCI labels natively.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pk">OCI</div><div class="sl">open standard</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">9+</div><div class="sl">standard keys</div></div>
+    <div class="sc"><div class="sv gn">portable</div><div class="sl">tool support</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — CI/CD TRACEABILITY + FULL EXAMPLE
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">CI/CD TRACEABILITY</div>
+    <div class="hdr-sub">COMMIT → IMAGE → PRODUCTION → AUDIT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL PATTERN</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">PRODUCTION ✓</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- CI pipeline injects labels at build time -->
+      <div class="fade" id="s4e1">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">CI PIPELINE — LABELS SET AT BUILD TIME</div>
+        <!-- git → ci arrow -->
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+          <div style="border:2px solid #e8a020;border-radius:3px;padding:8px 6px;text-align:center;width:70px;flex-shrink:0">
+            <div style="font-size:14px">🔀</div>
+            <div style="font-size:6px;color:#e8a020;margin-top:2px">git push</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="height:3px;width:0;background:#e8a020;border-radius:1px;transition:width .7s ease-out" id="arr_ci1"></div>
+          </div>
+          <div style="border:2px solid #4ec9e1;border-radius:3px;padding:8px 6px;text-align:center;width:70px;flex-shrink:0">
+            <div style="font-size:14px">⚙️</div>
+            <div style="font-size:6px;color:#4ec9e1;margin-top:2px">CI build</div>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="height:3px;width:0;background:#4ec9e1;border-radius:1px;transition:width .7s ease-out" id="arr_ci2"></div>
+          </div>
+          <div style="border:2px solid #ff79c6;border-radius:3px;padding:8px 6px;text-align:center;width:70px;flex-shrink:0">
+            <div style="font-size:14px">🏷️</div>
+            <div style="font-size:6px;color:#ff79c6;margin-top:2px">labeled image</div>
+          </div>
+        </div>
+        <!-- the CI docker build command -->
+        <div class="cmd-block" style="border-color:#4ec9e1">
+          <div class="cmd-prompt">CI pipeline script (GitHub Actions etc.)</div>
+          <div class="cmd-line" style="line-height:2.3">
+            <span style="color:#4ec9e1">docker build</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--label</span> <span style="color:#4ec9e1">org.opencontainers.image.revision</span>=\<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4eff9a">$(git rev-parse HEAD)</span> \<br>
+            &nbsp;&nbsp;<span style="color:#e8a020">--label</span> <span style="color:#4ec9e1">org.opencontainers.image.created</span>=\<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4eff9a">$(date -u +%Y-%m-%dT%H:%M:%SZ)</span> \<br>
+            &nbsp;&nbsp;-t <span style="color:#ff79c6">my-app:1.0.0</span> .
+          </div>
+        </div>
+      </div>
+
+      <!-- traceability scenario -->
+      <div class="fade" id="s4e2" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px">🔍 PROD INCIDENT — TRACE IN SECONDS</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:7px">
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <span style="color:#e8a020;flex-shrink:0">1.</span>
+            <span style="color:#ccc;line-height:1.7">Alert fires: "API returning 500s"</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <span style="color:#e8a020;flex-shrink:0">2.</span>
+            <span style="color:#ccc;line-height:1.7">Run <span style="color:#ff79c6">docker inspect --format '{{"{{"}}json .Config.Labels{{"}}"}}' running-container</span></span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">3.</span>
+            <span style="color:#ccc;line-height:1.7">See <span style="color:#4eff9a">git.revision: a3f9c1b</span> → open that commit on GitHub</span>
+          </div>
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <span style="color:#4eff9a;flex-shrink:0">4.</span>
+            <span style="color:#ccc;line-height:1.7">Found bad deploy in 30s. Fixed in 2 min.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- final cheatsheet -->
+      <div class="fade" id="s4e3" style="border:2px solid #ff79c6;border-radius:3px;padding:10px 12px;background:#1a0820">
+        <div style="font-size:7px;color:#ff79c6;margin-bottom:8px;letter-spacing:1px">✅ COMPLETE LABEL CHEATSHEET</div>
+        <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.3">
+          <span style="color:#888"># one LABEL per line or multi-line</span><br>
+          <span style="color:#ff79c6">LABEL</span> <span style="color:#4ec9e1">maintainer</span>=<span style="color:#4eff9a">"you@co.com"</span> \<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4ec9e1">version</span>=<span style="color:#4eff9a">"1.0.0"</span> \<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#4ec9e1">description</span>=<span style="color:#4eff9a">"my service"</span><br>
+          <span style="color:#888"># read it</span><br>
+          <span style="color:#4ec9e1">docker inspect</span> --format \<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">'{{"{{"}}json .Config.Labels{{"}}"}}'</span> img<br>
+          <span style="color:#888"># filter by it</span><br>
+          <span style="color:#4ec9e1">docker images</span> --filter \<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">label=version=1.0.0</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Labels turn images into auditable artifacts.</div>
+    <div class="ih" style="color:#4eff9a">git commit in every image = instant prod traceability.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pk">label</div><div class="sl">at build time</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">inspect</div><div class="sl">query anytime</div></div>
+    <div class="sc"><div class="sv gn">trace</div><div class="sl">commit → prod</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3','s2e4','s2e5'],
+    3:['s3e1','s3e2','s3e3',
+       'oci1','oci2','oci3','oci4','oci5','oci6','oci7','oci8','oci9'],
+    4:['s4e1','s4e2','s4e3']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  ['arr_ci1','arr_ci2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1200);
+  show('s1e3',2100);
+  show('s1e4',3000);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  show('s2e2',1100);
+  show('s2e3',2000);
+  show('s2e4',2800);
+  show('s2e5',3600);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  show('s3e2',1000);
+  const ociIds=['oci1','oci2','oci3','oci4','oci5','oci6','oci7','oci8','oci9'];
+  ociIds.forEach((id,i)=>show(id,1200+i*180));
+  show('s3e3',3100);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  setTimeout(()=>{
+    const a1=document.getElementById('arr_ci1');
+    if(a1) a1.style.width='100%';
+  },500);
+  setTimeout(()=>{
+    const a2=document.getElementById('arr_ci2');
+    if(a2) a2.style.width='100%';
+  },1100);
+  show('s4e2',2200);
+  show('s4e3',3200);
+}
+
+play1();
+</script>
+</body>
+</html>

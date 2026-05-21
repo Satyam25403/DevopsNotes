@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Namespaces & cgroups</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;
+  color:#fff;overflow-x:hidden;
+}
+.scene{width:390px;min-height:100vh;display:none;flex-direction:column}
+.scene.active{display:flex}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.cy{border-color:#4ec9e1}.info.pu{border-color:#b47eff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.cy{color:#4ec9e1}.ih.pu{color:#b47eff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#b47eff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:68px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:10px 14px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.fade{opacity:0;transition:opacity .5s ease}
+.fade.show{opacity:1}
+
+/* kernel layer diagram */
+.kernel-diagram{display:flex;flex-direction:column;gap:0;border:2px solid #e85050;border-radius:4px;overflow:hidden}
+.kd-row{padding:8px 12px;display:flex;align-items:center;gap:8px;font-size:7px}
+.kd-label{font-size:7px;color:#888;width:60px;flex-shrink:0}
+
+/* namespace cards grid */
+.ns-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+.ns-card{border:2px solid;border-radius:3px;padding:7px 6px;display:flex;flex-direction:column;gap:4px;transition:border-color .3s,background .3s}
+.ns-card-name{font-size:8px;text-align:center;letter-spacing:.5px}
+.ns-card-desc{font-size:6px;color:#888;text-align:center;line-height:1.6}
+.ns-card-example{font-size:6px;text-align:center;font-family:'Press Start 2P',monospace}
+
+/* cgroup bars */
+.cg-bar-wrap{display:flex;flex-direction:column;gap:6px}
+.cg-bar-row{display:flex;flex-direction:column;gap:3px}
+.cg-bar-label{display:flex;justify-content:space-between;font-size:7px}
+.cg-track{height:20px;background:#0a0a14;border:1px solid #2a1f3d;border-radius:2px;overflow:hidden;position:relative}
+.cg-fill{height:100%;width:0;border-radius:1px;transition:width 1.1s ease-out;display:flex;align-items:center;padding-left:6px}
+.cg-fill span{font-size:6px;font-family:'Press Start 2P',monospace;white-space:nowrap}
+
+/* overlayfs layers */
+.ofs-stack{display:flex;flex-direction:column;gap:3px}
+.ofs-layer{border:2px solid;border-radius:2px;padding:7px 10px;display:flex;align-items:center;justify-content:space-between;font-size:7px;transition:border-color .3s,background .3s}
+.ofs-label{font-size:7px}
+.ofs-badge{font-size:6px;padding:2px 6px;border:1px solid;border-radius:2px}
+
+/* vm vs container */
+.cmp-pair{display:flex;gap:8px}
+.cmp-col{flex:1;border:2px solid;border-radius:3px;overflow:hidden}
+.cmp-title{padding:6px 8px;font-size:7px;text-align:center}
+.cmp-body{padding:8px 8px;display:flex;flex-direction:column;gap:4px}
+.cmp-row{font-size:6px;color:#ccc;line-height:1.7;padding:3px 0;border-bottom:1px solid #1a1a2e}
+.cmp-row:last-child{border-bottom:none}
+
+/* cmd block */
+.cmd-block{border:1px solid #2a1f3d;border-radius:3px;padding:10px 12px;background:#0a0a14}
+.cmd-prompt{font-size:7px;color:#555;margin-bottom:4px;letter-spacing:1px}
+.cmd-line{font-size:8px;font-family:'Press Start 2P',monospace;line-height:2.2;color:#ccc}
+.cmd-out{font-size:7px;color:#888;line-height:1.9;margin-top:6px;font-family:'Press Start 2P',monospace}
+
+/* process tree */
+.proc-tree{font-size:7px;font-family:'Press Start 2P',monospace;line-height:2.2}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     SCENE 1 — CONTAINERS ARE NOT VMs
+═══════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">NAMESPACES & CGROUPS</div>
+    <div class="hdr-sub">WHAT ACTUALLY ISOLATES A CONTAINER</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e85050">NOT A VM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SHARED KERNEL</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- VM vs Container side by side -->
+      <div class="cmp-pair fade" id="s1e1">
+        <!-- VM -->
+        <div class="cmp-col" style="border-color:#e85050">
+          <div class="cmp-title" style="background:#1a0808;color:#e85050">VIRTUAL MACHINE</div>
+          <div class="cmp-body">
+            <div class="cmp-row" style="color:#aaa">App A</div>
+            <div class="cmp-row" style="color:#aaa">Guest OS (full)</div>
+            <div class="cmp-row" style="color:#aaa">Guest Kernel</div>
+            <div class="cmp-row" style="color:#888">Hypervisor</div>
+            <div class="cmp-row" style="color:#555">Host Kernel</div>
+          </div>
+        </div>
+        <!-- Container -->
+        <div class="cmp-col" style="border-color:#4ec9e1">
+          <div class="cmp-title" style="background:#04101a;color:#4ec9e1">CONTAINER</div>
+          <div class="cmp-body">
+            <div class="cmp-row" style="color:#aaa">App A</div>
+            <div class="cmp-row" style="color:#aaa">rootfs (libs)</div>
+            <div class="cmp-row" style="border-color:#1a2a3d"></div>
+            <div class="cmp-row" style="border-color:#1a2a3d"></div>
+            <div class="cmp-row" style="color:#4eff9a">Host Kernel ← shared</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- the kernel sharing implication -->
+      <div class="fade" id="s1e2" style="border:1px solid #e8a020;border-radius:3px;padding:10px 12px;background:#1a1208">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:6px">⚠ THE KEY IMPLICATION</div>
+        <div style="font-size:7px;color:#ccc;line-height:1.9">
+          Containers share the <span style="color:#e8a020">host kernel</span>.<br>
+          No separate OS. No hypervisor.<br>
+          Just a Linux process with <span style="color:#4eff9a">namespace illusions</span><br>
+          and <span style="color:#b47eff">cgroup resource caps</span>.
+        </div>
+      </div>
+
+      <!-- docker run is just this -->
+      <div class="fade" id="s1e3">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">docker run IS ESSENTIALLY THIS</div>
+        <div class="cmd-block" style="border-color:#4ec9e1">
+          <div class="cmd-prompt">what the kernel actually does</div>
+          <div class="cmd-line" style="line-height:2.4">
+            <span style="color:#4eff9a">1.</span> <span style="color:#b47eff">clone()</span> with namespace flags (CLONE_NEWPID…)<br>
+            <span style="color:#4eff9a">2.</span> write to <span style="color:#e8a020">/sys/fs/cgroup/…</span> (resource limits)<br>
+            <span style="color:#4eff9a">3.</span> <span style="color:#4ec9e1">chroot()</span> into the union filesystem<br>
+            <span style="color:#4eff9a">4.</span> exec the container entrypoint
+          </div>
+        </div>
+      </div>
+
+      <!-- pid 1 inside container -->
+      <div class="fade" id="s1e4">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">PID ILLUSION — CONTAINER SEES PID 1</div>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1;border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px;background:#0a0a14">
+            <div style="font-size:6px;color:#888;margin-bottom:5px">INSIDE CONTAINER</div>
+            <div class="proc-tree">
+              <span style="color:#4eff9a">PID 1</span> node index.js<br>
+              <span style="color:#4ec9e1">PID 2</span> npm worker<br>
+              <span style="color:#4ec9e1">PID 3</span> npm worker
+            </div>
+          </div>
+          <div style="flex:1;border:1px solid #2a1f3d;border-radius:3px;padding:8px 10px;background:#0a0a14">
+            <div style="font-size:6px;color:#888;margin-bottom:5px">HOST sees it as</div>
+            <div class="proc-tree">
+              <span style="color:#555">PID 1</span> systemd<br>
+              <span style="color:#555">…</span><br>
+              <span style="color:#e8a020">PID 8421</span> node<br>
+              <span style="color:#e8a020">PID 8422</span> npm<br>
+              <span style="color:#e8a020">PID 8423</span> npm
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Containers share the host kernel. No hypervisor.</div>
+    <div class="ih rd">Isolation = namespace tricks + cgroup limits, not a VM.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">shared</div><div class="sl">host kernel</div></div>
+    <div class="sc"><div class="sv pu">ns</div><div class="sl">illusion of isolation</div></div>
+    <div class="sc"><div class="sv am">cgroups</div><div class="sl">resource caps</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play1()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 2 — THE SIX NAMESPACES
+═══════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#1a1025">
+  <div class="hdr" style="background:#1a1025">
+    <div class="hdr-title">THE 6 NAMESPACES</div>
+    <div class="hdr-sub">EACH ONE HIDES A PART OF THE HOST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#b47eff">NAMESPACES</span>
+    <span class="sbadge" style="color:#b47eff;border-color:#b47eff">ISOLATION</span>
+  </div>
+  <div class="anim" style="background:#1a1025">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:8px">
+
+      <!-- namespace grid — 3x2 -->
+      <div class="ns-grid fade" id="s2e1">
+
+        <div class="ns-card fade" id="ns1" style="border-color:#b47eff;background:#0d0820">
+          <div class="ns-card-name" style="color:#b47eff">PID</div>
+          <div class="ns-card-desc">Process IDs. Container thinks it owns PID 1.</div>
+          <div class="ns-card-example" style="color:#b47eff">pid ns</div>
+        </div>
+
+        <div class="ns-card fade" id="ns2" style="border-color:#4ec9e1;background:#04101a">
+          <div class="ns-card-name" style="color:#4ec9e1">NET</div>
+          <div class="ns-card-desc">Own network stack, interfaces, routing table.</div>
+          <div class="ns-card-example" style="color:#4ec9e1">eth0</div>
+        </div>
+
+        <div class="ns-card fade" id="ns3" style="border-color:#4eff9a;background:#04140a">
+          <div class="ns-card-name" style="color:#4eff9a">MNT</div>
+          <div class="ns-card-desc">Own filesystem mount tree. chroot-like view.</div>
+          <div class="ns-card-example" style="color:#4eff9a">/proc</div>
+        </div>
+
+        <div class="ns-card fade" id="ns4" style="border-color:#e8a020;background:#1a1208">
+          <div class="ns-card-name" style="color:#e8a020">UTS</div>
+          <div class="ns-card-desc">Own hostname and domain name. Looks independent.</div>
+          <div class="ns-card-example" style="color:#e8a020">hostname</div>
+        </div>
+
+        <div class="ns-card fade" id="ns5" style="border-color:#ff79c6;background:#1a0820">
+          <div class="ns-card-name" style="color:#ff79c6">IPC</div>
+          <div class="ns-card-desc">Shared memory, semaphores. Isolated from host.</div>
+          <div class="ns-card-example" style="color:#ff79c6">shmem</div>
+        </div>
+
+        <div class="ns-card fade" id="ns6" style="border-color:#e85050;background:#1a0808">
+          <div class="ns-card-name" style="color:#e85050">USER</div>
+          <div class="ns-card-desc">UID/GID mapping. root inside ≠ root outside.</div>
+          <div class="ns-card-example" style="color:#e85050">uid map</div>
+        </div>
+
+      </div>
+
+      <!-- what namespaces do NOT isolate -->
+      <div class="fade" id="s2e2" style="border:1px solid #e85050;border-radius:3px;padding:10px 12px;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:6px">🔓 WHAT NAMESPACES DON'T ISOLATE</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div style="display:flex;gap:8px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">The host kernel — same kernel, always</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Kernel modules and syscalls (partial)</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <span style="color:#e85050;flex-shrink:0">✗</span>
+            <span style="color:#ccc;line-height:1.7">Hardware / CPU time (→ that's cgroups)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- check namespaces on a container -->
+      <div class="cmd-block fade" id="s2e3">
+        <div class="cmd-prompt">see a container's namespaces</div>
+        <div class="cmd-line">
+          <span style="color:#4ec9e1">lsns</span> <span style="color:#e8a020">-p</span> <span style="color:#4eff9a">$(docker inspect --format '{{"{{"}}index .State.Pid{{"}}"}}' myc)</span>
+        </div>
+        <div class="cmd-out">
+          TYPE &nbsp; NS &nbsp; &nbsp; &nbsp;PID &nbsp; COMMAND<br>
+          <span style="color:#b47eff">pid</span> &nbsp;&nbsp; 4026532… 8421 node<br>
+          <span style="color:#4ec9e1">net</span> &nbsp;&nbsp; 4026532… 8421 node<br>
+          <span style="color:#4eff9a">mnt</span> &nbsp;&nbsp; 4026532… 8421 node
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">6 namespaces hide PIDs, network, mounts, hostname, IPC, UIDs.</div>
+    <div class="ih pu">Each is a separate view of the same host kernel.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">6</div><div class="sl">namespace types</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">NET</div><div class="sl">biggest one</div></div>
+    <div class="sc"><div class="sv rd">kernel</div><div class="sl">never isolated</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(1)">◀ PREV</button>
+    <button class="btn play" onclick="play2()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 3 — CGROUPS: RESOURCE LIMITS
+═══════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">CGROUPS</div>
+    <div class="hdr-sub">RESOURCE LIMITS PER CONTAINER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#e8a020">CONTROL GROUPS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">RESOURCE CAPS</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- resource bars -->
+      <div class="fade" id="s3e1">
+        <div style="font-size:7px;color:#888;margin-bottom:8px;letter-spacing:1px">CONTAINER RESOURCE USAGE vs LIMIT</div>
+        <div class="cg-bar-wrap">
+
+          <div class="cg-bar-row">
+            <div class="cg-bar-label">
+              <span style="color:#4ec9e1">CPU</span>
+              <span style="color:#888">--cpus 0.5 → 50% of 1 core</span>
+            </div>
+            <div class="cg-track">
+              <div class="cg-fill" id="cgb1" style="background:#4ec9e1;max-width:50%">
+                <span style="color:#000">using 38%</span>
+              </div>
+              <div style="position:absolute;right:0;top:0;height:100%;width:2px;background:#e85050"></div>
+              <div style="position:absolute;right:4px;top:2px;font-size:6px;color:#e85050">LIMIT</div>
+            </div>
+          </div>
+
+          <div class="cg-bar-row">
+            <div class="cg-bar-label">
+              <span style="color:#4eff9a">MEMORY</span>
+              <span style="color:#888">--memory 256m</span>
+            </div>
+            <div class="cg-track">
+              <div class="cg-fill" id="cgb2" style="background:#4eff9a;max-width:72%">
+                <span style="color:#000">184 MB</span>
+              </div>
+              <div style="position:absolute;right:0;top:0;height:100%;width:2px;background:#e85050"></div>
+              <div style="position:absolute;right:4px;top:2px;font-size:6px;color:#e85050">256m</div>
+            </div>
+          </div>
+
+          <div class="cg-bar-row">
+            <div class="cg-bar-label">
+              <span style="color:#e8a020">BLOCK I/O</span>
+              <span style="color:#888">--blkio-weight 500</span>
+            </div>
+            <div class="cg-track">
+              <div class="cg-fill" id="cgb3" style="background:#e8a020;max-width:50%">
+                <span style="color:#000">weighted</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- what happens when you hit the limit -->
+      <div class="fade" id="s3e2">
+        <div style="font-size:7px;color:#888;margin-bottom:6px;letter-spacing:1px">HIT THE LIMIT → OOM KILL</div>
+        <div style="border:1px solid #e85050;border-radius:3px;padding:8px 10px;background:#1a0808">
+          <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.1">
+            <span style="color:#888"># allocate more than --memory 256m</span><br>
+            <span style="color:#e85050">KILLED</span> (OOM)<br>
+            <span style="color:#888">kernel OOM killer terminates PID 8421</span><br>
+            <span style="color:#e85050">Exit code 137</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- docker run flags -->
+      <div class="cmd-block fade" id="s3e3" style="border-color:#e8a020">
+        <div class="cmd-prompt">SETTING RESOURCE LIMITS AT RUN TIME</div>
+        <div class="cmd-line" style="line-height:2.3">
+          <span style="color:#4ec9e1">docker run</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--cpus</span> <span style="color:#4eff9a">"0.5"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--memory</span> <span style="color:#4eff9a">"256m"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--memory-swap</span> <span style="color:#4eff9a">"256m"</span> \<br>
+          &nbsp;&nbsp;<span style="color:#e8a020">--pids-limit</span> <span style="color:#4eff9a">100</span> \<br>
+          &nbsp;&nbsp;my-app
+        </div>
+        <div class="cmd-out"><span style="color:#888">these map directly to cgroup v2 files</span></div>
+      </div>
+
+      <!-- cgroup files -->
+      <div class="fade" id="s3e4" style="border:1px solid #4ec9e1;border-radius:3px;padding:10px 12px;background:#04101a">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:6px">📁 UNDER THE HOOD — cgroup v2 FILES</div>
+        <div style="font-size:7px;color:#ccc;font-family:'Press Start 2P',monospace;line-height:2.2">
+          /sys/fs/cgroup/docker/<span style="color:#e8a020">&lt;id&gt;</span>/<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">cpu.max</span> &nbsp;&nbsp;&nbsp;&nbsp; → 50000 100000<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">memory.max</span> &nbsp; → 268435456<br>
+          &nbsp;&nbsp;<span style="color:#4eff9a">pids.max</span> &nbsp;&nbsp;&nbsp; → 100
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">cgroups cap CPU, memory, I/O, and pids per container.</div>
+    <div class="ih am">Exceed memory limit = OOM kill. Exit code 137.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">cgroup</div><div class="sl">v2 files in /sys</div></div>
+    <div class="sc"><div class="sv rd">137</div><div class="sl">OOM exit code</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">--cpus</div><div class="sl">fractional cores</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(2)">◀ PREV</button>
+    <button class="btn play" onclick="play3()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SCENE 4 — OverlayFS + SECURITY
+═══════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0d1a2e">
+  <div class="hdr" style="background:#0d1a2e">
+    <div class="hdr-title">OverlayFS + SECURITY</div>
+    <div class="hdr-sub">UNION FS + CONTAINER ESCAPE RISK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr">
+    <span class="slabel" style="color:#4eff9a">FULL PICTURE</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SECURITY ⚠</span>
+  </div>
+  <div class="anim" style="background:#0d1a2e">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:10px">
+
+      <!-- overlayfs layer stack -->
+      <div class="fade" id="s4e1">
+        <div style="font-size:7px;color:#888;margin-bottom:7px;letter-spacing:1px">OverlayFS — THE UNION FILESYSTEM</div>
+        <div class="ofs-stack">
+          <div class="ofs-layer fade" id="ofl1" style="border-color:#4eff9a;background:#04140a">
+            <span class="ofs-label" style="color:#4eff9a">CONTAINER LAYER (rw)</span>
+            <span class="ofs-badge" style="color:#4eff9a;border-color:#4eff9a">your writes</span>
+          </div>
+          <div style="text-align:center;font-size:10px;color:#555;margin:-2px 0">↓ merged view</div>
+          <div class="ofs-layer fade" id="ofl2" style="border-color:#4ec9e1;background:#04101a">
+            <span class="ofs-label" style="color:#4ec9e1">IMAGE LAYER 3 (ro)</span>
+            <span class="ofs-badge" style="color:#4ec9e1;border-color:#4ec9e1">npm install</span>
+          </div>
+          <div class="ofs-layer fade" id="ofl3" style="border-color:#4ec9e1;background:#04101a">
+            <span class="ofs-label" style="color:#4ec9e1">IMAGE LAYER 2 (ro)</span>
+            <span class="ofs-badge" style="color:#4ec9e1;border-color:#4ec9e1">COPY src</span>
+          </div>
+          <div class="ofs-layer fade" id="ofl4" style="border-color:#888;background:#0a0a14">
+            <span class="ofs-label" style="color:#888">IMAGE LAYER 1 (ro)</span>
+            <span class="ofs-badge" style="color:#888;border-color:#888">base OS</span>
+          </div>
+        </div>
+        <div style="margin-top:6px;font-size:6px;color:#888;text-align:center">read layers shared between containers → zero disk copy</div>
+      </div>
+
+      <!-- container escape warning -->
+      <div class="fade" id="s4e2" style="border:2px solid #e85050;border-radius:3px;padding:10px 12px;background:#1a0808">
+        <div style="font-size:7px;color:#e85050;margin-bottom:7px;letter-spacing:1px">⚠ CONTAINER ESCAPE — WHY IT'S POSSIBLE</div>
+        <div style="display:flex;flex-direction:column;gap:6px;font-size:7px">
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0">!</span>
+            <span style="color:#ccc;line-height:1.7">Shared kernel → kernel exploit → break out of all namespaces</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0">!</span>
+            <span style="color:#ccc;line-height:1.7"><span style="color:#e8a020">--privileged</span> disables almost all isolation</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:flex-start">
+            <span style="color:#e85050;flex-shrink:0">!</span>
+            <span style="color:#ccc;line-height:1.7">Mounting <span style="color:#e8a020">/var/run/docker.sock</span> = full host access</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- hardening options -->
+      <div class="fade" id="s4e3" style="border:1px solid #4eff9a;border-radius:3px;padding:10px 12px;background:#04140a">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:7px;letter-spacing:1px">🔒 HARDENING AGAINST ESCAPE</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:7px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">Never use <span style="color:#e8a020">--privileged</span> in prod</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">Drop capabilities: <span style="color:#4ec9e1">--cap-drop ALL --cap-add NET_BIND_SERVICE</span></span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">Use <span style="color:#4ec9e1">--read-only</span> rootfs where possible</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">Enable seccomp + AppArmor profiles</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="color:#ccc;line-height:1.7">For true isolation: use gVisor or Kata Containers (VM-backed)</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">OverlayFS = layered read-only + one writable layer.</div>
+    <div class="ih" style="color:#4eff9a">Shared kernel = container escape possible. Drop privileges.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">overlay</div><div class="sl">union filesystem</div></div>
+    <div class="sc"><div class="sv rd">escape</div><div class="sl">kernel exploit risk</div></div>
+    <div class="sc"><div class="sv gn">seccomp</div><div class="sl">syscall filter</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="goScene(3)">◀ PREV</button>
+    <button class="btn play" onclick="play4()">▶ PLAY</button>
+    <button class="btn" onclick="goScene(1)" style="border-color:#e8a020;color:#e8a020">↩ RESTART</button>
+  </div>
+</div>
+
+<script>
+function goScene(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('active'));
+  document.getElementById('s'+n).classList.add('active');
+  resetAll(n);
+  ({1:play1,2:play2,3:play3,4:play4})[n]();
+}
+
+function resetAll(n){
+  const map={
+    1:['s1e1','s1e2','s1e3','s1e4'],
+    2:['s2e1','s2e2','s2e3',
+       'ns1','ns2','ns3','ns4','ns5','ns6'],
+    3:['s3e1','s3e2','s3e3','s3e4'],
+    4:['s4e1','s4e2','s4e3',
+       'ofl1','ofl2','ofl3','ofl4']
+  };
+  (map[n]||[]).forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('show');
+  });
+  ['cgb1','cgb2','cgb3'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.style.width='0';
+  });
+}
+
+function show(id,delay){
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.add('show');
+  },delay);
+}
+
+function play1(){
+  resetAll(1);
+  show('s1e1',300);
+  show('s1e2',1200);
+  show('s1e3',2100);
+  show('s1e4',3000);
+}
+
+function play2(){
+  resetAll(2);
+  show('s2e1',300);
+  const ns=['ns1','ns2','ns3','ns4','ns5','ns6'];
+  ns.forEach((id,i)=>show(id,500+i*220));
+  show('s2e2',2000);
+  show('s2e3',2900);
+}
+
+function play3(){
+  resetAll(3);
+  show('s3e1',300);
+  setTimeout(()=>{
+    const b1=document.getElementById('cgb1');
+    const b2=document.getElementById('cgb2');
+    const b3=document.getElementById('cgb3');
+    if(b1) b1.style.width='38%';
+    if(b2) b2.style.width='72%';
+    if(b3) b3.style.width='50%';
+  },500);
+  show('s3e2',1700);
+  show('s3e3',2600);
+  show('s3e4',3500);
+}
+
+function play4(){
+  resetAll(4);
+  show('s4e1',300);
+  ['ofl4','ofl3','ofl2','ofl1'].forEach((id,i)=>show(id,500+i*280));
+  show('s4e2',1700);
+  show('s4e3',2700);
+}
+
+play1();
+</script>
+</body>
+</html>

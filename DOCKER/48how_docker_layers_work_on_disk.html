@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OverlayFS — How Docker Layers Work on Disk</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 1 — What OverlayFS is: lowerdir / upperdir / merged
+═══════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#00060f">
+
+  <div class="hdr" style="background:#00060f;border-bottom:1px solid #0a1530">
+    <div class="hdr-title" style="color:#4ec9e1">OVERLAYFS</div>
+    <div class="hdr-sub">LOWERDIR · UPPERDIR · MERGED</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00060f">
+    <span class="slabel" style="color:#4ec9e1">PART 1 OF 4</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">overlay2</span>
+  </div>
+
+  <div class="anim" style="background:#00060f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1-intro" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #0a2040;border-right:1px solid #0a2040;border-bottom:1px solid #0a2040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">🗂 ONE VIEW, MANY LAYERS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker uses OverlayFS (<span style="color:#4ec9e1">overlay2</span> driver) to stack read-only image layers and a writable container layer into a single unified filesystem. The container sees one clean directory tree — it has no idea it's built from stacked layers.</div>
+      </div>
+
+      <!-- the three-dir stack diagram -->
+      <div id="s1-diag" class="panel" style="background:#00070f;border:2px solid #0a2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4ec9e1">OVERLAYFS MOUNT — THREE DIRECTORIES</div>
+        </div>
+        <div style="padding:8px 6px 10px">
+          <svg width="100%" height="262" viewBox="0 0 366 262" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-up" markerWidth="8" markerHeight="8" refX="4" refY="0" orient="auto">
+                <path d="M0,8 L4,0 L8,8 z" fill="#4ec9e1"/>
+              </marker>
+              <marker id="arr-up-g" markerWidth="8" markerHeight="8" refX="4" refY="0" orient="auto">
+                <path d="M0,8 L4,0 L8,8 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-up-a" markerWidth="8" markerHeight="8" refX="4" refY="0" orient="auto">
+                <path d="M0,8 L4,0 L8,8 z" fill="#e8a020"/>
+              </marker>
+              <filter id="gw"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+
+            <!-- MERGED layer (top — what container sees) -->
+            <rect id="s1-merged-box" x="10" y="8" width="346" height="50" rx="3" fill="#001a10" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+            <text id="s1-merged-t1" x="183" y="26" text-anchor="middle" font-size="7" fill="#4eff9a" opacity="0">merged</text>
+            <text id="s1-merged-t2" x="183" y="39" text-anchor="middle" font-size="5" fill="#888" opacity="0">what the container sees — unified view</text>
+            <!-- files shown in merged -->
+            <text id="s1-merged-f1" x="40" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">app.py</text>
+            <text id="s1-merged-f2" x="110" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">config.json</text>
+            <text id="s1-merged-f3" x="185" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">nginx.conf</text>
+            <text id="s1-merged-f4" x="260" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">lib.so</text>
+            <text id="s1-merged-f5" x="330" y="52" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">bash</text>
+
+            <!-- upward merge arrows -->
+            <line id="s1-ma1" x1="183" y1="160" x2="183" y2="68" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arr-up)" opacity="0"/>
+            <text id="s1-ma1-t" x="210" y="120" font-size="5" fill="#4ec9e1" opacity="0">OverlayFS merges</text>
+            <text id="s1-ma1-t2" x="213" y="130" font-size="5" fill="#4ec9e1" opacity="0">at mount time</text>
+
+            <!-- UPPERDIR (writable container layer) -->
+            <rect id="s1-upper-box" x="10" y="72" width="346" height="50" rx="3" fill="#100800" stroke="#e8a020" stroke-width="2" opacity="0"/>
+            <text id="s1-upper-t1" x="90" y="90" text-anchor="middle" font-size="7" fill="#e8a020" opacity="0">upperdir</text>
+            <text id="s1-upper-t2" x="90" y="103" text-anchor="middle" font-size="5" fill="#888" opacity="0">writable — this container only</text>
+            <text id="s1-upper-rw" x="310" y="96" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">READ</text>
+            <text id="s1-upper-rw2" x="310" y="108" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">WRITE</text>
+            <!-- files modified/added -->
+            <text id="s1-upper-f1" x="190" y="92" text-anchor="middle" font-size="5" fill="#e8a020" opacity="0">config.json*</text>
+            <text id="s1-upper-f1b" x="190" y="104" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">(modified)</text>
+
+            <!-- LOWERDIR layers (read-only image layers) -->
+            <rect id="s1-lower-box" x="10" y="136" width="346" height="110" rx="3" fill="#000d18" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s1-lower-t1" x="90" y="154" text-anchor="middle" font-size="7" fill="#4ec9e1" opacity="0">lowerdir</text>
+            <text id="s1-lower-t2" x="90" y="167" text-anchor="middle" font-size="5" fill="#888" opacity="0">read-only image layers (stacked)</text>
+            <text id="s1-lower-ro" x="310" y="160" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">READ</text>
+            <text id="s1-lower-ro2" x="310" y="172" text-anchor="middle" font-size="5.5" fill="#555" opacity="0">ONLY</text>
+
+            <!-- individual lowerdir layers -->
+            <rect id="s1-l3" x="22" y="176" width="322" height="20" rx="2" fill="#001020" stroke="#1a3a50" stroke-width="1" opacity="0"/>
+            <text id="s1-l3-t" x="80" y="190" text-anchor="middle" font-size="5" fill="#4ec9e1" opacity="0">Layer 3 — app code</text>
+            <text id="s1-l3-f" x="220" y="190" text-anchor="middle" font-size="5" fill="#888" opacity="0">app.py  config.json</text>
+
+            <rect id="s1-l2" x="22" y="200" width="322" height="20" rx="2" fill="#001020" stroke="#1a3a50" stroke-width="1" opacity="0"/>
+            <text id="s1-l2-t" x="80" y="214" text-anchor="middle" font-size="5" fill="#4ec9e1" opacity="0">Layer 2 — nginx</text>
+            <text id="s1-l2-f" x="220" y="214" text-anchor="middle" font-size="5" fill="#888" opacity="0">nginx.conf  lib.so</text>
+
+            <rect id="s1-l1" x="22" y="224" width="322" height="20" rx="2" fill="#001020" stroke="#1a3a50" stroke-width="1" opacity="0"/>
+            <text id="s1-l1-t" x="80" y="238" text-anchor="middle" font-size="5" fill="#4ec9e1" opacity="0">Layer 1 — base OS</text>
+            <text id="s1-l1-f" x="220" y="238" text-anchor="middle" font-size="5" fill="#888" opacity="0">bash  libc.so</text>
+
+            <!-- disk label -->
+            <text id="s1-disk" x="183" y="256" text-anchor="middle" font-size="5" fill="#333" opacity="0">↓ /var/lib/docker/overlay2/ on host disk ↓</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- three-term glossary -->
+      <div id="s1-glossary" class="panel" style="display:flex;flex-direction:column;gap:6px">
+        <div id="s1-g1" class="panel" style="background:#001020;border-left:3px solid #4ec9e1;padding:7px 10px">
+          <div style="font-size:6px;color:#4ec9e1;margin-bottom:4px">lowerdir</div>
+          <div style="font-size:5.5px;color:#aaa;line-height:1.8">Stacked read-only image layers. Shared across ALL containers using the same image. Never written to.</div>
+        </div>
+        <div id="s1-g2" class="panel" style="background:#100800;border-left:3px solid #e8a020;padding:7px 10px">
+          <div style="font-size:6px;color:#e8a020;margin-bottom:4px">upperdir</div>
+          <div style="font-size:5.5px;color:#aaa;line-height:1.8">Writable layer unique to this container. Starts empty. Only grows when files are modified or created.</div>
+        </div>
+        <div id="s1-g3" class="panel" style="background:#001508;border-left:3px solid #4eff9a;padding:7px 10px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:4px">merged</div>
+          <div style="font-size:5.5px;color:#aaa;line-height:1.8">The unified view the container sees. OverlayFS presents upperdir on top of lowerdir — seamlessly.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">Image layers are shared. Only changed files live in upperdir.</div>
+    <div class="ih">10 containers from the same image → 10 upperdirs, 1 shared lowerdir.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">lower</div><div class="sl">READ-ONLY</div></div>
+    <div class="sc"><div class="sv am">upper</div><div class="sl">WRITABLE</div></div>
+    <div class="sc"><div class="sv gn">merged</div><div class="sl">UNIFIED VIEW</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 2 — Copy-on-Write in action
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#060010">
+
+  <div class="hdr" style="background:#060010;border-bottom:1px solid #1a0838">
+    <div class="hdr-title" style="color:#a080ff">COPY-ON-WRITE</div>
+    <div class="hdr-sub">FILES COPIED UP ONLY WHEN MODIFIED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#060010">
+    <span class="slabel" style="color:#a080ff">PART 2 OF 4</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">CoW</span>
+  </div>
+
+  <div class="anim" style="background:#060010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-intro" class="panel" style="background:#0a0018;border-left:4px solid #a080ff;border-top:1px solid #2a1040;border-right:1px solid #2a1040;border-bottom:1px solid #2a1040;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">✏ COPY-ON-WRITE EXPLAINED</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">When a container reads a file, it reads directly from <span style="color:#4ec9e1">lowerdir</span> — no copy. When it writes a file for the first time, OverlayFS copies the entire file up to <span style="color:#e8a020">upperdir</span> first, then writes the modified version there.</div>
+      </div>
+
+      <!-- CoW animation diagram -->
+      <div id="s2-diag" class="panel" style="background:#040008;border:2px solid #1a0838;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#a080ff">COPY-ON-WRITE SEQUENCE</div>
+        </div>
+        <div style="padding:8px 6px 10px">
+          <svg width="100%" height="238" viewBox="0 0 366 238" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-pu4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#a080ff"/>
+              </marker>
+              <marker id="arr-am4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e8a020"/>
+              </marker>
+              <marker id="arr-gn4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+              <marker id="arr-up-pu" markerWidth="8" markerHeight="8" refX="4" refY="0" orient="auto">
+                <path d="M0,8 L4,0 L8,8 z" fill="#e8a020"/>
+              </marker>
+              <filter id="gp"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+
+            <!-- STEP 1: READ (no copy) -->
+            <text id="s2-s1-h" x="8" y="16" font-size="6" fill="#4eff9a" opacity="0">STEP 1: READ — no copy needed</text>
+            <!-- container reads -->
+            <rect id="s2-app" x="8" y="22" width="80" height="26" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s2-app-t" x="48" y="39" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">container</text>
+            <!-- lowerdir file -->
+            <rect id="s2-lo-file" x="220" y="22" width="136" height="26" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s2-lo-file-t" x="288" y="33" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">config.json</text>
+            <text id="s2-lo-file-t2" x="288" y="43" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">in lowerdir</text>
+            <!-- read arrow -->
+            <line id="s2-read-arr" x1="90" y1="35" x2="218" y2="35" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,2" marker-end="url(#arr-gn4)" opacity="0"/>
+            <text id="s2-read-t" x="155" y="28" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">open() → read directly</text>
+
+            <!-- upperdir empty -->
+            <rect id="s2-up-empty" x="110" y="22" width="100" height="26" rx="2" fill="#0d0004" stroke="#3a1500" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+            <text id="s2-up-empty-t" x="160" y="33" text-anchor="middle" font-size="5" fill="#444" opacity="0">upperdir</text>
+            <text id="s2-up-empty-t2" x="160" y="43" text-anchor="middle" font-size="4.5" fill="#333" opacity="0">(empty)</text>
+
+            <!-- divider -->
+            <line id="s2-div" x1="8" y1="58" x2="358" y2="58" stroke="#1a0a28" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+
+            <!-- STEP 2: WRITE — copy-up then modify -->
+            <text id="s2-s2-h" x="8" y="74" font-size="6" fill="#e8a020" opacity="0">STEP 2: WRITE — copy-up first</text>
+
+            <!-- lowerdir file (step 2) -->
+            <rect id="s2-lo-file2" x="220" y="80" width="136" height="26" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s2-lo-file2-t" x="288" y="91" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">config.json</text>
+            <text id="s2-lo-file2-t2" x="288" y="101" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">lowerdir (original)</text>
+
+            <!-- copy-up arrow -->
+            <line id="s2-cup-arr" x1="218" y1="93" x2="122" y2="93" stroke="#e8a020" stroke-width="2" marker-end="url(#arr-am4)" opacity="0"/>
+            <text id="s2-cup-t" x="170" y="86" text-anchor="middle" font-size="5" fill="#e8a020" opacity="0">1. copy-up!</text>
+
+            <!-- upperdir file (copied) -->
+            <rect id="s2-up-copied" x="22" y="80" width="96" height="26" rx="2" fill="#180800" stroke="#e8a020" stroke-width="2" opacity="0"/>
+            <text id="s2-up-copied-t" x="70" y="91" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">config.json</text>
+            <text id="s2-up-copied-t2" x="70" y="101" text-anchor="middle" font-size="4.5" fill="#888" opacity="0">upperdir (copy)</text>
+
+            <!-- write arrow from container to upperdir -->
+            <line id="s2-write-arr" x1="48" y1="108" x2="48" y2="118" stroke="#e8a020" stroke-width="2" marker-end="url(#arr-am4)" opacity="0"/>
+            <!-- container writes -->
+            <rect id="s2-app2" x="8" y="120" width="80" height="26" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s2-app2-t" x="48" y="137" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">container</text>
+            <text id="s2-write-label" x="100" y="130" font-size="5" fill="#e8a020" opacity="0">2. write to</text>
+            <text id="s2-write-label2" x="100" y="140" font-size="5" fill="#e8a020" opacity="0">upperdir copy</text>
+
+            <!-- divider 2 -->
+            <line id="s2-div2" x1="8" y1="158" x2="358" y2="158" stroke="#1a0a28" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+
+            <!-- STEP 3: result — lowerdir untouched -->
+            <text id="s2-s3-h" x="8" y="174" font-size="6" fill="#4eff9a" opacity="0">STEP 3: RESULT — lowerdir untouched</text>
+
+            <rect id="s2-lo-unchanged" x="200" y="180" width="156" height="26" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s2-lo-unch-t" x="278" y="191" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">config.json</text>
+            <text id="s2-lo-unch-t2" x="278" y="201" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">original — unchanged</text>
+
+            <rect id="s2-up-modified" x="22" y="180" width="100" height="26" rx="2" fill="#180800" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+            <text id="s2-up-mod-t" x="72" y="191" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">config.json'</text>
+            <text id="s2-up-mod-t2" x="72" y="201" text-anchor="middle" font-size="4.5" fill="#4eff9a" opacity="0">modified version</text>
+
+            <!-- overlay wins arrow -->
+            <line id="s2-win-arr" x1="124" y1="193" x2="196" y2="193" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+            <text id="s2-win-t" x="160" y="186" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">upper wins!</text>
+
+            <!-- shared label -->
+            <text id="s2-shared" x="278" y="222" text-anchor="middle" font-size="5" fill="#555" opacity="0">✓ other containers still see original</text>
+
+            <!-- animated particle for copy-up -->
+            <circle id="s2-pkt" cx="220" cy="93" r="4" fill="#e8a020" opacity="0" filter="url(#gp)"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- CoW implications -->
+      <div id="s2-impl" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+        <div style="background:#001508;border:1px solid #0a3015;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">✓ WHY IT'S FAST</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.8">Reads are free. No copy needed. 10 containers share 1 set of image layer files on disk.</div>
+        </div>
+        <div style="background:#0d0004;border:1px solid #2a0010;padding:8px 9px;border-radius:2px">
+          <div style="font-size:6px;color:#e85050;margin-bottom:5px">⚠ LARGE FILE TRAP</div>
+          <div style="font-size:5.5px;color:#888;line-height:1.8">Modifying a 500MB file copies the whole thing to upperdir first. One byte change = 500MB copy-up.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Read from lowerdir for free. First write triggers a full file copy-up.</div>
+    <div class="ih pu">lowerdir is never modified. It stays shared and clean forever.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">read</div><div class="sl">NO COPY</div></div>
+    <div class="sc"><div class="sv am">write</div><div class="sl">COPY-UP FIRST</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">lower</div><div class="sl">NEVER CHANGED</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 3 — Whiteout files: the delete trap
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050">THE DELETE TRAP</div>
+    <div class="hdr-sub">WHITEOUT FILES + LAYER BLOAT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">PART 3 OF 4</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">GOTCHA</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-intro" class="panel" style="background:#180008;border-left:4px solid #e85050;border-top:1px solid #3a0015;border-right:1px solid #3a0015;border-bottom:1px solid #3a0015;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">⚠ DELETING DOESN'T FREE SPACE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">When a Dockerfile <span style="color:#e85050">RUN rm -rf /tmp/bigfile</span> runs in a new layer, the original file still exists in the earlier layer. OverlayFS adds a <span style="color:#e85050">whiteout</span> file to hide it — but the bytes are still on disk.</div>
+      </div>
+
+      <!-- whiteout diagram -->
+      <div id="s3-diag" class="panel" style="background:#080002;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120005;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#e85050">WHITEOUT — THE HIDDEN SPACE WASTE</div>
+        </div>
+        <div style="padding:8px 6px 10px">
+          <svg width="100%" height="230" viewBox="0 0 366 230" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <defs>
+              <marker id="arr-rd4" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#e85050"/>
+              </marker>
+              <marker id="arr-gn5" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+                <path d="M0,0 L0,6 L8,3 z" fill="#4eff9a"/>
+              </marker>
+            </defs>
+
+            <!-- Dockerfile layers shown as stack -->
+            <text id="s3-df-t" x="8" y="14" font-size="5.5" fill="#e8a020" opacity="0">Dockerfile: 3 separate RUN commands</text>
+
+            <!-- Layer A -->
+            <rect id="s3-la" x="8" y="20" width="350" height="40" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s3-la-t" x="70" y="35" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">Layer A</text>
+            <text id="s3-la-cmd" x="70" y="48" text-anchor="middle" font-size="5" fill="#555" opacity="0">RUN apt-get install gcc</text>
+            <text id="s3-la-sz" x="290" y="38" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">+340 MB</text>
+            <text id="s3-la-f" x="290" y="50" text-anchor="middle" font-size="4.5" fill="#888" opacity="0">gcc + deps on disk</text>
+
+            <!-- arrow -->
+            <line id="s3-a1" x1="183" y1="62" x2="183" y2="72" stroke="#4ec9e1" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+
+            <!-- Layer B -->
+            <rect id="s3-lb" x="8" y="74" width="350" height="40" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s3-lb-t" x="70" y="89" text-anchor="middle" font-size="5.5" fill="#4ec9e1" opacity="0">Layer B</text>
+            <text id="s3-lb-cmd" x="70" y="102" text-anchor="middle" font-size="5" fill="#555" opacity="0">RUN make build</text>
+            <text id="s3-lb-sz" x="290" y="92" text-anchor="middle" font-size="5.5" fill="#e8a020" opacity="0">+20 MB</text>
+            <text id="s3-lb-f" x="290" y="104" text-anchor="middle" font-size="4.5" fill="#888" opacity="0">compiled binary</text>
+
+            <!-- arrow -->
+            <line id="s3-a2" x1="183" y1="116" x2="183" y2="126" stroke="#e85050" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+
+            <!-- Layer C — the delete -->
+            <rect id="s3-lc" x="8" y="128" width="350" height="52" rx="2" fill="#180008" stroke="#e85050" stroke-width="2" opacity="0"/>
+            <text id="s3-lc-t" x="70" y="143" text-anchor="middle" font-size="5.5" fill="#e85050" opacity="0">Layer C</text>
+            <text id="s3-lc-cmd" x="70" y="158" text-anchor="middle" font-size="5" fill="#e85050" opacity="0">RUN apt-get remove gcc</text>
+            <text id="s3-lc-cmd2" x="70" y="170" text-anchor="middle" font-size="5" fill="#555" opacity="0">    &amp;&amp; rm -rf /var/cache/apt</text>
+
+            <!-- whiteout files appearing -->
+            <rect id="s3-wo1" x="190" y="134" width="80" height="18" rx="2" fill="#300008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s3-wo1-t" x="230" y="147" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">.wh.gcc</text>
+
+            <rect id="s3-wo2" x="280" y="134" width="76" height="18" rx="2" fill="#300008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s3-wo2-t" x="318" y="147" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">.wh.libgcc</text>
+
+            <text id="s3-wo-label" x="280" y="170" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">whiteout files</text>
+
+            <!-- result summary -->
+            <rect id="s3-result" x="8" y="190" width="350" height="34" rx="2" fill="#200000" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s3-res-t1" x="183" y="204" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">Image size = 340 + 20 + ~0 = 360 MB</text>
+            <text id="s3-res-t2" x="183" y="218" text-anchor="middle" font-size="5" fill="#aaa" opacity="0">gcc bytes still live in Layer A — whiteout just hides them</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- the fix -->
+      <div id="s3-fix" class="panel" style="background:#000d04;border:2px solid #1a4a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:8px">
+          <span style="font-size:9px">✓</span>
+          <span style="font-size:6.5px;color:#4eff9a">THE FIX — CHAIN RUN COMMANDS</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3-f1" class="tline" style="color:#e85050">✗  RUN apt-get install gcc</div>
+          <div id="s3-f2" class="tline" style="color:#e85050">   RUN make build</div>
+          <div id="s3-f3" class="tline" style="color:#e85050">   RUN apt-get remove gcc   ← wastes space</div>
+          <div id="s3-sep" class="tline" style="color:#333;margin:2px 0">────────────────────────────</div>
+          <div id="s3-f4" class="tline" style="color:#4eff9a">✓  RUN apt-get install gcc \</div>
+          <div id="s3-f5" class="tline" style="color:#4eff9a">    &amp;&amp; make build \</div>
+          <div id="s3-f6" class="tline" style="color:#4eff9a">    &amp;&amp; apt-get remove gcc   ← ONE layer</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Deleting in a new layer adds a whiteout — original bytes persist in earlier layer.</div>
+    <div class="ih rd">Chain installs and cleanups in a single RUN to keep layers lean.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">.wh.</div><div class="sl">WHITEOUT FILE</div></div>
+    <div class="sc"><div class="sv am">360</div><div class="sl">MB WASTED</div></div>
+    <div class="sc"><div class="sv gn">&&</div><div class="sl">CHAIN FIX</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     SCENE 4 — docker system df + disk layout on host
+═══════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001508">
+
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0a2a10">
+    <div class="hdr-title" style="color:#4eff9a">DISK USAGE</div>
+    <div class="hdr-sub">docker system df + OVERLAY2 ON HOST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">PART 4 OF 4</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">df</span>
+  </div>
+
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- docker system df terminal -->
+      <div id="s4-term" class="panel" style="background:#000d04;border:2px solid #1a4a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4eff9a">terminal</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div id="s4-l0" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker system df</span></div>
+          <div id="s4-l1" class="tline" style="color:#555;font-size:5.5px">TYPE            TOTAL   ACTIVE   SIZE      RECLAIMABLE</div>
+          <div id="s4-l2" class="tline" style="color:#aaa">Images          <span style="color:#4ec9e1">14</span>      6        <span style="color:#e8a020">4.2GB</span>     <span style="color:#4eff9a">1.8GB</span> (43%)</div>
+          <div id="s4-l3" class="tline" style="color:#aaa">Containers      <span style="color:#4ec9e1">8</span>       3        <span style="color:#e8a020">124MB</span>     <span style="color:#4eff9a">88MB</span></div>
+          <div id="s4-l4" class="tline" style="color:#aaa">Local Volumes   <span style="color:#4ec9e1">12</span>      4        <span style="color:#e8a020">2.1GB</span>     <span style="color:#4eff9a">760MB</span></div>
+          <div id="s4-l5" class="tline" style="color:#aaa">Build Cache     <span style="color:#4ec9e1">47</span>      0        <span style="color:#e8a020">1.1GB</span>     <span style="color:#4eff9a">1.1GB</span></div>
+          <div id="s4-l6" class="tline" style="color:#888;margin-top:2px">$ <span style="color:#4eff9a">docker system df -v</span>   <span style="color:#333"># verbose per-image</span></div>
+        </div>
+      </div>
+
+      <!-- what "reclaimable" means -->
+      <div id="s4-reclaim" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0a3015;border-right:1px solid #0a3015;border-bottom:1px solid #0a3015;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:6px">RECLAIMABLE = UNUSED LAYERS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Images: layers not referenced by any running or stopped container. Containers: stopped container upperdirs. Build cache: intermediate layer snapshots. Volumes: not mounted by any container.</div>
+      </div>
+
+      <!-- host disk layout -->
+      <div id="s4-layout" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 12px;text-align:center">
+          <div style="font-size:6px;color:#4eff9a">/var/lib/docker/ ON HOST DISK</div>
+        </div>
+        <div style="padding:8px 10px">
+          <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <!-- root -->
+            <rect id="s4-root" x="130" y="6" width="106" height="22" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s4-root-t" x="183" y="21" text-anchor="middle" font-size="5" fill="#4eff9a" opacity="0">/var/lib/docker/</text>
+
+            <!-- branches -->
+            <line id="s4-br1" x1="155" y1="28" x2="44" y2="46" stroke="#1a4a10" stroke-width="1" opacity="0"/>
+            <line id="s4-br2" x1="165" y1="28" x2="110" y2="46" stroke="#1a4a10" stroke-width="1" opacity="0"/>
+            <line id="s4-br3" x1="183" y1="28" x2="183" y2="46" stroke="#1a4a10" stroke-width="1" opacity="0"/>
+            <line id="s4-br4" x1="200" y1="28" x2="258" y2="46" stroke="#1a4a10" stroke-width="1" opacity="0"/>
+            <line id="s4-br5" x1="210" y1="28" x2="324" y2="46" stroke="#1a4a10" stroke-width="1" opacity="0"/>
+
+            <!-- subdirs -->
+            <rect id="s4-d1" x="6" y="46" width="76" height="36" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s4-d1-t" x="44" y="60" text-anchor="middle" font-size="4.5" fill="#4ec9e1" opacity="0">overlay2/</text>
+            <text id="s4-d1-t2" x="44" y="72" text-anchor="middle" font-size="4" fill="#555" opacity="0">all layer dirs</text>
+            <text id="s4-d1-t3" x="44" y="80" text-anchor="middle" font-size="4" fill="#555" opacity="0">lowerdir+upperdir</text>
+
+            <rect id="s4-d2" x="88" y="46" width="66" height="36" rx="2" fill="#100800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s4-d2-t" x="121" y="60" text-anchor="middle" font-size="4.5" fill="#e8a020" opacity="0">volumes/</text>
+            <text id="s4-d2-t2" x="121" y="72" text-anchor="middle" font-size="4" fill="#555" opacity="0">named volumes</text>
+            <text id="s4-d2-t3" x="121" y="80" text-anchor="middle" font-size="4" fill="#555" opacity="0">persistent data</text>
+
+            <rect id="s4-d3" x="160" y="46" width="46" height="36" rx="2" fill="#0a0018" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+            <text id="s4-d3-t" x="183" y="60" text-anchor="middle" font-size="4.5" fill="#a080ff" opacity="0">image/</text>
+            <text id="s4-d3-t2" x="183" y="72" text-anchor="middle" font-size="4" fill="#555" opacity="0">image</text>
+            <text id="s4-d3-t3" x="183" y="80" text-anchor="middle" font-size="4" fill="#555" opacity="0">metadata</text>
+
+            <rect id="s4-d4" x="220" y="46" width="76" height="36" rx="2" fill="#100808" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="s4-d4-t" x="258" y="60" text-anchor="middle" font-size="4.5" fill="#e85050" opacity="0">containers/</text>
+            <text id="s4-d4-t2" x="258" y="72" text-anchor="middle" font-size="4" fill="#555" opacity="0">container</text>
+            <text id="s4-d4-t3" x="258" y="80" text-anchor="middle" font-size="4" fill="#555" opacity="0">config + logs</text>
+
+            <rect id="s4-d5" x="302" y="46" width="56" height="36" rx="2" fill="#050010" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s4-d5-t" x="330" y="60" text-anchor="middle" font-size="4.5" fill="#4ec9e1" opacity="0">buildkit/</text>
+            <text id="s4-d5-t2" x="330" y="72" text-anchor="middle" font-size="4" fill="#555" opacity="0">build cache</text>
+            <text id="s4-d5-t3" x="330" y="80" text-anchor="middle" font-size="4" fill="#555" opacity="0">layers</text>
+
+            <!-- overlay2 zoom -->
+            <rect id="s4-oz" x="6" y="96" width="354" height="46" rx="2" fill="#001020" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,2" opacity="0"/>
+            <text id="s4-oz-t" x="183" y="108" text-anchor="middle" font-size="5" fill="#4ec9e1" opacity="0">overlay2/  contains one dir per layer (SHA256 hash name)</text>
+            <text id="s4-oz-t2" x="183" y="120" text-anchor="middle" font-size="4.5" fill="#888" opacity="0">each dir has:  diff/  (layer contents)  work/  (OverlayFS temp)</text>
+            <text id="s4-oz-t3" x="183" y="132" text-anchor="middle" font-size="4.5" fill="#888" opacity="0">container upperdir → overlay2/&lt;id&gt;/diff/  (the writable layer)</text>
+            <text id="s4-oz-t4" x="183" y="144" text-anchor="middle" font-size="4" fill="#555" opacity="0">run: ls /var/lib/docker/overlay2/ to see all your layers</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- cleanup commands -->
+      <div id="s4-clean" class="panel" style="background:#001a08;border:1px solid #0a3015;padding:9px 11px;border-radius:2px">
+        <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">🧹 RECLAIM THAT SPACE</div>
+        <div style="font-size:6px;line-height:2.4">
+          <div id="s4-c1" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker image prune</span>       <span style="color:#333"># dangling images</span></div>
+          <div id="s4-c2" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker image prune -a</span>     <span style="color:#333"># ALL unused images</span></div>
+          <div id="s4-c3" class="tline" style="color:#888">$ <span style="color:#4eff9a">docker container prune</span>    <span style="color:#333"># stopped containers</span></div>
+          <div id="s4-c4" class="tline" style="color:#e85050">$ <span style="color:#e85050">docker system prune -a</span>    <span style="color:#333"># nuclear option</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">docker system df shows total vs reclaimable across images, containers, volumes.</div>
+    <div class="ih">All layer data lives in /var/lib/docker/overlay2/ — one dir per layer.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">df</div><div class="sl">USAGE AUDIT</div></div>
+    <div class="sc"><div class="sv am">o2/</div><div class="sl">LAYER STORE</div></div>
+    <div class="sc"><div class="sv rd">prune</div><div class="sl">RECLAIM</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function hide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+function tshow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); }});
+}
+function thide(id) {
+  const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); }
+}
+function svgShow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); });
+}
+function svgHide(id) {
+  const e = document.getElementById(id); if (e) e.setAttribute('opacity','0');
+}
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity','1');
+    const frames = Math.max(1, Math.round(durMs/16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f/frames, 1);
+      d.setAttribute('cx', x1+(x2-x1)*p);
+      d.setAttribute('cy', y1+(y2-y1)*p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity','0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s'+cur);
+  const next = document.getElementById('s'+n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-intro'); hide('s1-diag'); hide('s1-glossary');
+    ['s1-merged-box','s1-merged-t1','s1-merged-t2','s1-merged-f1','s1-merged-f2','s1-merged-f3','s1-merged-f4','s1-merged-f5',
+     's1-ma1','s1-ma1-t','s1-ma1-t2',
+     's1-upper-box','s1-upper-t1','s1-upper-t2','s1-upper-rw','s1-upper-rw2','s1-upper-f1','s1-upper-f1b',
+     's1-lower-box','s1-lower-t1','s1-lower-t2','s1-lower-ro','s1-lower-ro2',
+     's1-l3','s1-l3-t','s1-l3-f','s1-l2','s1-l2-t','s1-l2-f','s1-l1','s1-l1-t','s1-l1-f','s1-disk'].forEach(svgHide);
+    ['s1-g1','s1-g2','s1-g3'].forEach(hide);
+  }
+  if (n === 2) {
+    hide('s2-intro'); hide('s2-diag'); hide('s2-impl');
+    ['s2-s1-h','s2-app','s2-app-t','s2-lo-file','s2-lo-file-t','s2-lo-file-t2','s2-read-arr','s2-read-t',
+     's2-up-empty','s2-up-empty-t','s2-up-empty-t2','s2-div',
+     's2-s2-h','s2-lo-file2','s2-lo-file2-t','s2-lo-file2-t2','s2-cup-arr','s2-cup-t',
+     's2-up-copied','s2-up-copied-t','s2-up-copied-t2','s2-write-arr','s2-app2','s2-app2-t','s2-write-label','s2-write-label2',
+     's2-div2','s2-s3-h','s2-lo-unchanged','s2-lo-unch-t','s2-lo-unch-t2',
+     's2-up-modified','s2-up-mod-t','s2-up-mod-t2','s2-win-arr','s2-win-t','s2-shared','s2-pkt'].forEach(svgHide);
+  }
+  if (n === 3) {
+    hide('s3-intro'); hide('s3-diag'); hide('s3-fix');
+    ['s3-df-t','s3-la','s3-la-t','s3-la-cmd','s3-la-sz','s3-la-f',
+     's3-a1','s3-lb','s3-lb-t','s3-lb-cmd','s3-lb-sz','s3-lb-f',
+     's3-a2','s3-lc','s3-lc-t','s3-lc-cmd','s3-lc-cmd2',
+     's3-wo1','s3-wo1-t','s3-wo2','s3-wo2-t','s3-wo-label','s3-result','s3-res-t1','s3-res-t2'].forEach(svgHide);
+    ['s3-f1','s3-f2','s3-f3','s3-sep','s3-f4','s3-f5','s3-f6'].forEach(thide);
+  }
+  if (n === 4) {
+    hide('s4-term'); hide('s4-reclaim'); hide('s4-layout'); hide('s4-clean');
+    ['s4-l0','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6'].forEach(thide);
+    ['s4-root','s4-root-t','s4-br1','s4-br2','s4-br3','s4-br4','s4-br5',
+     's4-d1','s4-d1-t','s4-d1-t2','s4-d1-t3',
+     's4-d2','s4-d2-t','s4-d2-t2','s4-d2-t3',
+     's4-d3','s4-d3-t','s4-d3-t2','s4-d3-t3',
+     's4-d4','s4-d4-t','s4-d4-t2','s4-d4-t3',
+     's4-d5','s4-d5-t','s4-d5-t2','s4-d5-t3',
+     's4-oz','s4-oz-t','s4-oz-t2','s4-oz-t3','s4-oz-t4'].forEach(svgHide);
+    ['s4-c1','s4-c2','s4-c3','s4-c4'].forEach(thide);
+  }
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('s1-intro', 200);
+    show('s1-diag', 700);
+    // build bottom-up: lowerdir first, then upper, then merged
+    svgShow('s1-lower-box', 900); svgShow('s1-lower-t1', 1000); svgShow('s1-lower-t2', 1050);
+    svgShow('s1-lower-ro', 1050); svgShow('s1-lower-ro2', 1100);
+    svgShow('s1-l1', 1200); svgShow('s1-l1-t', 1280); svgShow('s1-l1-f', 1320);
+    svgShow('s1-l2', 1400); svgShow('s1-l2-t', 1480); svgShow('s1-l2-f', 1520);
+    svgShow('s1-l3', 1600); svgShow('s1-l3-t', 1680); svgShow('s1-l3-f', 1720);
+    svgShow('s1-upper-box', 1900); svgShow('s1-upper-t1', 2000); svgShow('s1-upper-t2', 2050);
+    svgShow('s1-upper-rw', 2050); svgShow('s1-upper-rw2', 2100);
+    svgShow('s1-upper-f1', 2200); svgShow('s1-upper-f1b', 2250);
+    svgShow('s1-ma1', 2400); svgShow('s1-ma1-t', 2500); svgShow('s1-ma1-t2', 2550);
+    svgShow('s1-merged-box', 2700); svgShow('s1-merged-t1', 2800); svgShow('s1-merged-t2', 2850);
+    svgShow('s1-merged-f1', 2950); svgShow('s1-merged-f2', 3000); svgShow('s1-merged-f3', 3050);
+    svgShow('s1-merged-f4', 3100); svgShow('s1-merged-f5', 3150);
+    svgShow('s1-disk', 3300);
+    show('s1-glossary', 3400);
+    show('s1-g1', 3500); show('s1-g2', 3800); show('s1-g3', 4100);
+  }
+
+  if (n === 2) {
+    show('s2-intro', 200);
+    show('s2-diag', 700);
+    // step 1: read
+    svgShow('s2-s1-h', 900);
+    svgShow('s2-up-empty', 1000); svgShow('s2-up-empty-t', 1050); svgShow('s2-up-empty-t2', 1100);
+    svgShow('s2-lo-file', 1000); svgShow('s2-lo-file-t', 1100); svgShow('s2-lo-file-t2', 1150);
+    svgShow('s2-app', 1300); svgShow('s2-app-t', 1350);
+    svgShow('s2-read-arr', 1500); svgShow('s2-read-t', 1600);
+    svgShow('s2-div', 2000);
+    // step 2: write → copy-up
+    svgShow('s2-s2-h', 2200);
+    svgShow('s2-lo-file2', 2400); svgShow('s2-lo-file2-t', 2500); svgShow('s2-lo-file2-t2', 2550);
+    // copy-up packet
+    movePkt('s2-pkt', 220, 93, 122, 93, 2700, 500);
+    svgShow('s2-cup-arr', 2700); svgShow('s2-cup-t', 2800);
+    svgShow('s2-up-copied', 3000); svgShow('s2-up-copied-t', 3100); svgShow('s2-up-copied-t2', 3150);
+    svgShow('s2-write-arr', 3300);
+    svgShow('s2-app2', 3400); svgShow('s2-app2-t', 3450);
+    svgShow('s2-write-label', 3350); svgShow('s2-write-label2', 3400);
+    svgShow('s2-div2', 3800);
+    // step 3: result
+    svgShow('s2-s3-h', 4000);
+    svgShow('s2-lo-unchanged', 4200); svgShow('s2-lo-unch-t', 4300); svgShow('s2-lo-unch-t2', 4350);
+    svgShow('s2-up-modified', 4200); svgShow('s2-up-mod-t', 4300); svgShow('s2-up-mod-t2', 4350);
+    svgShow('s2-win-arr', 4500); svgShow('s2-win-t', 4600);
+    svgShow('s2-shared', 4800);
+    show('s2-impl', 4000);
+  }
+
+  if (n === 3) {
+    show('s3-intro', 200);
+    show('s3-diag', 700);
+    svgShow('s3-df-t', 900);
+    svgShow('s3-la', 1000); svgShow('s3-la-t', 1100); svgShow('s3-la-cmd', 1150);
+    svgShow('s3-la-sz', 1200); svgShow('s3-la-f', 1250);
+    svgShow('s3-a1', 1400);
+    svgShow('s3-lb', 1500); svgShow('s3-lb-t', 1600); svgShow('s3-lb-cmd', 1650);
+    svgShow('s3-lb-sz', 1700); svgShow('s3-lb-f', 1750);
+    svgShow('s3-a2', 1900);
+    svgShow('s3-lc', 2000); svgShow('s3-lc-t', 2100); svgShow('s3-lc-cmd', 2150); svgShow('s3-lc-cmd2', 2200);
+    // whiteout files appear
+    svgShow('s3-wo1', 2500); svgShow('s3-wo1-t', 2600);
+    svgShow('s3-wo2', 2700); svgShow('s3-wo2-t', 2800);
+    svgShow('s3-wo-label', 2900);
+    svgShow('s3-result', 3100); svgShow('s3-res-t1', 3200); svgShow('s3-res-t2', 3300);
+    show('s3-fix', 3500);
+    ['s3-f1','s3-f2','s3-f3','s3-sep','s3-f4','s3-f5','s3-f6'].forEach((id,i) => tshow(id, 3700+i*250));
+  }
+
+  if (n === 4) {
+    show('s4-term', 200);
+    ['s4-l0','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6'].forEach((id,i) => tshow(id, 400+i*280));
+    show('s4-reclaim', 2400);
+    show('s4-layout', 3000);
+    svgShow('s4-root', 3200); svgShow('s4-root-t', 3300);
+    ['s4-br1','s4-br2','s4-br3','s4-br4','s4-br5'].forEach((id,i) => svgShow(id, 3450+i*60));
+    ['s4-d1','s4-d2','s4-d3','s4-d4','s4-d5'].forEach((id,i) => {
+      svgShow(id, 3700+i*100);
+      svgShow(id+'-t', 3750+i*100);
+      svgShow(id+'-t2', 3800+i*100);
+      svgShow(id+'-t3', 3850+i*100);
+    });
+    svgShow('s4-oz', 4300); svgShow('s4-oz-t', 4400); svgShow('s4-oz-t2', 4500);
+    svgShow('s4-oz-t3', 4600); svgShow('s4-oz-t4', 4700);
+    show('s4-clean', 4900);
+    ['s4-c1','s4-c2','s4-c3','s4-c4'].forEach((id,i) => tshow(id, 5100+i*280));
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker HEALTHCHECK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════════ SCENE 1: Without HEALTHCHECK — the lie -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e85050">RUNNING ≠ READY</div>
+    <div class="hdr-sub">DOCKER DOESN'T KNOW YOUR APP IS OK</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">NO CHECK</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- docker ps — falsely healthy -->
+      <div style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker ps</span></div>
+          <div id="s1l1" class="tline" style="color:#aaa">CONTAINER ID   IMAGE   STATUS</div>
+          <div id="s1l2" class="tline" style="color:#e8a020">a1b2c3d4e5f6   myapp   Up 5s</div>
+          <div id="s1l3" class="tline" style="color:#888"># Looks fine? Let's check inside…</div>
+          <div id="s1l4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">curl</span> localhost:3000/health</div>
+          <div id="s1l5" class="tline" style="color:#e85050">curl: (7) Connection refused</div>
+          <div id="s1l6" class="tline" style="color:#e85050"># App crashed — Docker has no idea!</div>
+        </div>
+      </div>
+
+      <!-- Lie diagram -->
+      <div id="s1diag" class="panel" style="background:#0a0010;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#120008;border-bottom:1px solid #2d0010;font-size:6px;color:#555;text-align:center">WITHOUT HEALTHCHECK</div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="redArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- Docker daemon box -->
+          <rect x="6" y="14" width="148" height="120" rx="4" fill="#0a0010" stroke="#2a1f3d" stroke-width="1.5"/>
+          <text x="80" y="32" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">DOCKER DAEMON</text>
+
+          <!-- process check -->
+          <rect id="s1proc" x="16" y="42" width="128" height="34" rx="3" fill="#120008" stroke="#2d0010" stroke-width="1" opacity="0"/>
+          <text id="s1proctxt" x="80" y="57" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">process running?</text>
+          <text id="s1proctxt2" x="80" y="70" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ PID exists → UP</text>
+
+          <!-- status badge -->
+          <rect id="s1statbox" x="16" y="90" width="128" height="34" rx="3" fill="#001a08" stroke="#0a4020" stroke-width="1" opacity="0"/>
+          <text id="s1stattxt" x="80" y="108" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">STATUS: Up 5s</text>
+          <text id="s1stattxt2" x="80" y="119" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">(assumed healthy)</text>
+
+          <!-- Container box -->
+          <rect x="212" y="14" width="148" height="120" rx="4" fill="#100006" stroke="#3d0010" stroke-width="1.5"/>
+          <text x="286" y="32" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">CONTAINER</text>
+
+          <!-- app crashed -->
+          <rect id="s1crash" x="222" y="42" width="128" height="34" rx="3" fill="#1a0008" stroke="#e85050" stroke-width="1" opacity="0"/>
+          <text id="s1crashtxt" x="286" y="57" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">app process</text>
+          <text id="s1crashtxt2" x="286" y="70" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">💥 CRASHED</text>
+
+          <!-- port blocked -->
+          <rect id="s1portbox" x="222" y="90" width="128" height="34" rx="3" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s1porttxt" x="286" y="108" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">:3000 CLOSED</text>
+          <text id="s1porttxt2" x="286" y="119" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">no one listening</text>
+
+          <!-- blind arrow: daemon→container (no info) -->
+          <line id="s1blindarr" x1="156" y1="74" x2="210" y2="74" stroke="#333" stroke-width="1.5" stroke-dasharray="3,3" opacity="0"/>
+          <text id="s1blindtxt" x="183" y="68" text-anchor="middle" font-size="5" fill="#444" font-family="'Press Start 2P',monospace" opacity="0">no probe</text>
+          <text id="s1blindx" x="183" y="84" text-anchor="middle" font-size="8" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">?</text>
+        </svg>
+      </div>
+
+      <!-- Explanation -->
+      <div id="s1card" class="panel" style="background:#0f0003;border-left:4px solid #e85050;border-top:1px solid #2d0010;border-right:1px solid #2d0010;border-bottom:1px solid #2d0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">THE LIE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Without HEALTHCHECK, Docker marks a container "Up" the instant its process starts. It never checks whether the app inside is actually serving traffic. A crashed app looks identical to a healthy one.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Process running ≠ application healthy. Docker can't tell the difference.</div>
+    <div class="ih rd">A crashed app shows "Up" in docker ps. No HEALTHCHECK = blind.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">blind</div><div class="sl">NO APP<br>PROBE</div></div>
+    <div class="sc"><div class="sv rd">Up</div><div class="sl">LIE IN<br>docker ps</div></div>
+    <div class="sc"><div class="sv rd">✕</div><div class="sl">PROD<br>UNSAFE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCENE 2: HEALTHCHECK syntax & options -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">HEALTHCHECK</div>
+    <div class="hdr-sub">SYNTAX, OPTIONS & WHAT THEY DO</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">THE SYNTAX</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">DOCKERFILE</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Dockerfile with HEALTHCHECK -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555">FROM node:20-alpine</div>
+          <div style="color:#555">WORKDIR /app</div>
+          <div style="color:#555">COPY . .</div>
+          <div style="color:#555">RUN npm install</div>
+          <div id="s2l1" class="tline" style="color:#4ec9e1">HEALTHCHECK \</div>
+          <div id="s2l2" class="tline" style="color:#e8a020">  --interval=30s \</div>
+          <div id="s2l3" class="tline" style="color:#e8a020">  --timeout=3s \</div>
+          <div id="s2l4" class="tline" style="color:#e8a020">  --start-period=10s \</div>
+          <div id="s2l5" class="tline" style="color:#e8a020">  --retries=3 \</div>
+          <div id="s2l6" class="tline" style="color:#4eff9a">  CMD curl -f localhost:3000/health \</div>
+          <div id="s2l7" class="tline" style="color:#4eff9a">      || exit 1</div>
+        </div>
+      </div>
+
+      <!-- Options breakdown -->
+      <div id="s2opts" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001018;padding:6px 10px;border-bottom:1px solid #0d2030;font-size:7px;color:#4ec9e1;text-align:center">OPTIONS EXPLAINED</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1820;align-items:start">
+            <span style="font-size:6px;color:#e8a020">--interval</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">How often to run the probe. Default 30s. Shorter = faster detection, more overhead.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1820;align-items:start">
+            <span style="font-size:6px;color:#e8a020">--timeout</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">Probe must complete within this. If it hangs longer, counts as failure. Default 30s.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1820;align-items:start">
+            <span style="font-size:6px;color:#e8a020">--start-period</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">Grace period after container start. Failures during this don't count. Lets app boot.</span>
+          </div>
+          <div style="display:grid;grid-template-columns:100px 1fr;gap:8px;padding:7px 4px;align-items:start">
+            <span style="font-size:6px;color:#e8a020">--retries</span>
+            <span style="font-size:5.5px;color:#aaa;line-height:1.8">How many consecutive failures before marking unhealthy. Default 3.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CMD explanation -->
+      <div id="s2cmd" class="panel" style="background:#000810;border-left:4px solid #4eff9a;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">THE CMD PROBE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4eff9a">exit 0</span> = healthy. <span style="color:#e85050">exit 1</span> = unhealthy. The <span style="color:#4ec9e1">curl -f</span> flag makes curl exit non-zero on HTTP errors (4xx/5xx) — so a 500 response correctly fails the check. No curl? Use <span style="color:#4ec9e1">wget -q</span> instead.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">CMD exit 0 = healthy. exit 1 = unhealthy. That's all Docker checks.</div>
+    <div class="ih">curl -f fails on HTTP errors — making it a real health signal.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">30s</div><div class="sl">DEFAULT<br>INTERVAL</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">RETRIES<br>BEFORE ✗</div></div>
+    <div class="sc"><div class="sv gn">exit 0</div><div class="sl">HEALTHY<br>SIGNAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCENE 3: State machine — starting→healthy/unhealthy -->
+<div class="scene" id="s3" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #1a1040">
+    <div class="hdr-title" style="color:#a080ff">HEALTH STATES</div>
+    <div class="hdr-sub">STARTING → HEALTHY / UNHEALTHY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">STATE MACHINE</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">LIFECYCLE</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- State machine diagram -->
+      <div id="s3diag" class="panel" style="background:#06040e;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="padding:5px 10px;background:#0a0820;border-bottom:1px solid #1a1040;font-size:6px;color:#a080ff;text-align:center">CONTAINER HEALTH STATE MACHINE</div>
+        <svg width="100%" height="200" viewBox="0 0 366 200" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="purpArr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="greenArr5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+            <marker id="redArr4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round"/>
+            </marker>
+          </defs>
+
+          <!-- STARTING state -->
+          <rect id="s3st" x="120" y="12" width="126" height="46" rx="6" fill="#0a0820" stroke="#a080ff" stroke-width="2" opacity="0"/>
+          <text id="s3sttxt" x="183" y="32" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">starting</text>
+          <text id="s3sttxt2" x="183" y="47" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">probes running, grace period</text>
+
+          <!-- start-period label -->
+          <text id="s3splbl" x="183" y="72" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">after --start-period…</text>
+
+          <!-- Arrow: starting → healthy -->
+          <line id="s3arr1" x1="140" y1="80" x2="80" y2="118" stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#greenArr5)"/>
+          <text id="s3arr1lbl" x="88" y="98" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">probe ok</text>
+
+          <!-- Arrow: starting → unhealthy -->
+          <line id="s3arr2" x1="226" y1="80" x2="288" y2="118" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#redArr4)"/>
+          <text id="s3arr2lbl" x="280" y="98" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">N fails</text>
+
+          <!-- HEALTHY state -->
+          <rect id="s3hy" x="8" y="122" width="140" height="46" rx="6" fill="#001508" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+          <text id="s3hytxt" x="78" y="142" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">healthy</text>
+          <text id="s3hytxt2" x="78" y="157" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">probes passing ✓</text>
+
+          <!-- Arrow: healthy → unhealthy -->
+          <path id="s3arr3" d="M 148 168 Q 183 190 218 168" stroke="#e85050" stroke-width="1.5" fill="none" opacity="0" marker-end="url(#redArr4)"/>
+          <text id="s3arr3lbl" x="183" y="192" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">N consecutive fails</text>
+
+          <!-- UNHEALTHY state -->
+          <rect id="s3un" x="218" y="122" width="140" height="46" rx="6" fill="#100006" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s3untxt" x="288" y="142" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">unhealthy</text>
+          <text id="s3untxt2" x="288" y="157" text-anchor="middle" font-size="5.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">N probes failed ✗</text>
+
+          <!-- Arrow: unhealthy → healthy (recovery) -->
+          <path id="s3arr4" d="M 218 138 Q 183 112 148 138" stroke="#4eff9a" stroke-width="1.5" fill="none" stroke-dasharray="3,2" opacity="0" marker-end="url(#greenArr5)"/>
+          <text id="s3arr4lbl" x="183" y="108" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">probe passes again</text>
+
+          <!-- docker ps preview -->
+          <rect id="s3psbox" x="8" y="178" width="140" height="18" rx="2" fill="#001508" stroke="#0a4020" stroke-width="1" opacity="0"/>
+          <text id="s3pstxt" x="78" y="190" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">STATUS: Up 2m (healthy)</text>
+          <rect id="s3psbox2" x="218" y="178" width="140" height="18" rx="2" fill="#1a0008" stroke="#3d0010" stroke-width="1" opacity="0"/>
+          <text id="s3pstxt2" x="288" y="190" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">STATUS: Up 2m (unhealthy)</text>
+        </svg>
+      </div>
+
+      <!-- docker ps output showing health -->
+      <div id="s3term" class="panel" style="background:#050002;border:2px solid #1a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0820;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker ps — with HEALTHCHECK</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker ps</span></div>
+          <div id="s3tl1" class="tline" style="color:#aaa">ID       IMAGE   STATUS</div>
+          <div id="s3tl2" class="tline" style="color:#e8a020">a1b2…    myapp   Up 5s (starting)</div>
+          <div id="s3tl3" class="tline" style="color:#4eff9a">a1b2…    myapp   Up 40s (healthy)</div>
+          <div id="s3tl4" class="tline" style="color:#e85050">a1b2…    myapp   Up 2m (unhealthy)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Three states: starting → healthy or unhealthy. Visible in docker ps.</div>
+    <div class="ih pu">Recovery is automatic — pass a probe and you're healthy again.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am" style="font-size:9px">start</div><div class="sl">GRACE<br>PERIOD</div></div>
+    <div class="sc"><div class="sv gn" style="font-size:9px">healthy</div><div class="sl">PROBE<br>PASSES</div></div>
+    <div class="sc"><div class="sv rd" style="font-size:9px">sick</div><div class="sl">N PROBES<br>FAILED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCENE 4: Compose depends_on + production tips -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">PRODUCTION USE</div>
+    <div class="hdr-sub">COMPOSE DEPENDS_ON + TIPS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">REAL WORLD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">MUST KNOW</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Compose depends_on condition -->
+      <div style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#4eff9a">services:</div>
+          <div id="s4l1" class="tline" style="color:#4ec9e1;padding-left:12px">backend:</div>
+          <div id="s4l2" class="tline" style="color:#aaa;padding-left:24px">image: myapi</div>
+          <div id="s4l3" class="tline" style="color:#e8a020;padding-left:24px">healthcheck:</div>
+          <div id="s4l4" class="tline" style="color:#e8a020;padding-left:36px">test: ["CMD","curl","-f","localhost:5000"]</div>
+          <div id="s4l5" class="tline" style="color:#e8a020;padding-left:36px">interval: 10s</div>
+          <div id="s4l6" class="tline" style="color:#4ec9e1;padding-left:12px">frontend:</div>
+          <div id="s4l7" class="tline" style="color:#aaa;padding-left:24px">image: myui</div>
+          <div id="s4l8" class="tline" style="color:#4eff9a;padding-left:24px">depends_on:</div>
+          <div id="s4l9" class="tline" style="color:#4eff9a;padding-left:36px">backend:</div>
+          <div id="s4l10" class="tline" style="color:#4eff9a;padding-left:48px">condition: service_healthy</div>
+        </div>
+      </div>
+
+      <!-- depends_on explanation -->
+      <div id="s4dep" class="panel" style="background:#001508;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">WHY THIS MATTERS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4ec9e1">condition: service_healthy</span> makes Compose hold the frontend until the backend passes its health probe. Without this, frontend starts before the backend API is ready — instant connection errors on boot.</div>
+      </div>
+
+      <!-- Tips grid -->
+      <div id="s4tips" class="panel" style="background:#001508;border:2px solid #1a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:6px 10px;border-bottom:1px solid #1a2810;font-size:7px;color:#4eff9a;text-align:center">PRODUCTION TIPS</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:0">
+          <div id="s4t1" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1808;opacity:0;transition:opacity .3s">
+            <span style="color:#4eff9a;font-size:8px;flex-shrink:0">✓</span>
+            <div><div style="font-size:6px;color:#4eff9a;margin-bottom:3px">USE A DEDICATED /health ENDPOINT</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">Return 200 only when DB is connected, cache is warm, and the app is ready to serve. Not just "process is alive".</div></div>
+          </div>
+          <div id="s4t2" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;border-bottom:1px solid #0d1808;opacity:0;transition:opacity .3s">
+            <span style="color:#e8a020;font-size:8px;flex-shrink:0">⚠</span>
+            <div><div style="font-size:6px;color:#e8a020;margin-bottom:3px">ALPINE IMAGES — NO CURL</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">Alpine has no curl by default. Either RUN apk add curl in the Dockerfile, or use wget -qO- localhost:3000/health || exit 1.</div></div>
+          </div>
+          <div id="s4t3" style="display:flex;align-items:flex-start;gap:8px;padding:7px 4px;opacity:0;transition:opacity .3s">
+            <span style="color:#a080ff;font-size:8px;flex-shrink:0">★</span>
+            <div><div style="font-size:6px;color:#a080ff;margin-bottom:3px">SWARM / K8S RESTART POLICY</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">In Swarm mode, unhealthy containers are restarted automatically. In Kubernetes use readiness/liveness probes instead — HEALTHCHECK is ignored.</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">condition: service_healthy waits for probe to pass before starting dependents.</div>
+    <div class="ih">HEALTHCHECK is the safety net every production Dockerfile needs.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">wait</div><div class="sl">DEPENDS_ON<br>CONDITION</div></div>
+    <div class="sc"><div class="sv gn">auto</div><div class="sl">RESTART<br>UNHEALTHY</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">PROD<br>SAFE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n; reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    ['s1l1','s1l2','s1l3','s1l4','s1l5','s1l6'].forEach(id=>hideEl(id));
+    hide('s1diag'); hide('s1card');
+    ['s1proc','s1proctxt','s1proctxt2','s1statbox','s1stattxt','s1stattxt2',
+     's1crash','s1crashtxt','s1crashtxt2','s1portbox','s1porttxt','s1porttxt2',
+     's1blindarr','s1blindtxt','s1blindx'].forEach(id=>svgHide(id));
+  }
+  if(n===2){
+    ['s2l1','s2l2','s2l3','s2l4','s2l5','s2l6','s2l7'].forEach(id=>hideEl(id));
+    hide('s2opts'); hide('s2cmd');
+  }
+  if(n===3){
+    hide('s3diag'); hide('s3term');
+    ['s3st','s3sttxt','s3sttxt2','s3splbl',
+     's3arr1','s3arr1lbl','s3arr2','s3arr2lbl',
+     's3hy','s3hytxt','s3hytxt2',
+     's3un','s3untxt','s3untxt2',
+     's3arr3','s3arr3lbl','s3arr4','s3arr4lbl',
+     's3psbox','s3pstxt','s3psbox2','s3pstxt2'].forEach(id=>svgHide(id));
+    ['s3tl1','s3tl2','s3tl3','s3tl4'].forEach(id=>hideEl(id));
+  }
+  if(n===4){
+    ['s4l1','s4l2','s4l3','s4l4','s4l5','s4l6','s4l7','s4l8','s4l9','s4l10',
+     's4t1','s4t2','s4t3'].forEach(id=>hideEl(id));
+    hide('s4dep'); hide('s4tips');
+  }
+}
+
+function play(n){
+  if(n===1){
+    showEl('s1l1',200); showEl('s1l2',500);
+    showEl('s1l3',900); showEl('s1l4',1200);
+    showEl('s1l5',1600); showEl('s1l6',2000);
+    show('s1diag',400);
+    svgShow('s1proc',700); svgShow('s1proctxt',850); svgShow('s1proctxt2',1050);
+    svgShow('s1statbox',1300); svgShow('s1stattxt',1450); svgShow('s1stattxt2',1600);
+    svgShow('s1crash',1800); svgShow('s1crashtxt',1950); svgShow('s1crashtxt2',2100);
+    svgShow('s1portbox',2300); svgShow('s1porttxt',2450); svgShow('s1porttxt2',2600);
+    svgShow('s1blindarr',2800); svgShow('s1blindtxt',2900); svgShow('s1blindx',3100);
+    show('s1card',3300);
+  }
+  if(n===2){
+    showEl('s2l1',200); showEl('s2l2',500); showEl('s2l3',800);
+    showEl('s2l4',1100); showEl('s2l5',1400);
+    showEl('s2l6',1700); showEl('s2l7',2000);
+    show('s2opts',800);
+    show('s2cmd',2500);
+  }
+  if(n===3){
+    show('s3diag',200);
+    svgShow('s3st',400); svgShow('s3sttxt',550); svgShow('s3sttxt2',700);
+    svgShow('s3splbl',1000);
+    svgShow('s3arr1',1200); svgShow('s3arr1lbl',1350);
+    svgShow('s3arr2',1200); svgShow('s3arr2lbl',1350);
+    svgShow('s3hy',1600); svgShow('s3hytxt',1750); svgShow('s3hytxt2',1900);
+    svgShow('s3un',1600); svgShow('s3untxt',1750); svgShow('s3untxt2',1900);
+    svgShow('s3arr3',2200); svgShow('s3arr3lbl',2350);
+    svgShow('s3arr4',2600); svgShow('s3arr4lbl',2750);
+    svgShow('s3psbox',2900); svgShow('s3pstxt',3000);
+    svgShow('s3psbox2',2900); svgShow('s3pstxt2',3000);
+    show('s3term',2000);
+    showEl('s3tl1',2200); showEl('s3tl2',2600);
+    showEl('s3tl3',3200); showEl('s3tl4',3800);
+  }
+  if(n===4){
+    showEl('s4l1',200); showEl('s4l2',450); showEl('s4l3',700);
+    showEl('s4l4',950); showEl('s4l5',1200);
+    showEl('s4l6',1500); showEl('s4l7',1750); showEl('s4l8',2000);
+    showEl('s4l9',2250); showEl('s4l10',2500);
+    show('s4dep',1800);
+    show('s4tips',2800);
+    showEl('s4t1',3000); showEl('s4t2',3500); showEl('s4t3',4000);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>
