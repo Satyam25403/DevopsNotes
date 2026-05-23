@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Compose Overrides</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: The Problem / Base concept -->
+<div class="scene active" id="s1" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #1a0a2d">
+    <div class="hdr-title" style="color:#a080ff">COMPOSE OVERRIDES</div>
+    <div class="hdr-sub">MULTI-FILE COMPOSITION</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">WHY</span>
+  </div>
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1-prob" class="panel" style="background:#120020;border:2px solid #3a1f6d;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0840;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#a080ff">THE TYPICAL TRAP</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.0;color:#aaa">
+          <div id="s1-l1" class="tline">❌ One giant docker-compose.yml</div>
+          <div id="s1-l2" class="tline" style="color:#555">   with <span style="color:#e85050">if/else env vars everywhere</span></div>
+          <div id="s1-l3" class="tline" style="margin-top:6px">❌ Bind mounts leaking into prod</div>
+          <div id="s1-l4" class="tline" style="color:#555">   <span style="color:#e85050">./src:/app in production = bad</span></div>
+          <div id="s1-l5" class="tline" style="margin-top:6px">❌ Debug ports open in CI</div>
+          <div id="s1-l6" class="tline" style="color:#555">   <span style="color:#e85050">5005:5005 exposed always</span></div>
+        </div>
+      </div>
+
+      <div id="s1-sol" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">✅</span>
+          <span style="font-size:7.5px;color:#4eff9a">THE SOLUTION</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Split into <span style="color:#4ec9e1">base.yml</span> + environment-specific overrides.<br>
+          Docker merges them at runtime — no duplication, clean separation.
+        </div>
+      </div>
+
+      <div id="s1-svg" class="panel">
+        <div style="background:#08000e;border:2px solid #2a1040;border-radius:3px;overflow:hidden">
+          <svg width="100%" height="150" viewBox="0 0 366 150" xmlns="http://www.w3.org/2000/svg">
+            <text x="183" y="18" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">FILE LAYERING MODEL</text>
+            <!-- base file -->
+            <rect x="118" y="26" width="130" height="36" rx="3" fill="#1a0840" stroke="#a080ff" stroke-width="1.5"/>
+            <text x="183" y="41" text-anchor="middle" font-size="6" fill="#a080ff" font-family="'Press Start 2P',monospace">docker-compose.yml</text>
+            <text x="183" y="55" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">BASE (shared config)</text>
+            <!-- plus -->
+            <text id="s1-plus" x="183" y="82" text-anchor="middle" font-size="14" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">+</text>
+            <!-- override files -->
+            <rect id="s1-ov1" x="14" y="94" width="100" height="36" rx="3" fill="#001a00" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="s1-ov1t" x="64" y="109" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">override.dev</text>
+            <text id="s1-ov1s" x="64" y="122" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">mounts, debug</text>
+            <rect id="s1-ov2" x="133" y="94" width="100" height="36" rx="3" fill="#1a0800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+            <text id="s1-ov2t" x="183" y="109" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">override.prod</text>
+            <text id="s1-ov2s" x="183" y="122" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">limits, no mounts</text>
+            <rect id="s1-ov3" x="252" y="94" width="100" height="36" rx="3" fill="#000d18" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <text id="s1-ov3t" x="302" y="109" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">override.ci</text>
+            <text id="s1-ov3s" x="302" y="122" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">test env, mock svc</text>
+            <!-- arrow down -->
+            <line id="s1-arr" x1="183" y1="62" x2="183" y2="92" stroke="#2a1f3d" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+            <!-- merge result -->
+            <rect id="s1-merge" x="100" y="138" width="166" height="8" rx="2" fill="#4eff9a" opacity="0"/>
+            <text id="s1-merget" x="183" y="145" text-anchor="middle" font-size="5" fill="#001a00" font-family="'Press Start 2P',monospace" opacity="0">MERGED AT RUNTIME</text>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">One base file. Many environment overrides.</div>
+    <div class="ih pu">Docker deep-merges them — keys override, lists append.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">1</div><div class="sl">BASE<br>FILE</div></div>
+    <div class="sc"><div class="sv am">N</div><div class="sl">OVERRIDE<br>FILES</div></div>
+    <div class="sc"><div class="sv gn">∞</div><div class="sl">ENV<br>COMBOS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: Auto-merge override.yml -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">AUTO OVERRIDE</div>
+    <div class="hdr-sub">docker-compose.override.yml</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">MAGIC FILE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">AUTO-MERGE</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-info" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🪄</span>
+          <span style="font-size:7.5px;color:#4ec9e1">AUTOMATIC MAGIC</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">If a file named <span style="color:#4ec9e1">docker-compose.override.yml</span> exists in the same directory, Docker Compose merges it automatically. No flags needed — just <span style="color:#4eff9a">docker compose up</span>.</div>
+      </div>
+
+      <div id="s2-base" class="panel" style="background:#050010;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.1">
+          <div id="s2-b1" class="tline" style="color:#a080ff">services:</div>
+          <div id="s2-b2" class="tline" style="color:#4ec9e1">  web:</div>
+          <div id="s2-b3" class="tline" style="color:#aaa">    image: myapp:latest</div>
+          <div id="s2-b4" class="tline" style="color:#aaa">    ports: ["80:80"]</div>
+          <div id="s2-b5" class="tline" style="color:#aaa">    environment:</div>
+          <div id="s2-b6" class="tline" style="color:#aaa">      NODE_ENV: production</div>
+        </div>
+      </div>
+
+      <div id="s2-ovr" class="panel" style="background:#050010;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4eff9a">docker-compose.override.yml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.1">
+          <div id="s2-o1" class="tline" style="color:#a080ff">services:</div>
+          <div id="s2-o2" class="tline" style="color:#4ec9e1">  web:</div>
+          <div id="s2-o3" class="tline" style="color:#4eff9a">    volumes:</div>
+          <div id="s2-o4" class="tline" style="color:#4eff9a">      - ./src:/app   <span style="color:#555"># bind mount</span></div>
+          <div id="s2-o5" class="tline" style="color:#4eff9a">    environment:</div>
+          <div id="s2-o6" class="tline" style="color:#4eff9a">      NODE_ENV: development</div>
+          <div id="s2-o7" class="tline" style="color:#4eff9a">    ports: ["5005:5005"] <span style="color:#555"># debug</span></div>
+        </div>
+      </div>
+
+      <div id="s2-term" class="panel" style="background:#050010;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.1">
+          <div id="s2-t1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker compose up</span></div>
+          <div id="s2-t2" class="tline" style="color:#4eff9a"># auto-merges override.yml ✓</div>
+          <div id="s2-t3" class="tline" style="color:#555"># NODE_ENV=development wins</div>
+          <div id="s2-t4" class="tline" style="color:#555"># bind mount + debug port added</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">docker-compose.override.yml merges automatically.</div>
+    <div class="ih cy">Perfect for local dev defaults — no flags needed.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">AUTO</div><div class="sl">NO FLAGS<br>NEEDED</div></div>
+    <div class="sc"><div class="sv am">DEV</div><div class="sl">DEFAULT<br>TARGET</div></div>
+    <div class="sc"><div class="sv gn">MERGE</div><div class="sl">KEYS<br>OVERRIDE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: DEV vs PROD files -->
+<div class="scene" id="s3" style="background:#080010">
+  <div class="hdr" style="background:#080010;border-bottom:1px solid #200030">
+    <div class="hdr-title" style="color:#e8a020">DEV vs PROD</div>
+    <div class="hdr-sub">ENVIRONMENT FILE PATTERNS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#080010">
+    <span class="slabel" style="color:#e8a020">SEPARATION</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">PATTERN</span>
+  </div>
+  <div class="anim" style="background:#080010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#001a08;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">DEV OVERRIDE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            <div id="s3-d1" class="tline"><span style="color:#4eff9a">volumes:</span></div>
+            <div id="s3-d2" class="tline">  ./src:/app</div>
+            <div id="s3-d3" class="tline"><span style="color:#4eff9a">ports:</span></div>
+            <div id="s3-d4" class="tline">  5005:5005</div>
+            <div id="s3-d5" class="tline"><span style="color:#4eff9a">command:</span></div>
+            <div id="s3-d6" class="tline">  npm run dev</div>
+            <div id="s3-d7" class="tline"><span style="color:#4eff9a">environment:</span></div>
+            <div id="s3-d8" class="tline">  DEBUG: "*"</div>
+          </div>
+        </div>
+        <div style="background:#1a0800;border:2px solid #e8a020;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0800;padding:5px 7px;border-bottom:1px solid #3a1800;text-align:center">
+            <div style="font-size:6.5px;color:#e8a020">PROD OVERRIDE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            <div id="s3-p1" class="tline"><span style="color:#e8a020">deploy:</span></div>
+            <div id="s3-p2" class="tline">  replicas: 3</div>
+            <div id="s3-p3" class="tline"><span style="color:#e8a020">resources:</span></div>
+            <div id="s3-p4" class="tline">  mem: 512m</div>
+            <div id="s3-p5" class="tline"><span style="color:#e8a020">restart:</span></div>
+            <div id="s3-p6" class="tline">  always</div>
+            <div id="s3-p7" class="tline"><span style="color:#e8a020">logging:</span></div>
+            <div id="s3-p8" class="tline">  json-file</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="s3-rules" class="panel" style="background:#0e001a;border:2px solid #3a1f6d;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0840;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#a080ff">MERGE RULES</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s3-r1" class="tline" style="color:#aaa">🔑 <span style="color:#4ec9e1">Scalar values</span> → override wins</div>
+          <div id="s3-r2" class="tline" style="color:#aaa">📋 <span style="color:#4eff9a">Lists (ports/volumes)</span> → append</div>
+          <div id="s3-r3" class="tline" style="color:#aaa">🗺️ <span style="color:#e8a020">Maps (environment)</span> → deep merge</div>
+          <div id="s3-r4" class="tline" style="color:#aaa">❌ <span style="color:#e85050">To remove a key</span> → use null</div>
+        </div>
+      </div>
+
+      <div id="s3-term" class="panel" style="background:#050010;border:2px solid #200030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s3-t1" class="tline" style="color:#888">$ docker compose \</div>
+          <div id="s3-t2" class="tline" style="color:#888">  <span style="color:#4ec9e1">-f docker-compose.yml</span> \</div>
+          <div id="s3-t3" class="tline" style="color:#4eff9a">  -f docker-compose.prod.yml \</div>
+          <div id="s3-t4" class="tline" style="color:#888">  up -d</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Dev gets bind mounts + debug ports. Prod gets resource limits.</div>
+    <div class="ih am">Never mix env concerns in one giant compose file.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DEV</div><div class="sl">BIND<br>MOUNTS</div></div>
+    <div class="sc"><div class="sv am">PROD</div><div class="sl">RESOURCE<br>LIMITS</div></div>
+    <div class="sc"><div class="sv pu">-f</div><div class="sl">EXPLICIT<br>FLAG</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: CI override pattern -->
+<div class="scene" id="s4" style="background:#000d08">
+  <div class="hdr" style="background:#000d08;border-bottom:1px solid #0d2018">
+    <div class="hdr-title" style="color:#4ec9e1">CI PATTERN</div>
+    <div class="hdr-sub">docker-compose.ci.yml</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d08">
+    <span class="slabel" style="color:#4ec9e1">CI OVERRIDE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PIPELINE</span>
+  </div>
+  <div class="anim" style="background:#000d08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4-ci" class="panel" style="background:#050010;border:2px solid #0d3020;border-radius:3px;overflow:hidden">
+        <div style="background:#001810;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4ec9e1">docker-compose.ci.yml</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.1">
+          <div id="s4-c1" class="tline" style="color:#a080ff">services:</div>
+          <div id="s4-c2" class="tline" style="color:#4ec9e1">  web:</div>
+          <div id="s4-c3" class="tline" style="color:#4eff9a">    image: myapp:$CI_COMMIT_SHA</div>
+          <div id="s4-c4" class="tline" style="color:#aaa">    environment:</div>
+          <div id="s4-c5" class="tline" style="color:#aaa">      DATABASE_URL: postgres://ci-db</div>
+          <div id="s4-c6" class="tline" style="color:#aaa">  db:</div>
+          <div id="s4-c7" class="tline" style="color:#e8a020">    image: postgres:15 <span style="color:#555"># mock</span></div>
+          <div id="s4-c8" class="tline" style="color:#aaa">    tmpfs: [/var/lib/postgresql]</div>
+        </div>
+      </div>
+
+      <div id="s4-pipe" class="panel" style="background:#001810;border:2px solid #0d3020;border-radius:3px;overflow:hidden">
+        <div style="background:#002818;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#4ec9e1">CI PIPELINE STEP</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s4-p1" class="tline" style="color:#888">$ docker compose \</div>
+          <div id="s4-p2" class="tline" style="color:#888">  <span style="color:#a080ff">-f docker-compose.yml</span> \</div>
+          <div id="s4-p3" class="tline" style="color:#4ec9e1">  -f docker-compose.ci.yml \</div>
+          <div id="s4-p4" class="tline" style="color:#888">  up --abort-on-container-exit</div>
+          <div id="s4-p5" class="tline" style="color:#4eff9a"># exits when tests complete ✓</div>
+        </div>
+      </div>
+
+      <div id="s4-tips" class="panel" style="background:#000d08;border-left:4px solid #4ec9e1;border-top:1px solid #0d2018;border-right:1px solid #0d2018;border-bottom:1px solid #0d2018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚡</span>
+          <span style="font-size:7.5px;color:#4ec9e1">CI-SPECIFIC TRICKS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <span style="color:#4eff9a">tmpfs</span> for DB = fast, disposable, no disk I/O<br>
+          <span style="color:#4eff9a">$CI_COMMIT_SHA</span> pins exact image per build<br>
+          <span style="color:#4eff9a">--abort-on-container-exit</span> auto-cleanup<br>
+          <span style="color:#e8a020">No bind mounts</span> — CI has no local src dir
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">CI gets ephemeral DB, pinned image SHA, no mounts.</div>
+    <div class="ih cy">--abort-on-container-exit cleans up after tests.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">tmpfs</div><div class="sl">FAST<br>EPHEMERAL</div></div>
+    <div class="sc"><div class="sv am">SHA</div><div class="sl">PINNED<br>IMAGE</div></div>
+    <div class="sc"><div class="sv rd">NO</div><div class="sl">BIND<br>MOUNTS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 5: File structure + cheat sheet -->
+<div class="scene" id="s5" style="background:#001a00">
+  <div class="hdr" style="background:#001a00;border-bottom:1px solid #0d3010">
+    <div class="hdr-title" style="color:#4eff9a">FINAL STRUCTURE</div>
+    <div class="hdr-sub">THE RECOMMENDED LAYOUT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a00">
+    <span class="slabel" style="color:#4eff9a">CHEAT SHEET</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REFERENCE</span>
+  </div>
+  <div class="anim" style="background:#001a00">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s5-tree" class="panel" style="background:#000d04;border:2px solid #0d3010;border-radius:3px;overflow:hidden">
+        <div style="background:#002008;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#4eff9a">PROJECT FILE TREE</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s5-f1" class="tline" style="color:#aaa">📁 myproject/</div>
+          <div id="s5-f2" class="tline" style="color:#a080ff">  📄 docker-compose.yml       <span style="color:#555">← base</span></div>
+          <div id="s5-f3" class="tline" style="color:#4eff9a">  📄 docker-compose.override.yml <span style="color:#555">← dev auto</span></div>
+          <div id="s5-f4" class="tline" style="color:#e8a020">  📄 docker-compose.prod.yml  <span style="color:#555">← prod</span></div>
+          <div id="s5-f5" class="tline" style="color:#4ec9e1">  📄 docker-compose.ci.yml   <span style="color:#555">← CI</span></div>
+          <div id="s5-f6" class="tline" style="color:#888">  📄 docker-compose.staging.yml</div>
+        </div>
+      </div>
+
+      <div id="s5-cmds" class="panel" style="background:#000d04;border:2px solid #0d3010;border-radius:3px;overflow:hidden">
+        <div style="background:#002008;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#4eff9a">COMMAND CHEATSHEET</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.3">
+          <div id="s5-c1" class="tline" style="color:#555"># DEV (auto-merges override.yml)</div>
+          <div id="s5-c2" class="tline" style="color:#4eff9a">docker compose up</div>
+          <div id="s5-c3" class="tline" style="color:#555;margin-top:4px"># PROD</div>
+          <div id="s5-c4" class="tline" style="color:#e8a020">docker compose -f docker-compose.yml \<br>&nbsp;&nbsp;-f docker-compose.prod.yml up -d</div>
+          <div id="s5-c5" class="tline" style="color:#555;margin-top:4px"># CI</div>
+          <div id="s5-c6" class="tline" style="color:#4ec9e1">docker compose -f docker-compose.yml \<br>&nbsp;&nbsp;-f docker-compose.ci.yml up \<br>&nbsp;&nbsp;--abort-on-container-exit</div>
+          <div id="s5-c7" class="tline" style="color:#555;margin-top:4px"># validate merged config</div>
+          <div id="s5-c8" class="tline" style="color:#a080ff">docker compose -f base.yml -f prod.yml config</div>
+        </div>
+      </div>
+
+      <div id="s5-tip" class="panel" style="background:#001a00;border-left:4px solid #4eff9a;border-top:1px solid #0d3010;border-right:1px solid #0d3010;border-bottom:1px solid #0d3010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">💡</span>
+          <span style="font-size:7.5px;color:#4eff9a">PRO TIP: config COMMAND</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Run <span style="color:#4ec9e1">docker compose ... config</span> to print the fully merged YAML before deploying. Catches merge surprises before they hit production.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">One base + N override files = clean environment separation.</div>
+    <div class="ih">Run docker compose config to verify merged output.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">BASE</div><div class="sl">SHARED<br>CONFIG</div></div>
+    <div class="sc"><div class="sv am">-f</div><div class="sl">EXPLICIT<br>MERGE</div></div>
+    <div class="sc"><div class="sv pu">config</div><div class="sl">VERIFY<br>MERGED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  const all={
+    1:['s1-prob','s1-sol','s1-svg','s1-l1','s1-l2','s1-l3','s1-l4','s1-l5','s1-l6'],
+    2:['s2-info','s2-base','s2-ovr','s2-term','s2-b1','s2-b2','s2-b3','s2-b4','s2-b5','s2-b6','s2-o1','s2-o2','s2-o3','s2-o4','s2-o5','s2-o6','s2-o7','s2-t1','s2-t2','s2-t3','s2-t4'],
+    3:['s3-cmp','s3-rules','s3-term','s3-d1','s3-d2','s3-d3','s3-d4','s3-d5','s3-d6','s3-d7','s3-d8','s3-p1','s3-p2','s3-p3','s3-p4','s3-p5','s3-p6','s3-p7','s3-p8','s3-r1','s3-r2','s3-r3','s3-r4','s3-t1','s3-t2','s3-t3','s3-t4'],
+    4:['s4-ci','s4-pipe','s4-tips','s4-c1','s4-c2','s4-c3','s4-c4','s4-c5','s4-c6','s4-c7','s4-c8','s4-p1','s4-p2','s4-p3','s4-p4','s4-p5'],
+    5:['s5-tree','s5-cmds','s5-tip','s5-f1','s5-f2','s5-f3','s5-f4','s5-f5','s5-f6','s5-c1','s5-c2','s5-c3','s5-c4','s5-c5','s5-c6','s5-c7','s5-c8']
+  };
+  (all[n]||[]).forEach(id=>hide(id));
+  if(n===1){svgHide('s1-plus');svgHide('s1-ov1');svgHide('s1-ov1t');svgHide('s1-ov1s');svgHide('s1-ov2');svgHide('s1-ov2t');svgHide('s1-ov2s');svgHide('s1-ov3');svgHide('s1-ov3t');svgHide('s1-ov3s');svgHide('s1-arr');svgHide('s1-merge');svgHide('s1-merget');}
+}
+
+function play(n){
+  if(n===1){
+    show('s1-prob',200);
+    showEl('s1-l1',400);showEl('s1-l2',700);
+    showEl('s1-l3',1100);showEl('s1-l4',1400);
+    showEl('s1-l5',1800);showEl('s1-l6',2100);
+    show('s1-sol',2600);
+    show('s1-svg',3300);
+    svgShow('s1-arr',3600);
+    svgShow('s1-plus',3800);
+    svgShow('s1-ov1',4100);svgShow('s1-ov1t',4100);svgShow('s1-ov1s',4100);
+    svgShow('s1-ov2',4400);svgShow('s1-ov2t',4400);svgShow('s1-ov2s',4400);
+    svgShow('s1-ov3',4700);svgShow('s1-ov3t',4700);svgShow('s1-ov3s',4700);
+    svgShow('s1-merge',5200);svgShow('s1-merget',5200);
+  }
+  if(n===2){
+    show('s2-info',200);
+    show('s2-base',900);
+    showEl('s2-b1',1100);showEl('s2-b2',1300);showEl('s2-b3',1500);showEl('s2-b4',1700);showEl('s2-b5',1900);showEl('s2-b6',2100);
+    show('s2-ovr',2500);
+    showEl('s2-o1',2700);showEl('s2-o2',2900);showEl('s2-o3',3100);showEl('s2-o4',3300);showEl('s2-o5',3500);showEl('s2-o6',3700);showEl('s2-o7',3900);
+    show('s2-term',4400);
+    showEl('s2-t1',4600);showEl('s2-t2',4900);showEl('s2-t3',5200);showEl('s2-t4',5500);
+  }
+  if(n===3){
+    show('s3-cmp',200);
+    showEl('s3-d1',400);showEl('s3-d2',600);showEl('s3-d3',800);showEl('s3-d4',1000);
+    showEl('s3-d5',1200);showEl('s3-d6',1400);showEl('s3-d7',1600);showEl('s3-d8',1800);
+    showEl('s3-p1',400);showEl('s3-p2',600);showEl('s3-p3',800);showEl('s3-p4',1000);
+    showEl('s3-p5',1200);showEl('s3-p6',1400);showEl('s3-p7',1600);showEl('s3-p8',1800);
+    show('s3-rules',2300);
+    showEl('s3-r1',2500);showEl('s3-r2',2900);showEl('s3-r3',3300);showEl('s3-r4',3700);
+    show('s3-term',4200);
+    showEl('s3-t1',4400);showEl('s3-t2',4700);showEl('s3-t3',5000);showEl('s3-t4',5300);
+  }
+  if(n===4){
+    show('s4-ci',200);
+    showEl('s4-c1',400);showEl('s4-c2',600);showEl('s4-c3',800);showEl('s4-c4',1000);
+    showEl('s4-c5',1200);showEl('s4-c6',1400);showEl('s4-c7',1600);showEl('s4-c8',1800);
+    show('s4-pipe',2300);
+    showEl('s4-p1',2500);showEl('s4-p2',2800);showEl('s4-p3',3100);showEl('s4-p4',3400);showEl('s4-p5',3800);
+    show('s4-tips',4300);
+  }
+  if(n===5){
+    show('s5-tree',200);
+    showEl('s5-f1',400);showEl('s5-f2',700);showEl('s5-f3',1000);showEl('s5-f4',1300);showEl('s5-f5',1600);showEl('s5-f6',1900);
+    show('s5-cmds',2400);
+    showEl('s5-c1',2600);showEl('s5-c2',2800);showEl('s5-c3',3100);showEl('s5-c4',3300);
+    showEl('s5-c5',3700);showEl('s5-c6',3900);showEl('s5-c7',4400);showEl('s5-c8',4600);
+    show('s5-tip',5200);
+  }
+}
+
+window.addEventListener('load',()=>{reset(1);af(150,()=>play(1));});
+</script>
+</body>
+</html>

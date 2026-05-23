@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Docker Port Exposure</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: EXPOSE -->
+<div class="scene active" id="s1" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #1a0a2d">
+    <div class="hdr-title" style="color:#a080ff">DOCKER PORTS</div>
+    <div class="hdr-sub">EXPOSE, -p, -P & 0.0.0.0</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">EXPOSE KEYWORD</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">DOCS ONLY</span>
+  </div>
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1-df" class="panel" style="background:#0e0020;border:2px solid #3a1f6d;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0840;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">FROM nginx:alpine</div>
+          <div id="s1-l1" class="tline" style="color:#a080ff">EXPOSE 80</div>
+          <div id="s1-l2" class="tline" style="color:#555"># no port is published yet</div>
+          <div id="s1-l3" class="tline" style="color:#555"># just says "app uses port 80"</div>
+        </div>
+      </div>
+
+      <div id="s1-card1" class="panel" style="background:#120020;border-left:4px solid #a080ff;border-top:1px solid #2a1040;border-right:1px solid #2a1040;border-bottom:1px solid #2a1040;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">📜</span>
+          <span style="font-size:7.5px;color:#a080ff">EXPOSE IS DOCUMENTATION</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">EXPOSE does NOT open any port on the host. It is a hint inside the image telling other developers (and Docker) which port the app listens on. Nothing is reachable yet.</div>
+      </div>
+
+      <div id="s1-card2" class="panel" style="background:#120020;border-left:4px solid #e8a020;border-top:1px solid #2a1040;border-right:1px solid #2a1040;border-bottom:1px solid #2a1040;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚠️</span>
+          <span style="font-size:7.5px;color:#e8a020">COMMON MISTAKE</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Many beginners write EXPOSE 80 and wonder why they cannot reach the container. The actual port binding happens at <span style="color:#4ec9e1">docker run</span> time with <span style="color:#4eff9a">-p</span> or <span style="color:#4eff9a">-P</span>.</div>
+      </div>
+
+      <div id="s1-svg" class="panel">
+        <div style="background:#000810;border:2px solid #1a0840;border-radius:3px;overflow:hidden">
+          <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="20" width="120" height="80" rx="4" fill="#1a0040" stroke="#3a1f6d" stroke-width="1.5"/>
+            <text x="70" y="52" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace">CONTAINER</text>
+            <text x="70" y="68" text-anchor="middle" font-size="6" fill="#666" font-family="'Press Start 2P',monospace">port 80 (app)</text>
+            <text x="70" y="82" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace">EXPOSE 80</text>
+            <rect x="246" y="20" width="110" height="80" rx="4" fill="#0a0820" stroke="#2a1f3d" stroke-width="1.5"/>
+            <text x="301" y="52" text-anchor="middle" font-size="7" fill="#555" font-family="'Press Start 2P',monospace">HOST</text>
+            <text x="301" y="70" text-anchor="middle" font-size="6" fill="#444" font-family="'Press Start 2P',monospace">no port open</text>
+            <line x1="132" y1="60" x2="244" y2="60" stroke="#3a1f3d" stroke-width="1.5" stroke-dasharray="5,4"/>
+            <text x="188" y="52" text-anchor="middle" font-size="6" fill="#555" font-family="'Press Start 2P',monospace">BLOCKED</text>
+            <text x="188" y="78" text-anchor="middle" font-size="16" fill="#e85050">⛔</text>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">EXPOSE is metadata — like a comment with extra steps.</div>
+    <div class="ih pu">No ports published until you use -p or -P at run time.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">0</div><div class="sl">HOST PORTS<br>OPENED</div></div>
+    <div class="sc"><div class="sv am">DOCS</div><div class="sl">ONLY<br>PURPOSE</div></div>
+    <div class="sc"><div class="sv rd">⛔</div><div class="sl">NOT<br>REACHABLE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: -p flag -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">-p FLAG</div>
+    <div class="hdr-sub">EXPLICIT PORT PUBLISHING</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">-p HOST:CONTAINER</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">EXPLICIT</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-term" class="panel" style="background:#050010;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2-l1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> <span style="color:#4eff9a">-p 8080:80</span> nginx</div>
+          <div id="s2-l2" class="tline" style="color:#aaa"># host_port : container_port</div>
+          <div id="s2-l3" class="tline" style="color:#4eff9a"># curl http://localhost:8080 works!</div>
+        </div>
+      </div>
+
+      <div id="s2-svg" class="panel">
+        <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+          <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <filter id="glow2"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <rect x="10" y="20" width="130" height="90" rx="4" fill="#001020" stroke="#0d3050" stroke-width="1.5"/>
+            <text x="75" y="48" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace">CONTAINER</text>
+            <text x="75" y="64" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace">nginx :80</text>
+            <rect x="220" y="20" width="136" height="90" rx="4" fill="#001020" stroke="#0d3050" stroke-width="1.5"/>
+            <text x="288" y="48" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace">HOST</text>
+            <text x="288" y="64" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace">:8080 open</text>
+            <line id="s2-arr" x1="142" y1="65" x2="218" y2="65" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+            <polygon id="s2-arh" points="222,65 214,61 214,69" fill="#4ec9e1" opacity="0"/>
+            <text id="s2-arlt" x="183" y="55" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">8080→80</text>
+            <circle id="s2-pkt" cx="142" cy="65" r="5" fill="#4ec9e1" opacity="0" filter="url(#glow2)"/>
+            <text id="s2-ok" x="183" y="110" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">✓ TRAFFIC FLOWS</text>
+          </svg>
+        </div>
+      </div>
+
+      <div id="s2-card1" class="panel" style="background:#000d18;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🔁</span>
+          <span style="font-size:7.5px;color:#4ec9e1">PORT MAPPING SYNTAX</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <span style="color:#4eff9a">-p 8080:80</span> → host 8080 to container 80<br>
+          <span style="color:#4eff9a">-p 443:443</span> → same port on both sides<br>
+          <span style="color:#4eff9a">-p 3000:3000 -p 5000:5000</span> → multi port
+        </div>
+      </div>
+
+      <div id="s2-card2" class="panel" style="background:#000d18;border-left:4px solid #e8a020;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🌐</span>
+          <span style="font-size:7.5px;color:#e8a020">BINDS TO 0.0.0.0 BY DEFAULT</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Without specifying an IP, -p binds to <span style="color:#e85050">0.0.0.0</span> — all network interfaces. On a cloud VM with a public IP, port 8080 is reachable from the internet!</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">-p 8080:80 opens host port 8080 → container 80.</div>
+    <div class="ih am">Default binds to 0.0.0.0 — all interfaces including public IPs.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">8080</div><div class="sl">HOST<br>PORT</div></div>
+    <div class="sc"><div class="sv am">→80</div><div class="sl">CONTAINER<br>PORT</div></div>
+    <div class="sc"><div class="sv rd">0.0.0.0</div><div class="sl">BOUND<br>IFACE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: 0.0.0.0 vs 127.0.0.1 -->
+<div class="scene" id="s3" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #300010">
+    <div class="hdr-title" style="color:#e85050">INTERFACE BINDING</div>
+    <div class="hdr-sub">0.0.0.0 vs 127.0.0.1</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e85050">SECURITY CRITICAL</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s3-cmp" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">⚠ 0.0.0.0</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.0">
+            <span style="color:#e85050">ALL</span> interfaces<br>
+            Public IP ✓<br>
+            Loopback ✓<br>
+            LAN ✓<br>
+            <span style="color:#e85050">Internet exposed!</span>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ 127.0.0.1</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.0">
+            <span style="color:#4eff9a">ONLY</span> localhost<br>
+            Public IP ✗<br>
+            Loopback ✓<br>
+            LAN ✗<br>
+            <span style="color:#4eff9a">Local only, safe!</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="s3-term" class="panel" style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3-l1" class="tline" style="color:#e85050"># DANGEROUS on cloud VM:</div>
+          <div id="s3-l2" class="tline" style="color:#888">$ docker run <span style="color:#e85050">-p 8080:80</span> nginx</div>
+          <div id="s3-l3" class="tline" style="color:#4eff9a"># SAFE — localhost only:</div>
+          <div id="s3-l4" class="tline" style="color:#888">$ docker run <span style="color:#4eff9a">-p 127.0.0.1:8080:80</span> nginx</div>
+        </div>
+      </div>
+
+      <div id="s3-svg" class="panel">
+        <div style="background:#080000;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+          <svg width="100%" height="140" viewBox="0 0 366 140" xmlns="http://www.w3.org/2000/svg">
+            <text x="183" y="18" text-anchor="middle" font-size="6.5" fill="#555" font-family="'Press Start 2P',monospace">CLOUD VM WITH PUBLIC IP</text>
+            <rect x="10" y="28" width="346" height="100" rx="4" fill="#0a0000" stroke="#3a1010" stroke-width="1.5"/>
+            <text x="183" y="48" text-anchor="middle" font-size="6" fill="#888" font-family="'Press Start 2P',monospace">NETWORK INTERFACES</text>
+            <rect x="20" y="56" width="90" height="62" rx="3" fill="#1a0000" stroke="#e85050" stroke-width="1"/>
+            <text x="65" y="75" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace">eth0</text>
+            <text x="65" y="89" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">1.2.3.4</text>
+            <text x="65" y="103" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace">PUBLIC IP</text>
+            <text x="65" y="114" text-anchor="middle" font-size="10" fill="#e85050">🌍</text>
+            <rect x="130" y="56" width="100" height="62" rx="3" fill="#001a00" stroke="#4eff9a" stroke-width="1"/>
+            <text x="180" y="75" text-anchor="middle" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace">lo</text>
+            <text x="180" y="89" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">127.0.0.1</text>
+            <text x="180" y="103" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">LOCALHOST</text>
+            <text x="180" y="114" text-anchor="middle" font-size="10" fill="#4eff9a">🔒</text>
+            <rect x="248" y="56" width="100" height="62" rx="3" fill="#0a0a00" stroke="#e8a020" stroke-width="1"/>
+            <text x="298" y="75" text-anchor="middle" font-size="6" fill="#e8a020" font-family="'Press Start 2P',monospace">0.0.0.0</text>
+            <text x="298" y="89" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">ALL IFACES</text>
+            <text x="298" y="103" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace">eth0+lo+more</text>
+            <text x="298" y="114" text-anchor="middle" font-size="10" fill="#e85050">⚠️</text>
+          </svg>
+        </div>
+      </div>
+
+      <div id="s3-warn" class="panel" style="background:#120000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">☁️</span>
+          <span style="font-size:7.5px;color:#e85050">CLOUD VM GOTCHA</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Most cloud VMs have a public IP on eth0. Docker binding to 0.0.0.0 exposes your container to the internet — even without explicit firewall rules. Always use 127.0.0.1 binding for internal services.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">0.0.0.0 means ALL interfaces — public IP included.</div>
+    <div class="ih rd">Use -p 127.0.0.1:8080:80 to restrict to localhost only.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">0.0.0.0<br>IFACES</div></div>
+    <div class="sc"><div class="sv gn">LOCAL</div><div class="sl">127.0.0.1<br>ONLY</div></div>
+    <div class="sc"><div class="sv rd">⚠️</div><div class="sl">CLOUD<br>RISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: -P flag -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">-P FLAG (UPPERCASE)</div>
+    <div class="hdr-sub">AUTO PUBLISH ALL EXPOSE PORTS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">-P AUTO-PUBLISH</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">EPHEMERAL</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4-term" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s4-l1" class="tline" style="color:#888">$ docker run <span style="color:#4eff9a">-P</span> nginx</div>
+          <div id="s4-l2" class="tline" style="color:#4eff9a"># publishes ALL EXPOSE'd ports</div>
+          <div id="s4-l3" class="tline" style="color:#888">$ docker port my-container</div>
+          <div id="s4-l4" class="tline" style="color:#e8a020">80/tcp -&gt; 0.0.0.0:49153</div>
+          <div id="s4-l5" class="tline" style="color:#555"># random ephemeral port!</div>
+        </div>
+      </div>
+
+      <div id="s4-svg" class="panel">
+        <div style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+          <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="16" width="130" height="90" rx="4" fill="#001a00" stroke="#0d3018" stroke-width="1.5"/>
+            <text x="75" y="38" text-anchor="middle" font-size="7" fill="#4eff9a" font-family="'Press Start 2P',monospace">IMAGE</text>
+            <text x="75" y="54" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace">EXPOSE 80</text>
+            <text x="75" y="68" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace">EXPOSE 443</text>
+            <text x="75" y="82" text-anchor="middle" font-size="5.5" fill="#aaa" font-family="'Press Start 2P',monospace">EXPOSE 22</text>
+            <text x="183" y="30" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">-P</text>
+            <line id="s4-a1" x1="142" y1="46" x2="205" y2="46" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <line id="s4-a2" x1="142" y1="64" x2="205" y2="64" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <line id="s4-a3" x1="142" y1="78" x2="205" y2="78" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <rect x="208" y="16" width="148" height="90" rx="4" fill="#001a00" stroke="#0d3018" stroke-width="1.5"/>
+            <text x="282" y="34" text-anchor="middle" font-size="6.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">HOST PORTS</text>
+            <text id="s4-p1" x="282" y="50" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">:49153 → :80</text>
+            <text id="s4-p2" x="282" y="66" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">:49154 → :443</text>
+            <text id="s4-p3" x="282" y="82" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">:49155 → :22</text>
+            <text id="s4-rand" x="282" y="100" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">RANDOM!</text>
+          </svg>
+        </div>
+      </div>
+
+      <div id="s4-card1" class="panel" style="background:#001a08;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🎲</span>
+          <span style="font-size:7.5px;color:#4eff9a">EPHEMERAL PORTS 32768-60999</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker picks random high ports from the ephemeral range. Use <span style="color:#4ec9e1">docker port &lt;name&gt;</span> to find which port was assigned. Changes on every restart!</div>
+      </div>
+
+      <div id="s4-card2" class="panel" style="background:#001a08;border-left:4px solid #e8a020;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🗺️</span>
+          <span style="font-size:7.5px;color:#e8a020">WHEN TO USE -P</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Good for quick dev/testing when you do not care which port you get. Bad for production — clients cannot know the port upfront. Also still binds to 0.0.0.0 by default.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">-P publishes ALL EXPOSE'd ports to random host ports.</div>
+    <div class="ih">Ephemeral range (~49153+). Find them with docker port.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">ALL</div><div class="sl">EXPOSE<br>PORTS</div></div>
+    <div class="sc"><div class="sv am">RAND</div><div class="sl">HOST<br>PORT</div></div>
+    <div class="sc"><div class="sv rd">DEV</div><div class="sl">USE<br>ONLY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function movePkt(id,x1,y1,x2,y2,startMs,durMs){
+  af(startMs,()=>{
+    const d=document.getElementById(id);if(!d)return;
+    d.setAttribute('cx',x1);d.setAttribute('cy',y1);d.setAttribute('opacity','1');
+    const frames=Math.max(1,Math.round(durMs/16));let f=0;
+    function step(){
+      f++;const p=Math.min(f/frames,1);
+      d.setAttribute('cx',x1+(x2-x1)*p);
+      d.setAttribute('cy',y1+(y2-y1)*p);
+      if(f<frames)af(16,step);else d.setAttribute('opacity','0');
+    }
+    af(16,step);
+  });
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  const all={
+    1:['s1-df','s1-card1','s1-card2','s1-svg','s1-l1','s1-l2','s1-l3'],
+    2:['s2-term','s2-svg','s2-card1','s2-card2','s2-l1','s2-l2','s2-l3'],
+    3:['s3-cmp','s3-term','s3-svg','s3-warn','s3-l1','s3-l2','s3-l3','s3-l4'],
+    4:['s4-term','s4-svg','s4-card1','s4-card2','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5']
+  };
+  (all[n]||[]).forEach(id=>hide(id));
+  if(n===2){svgHide('s2-arr');svgHide('s2-arh');svgHide('s2-arlt');svgHide('s2-ok');svgHide('s2-pkt');}
+  if(n===4){svgHide('s4-a1');svgHide('s4-a2');svgHide('s4-a3');svgHide('s4-p1');svgHide('s4-p2');svgHide('s4-p3');svgHide('s4-rand');}
+}
+
+function play(n){
+  if(n===1){
+    show('s1-df',200);
+    showEl('s1-l1',500);showEl('s1-l2',900);showEl('s1-l3',1300);
+    show('s1-card1',1700);
+    show('s1-card2',2400);
+    show('s1-svg',3100);
+  }
+  if(n===2){
+    show('s2-term',200);
+    showEl('s2-l1',500);showEl('s2-l2',900);showEl('s2-l3',1300);
+    show('s2-svg',1700);
+    svgShow('s2-arr',2000);svgShow('s2-arh',2000);svgShow('s2-arlt',2000);
+    movePkt('s2-pkt',142,65,222,65,2200,500);
+    svgShow('s2-ok',2900);
+    show('s2-card1',3400);
+    show('s2-card2',4100);
+  }
+  if(n===3){
+    show('s3-cmp',200);
+    show('s3-term',1000);
+    showEl('s3-l1',1300);showEl('s3-l2',1700);showEl('s3-l3',2200);showEl('s3-l4',2600);
+    show('s3-svg',3100);
+    show('s3-warn',4000);
+  }
+  if(n===4){
+    show('s4-term',200);
+    showEl('s4-l1',500);showEl('s4-l2',900);showEl('s4-l3',1300);showEl('s4-l4',1700);showEl('s4-l5',2100);
+    show('s4-svg',2500);
+    svgShow('s4-a1',2800);svgShow('s4-p1',2800);
+    svgShow('s4-a2',3200);svgShow('s4-p2',3200);
+    svgShow('s4-a3',3600);svgShow('s4-p3',3600);
+    svgShow('s4-rand',4100);
+    show('s4-card1',4600);
+    show('s4-card2',5300);
+  }
+}
+
+window.addEventListener('load',()=>{reset(1);af(150,()=>play(1));});
+</script>
+</body>
+</html>

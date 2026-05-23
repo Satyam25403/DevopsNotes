@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>Container Security Scanning</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: WHY SCAN? -->
+<div class="scene active" id="s1" style="background:#0a0008">
+  <div class="hdr" style="background:#0a0008;border-bottom:1px solid #2a0020">
+    <div class="hdr-title" style="color:#e85050">CONTAINER SECURITY</div>
+    <div class="hdr-sub">CVE SCANNING — SHIFT LEFT</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0008">
+    <span class="slabel" style="color:#e8a020">WHY SCAN?</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+  <div class="anim" style="background:#0a0008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="c1a" class="panel" style="background:#100005;border:2px solid #3d0015;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0008;padding:6px 10px;border-bottom:1px solid #3d0015;text-align:center;font-size:7px;color:#e85050;letter-spacing:1px">YOUR IMAGE LAYERS</div>
+        <svg width="100%" height="160" viewBox="0 0 366 160" xmlns="http://www.w3.org/2000/svg">
+          <rect id="ly4" x="14" y="12" width="220" height="26" rx="2" fill="#1a0a00" stroke="#e8a02050" stroke-width="1" opacity="0"/>
+          <text id="lt4" x="24" y="25" font-family="'Press Start 2P',monospace" font-size="6" fill="#e8a020" opacity="0">BASE OS (debian:bullseye)</text>
+          <rect id="ly3" x="14" y="44" width="220" height="26" rx="2" fill="#1a0500" stroke="#e8502050" stroke-width="1" opacity="0"/>
+          <text id="lt3" x="24" y="57" font-family="'Press Start 2P',monospace" font-size="6" fill="#e85050" opacity="0">RUNTIME (python 3.9)</text>
+          <rect id="ly2" x="14" y="76" width="220" height="26" rx="2" fill="#001a00" stroke="#4eff9a50" stroke-width="1" opacity="0"/>
+          <text id="lt2" x="24" y="89" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a" opacity="0">APP DEPS (requirements.txt)</text>
+          <rect id="ly1" x="14" y="108" width="220" height="26" rx="2" fill="#00081a" stroke="#4ec9e150" stroke-width="1" opacity="0"/>
+          <text id="lt1" x="24" y="121" font-family="'Press Start 2P',monospace" font-size="6" fill="#4ec9e1" opacity="0">APP CODE</text>
+          <circle id="bug1" cx="258" cy="25" r="10" fill="#e8505000" opacity="0"/>
+          <text id="bgt1" x="258" y="29" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="7" fill="#e85050" opacity="0">!</text>
+          <text id="bgl1" x="274" y="20" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050" opacity="0">CVE-2024</text>
+          <text id="bgl1b" x="274" y="30" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e8a020" opacity="0">CRITICAL</text>
+          <circle id="bug2" cx="258" cy="57" r="10" fill="#e8505000" opacity="0"/>
+          <text id="bgt2" x="258" y="61" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="7" fill="#e85050" opacity="0">!</text>
+          <text id="bgl2" x="274" y="52" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050" opacity="0">CVE-2023</text>
+          <text id="bgl2b" x="274" y="62" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050" opacity="0">HIGH</text>
+          <circle id="bug3" cx="258" cy="89" r="10" fill="#e8a02000" opacity="0"/>
+          <text id="bgt3" x="258" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="7" fill="#e8a020" opacity="0">!</text>
+          <text id="bgl3" x="274" y="84" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e8a020" opacity="0">CVE-2022</text>
+          <text id="bgl3b" x="274" y="94" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e8a020" opacity="0">MEDIUM</text>
+          <text id="scanlbl" x="183" y="150" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#888" opacity="0">vulnerabilities lurk in every layer</text>
+        </svg>
+      </div>
+
+      <div id="c1b" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#130005;border:2px solid #e85050;border-radius:2px;padding:10px 8px;text-align:center">
+          <div style="font-size:6.5px;color:#888;margin-bottom:6px">AVG CVEs IN</div>
+          <div style="font-size:11px;color:#e85050">1000+</div>
+          <div style="font-size:6px;color:#888;margin-top:4px">POPULAR BASE IMAGE</div>
+        </div>
+        <div style="background:#130005;border:2px solid #e8a020;border-radius:2px;padding:10px 8px;text-align:center">
+          <div style="font-size:6.5px;color:#888;margin-bottom:6px">BREACH COST</div>
+          <div style="font-size:11px;color:#e8a020">$4.9M</div>
+          <div style="font-size:6px;color:#888;margin-top:4px">AVG (IBM 2024)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Container images bundle OS libs, runtimes, and app deps.</div>
+    <div class="ih rd">Each layer is a potential CVE hiding place. Scan all of them.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">CVE</div><div class="sl">VULNERABILITY<br>FORMAT</div></div>
+    <div class="sc"><div class="sv am">CVSS</div><div class="sl">SEVERITY<br>SCORE</div></div>
+    <div class="sc"><div class="sv gn">SCAN</div><div class="sl">YOUR SHIELD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: TRIVY -->
+<div class="scene" id="s2" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">TRIVY</div>
+    <div class="hdr-sub">trivy image — SCAN ANY IMAGE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">AQUA SECURITY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OPEN SOURCE</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="c2a" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d2030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">trivy image</span> nginx:latest</div>
+          <div id="t2a" class="tline" style="color:#4eff9a">✓ Vulnerability DB updated</div>
+          <div id="t2b" class="tline" style="color:#aaa">Scanning image layers...</div>
+          <div id="t2c" class="tline" style="color:#aaa">Detected OS: debian 11</div>
+          <div id="t2d" class="tline" style="color:#aaa">Scanning language packages...</div>
+          <div id="t2e" class="tline" style="color:#e85050">CRITICAL: 3  HIGH: 12  MEDIUM: 28</div>
+        </div>
+      </div>
+
+      <div id="c2b" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;letter-spacing:1px">SCAN OUTPUT FORMAT</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div id="r2a" class="tline" style="display:flex;gap:6px;align-items:flex-start">
+            <span style="background:#e85050;color:#fff;font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0;margin-top:1px">CRITICAL</span>
+            <div>
+              <div style="font-size:6px;color:#4ec9e1">CVE-2023-44487</div>
+              <div style="font-size:6px;color:#888">libssl1.1 → fixed in 1.1.1w</div>
+            </div>
+            <span style="margin-left:auto;font-size:6px;color:#e85050;flex-shrink:0">9.8</span>
+          </div>
+          <div id="r2b" class="tline" style="display:flex;gap:6px;align-items:flex-start">
+            <span style="background:#e85050;color:#fff;font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0;margin-top:1px">HIGH</span>
+            <div>
+              <div style="font-size:6px;color:#4ec9e1">CVE-2023-2650</div>
+              <div style="font-size:6px;color:#888">openssl → fixed in 3.0.9</div>
+            </div>
+            <span style="margin-left:auto;font-size:6px;color:#e85050;flex-shrink:0">7.5</span>
+          </div>
+          <div id="r2c" class="tline" style="display:flex;gap:6px;align-items:flex-start">
+            <span style="background:#e8a020;color:#fff;font-size:6px;padding:2px 5px;border-radius:2px;flex-shrink:0;margin-top:1px">MEDIUM</span>
+            <div>
+              <div style="font-size:6px;color:#4ec9e1">CVE-2022-4899</div>
+              <div style="font-size:6px;color:#888">zstd → no fix yet</div>
+            </div>
+            <span style="margin-left:auto;font-size:6px;color:#e8a020;flex-shrink:0">6.5</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="c2c" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;letter-spacing:1px">TRIVY SCANS</div>
+        <div style="padding:8px 10px;display:flex;flex-wrap:wrap;gap:6px">
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">OS packages</span>
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">pip/npm/gem</span>
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">Dockerfile</span>
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">IaC configs</span>
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">secrets</span>
+          <span style="background:#0d2030;font-size:6px;color:#4ec9e1;padding:4px 8px;border:1px solid #4ec9e140;border-radius:2px">SBOMs</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Trivy is zero-config. One binary, no daemon, no account needed.</div>
+    <div class="ih am">Reads CVE DBs from NVD + OS advisories. Updated daily.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">9.8</div><div class="sl">MAX CVSS<br>CRITICAL</div></div>
+    <div class="sc"><div class="sv am">24h</div><div class="sl">DB UPDATE<br>CYCLE</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">DEPS TO<br>INSTALL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: SNYK -->
+<div class="scene" id="s3" style="background:#010a04">
+  <div class="hdr" style="background:#010a04;border-bottom:1px solid #0a2810">
+    <div class="hdr-title" style="color:#4eff9a">SNYK</div>
+    <div class="hdr-sub">CI INTEGRATION — PR GATES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#010a04">
+    <span class="slabel" style="color:#4eff9a">SNYK CONTAINER</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CI/CD</span>
+  </div>
+  <div class="anim" style="background:#010a04">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="c3a" class="panel" style="background:#010a04;border:2px solid #0a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#041208;padding:5px 10px;border-bottom:1px solid #0a2810;font-size:6.5px;color:#4eff9a;letter-spacing:1px">CI PIPELINE FLOW</div>
+        <svg width="100%" height="120" viewBox="0 0 366 120" xmlns="http://www.w3.org/2000/svg">
+          <rect id="p3a" x="10" y="40" width="58" height="36" rx="2" fill="#041208" stroke="#4eff9a50" stroke-width="1" opacity="0"/>
+          <text x="39" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a" opacity="1" id="p3at">BUILD</text>
+          <text x="39" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" opacity="1" id="p3as">docker build</text>
+          <line id="ar3a" x1="68" y1="58" x2="82" y2="58" stroke="#4eff9a" stroke-width="1" opacity="0" marker-end="url(#arr3)"/>
+          <rect id="p3b" x="82" y="40" width="64" height="36" rx="2" fill="#041208" stroke="#4ec9e150" stroke-width="1" opacity="0"/>
+          <text x="114" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4ec9e1" opacity="1" id="p3bt">SCAN</text>
+          <text x="114" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" opacity="1" id="p3bs">snyk test</text>
+          <line id="ar3b" x1="146" y1="58" x2="160" y2="58" stroke="#4ec9e1" stroke-width="1" opacity="0" marker-end="url(#arr3b)"/>
+          <polygon id="p3c" points="175,40 207,58 175,76 143,58" fill="#05160a" stroke="#e8a020" stroke-width="1" opacity="0"/>
+          <text x="175" y="61" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" id="p3ct">PASS?</text>
+          <line id="ar3f" x1="175" y1="76" x2="175" y2="100" stroke="#e85050" stroke-width="1" stroke-dasharray="3,2" opacity="0"/>
+          <text id="failtxt" x="175" y="112" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050" opacity="0">✗ BLOCK PR</text>
+          <line id="ar3p" x1="207" y1="58" x2="222" y2="58" stroke="#4eff9a" stroke-width="1" opacity="0" marker-end="url(#arr3p)"/>
+          <rect id="p3d" x="222" y="40" width="60" height="36" rx="2" fill="#041208" stroke="#4eff9a50" stroke-width="1" opacity="0"/>
+          <text x="252" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a" id="p3dt">PUSH</text>
+          <text x="252" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" id="p3ds">registry</text>
+          <line id="ar3q" x1="282" y1="58" x2="296" y2="58" stroke="#4eff9a" stroke-width="1" opacity="0" marker-end="url(#arr3q)"/>
+          <rect id="p3e" x="296" y="40" width="58" height="36" rx="2" fill="#041208" stroke="#4eff9a50" stroke-width="1" opacity="0"/>
+          <text x="325" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a" id="p3et">DEPLOY</text>
+          <text x="325" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" id="p3es">k8s</text>
+          <defs>
+            <marker id="arr3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/></marker>
+            <marker id="arr3b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/></marker>
+            <marker id="arr3p" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/></marker>
+            <marker id="arr3q" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/></marker>
+          </defs>
+        </svg>
+      </div>
+
+      <div id="c3b" class="panel" style="background:#010a04;border:2px solid #0a2810;border-radius:3px;overflow:hidden">
+        <div style="background:#041208;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0a2810">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">.github/workflows/scan.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="y3a" class="tline" style="color:#a080ff">- name: <span style="color:#4eff9a">Snyk container scan</span></div>
+          <div id="y3b" class="tline" style="color:#888">  uses: <span style="color:#4ec9e1">snyk/actions/docker@master</span></div>
+          <div id="y3c" class="tline" style="color:#888">  with:</div>
+          <div id="y3d" class="tline" style="color:#888">    image: <span style="color:#e8a020">$&#123;&#123; env.IMAGE &#125;&#125;</span></div>
+          <div id="y3e" class="tline" style="color:#888">    args: <span style="color:#e8a020">--severity-threshold=high</span></div>
+          <div id="y3f" class="tline" style="color:#4eff9a">  # blocks PR if HIGH+ found</div>
+        </div>
+      </div>
+
+      <div id="c3c" class="panel" style="background:#041208;border-left:4px solid #4eff9a;border-top:1px solid #0a2810;border-right:1px solid #0a2810;border-bottom:1px solid #0a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">SNYK EXTRAS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          → Monitors images continuously<br>
+          → Fix PRs opened automatically<br>
+          → SaaS dashboard + Slack alerts<br>
+          → SARIF output for GitHub Security
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Snyk blocks bad images before they merge. Gate on severity level.</div>
+    <div class="ih">Set --severity-threshold=high to block CRITICAL and HIGH only.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">HIGH</div><div class="sl">BLOCK<br>THRESHOLD</div></div>
+    <div class="sc"><div class="sv gn">PR</div><div class="sl">GATED<br>BEFORE MERGE</div></div>
+    <div class="sc"><div class="sv am">SARIF</div><div class="sl">SECURITY<br>REPORT FMT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: GRYPE -->
+<div class="scene" id="s4" style="background:#07000f">
+  <div class="hdr" style="background:#07000f;border-bottom:1px solid #1a0030">
+    <div class="hdr-title" style="color:#a080ff">GRYPE</div>
+    <div class="hdr-sub">ANCHORE — FAST ALTERNATIVE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#07000f">
+    <span class="slabel" style="color:#a080ff">GRYPE</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">FAST SCAN</span>
+  </div>
+  <div class="anim" style="background:#07000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="c4a" class="panel" style="background:#05000c;border:2px solid #1a0030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#a080ff">grype</span> nginx:latest</div>
+          <div id="g4a" class="tline" style="color:#a080ff">↳ Loading vulnerability DB...</div>
+          <div id="g4b" class="tline" style="color:#aaa">↳ Cataloguing packages...</div>
+          <div id="g4c" class="tline" style="color:#aaa">↳ Matching vulnerabilities...</div>
+          <div id="g4d" class="tline" style="color:#4eff9a">Done. [2.1s]</div>
+          <div style="height:6px"></div>
+          <div id="g4e" class="tline" style="color:#888">$ <span style="color:#a080ff">grype</span> dir:. <span style="color:#555"># scan filesystem</span></div>
+          <div id="g4f" class="tline" style="color:#888">$ <span style="color:#a080ff">grype</span> sbom:syft.json <span style="color:#555"># from SBOM</span></div>
+        </div>
+      </div>
+
+      <div id="c4b" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#050010;border:2px solid #4ec9e1;border-radius:2px;overflow:hidden">
+          <div style="background:#080018;padding:5px 7px;border-bottom:1px solid #1a0030;text-align:center">
+            <div style="font-size:6.5px;color:#4ec9e1">TRIVY</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            ✓ IaC scanning<br>
+            ✓ Secret detection<br>
+            ✓ Dockerfile lint<br>
+            ✓ SBOM gen<br>
+            ~ Slightly slower
+          </div>
+        </div>
+        <div style="background:#050010;border:2px solid #a080ff;border-radius:2px;overflow:hidden">
+          <div style="background:#080018;padding:5px 7px;border-bottom:1px solid #1a0030;text-align:center">
+            <div style="font-size:6.5px;color:#a080ff">GRYPE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.1">
+            ✓ Faster startup<br>
+            ✓ Pairs w/ Syft<br>
+            ✓ Flexible output<br>
+            ✓ SBOM input<br>
+            ~ Less built-in
+          </div>
+        </div>
+      </div>
+
+      <div id="c4c" class="panel" style="background:#0a0018;border-left:4px solid #a080ff;border-top:1px solid #1a0030;border-right:1px solid #1a0030;border-bottom:1px solid #1a0030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">OUTPUT FORMATS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          grype ... -o <span style="color:#4ec9e1">table</span>   → human readable<br>
+          grype ... -o <span style="color:#4ec9e1">json</span>    → machine parse<br>
+          grype ... -o <span style="color:#4ec9e1">sarif</span>   → GitHub Security<br>
+          grype ... -o <span style="color:#4ec9e1">cyclonedx</span> → SBOM format
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Grype + Syft = full SBOM-based scanning pipeline for supply chain.</div>
+    <div class="ih pu">Generate SBOM with Syft, scan it with Grype. Audit trail included.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">2.1s</div><div class="sl">SCAN<br>SPEED</div></div>
+    <div class="sc"><div class="sv gn">SBOM</div><div class="sl">ACCEPTS<br>AS INPUT</div></div>
+    <div class="sc"><div class="sv am">4+</div><div class="sl">OUTPUT<br>FORMATS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 5: SHIFT LEFT -->
+<div class="scene" id="s5" style="background:#001508">
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">SHIFT LEFT</div>
+    <div class="hdr-sub">SCAN BEFORE PUSH — NOT AFTER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">BEST PRACTICE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="c5a" class="panel" style="background:#001008;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#e85050;letter-spacing:1px">✗ WRONG — SCAN AFTER DEPLOY</div>
+        <svg width="100%" height="56" viewBox="0 0 366 56" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="aw" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/></marker></defs>
+          <rect x="10" y="14" width="50" height="28" rx="2" fill="#1a0400" stroke="#e8505040"/>
+          <text x="35" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">BUILD</text>
+          <line x1="60" y1="28" x2="75" y2="28" stroke="#e85050" stroke-width="1" marker-end="url(#aw)"/>
+          <rect x="75" y="14" width="50" height="28" rx="2" fill="#1a0400" stroke="#e8505040"/>
+          <text x="100" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">PUSH</text>
+          <line x1="125" y1="28" x2="140" y2="28" stroke="#e85050" stroke-width="1" marker-end="url(#aw)"/>
+          <rect x="140" y="14" width="56" height="28" rx="2" fill="#1a0400" stroke="#e8505040"/>
+          <text x="168" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">DEPLOY</text>
+          <line x1="196" y1="28" x2="211" y2="28" stroke="#e85050" stroke-width="1" marker-end="url(#aw)"/>
+          <rect x="211" y="14" width="50" height="28" rx="2" fill="#1a0400" stroke="#e8505050"/>
+          <text x="236" y="28" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">SCAN</text>
+          <text x="236" y="38" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050">← TOO LATE</text>
+          <text x="310" y="28" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">$$$</text>
+        </svg>
+      </div>
+
+      <div id="c5b" class="panel" style="background:#001008;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#4eff9a;letter-spacing:1px">✓ RIGHT — SCAN BEFORE PUSH</div>
+        <svg width="100%" height="56" viewBox="0 0 366 56" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/></marker></defs>
+          <rect x="10" y="14" width="50" height="28" rx="2" fill="#001a08" stroke="#4eff9a40"/>
+          <text x="35" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">BUILD</text>
+          <line x1="60" y1="28" x2="75" y2="28" stroke="#4eff9a" stroke-width="1" marker-end="url(#ag)"/>
+          <rect x="75" y="14" width="50" height="28" rx="2" fill="#001a08" stroke="#4eff9a80"/>
+          <text x="100" y="28" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">SCAN</text>
+          <text x="100" y="38" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">← HERE</text>
+          <line x1="125" y1="28" x2="140" y2="28" stroke="#4eff9a" stroke-width="1" marker-end="url(#ag)"/>
+          <rect x="140" y="14" width="50" height="28" rx="2" fill="#001a08" stroke="#4eff9a40"/>
+          <text x="165" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">PUSH</text>
+          <line x1="190" y1="28" x2="205" y2="28" stroke="#4eff9a" stroke-width="1" marker-end="url(#ag)"/>
+          <rect x="205" y="14" width="56" height="28" rx="2" fill="#001a08" stroke="#4eff9a40"/>
+          <text x="233" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa">DEPLOY</text>
+          <text x="295" y="28" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">SAFE</text>
+          <text x="286" y="40" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">✓ CHEAP</text>
+        </svg>
+      </div>
+
+      <div id="c5c" class="panel" style="background:#001a08;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#4eff9a;letter-spacing:1px">CHEAT SHEET</div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">trivy image</span> myapp:latest</div>
+          <div id="cs1" class="tline" style="color:#888">$ <span style="color:#a080ff">grype</span> myapp:latest <span style="color:#555">-o table</span></div>
+          <div id="cs2" class="tline" style="color:#888">$ <span style="color:#4eff9a">snyk container test</span> myapp</div>
+          <div id="cs3" class="tline" style="color:#e8a020">→ fail on CRITICAL/HIGH in CI</div>
+          <div id="cs4" class="tline" style="color:#e8a020">→ fix: pin to patched base image</div>
+          <div id="cs5" class="tline" style="color:#4eff9a">→ use distroless/alpine for less CVEs</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Fix cost is 100x cheaper before deploy than after. Shift left always.</div>
+    <div class="ih">Use distroless or alpine base images to minimize CVE surface area.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">$1</div><div class="sl">FIX COST<br>IN DEV</div></div>
+    <div class="sc"><div class="sv rd">$100</div><div class="sl">FIX COST<br>IN PROD</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">SCANNERS<br>COVERED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){hide('c1a');hide('c1b');['ly4','lt4','ly3','lt3','ly2','lt2','ly1','lt1','bug1','bgt1','bgl1','bgl1b','bug2','bgt2','bgl2','bgl2b','bug3','bgt3','bgl3','bgl3b','scanlbl'].forEach(svgHide);}
+  if(n===2){hide('c2a');hide('c2b');hide('c2c');['t2a','t2b','t2c','t2d','t2e','r2a','r2b','r2c'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});}
+  if(n===3){hide('c3a');hide('c3b');hide('c3c');['p3a','ar3a','p3b','ar3b','p3c','ar3f','failtxt','ar3p','p3d','ar3q','p3e'].forEach(svgHide);['y3a','y3b','y3c','y3d','y3e','y3f'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});}
+  if(n===4){hide('c4a');hide('c4b');hide('c4c');['g4a','g4b','g4c','g4d','g4e','g4f'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});}
+  if(n===5){hide('c5a');hide('c5b');hide('c5c');['cs1','cs2','cs3','cs4','cs5'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});}
+}
+
+function play(n){
+  if(n===1){
+    show('c1a',200);
+    svgShow('ly4',400);svgShow('lt4',500);
+    svgShow('ly3',700);svgShow('lt3',800);
+    svgShow('ly2',1000);svgShow('lt2',1100);
+    svgShow('ly1',1300);svgShow('lt1',1400);
+    svgShow('bug1',1600);svgShow('bgt1',1700);svgShow('bgl1',1750);svgShow('bgl1b',1800);
+    svgShow('bug2',2000);svgShow('bgt2',2100);svgShow('bgl2',2150);svgShow('bgl2b',2200);
+    svgShow('bug3',2400);svgShow('bgt3',2500);svgShow('bgl3',2550);svgShow('bgl3b',2600);
+    svgShow('scanlbl',2900);
+    show('c1b',3200);
+  }
+  if(n===2){
+    show('c2a',200);
+    ['t2a','t2b','t2c','t2d','t2e'].forEach((id,i)=>{af(600+i*450,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});});
+    show('c2b',3200);
+    ['r2a','r2b','r2c'].forEach((id,i)=>{af(3400+i*350,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});});
+    show('c2c',4500);
+  }
+  if(n===3){
+    show('c3a',200);
+    svgShow('p3a',500);svgShow('ar3a',900);
+    svgShow('p3b',1100);svgShow('ar3b',1500);
+    svgShow('p3c',1700);
+    svgShow('ar3f',2000);svgShow('failtxt',2300);
+    svgShow('ar3p',2600);svgShow('p3d',2800);svgShow('ar3q',3100);svgShow('p3e',3300);
+    show('c3b',3600);
+    ['y3a','y3b','y3c','y3d','y3e','y3f'].forEach((id,i)=>{af(3800+i*300,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});});
+    show('c3c',5600);
+  }
+  if(n===4){
+    show('c4a',200);
+    ['g4a','g4b','g4c','g4d','g4e','g4f'].forEach((id,i)=>{af(500+i*400,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});});
+    show('c4b',3200);
+    show('c4c',4000);
+  }
+  if(n===5){
+    show('c5a',200);
+    show('c5b',1000);
+    show('c5c',1800);
+    ['cs1','cs2','cs3','cs4','cs5'].forEach((id,i)=>{af(2100+i*350,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});});
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

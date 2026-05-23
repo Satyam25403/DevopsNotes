@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker Compose: Scale vs Deploy Replicas</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 1: The --scale Flag (Compose v1 way) -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#000a0f">
+
+  <div class="hdr" style="background:#000a0f;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">SCALE vs REPLICAS</div>
+    <div class="hdr-sub">DOCKER COMPOSE SCALING DEEP DIVE</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+      <div class="dot" id="d1-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000a0f">
+    <span class="slabel" style="color:#e8a020">STEP 1 — THE --SCALE FLAG</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">COMPOSE V1</span>
+  </div>
+
+  <div class="anim" style="background:#000a0f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Intro label -->
+      <div id="s1-intro" class="panel" style="background:#001018;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">THE ORIGINAL WAY TO SCALE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">In Compose v1, you'd pass <span style="color:#4ec9e1">--scale</span> at runtime to spin up N containers for a service.</div>
+      </div>
+
+      <!-- Terminal: docker-compose up --scale -->
+      <div id="s1-term" class="panel" style="background:#050010;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">bash</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker-compose up</span> --scale web=3</div>
+          <div id="s1-l1" class="tline" style="color:#4eff9a">Creating project_web_1 ... done</div>
+          <div id="s1-l2" class="tline" style="color:#4eff9a">Creating project_web_2 ... done</div>
+          <div id="s1-l3" class="tline" style="color:#4eff9a">Creating project_web_3 ... done</div>
+          <div id="s1-l4" class="tline" style="color:#e8a020">⚠  web replicated 3x → 3 containers running</div>
+        </div>
+      </div>
+
+      <!-- Container boxes diagram -->
+      <div id="s1-diag" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Container boxes -->
+          <g id="s1-box1" opacity="0" style="transition:opacity 0.4s">
+            <rect x="10" y="20" width="100" height="60" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="60" y="40" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a">WEB_1</text>
+            <text x="60" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">port: random</text>
+            <text x="60" y="70" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">pid: 1841</text>
+          </g>
+          <g id="s1-box2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="133" y="20" width="100" height="60" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="183" y="40" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a">WEB_2</text>
+            <text x="183" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">port: random</text>
+            <text x="183" y="70" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">pid: 1842</text>
+          </g>
+          <g id="s1-box3" opacity="0" style="transition:opacity 0.4s">
+            <rect x="256" y="20" width="100" height="60" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="306" y="40" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a">WEB_3</text>
+            <text x="306" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">port: random</text>
+            <text x="306" y="70" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">pid: 1843</text>
+          </g>
+          <!-- Label -->
+          <text id="s1-capt" x="183" y="118" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#555" opacity="0" style="transition:opacity 0.4s">3 containers — ephemeral, CLI-driven</text>
+        </svg>
+      </div>
+
+      <!-- Deprecation warning card -->
+      <div id="s1-warn" class="panel" style="background:#120800;border-left:4px solid #e85050;border-top:1px solid #2a1000;border-right:1px solid #2a1000;border-bottom:1px solid #2a1000;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚠</span>
+          <span style="font-size:7.5px;color:#e85050">DEPRECATED IN COMPOSE V2</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#e8a020">docker compose up --scale</span> still works but is considered a runtime override — not declarative config. Compose V2 prefers <span style="color:#4eff9a">deploy.replicas</span> in the YAML.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">--scale overrides at runtime — not stored in docker-compose.yml.</div>
+    <div class="ih am">Great for testing. Bad for reproducible infra.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv am">V1</div><div class="sl">COMPOSE ERA</div></div>
+    <div class="sc"><div class="sv gn">3x</div><div class="sl">CONTAINERS</div></div>
+    <div class="sc"><div class="sv rd">CLI</div><div class="sl">OVERRIDE ONLY</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 2: deploy.replicas in YAML -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#00050a">
+
+  <div class="hdr" style="background:#00050a;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#a080ff">DEPLOY.REPLICAS IN YAML</div>
+    <div class="hdr-sub">THE DECLARATIVE APPROACH</div>
+    <div class="dots">
+      <div class="dot done" id="d2-1"></div>
+      <div class="dot active" id="d2-2"></div>
+      <div class="dot" id="d2-3"></div>
+      <div class="dot" id="d2-4"></div>
+      <div class="dot" id="d2-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00050a">
+    <span class="slabel" style="color:#a080ff">STEP 2 — DEPLOY.REPLICAS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">COMPOSE V2</span>
+  </div>
+
+  <div class="anim" style="background:#00050a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- YAML file card -->
+      <div id="s2-yaml" class="panel" style="background:#05000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">services:</div>
+          <div style="color:#4ec9e1;padding-left:12px">web:</div>
+          <div style="color:#aaa;padding-left:24px">image: nginx:alpine</div>
+          <div id="s2-l1" class="tline" style="color:#a080ff;padding-left:24px">deploy:</div>
+          <div id="s2-l2" class="tline" style="color:#4eff9a;padding-left:36px">replicas: <span style="color:#e8a020">3</span></div>
+          <div id="s2-l3" class="tline" style="color:#a080ff;padding-left:36px">resources:</div>
+          <div id="s2-l4" class="tline" style="color:#aaa;padding-left:48px">limits:</div>
+          <div id="s2-l5" class="tline" style="color:#aaa;padding-left:60px">cpus: <span style="color:#e8a020">'0.5'</span></div>
+        </div>
+      </div>
+
+      <!-- Swarm vs standalone cards -->
+      <div id="s2-cmp" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#001500;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a00;padding:5px 7px;border-bottom:1px solid #0d3010;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ SWARM MODE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.2">
+            <div>deploy.replicas</div>
+            <div style="color:#4eff9a">IS RESPECTED</div>
+            <div style="margin-top:4px">orchestrator</div>
+            <div>manages replicas</div>
+          </div>
+        </div>
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ STANDALONE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6.5px;color:#aaa;line-height:2.2">
+            <div>deploy.replicas</div>
+            <div style="color:#e85050">IS IGNORED</div>
+            <div style="margin-top:4px">use --scale</div>
+            <div>flag instead</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command comparison terminal -->
+      <div id="s2-term" class="panel" style="background:#05000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">runtime check</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2-t1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker compose up</span> -d</div>
+          <div id="s2-t2" class="tline" style="color:#e85050">⚠ replicas: 3 — ignored (not Swarm)</div>
+          <div id="s2-t3" class="tline" style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker compose up</span> --scale web=3 -d</div>
+          <div id="s2-t4" class="tline" style="color:#4eff9a">✓ 3 replicas running (standalone)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">deploy.replicas belongs in YAML for declarative config.</div>
+    <div class="ih pu">But plain docker compose ignores it — only Swarm respects it.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">YAML</div><div class="sl">DECLARATIVE</div></div>
+    <div class="sc"><div class="sv gn">SWARM</div><div class="sl">RESPECTED ✓</div></div>
+    <div class="sc"><div class="sv rd">SOLO</div><div class="sl">IGNORED ✗</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 3: Port Conflict Hell -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#e85050">PORT CONFLICT HELL</div>
+    <div class="hdr-sub">WHY FIXED PORTS BREAK SCALING</div>
+    <div class="dots">
+      <div class="dot done" id="d3-1"></div>
+      <div class="dot done" id="d3-2"></div>
+      <div class="dot active" id="d3-3"></div>
+      <div class="dot" id="d3-4"></div>
+      <div class="dot" id="d3-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">STEP 3 — PORT CONFLICTS</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">DANGER ZONE</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Bad YAML -->
+      <div id="s3-bad" class="panel" style="background:#0d0005;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#140008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#e85050">✗ BAD — fixed host port</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#4ec9e1">web:</div>
+          <div style="color:#aaa;padding-left:12px">image: nginx:alpine</div>
+          <div id="s3-l1" class="tline" style="color:#e85050;padding-left:12px">ports:</div>
+          <div id="s3-l2" class="tline" style="color:#e85050;padding-left:24px">- "<span style="color:#e8a020">8080</span>:80"   <span style="color:#555"># FIXED HOST</span></div>
+        </div>
+      </div>
+
+      <!-- Error explosion terminal -->
+      <div id="s3-err" class="panel" style="background:#0d0005;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#140008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker compose up</span> --scale web=3</div>
+          <div id="s3-e1" class="tline" style="color:#4eff9a">Creating project_web_1 ... done</div>
+          <div id="s3-e2" class="tline" style="color:#e85050">Creating project_web_2 ... ERROR</div>
+          <div id="s3-e3" class="tline" style="color:#e85050">Bind for 0.0.0.0:8080 failed:</div>
+          <div id="s3-e4" class="tline" style="color:#e85050">port is already allocated</div>
+          <div id="s3-e5" class="tline" style="color:#e8a020">✗ Only 1 of 3 containers started</div>
+        </div>
+      </div>
+
+      <!-- Visual diagram of port collision -->
+      <div id="s3-diag" class="panel" style="background:#080003;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <!-- Host port 8080 box -->
+          <rect x="10" y="15" width="100" height="40" rx="4" fill="#0d0005" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="60" y="31" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4ec9e1">HOST :8080</text>
+          <text x="60" y="47" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#888">one slot only</text>
+
+          <!-- Arrow to web_1 (OK) -->
+          <line x1="110" y1="35" x2="155" y2="25" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arrGn)"/>
+          <!-- Arrow to web_2 (FAIL) -->
+          <line x1="110" y1="35" x2="155" y2="55" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrRd)"/>
+          <!-- Arrow to web_3 (FAIL) -->
+          <line x1="110" y1="35" x2="155" y2="85" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrRd)"/>
+
+          <!-- Container boxes -->
+          <rect x="157" y="10" width="90" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="202" y="24" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">web_1 ✓ UP</text>
+
+          <rect x="157" y="42" width="90" height="28" rx="3" fill="#1a0005" stroke="#e85050" stroke-width="1.5"/>
+          <text x="202" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">web_2 ✗ FAIL</text>
+
+          <rect x="157" y="74" width="90" height="28" rx="3" fill="#1a0005" stroke="#e85050" stroke-width="1.5"/>
+          <text x="202" y="88" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">web_3 ✗ FAIL</text>
+
+          <!-- Boom text -->
+          <text id="s3-boom" x="295" y="55" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="18" fill="#e85050" opacity="0" style="transition:opacity 0.3s">💥</text>
+
+          <defs>
+            <marker id="arrGn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <marker id="arrRd" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Only one container can bind a fixed host port at a time.</div>
+    <div class="ih rd">Fixed ports + --scale = immediate bind error on container 2.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1/3</div><div class="sl">STARTED OK</div></div>
+    <div class="sc"><div class="sv rd">2</div><div class="sl">BIND ERRORS</div></div>
+    <div class="sc"><div class="sv am">8080</div><div class="sl">FIXED PORT</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 4: The Fix — Dynamic Ports -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#001a08">
+
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">THE FIX — DYNAMIC PORTS</div>
+    <div class="hdr-sub">OMIT THE HOST PORT, ADD A LB</div>
+    <div class="dots">
+      <div class="dot done" id="d4-1"></div>
+      <div class="dot done" id="d4-2"></div>
+      <div class="dot done" id="d4-3"></div>
+      <div class="dot active" id="d4-4"></div>
+      <div class="dot" id="d4-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">STEP 4 — DYNAMIC PORTS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Good YAML -->
+      <div id="s4-good" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#4eff9a">✓ GOOD — no fixed host port</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#4ec9e1">web:</div>
+          <div style="color:#aaa;padding-left:12px">image: nginx:alpine</div>
+          <div id="s4-l1" class="tline" style="color:#4eff9a;padding-left:12px">ports:</div>
+          <div id="s4-l2" class="tline" style="color:#4eff9a;padding-left:24px">- "<span style="color:#e8a020">80</span>"  <span style="color:#555"># container port only</span></div>
+          <div id="s4-l3" class="tline" style="color:#555;padding-left:24px"># host port = OS assigns random</div>
+        </div>
+      </div>
+
+      <!-- Success terminal -->
+      <div id="s4-term" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker compose up</span> --scale web=3 -d</div>
+          <div id="s4-e1" class="tline" style="color:#4eff9a">Creating project_web_1 ... done  :49152</div>
+          <div id="s4-e2" class="tline" style="color:#4eff9a">Creating project_web_2 ... done  :49153</div>
+          <div id="s4-e3" class="tline" style="color:#4eff9a">Creating project_web_3 ... done  :49154</div>
+          <div id="s4-e4" class="tline" style="color:#4eff9a">✓ All 3 containers running</div>
+        </div>
+      </div>
+
+      <!-- Load balancer architecture -->
+      <div id="s4-arch" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrLB" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+          <!-- Load balancer box -->
+          <rect x="10" y="40" width="110" height="40" rx="4" fill="#000d18" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="65" y="57" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4ec9e1">LOAD BALANCER</text>
+          <text x="65" y="71" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#888">:80 → round robin</text>
+
+          <!-- Arrows to web containers -->
+          <line x1="120" y1="52" x2="190" y2="22" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrLB)"/>
+          <line x1="120" y1="60" x2="190" y2="60" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrLB)"/>
+          <line x1="120" y1="68" x2="190" y2="98" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrLB)"/>
+
+          <!-- web containers -->
+          <rect x="192" y="8" width="88" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="236" y="22" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">web_1 :49152</text>
+
+          <rect x="192" y="46" width="88" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="236" y="60" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">web_2 :49153</text>
+
+          <rect x="192" y="84" width="88" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="236" y="98" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">web_3 :49154</text>
+
+          <!-- Packet animation dot -->
+          <circle id="s4-pkt" cx="65" cy="60" r="4" fill="#4ec9e1" opacity="0"/>
+
+          <text x="183" y="120" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#555">nginx or traefik routes traffic</text>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Omit the host port — Docker assigns random ephemeral ports.</div>
+    <div class="ih">Add a reverse proxy (nginx/traefik) on a fixed port to route traffic.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3/3</div><div class="sl">ALL RUNNING</div></div>
+    <div class="sc"><div class="sv gn">RAND</div><div class="sl">HOST PORTS</div></div>
+    <div class="sc"><div class="sv">LB</div><div class="sl">PROXY LAYER</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 5: Cheat Sheet Summary -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#000d18">
+
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">THE CHEAT SHEET</div>
+    <div class="hdr-sub">SCALE vs REPLICAS — WHEN TO USE WHAT</div>
+    <div class="dots">
+      <div class="dot done" id="d5-1"></div>
+      <div class="dot done" id="d5-2"></div>
+      <div class="dot done" id="d5-3"></div>
+      <div class="dot done" id="d5-4"></div>
+      <div class="dot active" id="d5-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4eff9a">STEP 5 — SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REFERENCE</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Card 1: --scale -->
+      <div id="s5-c1" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">--scale FLAG (RUNTIME)</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>✓ Works with standalone docker compose</div>
+          <div>✓ Quick testing &amp; dev environments</div>
+          <div style="color:#e85050">✗ Not declarative — not in YAML</div>
+          <div style="color:#e85050">✗ Lost on next docker compose up</div>
+        </div>
+      </div>
+
+      <!-- Card 2: deploy.replicas -->
+      <div id="s5-c2" class="panel" style="background:#000810;border-left:4px solid #a080ff;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">DEPLOY.REPLICAS (YAML)</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>✓ Declarative — lives in docker-compose.yml</div>
+          <div>✓ Respected by Docker Swarm</div>
+          <div style="color:#e85050">✗ IGNORED by plain docker compose</div>
+          <div style="color:#e85050">✗ Confusing if you forget this rule</div>
+        </div>
+      </div>
+
+      <!-- Card 3: port rule -->
+      <div id="s5-c3" class="panel" style="background:#120000;border-left:4px solid #e85050;border-top:1px solid #2a0010;border-right:1px solid #2a0010;border-bottom:1px solid #2a0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">THE PORT RULE (CRITICAL)</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="color:#e85050">✗ ports: "8080:80" + scale → CRASH</div>
+          <div style="color:#4eff9a">✓ ports: "80" (no host port) → WORKS</div>
+          <div style="color:#4eff9a">✓ Use a reverse proxy for :80 → replicas</div>
+        </div>
+      </div>
+
+      <!-- Quick decision card -->
+      <div id="s5-c4" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;text-align:center">
+          <div style="font-size:6.5px;color:#4eff9a">QUICK DECISION GUIDE</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;color:#aaa;line-height:2.3">
+          <div><span style="color:#4ec9e1">Local dev / testing?</span> → <span style="color:#4ec9e1">--scale</span></div>
+          <div><span style="color:#a080ff">Docker Swarm prod?</span> → <span style="color:#a080ff">deploy.replicas</span></div>
+          <div><span style="color:#e8a020">Standalone compose prod?</span> → <span style="color:#4ec9e1">--scale</span> + <span style="color:#4eff9a">no fixed ports</span></div>
+          <div><span style="color:#4eff9a">Any scaling setup?</span> → <span style="color:#4eff9a">reverse proxy!</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">deploy.replicas = for Swarm. --scale = for standalone.</div>
+    <div class="ih">Never scale with fixed host ports. Always use a reverse proxy.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv">--scale</div><div class="sl">STANDALONE</div></div>
+    <div class="sc"><div class="sv pu">replicas</div><div class="sl">SWARM ONLY</div></div>
+    <div class="sc"><div class="sv gn">LB</div><div class="sl">ALWAYS ADD</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-intro'); hide('s1-term'); hide('s1-diag'); hide('s1-warn');
+    hideEl('s1-l1'); hideEl('s1-l2'); hideEl('s1-l3'); hideEl('s1-l4');
+    const b1 = document.getElementById('s1-box1');
+    const b2 = document.getElementById('s1-box2');
+    const b3 = document.getElementById('s1-box3');
+    const cp = document.getElementById('s1-capt');
+    if (b1) b1.style.opacity = '0';
+    if (b2) b2.style.opacity = '0';
+    if (b3) b3.style.opacity = '0';
+    if (cp) cp.style.opacity = '0';
+  }
+  if (n === 2) {
+    hide('s2-yaml'); hide('s2-cmp'); hide('s2-term');
+    hideEl('s2-l1'); hideEl('s2-l2'); hideEl('s2-l3'); hideEl('s2-l4'); hideEl('s2-l5');
+    hideEl('s2-t1'); hideEl('s2-t2'); hideEl('s2-t3'); hideEl('s2-t4');
+  }
+  if (n === 3) {
+    hide('s3-bad'); hide('s3-err'); hide('s3-diag');
+    hideEl('s3-l1'); hideEl('s3-l2');
+    hideEl('s3-e1'); hideEl('s3-e2'); hideEl('s3-e3'); hideEl('s3-e4'); hideEl('s3-e5');
+    const boom = document.getElementById('s3-boom');
+    if (boom) boom.style.opacity = '0';
+  }
+  if (n === 4) {
+    hide('s4-good'); hide('s4-term'); hide('s4-arch');
+    hideEl('s4-l1'); hideEl('s4-l2'); hideEl('s4-l3');
+    hideEl('s4-e1'); hideEl('s4-e2'); hideEl('s4-e3'); hideEl('s4-e4');
+    const pkt = document.getElementById('s4-pkt');
+    if (pkt) pkt.style.opacity = '0';
+  }
+  if (n === 5) {
+    hide('s5-c1'); hide('s5-c2'); hide('s5-c3'); hide('s5-c4');
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    show('s1-intro', 200);
+    show('s1-term', 600);
+    showEl('s1-l1', 1000);
+    showEl('s1-l2', 1400);
+    showEl('s1-l3', 1800);
+    showEl('s1-l4', 2100);
+    show('s1-diag', 2400);
+    af(2600, () => {
+      const b1 = document.getElementById('s1-box1');
+      if (b1) b1.style.opacity = '1';
+    });
+    af(3000, () => {
+      const b2 = document.getElementById('s1-box2');
+      if (b2) b2.style.opacity = '1';
+    });
+    af(3400, () => {
+      const b3 = document.getElementById('s1-box3');
+      if (b3) b3.style.opacity = '1';
+    });
+    af(3700, () => {
+      const cp = document.getElementById('s1-capt');
+      if (cp) cp.style.opacity = '1';
+    });
+    show('s1-warn', 4100);
+  }
+
+  if (n === 2) {
+    show('s2-yaml', 200);
+    showEl('s2-l1', 700);
+    showEl('s2-l2', 1000);
+    showEl('s2-l3', 1300);
+    showEl('s2-l4', 1600);
+    showEl('s2-l5', 1900);
+    show('s2-cmp', 2300);
+    show('s2-term', 2900);
+    showEl('s2-t1', 3200);
+    showEl('s2-t2', 3600);
+    showEl('s2-t3', 4100);
+    showEl('s2-t4', 4500);
+  }
+
+  if (n === 3) {
+    show('s3-bad', 200);
+    showEl('s3-l1', 700);
+    showEl('s3-l2', 1100);
+    show('s3-err', 1500);
+    showEl('s3-e1', 1900);
+    showEl('s3-e2', 2400);
+    showEl('s3-e3', 2700);
+    showEl('s3-e4', 3000);
+    showEl('s3-e5', 3400);
+    show('s3-diag', 3800);
+    af(4200, () => {
+      const boom = document.getElementById('s3-boom');
+      if (boom) boom.style.opacity = '1';
+    });
+  }
+
+  if (n === 4) {
+    show('s4-good', 200);
+    showEl('s4-l1', 700);
+    showEl('s4-l2', 1100);
+    showEl('s4-l3', 1400);
+    show('s4-term', 1700);
+    showEl('s4-e1', 2100);
+    showEl('s4-e2', 2500);
+    showEl('s4-e3', 2900);
+    showEl('s4-e4', 3300);
+    show('s4-arch', 3700);
+    // Animate packet across LB
+    af(4200, () => {
+      const pkt = document.getElementById('s4-pkt');
+      if (!pkt) return;
+      pkt.setAttribute('opacity', '1');
+      pkt.setAttribute('cx', '65');
+      pkt.setAttribute('cy', '60');
+      let t = 0;
+      const targets = [{x:236,y:22},{x:236,y:60},{x:236,y:98}];
+      function firePacket(target) {
+        let f = 0, frames = 20;
+        const sx = 120, sy = 60;
+        function step() {
+          f++;
+          const p = f/frames;
+          pkt.setAttribute('cx', sx + (target.x - sx)*p);
+          pkt.setAttribute('cy', sy + (target.y - sy)*p);
+          if (f < frames) af(16, step);
+          else { pkt.setAttribute('opacity','0'); }
+        }
+        pkt.setAttribute('cx', sx); pkt.setAttribute('cy', sy); pkt.setAttribute('opacity','1');
+        af(16, step);
+      }
+      targets.forEach((tgt, i) => { af(i * 500, () => firePacket(tgt)); });
+    });
+  }
+
+  if (n === 5) {
+    show('s5-c1', 200);
+    show('s5-c2', 700);
+    show('s5-c3', 1200);
+    show('s5-c4', 1800);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

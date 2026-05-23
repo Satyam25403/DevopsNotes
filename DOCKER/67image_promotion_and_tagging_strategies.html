@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker: Image Promotion & Tagging</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 1: The Anti-Pattern — Rebuilding Per Environment -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#e85050">THE REBUILD ANTI-PATTERN</div>
+    <div class="hdr-sub">IMAGE PROMOTION & TAGGING STRATEGY</div>
+    <div class="dots">
+      <div class="dot active" id="d1-1"></div>
+      <div class="dot" id="d1-2"></div>
+      <div class="dot" id="d1-3"></div>
+      <div class="dot" id="d1-4"></div>
+      <div class="dot" id="d1-5"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">STEP 1 — ANTI-PATTERN</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">CI/CD FAIL</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Explainer card -->
+      <div id="s1-intro" class="panel" style="background:#0d0005;border-left:4px solid #e85050;border-top:1px solid #2a0010;border-right:1px solid #2a0010;border-bottom:1px solid #2a0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">REBUILDING FOR EACH ENV IS WRONG</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">A new <span style="color:#e85050">docker build</span> per environment produces a <span style="color:#e85050">different image</span> — even from the same source. Different digest = different binary = different behavior.</div>
+      </div>
+
+      <!-- Pipeline diagram showing bad pattern -->
+      <div id="s1-diag" class="panel" style="background:#080003;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0005;padding:5px 10px;text-align:center;font-size:6px;color:#e85050">✗ WRONG — rebuild at every stage</div>
+        <svg width="100%" height="160" viewBox="0 0 366 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrRd1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Source box -->
+          <g id="s1-src" opacity="0" style="transition:opacity 0.4s">
+            <rect x="8" y="30" width="72" height="36" rx="4" fill="#1a0005" stroke="#e85050" stroke-width="1.5"/>
+            <text x="44" y="46" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">SOURCE</text>
+            <text x="44" y="58" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#666">git sha</text>
+          </g>
+
+          <!-- Build 1 dev -->
+          <g id="s1-b1" opacity="0" style="transition:opacity 0.4s">
+            <line x1="80" y1="48" x2="96" y2="48" stroke="#e85050" stroke-width="1.2" marker-end="url(#arrRd1)"/>
+            <rect x="98" y="30" width="72" height="36" rx="4" fill="#1a0005" stroke="#e85050" stroke-width="1.5"/>
+            <text x="134" y="44" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">BUILD</text>
+            <text x="134" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">sha:aaa111</text>
+          </g>
+
+          <!-- dev env -->
+          <g id="s1-dev" opacity="0" style="transition:opacity 0.4s">
+            <line x1="170" y1="48" x2="186" y2="48" stroke="#e85050" stroke-width="1.2" marker-end="url(#arrRd1)"/>
+            <rect x="188" y="30" width="72" height="36" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="224" y="44" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">DEV ✓</text>
+            <text x="224" y="56" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">tests pass</text>
+          </g>
+
+          <!-- Rebuild arrow down -->
+          <g id="s1-rb1" opacity="0" style="transition:opacity 0.4s">
+            <line x1="134" y1="66" x2="134" y2="92" stroke="#e85050" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arrRd1)"/>
+            <text x="140" y="83" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050">REBUILD!</text>
+          </g>
+
+          <!-- Build 2 staging -->
+          <g id="s1-b2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="98" y="94" width="72" height="36" rx="4" fill="#1a0005" stroke="#e85050" stroke-width="1.5"/>
+            <text x="134" y="108" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e85050">BUILD</text>
+            <text x="134" y="120" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">sha:bbb222</text>
+            <line x1="170" y1="112" x2="186" y2="112" stroke="#e85050" stroke-width="1.2" marker-end="url(#arrRd1)"/>
+            <rect x="188" y="94" width="72" height="36" rx="4" fill="#120008" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="224" y="108" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#e8a020">STAGING</text>
+            <text x="224" y="120" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050">diff image!</text>
+          </g>
+
+          <!-- Warning label -->
+          <g id="s1-warn" opacity="0" style="transition:opacity 0.4s">
+            <rect x="272" y="64" width="88" height="40" rx="4" fill="#200000" stroke="#e85050" stroke-width="1.5"/>
+            <text x="316" y="80" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#e85050">⚠ DIFF</text>
+            <text x="316" y="94" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050">DIGEST!</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Why it's bad terminal -->
+      <div id="s1-term" class="panel" style="background:#080003;border:2px solid #2a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0005;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">digest check</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker inspect</span> myapp:dev --format '{{.Id}}'</div>
+          <div id="s1-l1" class="tline" style="color:#e8a020">sha256:aaa111...  ← tested this</div>
+          <div id="s1-l2" class="tline" style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker inspect</span> myapp:prod --format '{{.Id}}'</div>
+          <div id="s1-l3" class="tline" style="color:#e85050">sha256:bbb222...  ← deploying THIS</div>
+          <div id="s1-l4" class="tline" style="color:#e85050">✗ different binary in production!</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info rd">
+    <div class="il">Every docker build is non-deterministic — base layers, timestamps, deps.</div>
+    <div class="ih rd">Prod image ≠ tested image. This is the root cause of "works in staging" bugs.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3x</div><div class="sl">REBUILDS</div></div>
+    <div class="sc"><div class="sv rd">3</div><div class="sl">DIFF DIGESTS</div></div>
+    <div class="sc"><div class="sv rd">0%</div><div class="sl">CONFIDENCE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 2: Tag Strategy — Feature → SHA → Release -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#00050a">
+
+  <div class="hdr" style="background:#00050a;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">TAG STRATEGY</div>
+    <div class="hdr-sub">PR → SHA → SEMVER → LATEST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00050a">
+    <span class="slabel" style="color:#4ec9e1">STEP 2 — TAG STRATEGY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">PROTOCOL</span>
+  </div>
+
+  <div class="anim" style="background:#00050a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Stage 1: PR tag -->
+      <div id="s2-pr" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:6px;color:#4ec9e1">① FEATURE BRANCH</span>
+          <span style="font-size:6px;color:#555">git push → open PR</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker build</span> -t myapp:<span style="color:#e8a020">pr-123</span> .</div>
+          <div id="s2-pr1" class="tline" style="color:#4ec9e1">$ <span style="color:#4ec9e1">docker push</span> myapp:<span style="color:#e8a020">pr-123</span></div>
+          <div id="s2-pr2" class="tline" style="color:#555"># ephemeral — deleted when PR closes</div>
+        </div>
+      </div>
+
+      <!-- Stage 2: SHA tag -->
+      <div id="s2-sha" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:6px;color:#a080ff">② MERGE TO MAIN</span>
+          <span style="font-size:6px;color:#555">immutable forever</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker build</span> -t myapp:<span style="color:#a080ff">sha-abc1234</span> .</div>
+          <div id="s2-sha1" class="tline" style="color:#a080ff">$ <span style="color:#4ec9e1">docker push</span> myapp:<span style="color:#a080ff">sha-abc1234</span></div>
+          <div id="s2-sha2" class="tline" style="color:#4eff9a"># pinned to this exact git commit</div>
+        </div>
+      </div>
+
+      <!-- Stage 3: release tags -->
+      <div id="s2-rel" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:6px;color:#4eff9a">③ RELEASE DAY</span>
+          <span style="font-size:6px;color:#555">retag — no rebuild!</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s2-r1" class="tline" style="color:#888"># promote existing image — no rebuild</div>
+          <div id="s2-r2" class="tline" style="color:#4ec9e1">$ <span style="color:#4ec9e1">docker tag</span> myapp:<span style="color:#a080ff">sha-abc1234</span> myapp:<span style="color:#4eff9a">1.2.0</span></div>
+          <div id="s2-r3" class="tline" style="color:#4ec9e1">$ <span style="color:#4ec9e1">docker tag</span> myapp:<span style="color:#a080ff">sha-abc1234</span> myapp:<span style="color:#e8a020">latest</span></div>
+          <div id="s2-r4" class="tline" style="color:#4eff9a">$ <span style="color:#4ec9e1">docker push</span> myapp:<span style="color:#4eff9a">1.2.0</span> myapp:<span style="color:#e8a020">latest</span></div>
+        </div>
+      </div>
+
+      <!-- Tag summary row -->
+      <div id="s2-tags" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120800;border:1px solid #2a1800;border-radius:2px;padding:8px 10px">
+          <div style="font-size:6px;color:#e8a020;margin-bottom:5px">MUTABLE TAGS</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+            <div style="color:#e8a020">latest</div>
+            <div style="color:#e8a020">pr-123</div>
+            <div style="color:#555">move over time</div>
+          </div>
+        </div>
+        <div style="background:#001208;border:1px solid #0d3018;border-radius:2px;padding:8px 10px">
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">IMMUTABLE TAGS</div>
+          <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+            <div style="color:#4eff9a">sha-abc1234</div>
+            <div style="color:#4eff9a">1.2.0</div>
+            <div style="color:#555">fixed forever</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">One build per commit. Tags are just aliases — not new images.</div>
+    <div class="ih am">SHA tag = immutable. latest/semver = mutable pointers to a digest.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv am">pr-*</div><div class="sl">EPHEMERAL</div></div>
+    <div class="sc"><div class="sv pu">sha-*</div><div class="sl">IMMUTABLE</div></div>
+    <div class="sc"><div class="sv gn">1.2.0</div><div class="sl">SEMVER</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 3: Promote by Digest — The Correct Pattern -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#001a08">
+
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">PROMOTE BY DIGEST</div>
+    <div class="hdr-sub">ONE BUILD — THREE ENVIRONMENTS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">STEP 3 — DIGEST PROMOTION</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CORRECT</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- The core principle card -->
+      <div id="s3-rule" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">THE GOLDEN RULE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">The binary that <span style="color:#4eff9a">passed tests</span> is the binary you <span style="color:#4eff9a">deploy</span>. Never rebuild. Use <span style="color:#4ec9e1">docker tag</span> or registry promotion APIs to move the same image digest forward.</div>
+      </div>
+
+      <!-- Pipeline diagram showing correct pattern -->
+      <div id="s3-diag" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;text-align:center;font-size:6px;color:#4eff9a">✓ CORRECT — promote the same digest</div>
+        <svg width="100%" height="170" viewBox="0 0 366 170" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrGn2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+            <marker id="arrCy2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Single build box -->
+          <g id="s3-build" opacity="0" style="transition:opacity 0.4s">
+            <rect x="8" y="14" width="84" height="44" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="50" y="30" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">BUILD</text>
+            <text x="50" y="42" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">sha-abc1234</text>
+            <text x="50" y="52" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">ONCE only</text>
+          </g>
+
+          <!-- Arrow down to registry -->
+          <g id="s3-push" opacity="0" style="transition:opacity 0.4s">
+            <line x1="50" y1="58" x2="50" y2="75" stroke="#4eff9a" stroke-width="1.5" marker-end="url(#arrGn2)"/>
+            <text x="54" y="70" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">push</text>
+          </g>
+
+          <!-- Registry box -->
+          <g id="s3-reg" opacity="0" style="transition:opacity 0.4s">
+            <rect x="8" y="78" width="84" height="34" rx="4" fill="#000d18" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="50" y="92" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4ec9e1">REGISTRY</text>
+            <text x="50" y="104" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">ECR / GCR / GHCR</text>
+          </g>
+
+          <!-- Arrows to environments -->
+          <g id="s3-arrows" opacity="0" style="transition:opacity 0.4s">
+            <line x1="92" y1="88" x2="120" y2="38" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrCy2)"/>
+            <line x1="92" y1="95" x2="120" y2="95" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrCy2)"/>
+            <line x1="92" y1="102" x2="120" y2="150" stroke="#4ec9e1" stroke-width="1.2" marker-end="url(#arrCy2)"/>
+          </g>
+
+          <!-- Environment boxes -->
+          <g id="s3-dev" opacity="0" style="transition:opacity 0.4s">
+            <rect x="122" y="20" width="104" height="36" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="174" y="34" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">DEV ✓</text>
+            <text x="174" y="48" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4ec9e1">sha-abc1234</text>
+          </g>
+
+          <g id="s3-stg" opacity="0" style="transition:opacity 0.4s">
+            <rect x="122" y="77" width="104" height="36" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="174" y="91" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">STAGING ✓</text>
+            <text x="174" y="105" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4ec9e1">sha-abc1234</text>
+          </g>
+
+          <g id="s3-prd" opacity="0" style="transition:opacity 0.4s">
+            <rect x="122" y="134" width="104" height="36" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="174" y="148" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">PROD ✓</text>
+            <text x="174" y="162" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4ec9e1">sha-abc1234</text>
+          </g>
+
+          <!-- Same digest badge -->
+          <g id="s3-badge" opacity="0" style="transition:opacity 0.4s">
+            <rect x="242" y="62" width="116" height="46" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="2"/>
+            <text x="300" y="80" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a">SAME</text>
+            <text x="300" y="94" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a">DIGEST ✓</text>
+          </g>
+
+          <!-- Packet animation dot -->
+          <circle id="s3-pkt" cx="50" cy="95" r="4" fill="#4ec9e1" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- How to promote terminal -->
+      <div id="s3-cmd" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">promotion script</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s3-c1" class="tline" style="color:#555"># pull by digest — guaranteed same image</div>
+          <div id="s3-c2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker pull</span> myapp@sha256:<span style="color:#a080ff">abc1234...</span></div>
+          <div id="s3-c3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker tag</span>  myapp:<span style="color:#a080ff">sha-abc1234</span> myapp:<span style="color:#4eff9a">1.2.0</span></div>
+          <div id="s3-c4" class="tline" style="color:#4eff9a">$ <span style="color:#4ec9e1">docker push</span> myapp:<span style="color:#4eff9a">1.2.0</span></div>
+          <div id="s3-c5" class="tline" style="color:#4eff9a">✓ same bits, new alias</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">docker tag creates an alias — it does NOT copy or rebuild the image.</div>
+    <div class="ih">Build once, promote the digest. Same sha256 from dev to prod.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1x</div><div class="sl">BUILD</div></div>
+    <div class="sc"><div class="sv gn">3</div><div class="sl">ENVS SAME</div></div>
+    <div class="sc"><div class="sv gn">100%</div><div class="sl">CONFIDENCE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 4: Digest Pinning in docker-compose / K8s -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0012">
+
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #1a0d30">
+    <div class="hdr-title" style="color:#a080ff">DIGEST PINNING</div>
+    <div class="hdr-sub">LOCK YOUR DEPLOYMENTS TIGHT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">STEP 4 — DIGEST PINNING</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">ADVANCED</span>
+  </div>
+
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Why pin digests -->
+      <div id="s4-why" class="panel" style="background:#07000f;border-left:4px solid #a080ff;border-top:1px solid #1a0d30;border-right:1px solid #1a0d30;border-bottom:1px solid #1a0d30;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">WHY PIN BY DIGEST?</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Tags like <span style="color:#e85050">latest</span> or <span style="color:#e85050">1.2</span> are <span style="color:#e85050">mutable</span> — a registry push can silently replace them. Pin the full <span style="color:#a080ff">sha256 digest</span> to guarantee the exact image, forever.</div>
+      </div>
+
+      <!-- Tag vs digest comparison -->
+      <div id="s4-cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ TAG ONLY</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div style="color:#e85050">myapp:latest</div>
+            <div>can be replaced</div>
+            <div>any time by push</div>
+            <div style="color:#e85050">mutable ← risk</div>
+          </div>
+        </div>
+        <div style="background:#050010;border:2px solid #a080ff;border-radius:2px;overflow:hidden">
+          <div style="background:#0a0018;padding:5px 7px;border-bottom:1px solid #1a0d30;text-align:center">
+            <div style="font-size:6.5px;color:#a080ff">✓ DIGEST PIN</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div style="color:#a080ff">myapp@sha256:</div>
+            <div style="color:#a080ff">abc123...</div>
+            <div>immutable forever</div>
+            <div style="color:#4eff9a">safe ← use this</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compose example with digest -->
+      <div id="s4-compose" class="panel" style="background:#07000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">services:</div>
+          <div style="color:#4ec9e1;padding-left:12px">web:</div>
+          <div id="s4-c1" class="tline" style="color:#e85050;padding-left:24px">image: myapp:<span style="color:#e85050">latest</span>  <span style="color:#555"># ✗ mutable</span></div>
+          <div id="s4-c2" class="tline" style="color:#4eff9a;padding-left:24px"># or pin the digest:</div>
+          <div id="s4-c3" class="tline" style="color:#a080ff;padding-left:24px">image: myapp@sha256:<span style="color:#4eff9a">abc1234...</span></div>
+        </div>
+      </div>
+
+      <!-- How to get the digest -->
+      <div id="s4-how" class="panel" style="background:#07000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">get digest</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s4-h1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker inspect</span> myapp:1.2.0 \</div>
+          <div id="s4-h2" class="tline" style="color:#888">    --format <span style="color:#e8a020">'{{index .RepoDigests 0}}'</span></div>
+          <div id="s4-h3" class="tline" style="color:#a080ff">myapp@sha256:abc1234def5678...</div>
+          <div id="s4-h4" class="tline" style="color:#4eff9a">✓ paste this into your compose/k8s YAML</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Tags are mutable pointers. Digests are content-addressed hashes.</div>
+    <div class="ih pu">Pin sha256 in prod manifests — tags in CI, digests in deployment YAML.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">TAG</div><div class="sl">MUTABLE</div></div>
+    <div class="sc"><div class="sv pu">SHA256</div><div class="sl">IMMUTABLE</div></div>
+    <div class="sc"><div class="sv gn">PIN</div><div class="sl">PROD SAFE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 5: Full Cheat Sheet -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#000d18">
+
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">THE CHEAT SHEET</div>
+    <div class="hdr-sub">IMAGE PROMOTION REFERENCE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4eff9a">STEP 5 — REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Tag lifecycle card -->
+      <div id="s5-c1" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6.5px;color:#4ec9e1">TAG LIFECYCLE</div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.4">
+          <div><span style="color:#e8a020">myapp:pr-123</span>  → <span style="color:#555">ephemeral, PR only</span></div>
+          <div><span style="color:#a080ff">myapp:sha-abc1234</span> → <span style="color:#555">immutable, forever</span></div>
+          <div><span style="color:#4eff9a">myapp:1.2.0</span>    → <span style="color:#555">semver, release alias</span></div>
+          <div><span style="color:#e8a020">myapp:latest</span>   → <span style="color:#555">mutable, CI only</span></div>
+        </div>
+      </div>
+
+      <!-- Rules card -->
+      <div id="s5-c2" class="panel" style="background:#001208;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">THE RULES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <div><span style="color:#4eff9a">✓</span> Build once per commit</div>
+          <div><span style="color:#4eff9a">✓</span> Promote digest across envs</div>
+          <div><span style="color:#4eff9a">✓</span> Pin sha256 in prod YAML</div>
+          <div><span style="color:#e85050">✗</span> Never rebuild for promotion</div>
+          <div><span style="color:#e85050">✗</span> Never use :latest in prod</div>
+        </div>
+      </div>
+
+      <!-- CI pipeline card -->
+      <div id="s5-c3" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6.5px;color:#4ec9e1">CI PIPELINE FLOW</div>
+        <svg width="100%" height="72" viewBox="0 0 366 72" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrCy5" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+          <rect x="8" y="22" width="60" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+          <text x="38" y="36" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">BUILD</text>
+          <text x="38" y="46" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">sha tag</text>
+          <line x1="68" y1="36" x2="82" y2="36" stroke="#4ec9e1" stroke-width="1" marker-end="url(#arrCy5)"/>
+          <rect x="84" y="22" width="60" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+          <text x="114" y="36" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">TEST</text>
+          <text x="114" y="46" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">same img</text>
+          <line x1="144" y1="36" x2="158" y2="36" stroke="#4ec9e1" stroke-width="1" marker-end="url(#arrCy5)"/>
+          <rect x="160" y="22" width="60" height="28" rx="3" fill="#001208" stroke="#4ec9e1" stroke-width="1"/>
+          <text x="190" y="36" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">PROMOTE</text>
+          <text x="190" y="46" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">retag only</text>
+          <line x1="220" y1="36" x2="234" y2="36" stroke="#4ec9e1" stroke-width="1" marker-end="url(#arrCy5)"/>
+          <rect x="236" y="22" width="60" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+          <text x="266" y="36" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">DEPLOY</text>
+          <text x="266" y="46" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">same bits</text>
+          <!-- NO REBUILD badge -->
+          <rect x="302" y="14" width="56" height="44" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+          <text x="330" y="30" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">NO</text>
+          <text x="330" y="42" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">RE-</text>
+          <text x="330" y="54" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">BUILD</text>
+        </svg>
+      </div>
+
+      <!-- Latest warning card -->
+      <div id="s5-c4" class="panel" style="background:#0d0800;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ ON USING :LATEST</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Use <span style="color:#e8a020">:latest</span> in dev/CI as a convenience pointer. <span style="color:#e85050">Never</span> reference it in production manifests — it's mutable and will silently change under you. Use <span style="color:#4eff9a">semver</span> or <span style="color:#a080ff">digest</span> in prod.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Build → test → promote the same sha256. Never rebuild for envs.</div>
+    <div class="ih">Immutable tags + digest pinning = reproducible, auditable deploys.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">1x</div><div class="sl">BUILD ONLY</div></div>
+    <div class="sc"><div class="sv pu">SHA256</div><div class="sl">PIN IN PROD</div></div>
+    <div class="sc"><div class="sv rd">0x</div><div class="sl">REBUILDS</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    hide('s1-intro'); hide('s1-diag'); hide('s1-term');
+    svgHide('s1-src'); svgHide('s1-b1'); svgHide('s1-dev');
+    svgHide('s1-rb1'); svgHide('s1-b2'); svgHide('s1-warn');
+    hideEl('s1-l1'); hideEl('s1-l2'); hideEl('s1-l3'); hideEl('s1-l4');
+  }
+  if (n === 2) {
+    hide('s2-pr'); hide('s2-sha'); hide('s2-rel'); hide('s2-tags');
+    hideEl('s2-pr1'); hideEl('s2-pr2');
+    hideEl('s2-sha1'); hideEl('s2-sha2');
+    hideEl('s2-r1'); hideEl('s2-r2'); hideEl('s2-r3'); hideEl('s2-r4');
+  }
+  if (n === 3) {
+    hide('s3-rule'); hide('s3-diag'); hide('s3-cmd');
+    svgHide('s3-build'); svgHide('s3-push'); svgHide('s3-reg');
+    svgHide('s3-arrows'); svgHide('s3-dev'); svgHide('s3-stg');
+    svgHide('s3-prd'); svgHide('s3-badge');
+    const p = document.getElementById('s3-pkt'); if(p) p.setAttribute('opacity','0');
+    hideEl('s3-c1'); hideEl('s3-c2'); hideEl('s3-c3'); hideEl('s3-c4'); hideEl('s3-c5');
+  }
+  if (n === 4) {
+    hide('s4-why'); hide('s4-cmp'); hide('s4-compose'); hide('s4-how');
+    hideEl('s4-c1'); hideEl('s4-c2'); hideEl('s4-c3');
+    hideEl('s4-h1'); hideEl('s4-h2'); hideEl('s4-h3'); hideEl('s4-h4');
+  }
+  if (n === 5) {
+    hide('s5-c1'); hide('s5-c2'); hide('s5-c3'); hide('s5-c4');
+  }
+}
+
+function animPkt3() {
+  const pkt = document.getElementById('s3-pkt');
+  if (!pkt) return;
+  const targets = [{x:174,y:38},{x:174,y:95},{x:174,y:152}];
+  const sx = 92, sy = 95;
+  function firePacket(target, delay) {
+    af(delay, () => {
+      pkt.setAttribute('cx', sx); pkt.setAttribute('cy', sy); pkt.setAttribute('opacity','1');
+      let f = 0, frames = 22;
+      function step() {
+        f++;
+        const p = f/frames;
+        pkt.setAttribute('cx', sx + (target.x-sx)*p);
+        pkt.setAttribute('cy', sy + (target.y-sy)*p);
+        if (f < frames) af(16, step);
+        else pkt.setAttribute('opacity','0');
+      }
+      af(16, step);
+    });
+  }
+  targets.forEach((t,i) => firePacket(t, i*550));
+}
+
+function play(n) {
+  clr();
+
+  if (n === 1) {
+    show('s1-intro', 200);
+    show('s1-diag', 700);
+    svgShow('s1-src', 900);
+    svgShow('s1-b1', 1300);
+    svgShow('s1-dev', 1700);
+    svgShow('s1-rb1', 2100);
+    svgShow('s1-b2', 2600);
+    svgShow('s1-warn', 3100);
+    show('s1-term', 3600);
+    showEl('s1-l1', 4000);
+    showEl('s1-l2', 4400);
+    showEl('s1-l3', 4800);
+    showEl('s1-l4', 5200);
+  }
+
+  if (n === 2) {
+    show('s2-pr', 200);
+    showEl('s2-pr1', 700);
+    showEl('s2-pr2', 1000);
+    show('s2-sha', 1400);
+    showEl('s2-sha1', 1800);
+    showEl('s2-sha2', 2100);
+    show('s2-rel', 2500);
+    showEl('s2-r1', 2900);
+    showEl('s2-r2', 3200);
+    showEl('s2-r3', 3600);
+    showEl('s2-r4', 4000);
+    show('s2-tags', 4400);
+  }
+
+  if (n === 3) {
+    show('s3-rule', 200);
+    show('s3-diag', 700);
+    svgShow('s3-build', 900);
+    svgShow('s3-push', 1300);
+    svgShow('s3-reg', 1700);
+    svgShow('s3-arrows', 2100);
+    svgShow('s3-dev', 2400);
+    svgShow('s3-stg', 2800);
+    svgShow('s3-prd', 3200);
+    svgShow('s3-badge', 3600);
+    af(4000, animPkt3);
+    show('s3-cmd', 4200);
+    showEl('s3-c1', 4500);
+    showEl('s3-c2', 4900);
+    showEl('s3-c3', 5300);
+    showEl('s3-c4', 5700);
+    showEl('s3-c5', 6000);
+  }
+
+  if (n === 4) {
+    show('s4-why', 200);
+    show('s4-cmp', 800);
+    show('s4-compose', 1500);
+    showEl('s4-c1', 1900);
+    showEl('s4-c2', 2400);
+    showEl('s4-c3', 2800);
+    show('s4-how', 3300);
+    showEl('s4-h1', 3700);
+    showEl('s4-h2', 4000);
+    showEl('s4-h3', 4400);
+    showEl('s4-h4', 4800);
+  }
+
+  if (n === 5) {
+    show('s5-c1', 200);
+    show('s5-c2', 800);
+    show('s5-c3', 1400);
+    show('s5-c4', 2000);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

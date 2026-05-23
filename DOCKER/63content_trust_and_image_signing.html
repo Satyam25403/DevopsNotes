@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker Content Trust & Image Signing</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1 — Supply Chain Attack: The Threat ═══ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">IMAGE SIGNING</div>
+    <div class="hdr-sub">SUPPLY CHAIN ATTACKS ON CONTAINERS</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE THREAT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SUPPLY CHAIN</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- attack flow diagram -->
+      <div id="p1c1" class="panel" style="background:#0a0005;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#150008;padding:6px 10px;border-bottom:1px solid #3a0010;text-align:center">
+          <div style="font-size:7px;color:#e85050;letter-spacing:1px">POISONED IMAGE ATTACK FLOW</div>
+        </div>
+        <svg width="100%" height="210" viewBox="0 0 366 210" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ard" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#555" stroke-width="1.5"/>
+            </marker>
+            <marker id="arre" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+            <marker id="aram" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e8a020" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- dev box -->
+          <rect id="b1dev" x="10" y="12" width="80" height="44" rx="2" fill="#0a1010" stroke="#2a4040" stroke-width="1.5" opacity="0"/>
+          <text x="50" y="29" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0" id="t1dev">DEV</text>
+          <text x="50" y="44" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t1devs">pushes image</text>
+          <!-- registry box -->
+          <rect id="b1reg" x="138" y="12" width="90" height="44" rx="2" fill="#100a08" stroke="#403020" stroke-width="1.5" opacity="0"/>
+          <text x="183" y="29" text-anchor="middle" font-size="7" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="t1reg">REGISTRY</text>
+          <text x="183" y="44" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t1regs">Docker Hub</text>
+          <!-- attacker -->
+          <rect id="b1atk" x="138" y="80" width="90" height="44" rx="2" fill="#200005" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text x="183" y="97" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0" id="t1atk">ATTACKER</text>
+          <text x="183" y="112" text-anchor="middle" font-size="5.5" fill="#c03030" font-family="'Press Start 2P',monospace" opacity="0" id="t1atks">injects malware</text>
+          <!-- prod box -->
+          <rect id="b1prd" x="276" y="12" width="80" height="44" rx="2" fill="#0a1010" stroke="#2a4040" stroke-width="1.5" opacity="0"/>
+          <text x="316" y="29" text-anchor="middle" font-size="7" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0" id="t1prd">PROD</text>
+          <text x="316" y="44" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t1prds">pulls &amp; runs</text>
+          <!-- arrows -->
+          <line id="a1dp" x1="90" y1="34" x2="136" y2="34" stroke="#555" stroke-width="1.5" opacity="0" marker-end="url(#ard)"/>
+          <text id="ta1" x="113" y="29" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">push</text>
+          <line id="a1ap" x1="183" y1="80" x2="183" y2="58" stroke="#e85050" stroke-width="2" opacity="0" marker-end="url(#arre)"/>
+          <text id="ta2" x="202" y="73" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">replace</text>
+          <line id="a1rp" x1="228" y1="34" x2="274" y2="34" stroke="#e85050" stroke-width="2" opacity="0" marker-end="url(#arre)"/>
+          <text id="ta3" x="251" y="29" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">pull</text>
+          <!-- skull -->
+          <text id="skl" x="316" y="76" text-anchor="middle" font-size="22" fill="#e85050" font-family="monospace" opacity="0">💀</text>
+          <!-- no verify label -->
+          <rect id="novfy" x="10" y="136" width="346" height="62" rx="2" fill="#150005" stroke="#e85050" stroke-width="1" stroke-dasharray="4,3" opacity="0"/>
+          <text id="nv1" x="183" y="157" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">⚠ NO SIGNATURE CHECK</text>
+          <text id="nv2" x="183" y="173" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">prod blindly trusts the registry tag.</text>
+          <text id="nv3" x="183" y="187" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">tag ≠ digest ≠ authenticity.</text>
+        </svg>
+      </div>
+
+      <!-- real-world note -->
+      <div id="p1c2" class="panel" style="background:#120005;border-left:4px solid #e85050;border-top:1px solid #2a0010;border-right:1px solid #2a0010;border-bottom:1px solid #2a0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">REAL-WORLD: SOLARWINDS-STYLE ATTACK</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Attacker compromises a registry, CDN, or CI pipeline and <span style="color:#e85050">replaces a legitimate image</span> with a backdoored one. Same tag. Same name. No alert.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Docker tags are mutable. Anyone can overwrite nginx:latest.</div>
+    <div class="ih rd">Without signing, you cannot prove who built the image you're running.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0</div><div class="sl">DEFAULT<br>CHECKS</div></div>
+    <div class="sc"><div class="sv am">mutable</div><div class="sl">TAGS ARE<br>NOT PINNED</div></div>
+    <div class="sc"><div class="sv rd">CRITICAL</div><div class="sl">SUPPLY<br>CHAIN RISK</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 — Docker Content Trust (DCT) ═══ -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2a3d">
+    <div class="hdr-title" style="color:#4ec9e1">DOCKER CONTENT TRUST</div>
+    <div class="hdr-sub">DCT — THE ORIGINAL APPROACH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">DCT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">NOTARY v1</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- dct flow -->
+      <div id="p2c1" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:6px 10px;border-bottom:1px solid #0d2030;text-align:center">
+          <div style="font-size:7px;color:#4ec9e1;letter-spacing:1px">DCT SIGNING ARCHITECTURE</div>
+        </div>
+        <svg width="100%" height="180" viewBox="0 0 366 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arcn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+            <marker id="argn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- root key -->
+          <rect id="d2rk" x="10" y="14" width="100" height="44" rx="2" fill="#0a0020" stroke="#4040a0" stroke-width="1.5" opacity="0"/>
+          <text x="60" y="31" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0" id="t2rk">ROOT KEY</text>
+          <text x="60" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t2rks">offline, cold</text>
+          <!-- targets key -->
+          <rect id="d2tk" x="133" y="14" width="100" height="44" rx="2" fill="#0a0020" stroke="#4040a0" stroke-width="1.5" opacity="0"/>
+          <text x="183" y="31" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0" id="t2tkl">TARGETS KEY</text>
+          <text x="183" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t2tks">signs image tags</text>
+          <!-- notary server -->
+          <rect id="d2ns" x="256" y="14" width="100" height="44" rx="2" fill="#000d18" stroke="#1a3040" stroke-width="1.5" opacity="0"/>
+          <text x="306" y="31" text-anchor="middle" font-size="6.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0" id="t2ns">NOTARY</text>
+          <text x="306" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t2nss">server + signer</text>
+          <!-- arrows top row -->
+          <line id="a2rk" x1="110" y1="36" x2="131" y2="36" stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#arcn)"/>
+          <line id="a2tk" x1="233" y1="36" x2="254" y2="36" stroke="#4ec9e1" stroke-width="1.5" opacity="0" marker-end="url(#arcn)"/>
+          <!-- pull block -->
+          <rect id="d2pb" x="10" y="90" width="346" height="76" rx="3" fill="#001018" stroke="#0d2030" stroke-width="1" opacity="0"/>
+          <text id="t2pb" x="183" y="110" text-anchor="middle" font-size="6.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">DOCKER PULL WITH DCT ENABLED</text>
+          <line id="d2l1" x1="30" y1="118" x2="30" y2="156" stroke="#0d2030" stroke-width="1" opacity="0"/>
+          <text id="t2s1" x="40" y="128" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">1. pull image manifest</text>
+          <text id="t2s2" x="40" y="142" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">2. fetch TUF metadata from notary</text>
+          <text id="t2s3" x="40" y="156" font-size="6" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">3. verify digest signature → allow/block</text>
+        </svg>
+      </div>
+
+      <!-- DCT terminal -->
+      <div id="p2c2" class="panel" style="background:#050008;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001020;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">enabling DCT</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="dc1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">export DOCKER_CONTENT_TRUST=1</span></div>
+          <div id="dc2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker pull nginx:latest</span></div>
+          <div id="dc3" class="tline" style="color:#4eff9a">Pull (1 of 1): nginx:latest@sha256:abc…</div>
+          <div id="dc4" class="tline" style="color:#888">$ <span style="color:#e85050">docker pull unsigned-image:latest</span></div>
+          <div id="dc5" class="tline" style="color:#e85050">Error: image is not signed</div>
+        </div>
+      </div>
+
+      <!-- DCT limitation card -->
+      <div id="p2c3" class="panel" style="background:#120800;border-left:4px solid #e8a020;border-top:1px solid #2a1500;border-right:1px solid #2a1500;border-bottom:1px solid #2a1500;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ DCT LIMITATIONS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Tied to Docker Hub's Notary v1. Key management is painful. No OCI-native support. Not portable across registries. <span style="color:#e8a020">Cosign replaces this.</span></div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">DOCKER_CONTENT_TRUST=1 blocks unsigned images at pull time.</div>
+    <div class="ih">But DCT is old, registry-specific, and hard to manage.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv">TUF</div><div class="sl">FRAMEWORK<br>USED</div></div>
+    <div class="sc"><div class="sv am">Notary</div><div class="sl">BACKEND<br>SERVER</div></div>
+    <div class="sc"><div class="sv rd">v1</div><div class="sl">VERSION<br>OUTDATED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 — Cosign + Sigstore ═══ -->
+<div class="scene" id="s3" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">COSIGN + SIGSTORE</div>
+    <div class="hdr-sub">THE MODERN CNCF APPROACH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">COSIGN</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">SIGSTORE</span>
+  </div>
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- sigstore architecture -->
+      <div id="p3c1" class="panel" style="background:#060010;border:2px solid #2a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#100820;padding:6px 10px;border-bottom:1px solid #2a1040;text-align:center">
+          <div style="font-size:7px;color:#a080ff;letter-spacing:1px">SIGSTORE COMPONENTS</div>
+        </div>
+        <svg width="100%" height="178" viewBox="0 0 366 178" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arpu" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5"/>
+            </marker>
+            <marker id="arcnb" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- Fulcio box -->
+          <rect id="s3f" x="10" y="14" width="100" height="52" rx="2" fill="#0a0820" stroke="#3a2060" stroke-width="1.5" opacity="0"/>
+          <text x="60" y="32" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0" id="t3f">FULCIO</text>
+          <text x="60" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3fs">certificate</text>
+          <text x="60" y="58" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3fs2">authority</text>
+          <!-- Rekor box -->
+          <rect id="s3r" x="133" y="14" width="100" height="52" rx="2" fill="#0a0820" stroke="#3a2060" stroke-width="1.5" opacity="0"/>
+          <text x="183" y="32" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0" id="t3r">REKOR</text>
+          <text x="183" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3rs">transparency</text>
+          <text x="183" y="58" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3rs2">log (immutable)</text>
+          <!-- OIDC box -->
+          <rect id="s3o" x="256" y="14" width="100" height="52" rx="2" fill="#0a0820" stroke="#3a2060" stroke-width="1.5" opacity="0"/>
+          <text x="306" y="32" text-anchor="middle" font-size="7" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0" id="t3o">OIDC</text>
+          <text x="306" y="46" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3os">GitHub / Google</text>
+          <text x="306" y="58" text-anchor="middle" font-size="5.5" fill="#666" font-family="'Press Start 2P',monospace" opacity="0" id="t3os2">identity token</text>
+          <!-- arrows -->
+          <line id="a3fo" x1="256" y1="40" x2="234" y2="40" stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#arpu)"/>
+          <line id="a3rf" x1="131" y1="40" x2="112" y2="40" stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#arpu)"/>
+          <!-- keyless signing label -->
+          <rect id="s3kl" x="10" y="82" width="346" height="82" rx="3" fill="#060010" stroke="#2a1040" stroke-width="1" opacity="0"/>
+          <text id="t3kl" x="183" y="100" text-anchor="middle" font-size="6.5" fill="#a080ff" font-family="'Press Start 2P',monospace" opacity="0">KEYLESS SIGNING FLOW</text>
+          <text id="t3k1" x="20" y="116" font-size="5.8" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">1. authenticate via OIDC (GitHub Actions etc.)</text>
+          <text id="t3k2" x="20" y="130" font-size="5.8" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">2. Fulcio issues short-lived cert (10 min)</text>
+          <text id="t3k3" x="20" y="144" font-size="5.8" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">3. sign image, entry written to Rekor log</text>
+          <text id="t3k4" x="20" y="158" font-size="5.8" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">4. no long-lived private key to leak! ✓</text>
+        </svg>
+      </div>
+
+      <!-- cosign terminal -->
+      <div id="p3c2" class="panel" style="background:#050002;border:2px solid #2d0050;border-radius:3px;overflow:hidden">
+        <div style="background:#120020;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">cosign sign &amp; verify</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="cs1" class="tline" style="color:#888"># <span style="color:#a080ff">sign (keyless — uses OIDC)</span></div>
+          <div id="cs2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">cosign sign</span> ghcr.io/myorg/myapp:v1.0</div>
+          <div id="cs3" class="tline" style="color:#4eff9a">Pushing signature to: ghcr.io/myorg/myapp</div>
+          <div id="cs4" class="tline" style="color:#888"># <span style="color:#a080ff">verify before deploy</span></div>
+          <div id="cs5" class="tline" style="color:#888">$ <span style="color:#4ec9e1">cosign verify</span> --certificate-identity \</div>
+          <div id="cs6" class="tline" style="color:#888">  <span style="color:#a080ff">alice@company.com</span> ghcr.io/myorg/myapp:v1.0</div>
+          <div id="cs7" class="tline" style="color:#4eff9a">Verified OK ✓</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Cosign stores signatures as OCI artifacts in the registry itself.</div>
+    <div class="ih pu">No key server needed. Works with any OCI-compatible registry.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">OIDC</div><div class="sl">IDENTITY<br>SOURCE</div></div>
+    <div class="sc"><div class="sv gn">10min</div><div class="sl">CERT<br>LIFETIME</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">LONG-LIVED<br>KEYS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 — CI/CD Integration ═══ -->
+<div class="scene" id="s4" style="background:#00100a">
+  <div class="hdr" style="background:#00100a;border-bottom:1px solid #0d3020">
+    <div class="hdr-title" style="color:#4eff9a">CI/CD PIPELINE</div>
+    <div class="hdr-sub">SIGN ON PUSH — VERIFY ON DEPLOY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#00100a">
+    <span class="slabel" style="color:#4eff9a">PIPELINE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CI/CD</span>
+  </div>
+  <div class="anim" style="background:#00100a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- github actions yaml -->
+      <div id="p4c1" class="panel" style="background:#020c04;border:2px solid #0d3020;border-radius:3px;overflow:hidden">
+        <div style="background:#001510;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">.github/workflows/sign.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.15">
+          <div id="y1" class="tline" style="color:#a080ff">- name: <span style="color:#4eff9a">Sign image with Cosign</span></div>
+          <div id="y2" class="tline" style="color:#888">  uses: <span style="color:#4ec9e1">sigstore/cosign-installer@v3</span></div>
+          <div id="y3" class="tline" style="color:#a080ff">- name: <span style="color:#4eff9a">Push &amp; sign</span></div>
+          <div id="y4" class="tline" style="color:#888">  run: |</div>
+          <div id="y5" class="tline" style="color:#888">    <span style="color:#4ec9e1">docker build</span> -t $IMAGE .</div>
+          <div id="y6" class="tline" style="color:#888">    <span style="color:#4ec9e1">docker push</span> $IMAGE</div>
+          <div id="y7" class="tline" style="color:#4eff9a">    cosign sign --yes $IMAGE</div>
+          <div id="y8" class="tline" style="color:#555">  env:</div>
+          <div id="y9" class="tline" style="color:#555">    COSIGN_EXPERIMENTAL: "1" <span style="color:#444"># keyless</span></div>
+        </div>
+      </div>
+
+      <!-- admission controller card -->
+      <div id="p4c2" class="panel" style="background:#001510;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">KUBERNETES: ENFORCE AT ADMISSION</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Use <span style="color:#4ec9e1">Kyverno</span> or <span style="color:#4ec9e1">Connaisseur</span> as admission webhooks. Any pod spec with an unsigned image is <span style="color:#e85050">rejected before scheduling</span>. No unsigned image ever runs on the cluster.</div>
+      </div>
+
+      <!-- verify terminal -->
+      <div id="p4c3" class="panel" style="background:#020c04;border:2px solid #0d3020;border-radius:3px;overflow:hidden">
+        <div style="background:#001510;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">kyverno policy — verify signature</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.15">
+          <div id="kv1" class="tline" style="color:#a080ff">verifyImages:</div>
+          <div id="kv2" class="tline" style="color:#888">  - imageReferences:</div>
+          <div id="kv3" class="tline" style="color:#888">      - <span style="color:#4ec9e1">"ghcr.io/myorg/*"</span></div>
+          <div id="kv4" class="tline" style="color:#888">    attestors:</div>
+          <div id="kv5" class="tline" style="color:#888">      - entries:</div>
+          <div id="kv6" class="tline" style="color:#4eff9a">          - keyless: {rekor: sigstore}</div>
+          <div id="kv7" class="tline" style="color:#e85050">    # unsigned → pod rejected ✗</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">GitHub Actions signs on push using the workflow OIDC token.</div>
+    <div class="ih">Kyverno enforces — unsigned images never reach the cluster.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">push</div><div class="sl">SIGN ON<br>PUSH</div></div>
+    <div class="sc"><div class="sv gn">admit</div><div class="sl">VERIFY AT<br>ADMISSION</div></div>
+    <div class="sc"><div class="sv rd">reject</div><div class="sl">UNSIGNED<br>BLOCKED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5 — Before vs After Summary ═══ -->
+<div class="scene" id="s5" style="background:#001008">
+  <div class="hdr" style="background:#001008;border-bottom:1px solid #0d3020">
+    <div class="hdr-title" style="color:#4eff9a">SIGNED vs UNSIGNED</div>
+    <div class="hdr-sub">FULL COMPARISON + MIGRATION PATH</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001008">
+    <span class="slabel" style="color:#4eff9a">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SAFE</span>
+  </div>
+  <div class="anim" style="background:#001008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- comparison grid -->
+      <div id="p5c1" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:6px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ UNSIGNED</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div id="u1" class="tline">any tag mutable</div>
+            <div id="u2" class="tline">no provenance</div>
+            <div id="u3" class="tline">registry breach</div>
+            <div id="u4" class="tline">= silent pwn</div>
+            <div id="u5" class="tline">fails compliance</div>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:6px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ COSIGN SIGNED</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div id="s1a" class="tline">digest pinned</div>
+            <div id="s2a" class="tline">builder identity</div>
+            <div id="s3a" class="tline">tamper-evident</div>
+            <div id="s4a" class="tline">rekor log trail</div>
+            <div id="s5a" class="tline">SLSA compliant</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- tool landscape -->
+      <div id="p5c2" class="panel" style="background:#001510;border:2px solid #0d3020;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:10px;text-align:center">SIGNING TOOL LANDSCAPE</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div id="tl1" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:6.5px;color:#aaa">DCT / Notary v1</span>
+            <span style="font-size:6px;color:#e85050;border:1px solid #e85050;padding:2px 5px;border-radius:2px">LEGACY</span>
+          </div>
+          <div id="tl2" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:6.5px;color:#aaa">Notary v2 (nv2)</span>
+            <span style="font-size:6px;color:#e8a020;border:1px solid #e8a020;padding:2px 5px;border-radius:2px">SPEC ONLY</span>
+          </div>
+          <div id="tl3" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:6.5px;color:#4ec9e1">Cosign + Sigstore</span>
+            <span style="font-size:6px;color:#4eff9a;border:1px solid #4eff9a;padding:2px 5px;border-radius:2px">RECOMMENDED</span>
+          </div>
+          <div id="tl4" class="tline" style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:6.5px;color:#aaa">Notation (CNCF)</span>
+            <span style="font-size:6px;color:#a080ff;border:1px solid #a080ff;padding:2px 5px;border-radius:2px">EMERGING</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- migration path -->
+      <div id="p5c3" class="panel" style="background:#001510;border-left:4px solid #4ec9e1;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">MIGRATION PATH (3 STEPS)</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <span style="color:#4eff9a">1.</span> Install cosign, add sign step to CI pipeline<br>
+          <span style="color:#4eff9a">2.</span> Add cosign verify to deployment scripts<br>
+          <span style="color:#4eff9a">3.</span> Deploy Kyverno/Connaisseur to enforce cluster-wide
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Cosign + Sigstore is the CNCF standard. Becoming a compliance req.</div>
+    <div class="ih">Sign on push. Verify on deploy. Reject unsigned at admission.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">SLSA</div><div class="sl">COMPLIANCE<br>FRAMEWORK</div></div>
+    <div class="sc"><div class="sv gn">OCI</div><div class="sl">NATIVE<br>ARTIFACT</div></div>
+    <div class="sc"><div class="sv gn">CNCF</div><div class="sl">BLESSED<br>STANDARD</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+function show(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) { e.style.opacity='1'; e.classList.add('vis'); } });
+}
+function hide(id) { const e = document.getElementById(id); if (e) { e.style.opacity='0'; e.classList.remove('vis'); } }
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity='1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity='0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity','0'); }
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s'+cur);
+  const next = document.getElementById('s'+n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n===1) {
+    hide('p1c1'); hide('p1c2');
+    ['b1dev','t1dev','t1devs','b1reg','t1reg','t1regs','a1dp','ta1',
+     'b1atk','t1atk','t1atks','a1ap','ta2','a1rp','ta3','b1prd','t1prd','t1prds',
+     'skl','novfy','nv1','nv2','nv3'].forEach(svgHide);
+  } else if (n===2) {
+    hide('p2c1'); hide('p2c2'); hide('p2c3');
+    ['d2rk','t2rk','t2rks','d2tk','t2tkl','t2tks','d2ns','t2ns','t2nss',
+     'a2rk','a2tk','d2pb','t2pb','d2l1','t2s1','t2s2','t2s3'].forEach(svgHide);
+    ['dc1','dc2','dc3','dc4','dc5'].forEach(hideEl);
+  } else if (n===3) {
+    hide('p3c1'); hide('p3c2');
+    ['s3f','t3f','t3fs','t3fs2','s3r','t3r','t3rs','t3rs2','s3o','t3o','t3os','t3os2',
+     'a3fo','a3rf','s3kl','t3kl','t3k1','t3k2','t3k3','t3k4'].forEach(svgHide);
+    ['cs1','cs2','cs3','cs4','cs5','cs6','cs7'].forEach(hideEl);
+  } else if (n===4) {
+    hide('p4c1'); hide('p4c2'); hide('p4c3');
+    ['y1','y2','y3','y4','y5','y6','y7','y8','y9',
+     'kv1','kv2','kv3','kv4','kv5','kv6','kv7'].forEach(hideEl);
+  } else if (n===5) {
+    hide('p5c1'); hide('p5c2'); hide('p5c3');
+    ['u1','u2','u3','u4','u5','s1a','s2a','s3a','s4a','s5a',
+     'tl1','tl2','tl3','tl4'].forEach(hideEl);
+  }
+}
+
+function play(n) {
+  clr();
+  if (n===1) {
+    show('p1c1', 200);
+    svgShow('b1dev',400); svgShow('t1dev',480); svgShow('t1devs',530);
+    svgShow('a1dp',700); svgShow('ta1',750);
+    svgShow('b1reg',900); svgShow('t1reg',970); svgShow('t1regs',1020);
+    svgShow('b1atk',1300); svgShow('t1atk',1380); svgShow('t1atks',1430);
+    svgShow('a1ap',1600); svgShow('ta2',1650);
+    svgShow('a1rp',1900); svgShow('ta3',1950);
+    svgShow('b1prd',2100); svgShow('t1prd',2180); svgShow('t1prds',2230);
+    svgShow('skl',2500);
+    svgShow('novfy',2900); svgShow('nv1',3000); svgShow('nv2',3200); svgShow('nv3',3400);
+    show('p1c2',3800);
+  } else if (n===2) {
+    show('p2c1',200);
+    svgShow('d2rk',400); svgShow('t2rk',480); svgShow('t2rks',530);
+    svgShow('a2rk',700);
+    svgShow('d2tk',900); svgShow('t2tkl',970); svgShow('t2tks',1020);
+    svgShow('a2tk',1200);
+    svgShow('d2ns',1400); svgShow('t2ns',1470); svgShow('t2nss',1520);
+    svgShow('d2pb',1900); svgShow('t2pb',2000); svgShow('d2l1',2100);
+    svgShow('t2s1',2200); svgShow('t2s2',2500); svgShow('t2s3',2800);
+    show('p2c2',3200);
+    showEl('dc1',3400); showEl('dc2',3700); showEl('dc3',4000);
+    showEl('dc4',4400); showEl('dc5',4700);
+    show('p2c3',5100);
+  } else if (n===3) {
+    show('p3c1',200);
+    svgShow('s3o',400); svgShow('t3o',480); svgShow('t3os',530); svgShow('t3os2',580);
+    svgShow('a3fo',800);
+    svgShow('s3r',1000); svgShow('t3r',1080); svgShow('t3rs',1130); svgShow('t3rs2',1180);
+    svgShow('a3rf',1400);
+    svgShow('s3f',1600); svgShow('t3f',1680); svgShow('t3fs',1730); svgShow('t3fs2',1780);
+    svgShow('s3kl',2100); svgShow('t3kl',2200);
+    svgShow('t3k1',2400); svgShow('t3k2',2700); svgShow('t3k3',3000); svgShow('t3k4',3300);
+    show('p3c2',3700);
+    showEl('cs1',3900); showEl('cs2',4100); showEl('cs3',4500);
+    showEl('cs4',4900); showEl('cs5',5100); showEl('cs6',5300); showEl('cs7',5600);
+  } else if (n===4) {
+    show('p4c1',200);
+    showEl('y1',400); showEl('y2',650); showEl('y3',900); showEl('y4',1100);
+    showEl('y5',1300); showEl('y6',1500); showEl('y7',1750); showEl('y8',2000); showEl('y9',2200);
+    show('p4c2',2700);
+    show('p4c3',3400);
+    showEl('kv1',3600); showEl('kv2',3800); showEl('kv3',4000);
+    showEl('kv4',4200); showEl('kv5',4400); showEl('kv6',4600); showEl('kv7',4900);
+  } else if (n===5) {
+    show('p5c1',200);
+    showEl('u1',400); showEl('u2',600); showEl('u3',800); showEl('u4',1000); showEl('u5',1200);
+    showEl('s1a',500); showEl('s2a',700); showEl('s3a',900); showEl('s4a',1100); showEl('s5a',1300);
+    show('p5c2',1800);
+    showEl('tl1',2000); showEl('tl2',2300); showEl('tl3',2600); showEl('tl4',2900);
+    show('p5c3',3400);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

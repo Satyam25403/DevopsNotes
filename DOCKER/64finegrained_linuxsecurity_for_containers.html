@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>Capabilities & seccomp</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: WHAT IS ROOT IN CONTAINERS? -->
+<div class="scene active" id="s1" style="background:#0a0003">
+  <div class="hdr" style="background:#0a0003;border-bottom:1px solid #2a0010">
+    <div class="hdr-title" style="color:#e85050">LINUX CAPABILITIES</div>
+    <div class="hdr-sub">BREAKING ROOT INTO PIECES</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+  <div class="anim" style="background:#0a0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Root vs capabilities diagram -->
+      <div id="c1a" class="panel" style="background:#0f0005;border:2px solid #3d0015;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0008;padding:6px 10px;border-bottom:1px solid #3d0015;text-align:center;font-size:7px;color:#e85050;letter-spacing:1px">ROOT = ALL POWERS BUNDLED</div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <!-- Root blob -->
+          <rect id="rootbox" x="12" y="10" width="100" height="124" rx="4" fill="#1a0005" stroke="#e8505060" stroke-width="1.5" opacity="0"/>
+          <text id="roottxt" x="62" y="30" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6.5" fill="#e85050" opacity="0">ROOT</text>
+          <text id="rootsub" x="62" y="44" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050" opacity="0">uid=0</text>
+
+          <!-- capability pills inside root -->
+          <rect id="cap1" x="18" y="52" width="88" height="14" rx="2" fill="#2a0008" stroke="#e8505040" opacity="0"/>
+          <text id="cap1t" x="62" y="62" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" opacity="0">NET_ADMIN</text>
+          <rect id="cap2" x="18" y="70" width="88" height="14" rx="2" fill="#2a0008" stroke="#e8505040" opacity="0"/>
+          <text id="cap2t" x="62" y="80" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" opacity="0">SYS_ADMIN</text>
+          <rect id="cap3" x="18" y="88" width="88" height="14" rx="2" fill="#2a0008" stroke="#e8505040" opacity="0"/>
+          <text id="cap3t" x="62" y="98" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" opacity="0">SYS_PTRACE</text>
+          <rect id="cap4" x="18" y="106" width="88" height="14" rx="2" fill="#2a0008" stroke="#e8505040" opacity="0"/>
+          <text id="cap4t" x="62" y="116" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" opacity="0">DAC_OVERRIDE</text>
+          <text id="cap5t" x="62" y="130" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#666" opacity="0">+37 more...</text>
+
+          <!-- arrow -->
+          <line id="arr1" x1="120" y1="74" x2="144" y2="74" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0"/>
+          <text id="arrtxt1" x="132" y="70" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050" opacity="0">BAD</text>
+
+          <!-- Right side: problem -->
+          <rect id="probbox" x="148" y="10" width="206" height="124" rx="4" fill="#0f0005" stroke="#e8505030" stroke-width="1" opacity="0"/>
+          <text id="probt1" x="251" y="32" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#e85050" opacity="0">CONTAINER ESCAPES</text>
+          <text id="probt2" x="251" y="52" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa" opacity="0">SYS_ADMIN → mount</text>
+          <text id="probt3" x="251" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa" opacity="0">host fs access</text>
+          <text id="probt4" x="251" y="88" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa" opacity="0">NET_ADMIN → sniff</text>
+          <text id="probt5" x="251" y="104" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#aaa" opacity="0">host network traffic</text>
+          <text id="probt6" x="251" y="124" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050" opacity="0">privilege escalation risk</text>
+        </svg>
+      </div>
+
+      <!-- Fix preview -->
+      <div id="c1b" class="panel" style="background:#001008;border-left:4px solid #4eff9a;border-top:1px solid #0a2810;border-right:1px solid #0a2810;border-bottom:1px solid #0a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">THE SOLUTION</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Drop <span style="color:#e85050">ALL</span> caps, then add back only what<br>
+          your app actually needs. Minimal privilege.<br>
+          <span style="color:#4eff9a">Linux has 41 capabilities — use 1-3.</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Root inside a container still has Linux capabilities by default.</div>
+    <div class="ih rd">SYS_ADMIN alone enables 150+ kernel operations. Drop it.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">41</div><div class="sl">LINUX<br>CAPABILITIES</div></div>
+    <div class="sc"><div class="sv am">14</div><div class="sl">DOCKER<br>DEFAULT CAPS</div></div>
+    <div class="sc"><div class="sv gn">1-3</div><div class="sl">WHAT YOU<br>SHOULD USE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: --cap-drop / --cap-add -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">--cap-drop / --cap-add</div>
+    <div class="hdr-sub">MINIMAL PRIVILEGE PATTERN</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">CAP FLAGS</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">DOCKER RUN</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Terminal -->
+      <div id="c2a" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d2030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555"># bad — default caps (14 enabled)</div>
+          <div id="t2bad" class="tline" style="color:#e85050">$ docker run nginx:latest</div>
+          <div style="height:4px"></div>
+          <div id="t2ok" class="tline" style="color:#555"># good — drop all, add only needed</div>
+          <div id="t2cmd" class="tline" style="color:#4ec9e1">$ docker run \</div>
+          <div id="t2c1" class="tline" style="color:#4eff9a">  --cap-drop ALL \</div>
+          <div id="t2c2" class="tline" style="color:#4eff9a">  --cap-add NET_BIND_SERVICE \</div>
+          <div id="t2c3" class="tline" style="color:#aaa">  nginx:latest</div>
+        </div>
+      </div>
+
+      <!-- Common caps reference -->
+      <div id="c2b" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;border-bottom:1px solid #0d2030;font-size:6.5px;color:#4ec9e1;letter-spacing:1px">COMMON CAPABILITIES</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:5px">
+          <div id="cr1" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:6px;color:#4eff9a;min-width:118px">NET_BIND_SERVICE</span>
+            <span style="font-size:6px;color:#888">bind ports &lt;1024</span>
+          </div>
+          <div id="cr2" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:6px;color:#4eff9a;min-width:118px">CHOWN</span>
+            <span style="font-size:6px;color:#888">change file ownership</span>
+          </div>
+          <div id="cr3" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:6px;color:#e8a020;min-width:118px">NET_ADMIN</span>
+            <span style="font-size:6px;color:#888">configure network interfaces</span>
+          </div>
+          <div id="cr4" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:6px;color:#e85050;min-width:118px">SYS_ADMIN</span>
+            <span style="font-size:6px;color:#888">mount, namespaces, kernel ops</span>
+          </div>
+          <div id="cr5" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:6px;color:#e85050;min-width:118px">SYS_PTRACE</span>
+            <span style="font-size:6px;color:#888">trace any process (debug escape)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compose syntax -->
+      <div id="c2c" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d2030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="cy1" class="tline" style="color:#a080ff">cap_drop:</div>
+          <div id="cy2" class="tline" style="color:#4eff9a">  - ALL</div>
+          <div id="cy3" class="tline" style="color:#a080ff">cap_add:</div>
+          <div id="cy4" class="tline" style="color:#4eff9a">  - NET_BIND_SERVICE</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">--cap-drop ALL is the baseline. Then only add what breaks without it.</div>
+    <div class="ih am">Test with strace or ausearch to find which caps your app uses.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">DROP<br>FIRST</div></div>
+    <div class="sc"><div class="sv gn">NET_BIND</div><div class="sl">MOST COMMON<br>ADD-BACK</div></div>
+    <div class="sc"><div class="sv rd">SYS_ADM</div><div class="sl">NEVER<br>ADD THIS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: SECCOMP -->
+<div class="scene" id="s3" style="background:#07000f">
+  <div class="hdr" style="background:#07000f;border-bottom:1px solid #1a0030">
+    <div class="hdr-title" style="color:#a080ff">SECCOMP</div>
+    <div class="hdr-sub">SYSCALL FILTERING LAYER</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#07000f">
+    <span class="slabel" style="color:#a080ff">SECCOMP BPF</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">KERNEL FILTER</span>
+  </div>
+  <div class="anim" style="background:#07000f">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Syscall flow diagram -->
+      <div id="c3a" class="panel" style="background:#05000c;border:2px solid #1a0030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;border-bottom:1px solid #1a0030;font-size:6.5px;color:#a080ff;letter-spacing:1px">SYSCALL INTERCEPTION</div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="amu" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5"/></marker>
+            <marker id="amg" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#4eff9a" stroke-width="1.5"/></marker>
+            <marker id="amr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/></marker>
+          </defs>
+          <!-- App box -->
+          <rect id="appbox" x="10" y="10" width="80" height="36" rx="2" fill="#0a0018" stroke="#a080ff50" stroke-width="1" opacity="0"/>
+          <text x="50" y="26" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#a080ff" opacity="1" id="apptxt">APP</text>
+          <text x="50" y="38" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" opacity="1" id="appsub">container</text>
+
+          <!-- syscall arrow down -->
+          <line id="sc_arrow" x1="50" y1="46" x2="50" y2="60" stroke="#a080ff" stroke-width="1.5" opacity="0" marker-end="url(#amu)"/>
+          <text id="sc_lbl" x="56" y="56" font-family="'Press Start 2P',monospace" font-size="5" fill="#a080ff" opacity="0">syscall()</text>
+
+          <!-- seccomp filter box -->
+          <rect id="secbox" x="10" y="62" width="80" height="32" rx="2" fill="#12001f" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="sectxt" x="50" y="76" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#a080ff" opacity="0">SECCOMP</text>
+          <text id="secsub" x="50" y="87" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" opacity="0">BPF filter</text>
+
+          <!-- allow path -->
+          <line id="allow_arr" x1="90" y1="78" x2="120" y2="78" stroke="#4eff9a" stroke-width="1.5" opacity="0" marker-end="url(#amg)"/>
+          <text id="allow_lbl" x="105" y="73" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a" opacity="0">ALLOW</text>
+          <rect id="kernbox" x="120" y="62" width="80" height="32" rx="2" fill="#001a08" stroke="#4eff9a50" stroke-width="1" opacity="0"/>
+          <text id="kerntxt" x="160" y="76" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4eff9a" opacity="0">KERNEL</text>
+          <text id="kernsub" x="160" y="87" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#888" opacity="0">executes</text>
+
+          <!-- deny path -->
+          <line id="deny_arr" x1="50" y1="94" x2="50" y2="118" stroke="#e85050" stroke-width="1.5" stroke-dasharray="3,2" opacity="0" marker-end="url(#amr)"/>
+          <text id="deny_lbl" x="60" y="110" font-family="'Press Start 2P',monospace" font-size="5" fill="#e85050" opacity="0">EPERM / SIGKILL</text>
+
+          <!-- blocked syscalls label -->
+          <text id="blk_lbl" x="220" y="76" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#888" opacity="0">~300 blocked</text>
+          <text id="blk_lbl2" x="220" y="88" font-family="'Press Start 2P',monospace" font-size="5" fill="#555" opacity="0">by default profile</text>
+        </svg>
+      </div>
+
+      <!-- Default profile info -->
+      <div id="c3b" class="panel" style="background:#0a0018;border-left:4px solid #a080ff;border-top:1px solid #1a0030;border-right:1px solid #1a0030;border-bottom:1px solid #1a0030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">DOCKER DEFAULT SECCOMP</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Blocks: <span style="color:#e85050">ptrace, mount, kexec, pivot_root</span><br>
+          Allows: <span style="color:#4eff9a">read, write, open, close, fork</span><br>
+          Enabled by default on Docker ≥ 1.10<br>
+          <span style="color:#888">~300 syscalls blocked out of 400+</span>
+        </div>
+      </div>
+
+      <!-- Custom profile terminal -->
+      <div id="c3c" class="panel" style="background:#05000c;border:2px solid #1a0030;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #1a0030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="sc1" class="tline" style="color:#555"># use default profile (explicit)</div>
+          <div id="sc2" class="tline" style="color:#a080ff">$ docker run --security-opt \</div>
+          <div id="sc3" class="tline" style="color:#4eff9a">  seccomp=default nginx</div>
+          <div style="height:4px"></div>
+          <div id="sc4" class="tline" style="color:#555"># custom profile</div>
+          <div id="sc5" class="tline" style="color:#a080ff">$ docker run --security-opt \</div>
+          <div id="sc6" class="tline" style="color:#4eff9a">  seccomp=profile.json nginx</div>
+          <div style="height:4px"></div>
+          <div id="sc7" class="tline" style="color:#555"># disable (dangerous!)</div>
+          <div id="sc8" class="tline" style="color:#e85050">$ docker run --security-opt \</div>
+          <div id="sc9" class="tline" style="color:#e85050">  seccomp=unconfined nginx</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">seccomp works below capabilities — kernel-level syscall allowlist.</div>
+    <div class="ih pu">Never use seccomp=unconfined in production. Ever.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">400+</div><div class="sl">TOTAL<br>SYSCALLS</div></div>
+    <div class="sc"><div class="sv rd">~300</div><div class="sl">BLOCKED BY<br>DEFAULT</div></div>
+    <div class="sc"><div class="sv gn">BPF</div><div class="sl">FILTER<br>ENGINE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: APPARMOR -->
+<div class="scene" id="s4" style="background:#000d08">
+  <div class="hdr" style="background:#000d08;border-bottom:1px solid #0a2010">
+    <div class="hdr-title" style="color:#4eff9a">APPARMOR</div>
+    <div class="hdr-sub">MAC — MANDATORY ACCESS CONTROL</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d08">
+    <span class="slabel" style="color:#4eff9a">APPARMOR</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">LAYER 3</span>
+  </div>
+  <div class="anim" style="background:#000d08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- 3-layer defence diagram -->
+      <div id="c4a" class="panel" style="background:#010a04;border:2px solid #0a2010;border-radius:3px;overflow:hidden">
+        <div style="background:#021408;padding:5px 10px;border-bottom:1px solid #0a2010;font-size:6.5px;color:#4eff9a;letter-spacing:1px">DEFENCE IN DEPTH</div>
+        <svg width="100%" height="124" viewBox="0 0 366 124" xmlns="http://www.w3.org/2000/svg">
+          <!-- Layer rings -->
+          <rect id="l4a" x="10" y="10" width="346" height="100" rx="6" fill="#001a08" stroke="#4eff9a40" stroke-width="1" opacity="0"/>
+          <text id="l4at" x="20" y="24" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a" opacity="0">APPARMOR — file/net/cap access control (MAC)</text>
+
+          <rect id="l4b" x="20" y="32" width="326" height="68" rx="4" fill="#001408" stroke="#a080ff40" stroke-width="1" opacity="0"/>
+          <text id="l4bt" x="30" y="46" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#a080ff" opacity="0">SECCOMP — syscall filter (BPF)</text>
+
+          <rect id="l4c" x="30" y="54" width="306" height="38" rx="3" fill="#000e04" stroke="#4ec9e140" stroke-width="1" opacity="0"/>
+          <text id="l4ct" x="40" y="68" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4ec9e1" opacity="0">CAPABILITIES — coarse kernel permissions</text>
+
+          <rect id="l4d" x="40" y="72" width="286" height="14" rx="2" fill="#000a02" stroke="#e8a02040" stroke-width="1" opacity="0"/>
+          <text id="l4dt" x="183" y="82" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020" opacity="0">APP PROCESS (runs here)</text>
+        </svg>
+      </div>
+
+      <!-- AppArmor profile snippet -->
+      <div id="c4b" class="panel" style="background:#010a04;border:2px solid #0a2010;border-radius:3px;overflow:hidden">
+        <div style="background:#021408;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0a2010">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">/etc/apparmor.d/docker-nginx</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="aa1" class="tline" style="color:#a080ff">profile docker-nginx flags=(attach_disconnected) {</div>
+          <div id="aa2" class="tline" style="color:#888">  #include &lt;abstractions/base&gt;</div>
+          <div id="aa3" class="tline" style="color:#4eff9a">  /var/www/html/** r,</div>
+          <div id="aa4" class="tline" style="color:#4eff9a">  /etc/nginx/** r,</div>
+          <div id="aa5" class="tline" style="color:#4ec9e1">  network inet stream,</div>
+          <div id="aa6" class="tline" style="color:#e85050">  deny /proc/sys/kernel/** w,</div>
+          <div id="aa7" class="tline" style="color:#a080ff">}</div>
+        </div>
+      </div>
+
+      <!-- Apply command -->
+      <div id="c4c" class="panel" style="background:#020a10;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#05101a;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d2030">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="ap1" class="tline" style="color:#555"># load profile</div>
+          <div id="ap2" class="tline" style="color:#4ec9e1">$ apparmor_parser -r docker-nginx</div>
+          <div id="ap3" class="tline" style="color:#555"># apply to container</div>
+          <div id="ap4" class="tline" style="color:#4eff9a">$ docker run --security-opt \</div>
+          <div id="ap5" class="tline" style="color:#4eff9a">  apparmor=docker-nginx nginx</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">AppArmor = file path + network + capability rules per process.</div>
+    <div class="ih">Three layers: capabilities → seccomp → AppArmor. All independent.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">MAC</div><div class="sl">MANDATORY<br>ACCESS CTRL</div></div>
+    <div class="sc"><div class="sv am">PATH</div><div class="sl">BASED<br>ON FILE PATH</div></div>
+    <div class="sc"><div class="sv pu">3</div><div class="sl">SECURITY<br>LAYERS TOTAL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 5: CIS BENCHMARK + CHEAT SHEET -->
+<div class="scene" id="s5" style="background:#001508">
+  <div class="hdr" style="background:#001508;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">CIS BENCHMARK</div>
+    <div class="hdr-sub">HARDENING CHECKLIST</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001508">
+    <span class="slabel" style="color:#4eff9a">FULL STACK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#001508">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- CIS checklist -->
+      <div id="c5a" class="panel" style="background:#001a08;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;border-bottom:1px solid #0d3018;font-size:6.5px;color:#4eff9a;letter-spacing:1px">CIS DOCKER BENCHMARK</div>
+        <div style="padding:8px 10px;display:flex;flex-direction:column;gap:6px">
+          <div id="ci1" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">Run as non-root user (USER directive)</span>
+          </div>
+          <div id="ci2" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">--cap-drop ALL + selective --cap-add</span>
+          </div>
+          <div id="ci3" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">seccomp profile enabled (default or custom)</span>
+          </div>
+          <div id="ci4" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">--read-only filesystem where possible</span>
+          </div>
+          <div id="ci5" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">--no-new-privileges flag always set</span>
+          </div>
+          <div id="ci6" class="tline" style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:9px;color:#4eff9a;flex-shrink:0">✓</span>
+            <span style="font-size:6px;color:#aaa">AppArmor profile attached</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full hardened run command -->
+      <div id="c5b" class="panel" style="background:#001a08;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #0d3018">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">fully hardened run</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6px;line-height:2.3">
+          <div id="hr1" class="tline" style="color:#4ec9e1">$ docker run \</div>
+          <div id="hr2" class="tline" style="color:#4eff9a">  --cap-drop ALL \</div>
+          <div id="hr3" class="tline" style="color:#4eff9a">  --cap-add NET_BIND_SERVICE \</div>
+          <div id="hr4" class="tline" style="color:#a080ff">  --security-opt seccomp=profile.json \</div>
+          <div id="hr5" class="tline" style="color:#a080ff">  --security-opt apparmor=docker-nginx \</div>
+          <div id="hr6" class="tline" style="color:#4ec9e1">  --security-opt no-new-privileges \</div>
+          <div id="hr7" class="tline" style="color:#e8a020">  --read-only \</div>
+          <div id="hr8" class="tline" style="color:#e8a020">  --user 1001:1001 \</div>
+          <div id="hr9" class="tline" style="color:#aaa">  nginx:latest</div>
+        </div>
+      </div>
+
+      <!-- Debug tip -->
+      <div id="c5c" class="panel" style="background:#041208;border-left:4px solid #e8a020;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">DEBUG TIP</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          Container works as root, fails as user?<br>
+          → Missing capability. Try adding one at a time.<br>
+          Use: <span style="color:#4ec9e1">docker run --cap-add SYS_PTRACE</span><br>
+          then strace to find the missing cap.
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">--no-new-privileges prevents setuid binaries escalating inside.</div>
+    <div class="ih">All 3 layers are independent. Use all of them. Stack the defence.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">6</div><div class="sl">CIS CHECKS<br>THIS COVERS</div></div>
+    <div class="sc"><div class="sv am">3</div><div class="sl">SECURITY<br>LAYERS</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">EXCUSES<br>TO SKIP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+function tshow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('c1a');hide('c1b');
+    ['rootbox','roottxt','rootsub','cap1','cap1t','cap2','cap2t','cap3','cap3t','cap4','cap4t','cap5t','arr1','arrtxt1','probbox','probt1','probt2','probt3','probt4','probt5','probt6'].forEach(svgHide);
+  }
+  if(n===2){
+    hide('c2a');hide('c2b');hide('c2c');
+    ['t2bad','t2ok','t2cmd','t2c1','t2c2','t2c3','cr1','cr2','cr3','cr4','cr5','cy1','cy2','cy3','cy4'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+  if(n===3){
+    hide('c3a');hide('c3b');hide('c3c');
+    ['appbox','sc_arrow','sc_lbl','secbox','sectxt','secsub','allow_arr','allow_lbl','kernbox','kerntxt','kernsub','deny_arr','deny_lbl','blk_lbl','blk_lbl2'].forEach(svgHide);
+    ['sc1','sc2','sc3','sc4','sc5','sc6','sc7','sc8','sc9'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+  if(n===4){
+    hide('c4a');hide('c4b');hide('c4c');
+    ['l4a','l4at','l4b','l4bt','l4c','l4ct','l4d','l4dt'].forEach(svgHide);
+    ['aa1','aa2','aa3','aa4','aa5','aa6','aa7','ap1','ap2','ap3','ap4','ap5'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+  if(n===5){
+    hide('c5a');hide('c5b');hide('c5c');
+    ['ci1','ci2','ci3','ci4','ci5','ci6','hr1','hr2','hr3','hr4','hr5','hr6','hr7','hr8','hr9'].forEach(id=>{const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}});
+  }
+}
+
+function play(n){
+  if(n===1){
+    show('c1a',200);
+    svgShow('rootbox',400);svgShow('roottxt',500);svgShow('rootsub',550);
+    svgShow('cap1',700);svgShow('cap1t',750);
+    svgShow('cap2',900);svgShow('cap2t',950);
+    svgShow('cap3',1100);svgShow('cap3t',1150);
+    svgShow('cap4',1300);svgShow('cap4t',1350);svgShow('cap5t',1400);
+    svgShow('arr1',1600);svgShow('arrtxt1',1650);
+    svgShow('probbox',1800);
+    svgShow('probt1',1900);svgShow('probt2',2050);svgShow('probt3',2150);
+    svgShow('probt4',2300);svgShow('probt5',2400);svgShow('probt6',2600);
+    show('c1b',2900);
+  }
+  if(n===2){
+    show('c2a',200);
+    ['t2bad','t2ok','t2cmd','t2c1','t2c2','t2c3'].forEach((id,i)=>tshow(id,500+i*350));
+    show('c2b',2700);
+    ['cr1','cr2','cr3','cr4','cr5'].forEach((id,i)=>tshow(id,2900+i*300));
+    show('c2c',4400);
+    ['cy1','cy2','cy3','cy4'].forEach((id,i)=>tshow(id,4600+i*250));
+  }
+  if(n===3){
+    show('c3a',200);
+    svgShow('appbox',400);
+    svgShow('sc_arrow',800);svgShow('sc_lbl',850);
+    svgShow('secbox',1100);svgShow('sectxt',1200);svgShow('secsub',1250);
+    svgShow('allow_arr',1500);svgShow('allow_lbl',1550);
+    svgShow('kernbox',1700);svgShow('kerntxt',1800);svgShow('kernsub',1850);
+    svgShow('deny_arr',2100);svgShow('deny_lbl',2200);
+    svgShow('blk_lbl',2400);svgShow('blk_lbl2',2500);
+    show('c3b',2800);
+    show('c3c',3400);
+    ['sc1','sc2','sc3','sc4','sc5','sc6','sc7','sc8','sc9'].forEach((id,i)=>tshow(id,3600+i*280));
+  }
+  if(n===4){
+    show('c4a',200);
+    svgShow('l4a',400);svgShow('l4at',500);
+    svgShow('l4b',800);svgShow('l4bt',900);
+    svgShow('l4c',1200);svgShow('l4ct',1300);
+    svgShow('l4d',1600);svgShow('l4dt',1700);
+    show('c4b',2100);
+    ['aa1','aa2','aa3','aa4','aa5','aa6','aa7'].forEach((id,i)=>tshow(id,2300+i*300));
+    show('c4c',4500);
+    ['ap1','ap2','ap3','ap4','ap5'].forEach((id,i)=>tshow(id,4700+i*300));
+  }
+  if(n===5){
+    show('c5a',200);
+    ['ci1','ci2','ci3','ci4','ci5','ci6'].forEach((id,i)=>tshow(id,400+i*350));
+    show('c5b',2500);
+    ['hr1','hr2','hr3','hr4','hr5','hr6','hr7','hr8','hr9'].forEach((id,i)=>tshow(id,2700+i*280));
+    show('c5c',5300);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

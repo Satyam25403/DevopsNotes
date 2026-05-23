@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker Socket Security</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1 — What the Socket IS ═══ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">DOCKER SOCKET</div>
+    <div class="hdr-sub">THE BIGGEST DOCKER SECURITY MISTAKE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">WHAT IS IT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">MUST KNOW</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- architecture diagram: socket as root gateway -->
+      <div id="p1c1" class="panel" style="background:#0a0005;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#150008;padding:6px 10px;border-bottom:1px solid #3a0010;text-align:center">
+          <div style="font-size:7px;color:#e85050;letter-spacing:1px">DOCKER SOCKET ARCHITECTURE</div>
+        </div>
+        <svg width="100%" height="195" viewBox="0 0 366 195" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arre" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e85050" stroke-width="1.5"/>
+            </marker>
+            <marker id="arcn" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5"/>
+            </marker>
+            <marker id="aram" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e8a020" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- HOST label band -->
+          <rect id="s1host" x="8" y="8" width="350" height="178" rx="3" fill="none" stroke="#2a0010" stroke-width="1.5" stroke-dasharray="5,3" opacity="0"/>
+          <text id="s1hl" x="20" y="22" font-size="6" fill="#444" font-family="'Press Start 2P',monospace" opacity="0">HOST</text>
+          <!-- dockerd box -->
+          <rect id="s1dd" x="130" y="30" width="106" height="48" rx="2" fill="#200010" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s1ddt" x="183" y="50" text-anchor="middle" font-size="7" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">dockerd</text>
+          <text id="s1dds" x="183" y="65" text-anchor="middle" font-size="5.5" fill="#c03030" font-family="'Press Start 2P',monospace" opacity="0">uid=0 (root)</text>
+          <!-- socket file -->
+          <rect id="s1sk" x="141" y="94" width="84" height="30" rx="2" fill="#150008" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text id="s1skt" x="183" y="110" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">docker.sock</text>
+          <!-- dockerd to socket arrow -->
+          <line id="s1dsa" x1="183" y1="78" x2="183" y2="92" stroke="#e85050" stroke-width="1.5" opacity="0" marker-end="url(#arre)"/>
+          <!-- cli left -->
+          <rect id="s1cli" x="14" y="94" width="90" height="30" rx="2" fill="#0a0810" stroke="#4ec9e1" stroke-width="1.5" opacity="0"/>
+          <text id="s1clit" x="59" y="110" text-anchor="middle" font-size="6" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0">docker CLI</text>
+          <line id="s1ca" x1="104" y1="109" x2="139" y2="109" stroke="#4ec9e1" stroke-width="1.5" opacity="0" marker-end="url(#arcn)"/>
+          <!-- danger container right -->
+          <rect id="s1dc" x="262" y="84" width="96" height="50" rx="2" fill="#200005" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="s1dct" x="310" y="103" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">CONTAINER</text>
+          <text id="s1dcs" x="310" y="116" text-anchor="middle" font-size="5.5" fill="#c03030" font-family="'Press Start 2P',monospace" opacity="0">with sock mount</text>
+          <text id="s1dcu" x="310" y="128" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">= root on host</text>
+          <line id="s1sa" x1="225" y1="109" x2="260" y2="109" stroke="#e85050" stroke-width="2" opacity="0" marker-end="url(#arre)"/>
+          <text id="s1sat" x="242" y="104" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">mounts</text>
+          <!-- bottom labels -->
+          <rect id="s1bl" x="8" y="148" width="350" height="32" rx="2" fill="#150005" stroke="#3a0010" stroke-width="1" opacity="0"/>
+          <text id="s1bl1" x="183" y="162" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">socket = unauthenticated root API</text>
+          <text id="s1bl2" x="183" y="176" text-anchor="middle" font-size="6" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">no TLS · no authz · any caller = full control</text>
+        </svg>
+      </div>
+
+      <!-- what is sock terminal -->
+      <div id="p1c2" class="panel" style="background:#050002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">what lives at docker.sock</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="w1" class="tline" style="color:#888">$ <span style="color:#4ec9e1">ls -la /var/run/docker.sock</span></div>
+          <div id="w2" class="tline" style="color:#e8a020">srw-rw---- 1 root docker  <span style="color:#e85050">← group=docker</span></div>
+          <div id="w3" class="tline" style="color:#888">$ <span style="color:#4ec9e1">curl --unix-socket /var/run/docker.sock \</span></div>
+          <div id="w4" class="tline" style="color:#888">  <span style="color:#4ec9e1">http://localhost/containers/json</span></div>
+          <div id="w5" class="tline" style="color:#4eff9a">[{"Id":"a3f...","Names":["/prod-db"],...}]</div>
+          <div id="w6" class="tline" style="color:#555"># anyone who can touch this socket</div>
+          <div id="w7" class="tline" style="color:#e85050"># controls every container on the host</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">/var/run/docker.sock is a UNIX socket — HTTP to dockerd.</div>
+    <div class="ih rd">No auth. No TLS. Touch it = full root API access.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">uid=0</div><div class="sl">DOCKERD<br>RUNS AS</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">AUTH<br>CHECKS</div></div>
+    <div class="sc"><div class="sv rd">CRITICAL</div><div class="sl">RISK<br>LEVEL</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2 — The Escape: Live Exploit ═══ -->
+<div class="scene" id="s2" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #3a0010">
+    <div class="hdr-title" style="color:#e85050">THE SOCKET ESCAPE</div>
+    <div class="hdr-sub">CONTAINER → FULL HOST ROOT IN 3 COMMANDS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">EXPLOIT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">LIVE DEMO</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- step 1: the bad compose -->
+      <div id="p2c1" class="panel" style="background:#0a0005;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#150008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml — DANGEROUS</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="e1" class="tline" style="color:#aaa">services:</div>
+          <div id="e2" class="tline" style="color:#aaa">  ci-agent:</div>
+          <div id="e3" class="tline" style="color:#aaa">    image: jenkins/jenkins:lts</div>
+          <div id="e4" class="tline" style="color:#aaa">    volumes:</div>
+          <div id="e5" class="tline"><span style="color:#e85050">      - /var/run/docker.sock:/var/run/docker.sock</span></div>
+          <div id="e6" class="tline" style="color:#555">      <span style="color:#e85050"># ← THIS LINE = host root access</span></div>
+        </div>
+      </div>
+
+      <!-- step 2: exploit terminal -->
+      <div id="p2c2" class="panel" style="background:#050002;border:2px solid #3a0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">inside ci-agent container</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="x1" class="tline" style="color:#888">jenkins@container$ <span style="color:#4ec9e1">docker ps</span></div>
+          <div id="x2" class="tline" style="color:#4eff9a">prod-db   postgres:15   Up 3 days</div>
+          <div id="x3" class="tline" style="color:#4eff9a">vault     hashicorp/v.. Up 3 days</div>
+          <div id="x4" class="tline" style="color:#888"># <span style="color:#e8a020">can see ALL host containers ↑</span></div>
+          <div id="x5" class="tline" style="color:#888">$ <span style="color:#e85050">docker run -v /:/host --rm -it alpine</span></div>
+          <div id="x6" class="tline" style="color:#e8a020">root@escape:/#</div>
+          <div id="x7" class="tline" style="color:#888"># <span style="color:#e85050">chroot /host</span></div>
+          <div id="x8" class="tline" style="color:#e85050">root@HOST:/#  <span style="color:#ff5050">← full host root 🔥</span></div>
+        </div>
+      </div>
+
+      <!-- what attacker can do -->
+      <div id="p2c3" class="panel" style="background:#120005;border-left:4px solid #e85050;border-top:1px solid #2a0010;border-right:1px solid #2a0010;border-bottom:1px solid #2a0010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">WHAT ATTACKER NOW CAN DO</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <span style="color:#e85050">✗</span> Read /etc/shadow, all secrets, env vars<br>
+          <span style="color:#e85050">✗</span> Install persistent backdoor or rootkit<br>
+          <span style="color:#e85050">✗</span> Exfiltrate all container volumes &amp; data<br>
+          <span style="color:#e85050">✗</span> Pivot to other hosts on the network
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">One mounted socket = one docker run -v /:/host away from root.</div>
+    <div class="ih rd">CI agent compromise → entire host and all containers owned.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3</div><div class="sl">COMMANDS<br>TO ESCAPE</div></div>
+    <div class="sc"><div class="sv rd">ALL</div><div class="sl">HOST DATA<br>READABLE</div></div>
+    <div class="sc"><div class="sv rd">0</div><div class="sl">BARRIERS<br>TO STOP IT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3 — Why CI/CD Does It ═══ -->
+<div class="scene" id="s3" style="background:#0a0800">
+  <div class="hdr" style="background:#0a0800;border-bottom:1px solid #302000">
+    <div class="hdr-title" style="color:#e8a020">WHY CI DOES IT</div>
+    <div class="hdr-sub">DOCKER-IN-DOCKER PATTERNS EXPLAINED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0800">
+    <span class="slabel" style="color:#e8a020">ROOT CAUSE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">CI PATTERN</span>
+  </div>
+  <div class="anim" style="background:#0a0800">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- use-case diagram -->
+      <div id="p3c1" class="panel" style="background:#080600;border:2px solid #302000;border-radius:3px;overflow:hidden">
+        <div style="background:#120a00;padding:6px 10px;border-bottom:1px solid #302000;text-align:center">
+          <div style="font-size:7px;color:#e8a020;letter-spacing:1px">WHY CI MOUNTS THE SOCKET</div>
+        </div>
+        <svg width="100%" height="158" viewBox="0 0 366 158" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="aram2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#e8a020" stroke-width="1.5"/>
+            </marker>
+          </defs>
+          <!-- CI pipeline box -->
+          <rect id="c3ci" x="8" y="14" width="96" height="60" rx="2" fill="#100800" stroke="#403010" stroke-width="1.5" opacity="0"/>
+          <text id="c3cit" x="56" y="34" text-anchor="middle" font-size="6.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">CI RUNNER</text>
+          <text id="c3ci1" x="56" y="50" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">Jenkins / GitLab</text>
+          <text id="c3ci2" x="56" y="63" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">GitHub Actions</text>
+          <!-- what it needs -->
+          <rect id="c3nd" x="136" y="14" width="94" height="60" rx="2" fill="#0a0500" stroke="#302000" stroke-width="1.5" opacity="0"/>
+          <text id="c3ndt" x="183" y="34" text-anchor="middle" font-size="6.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">NEEDS TO</text>
+          <text id="c3nd1" x="183" y="50" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">build images</text>
+          <text id="c3nd2" x="183" y="63" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">push to registry</text>
+          <!-- docker api box -->
+          <rect id="c3da" x="264" y="14" width="94" height="60" rx="2" fill="#200005" stroke="#e85050" stroke-width="2" opacity="0"/>
+          <text id="c3dat" x="311" y="34" text-anchor="middle" font-size="6.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">REACHES</text>
+          <text id="c3da1" x="311" y="50" text-anchor="middle" font-size="5.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">docker socket</text>
+          <text id="c3da2" x="311" y="63" text-anchor="middle" font-size="5.5" fill="#c03030" font-family="'Press Start 2P',monospace" opacity="0">= host root</text>
+          <!-- arrows -->
+          <line id="c3a1" x1="104" y1="44" x2="134" y2="44" stroke="#e8a020" stroke-width="1.5" opacity="0" marker-end="url(#aram2)"/>
+          <line id="c3a2" x1="230" y1="44" x2="262" y2="44" stroke="#e85050" stroke-width="2" opacity="0" marker-end="url(#aram2)"/>
+          <!-- lazy fix label -->
+          <rect id="c3lf" x="8" y="90" width="350" height="58" rx="2" fill="#0a0500" stroke="#302000" stroke-width="1" opacity="0"/>
+          <text id="c3lft" x="183" y="108" text-anchor="middle" font-size="6.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">THE "LAZY FIX" IN EVERY TUTORIAL:</text>
+          <text id="c3lf1" x="183" y="124" text-anchor="middle" font-size="6" fill="#aaa" font-family="'Press Start 2P',monospace" opacity="0">volumes:</text>
+          <text id="c3lf2" x="183" y="138" text-anchor="middle" font-size="6" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">- /var/run/docker.sock:/var/run/docker.sock</text>
+        </svg>
+      </div>
+
+      <!-- dind explanation -->
+      <div id="p3c2" class="panel" style="background:#120800;border-left:4px solid #e8a020;border-top:1px solid #2a1500;border-right:1px solid #2a1500;border-bottom:1px solid #2a1500;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">⚠ DinD WITH --privileged IS ALSO BAD</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Docker-in-Docker runs a second dockerd <span style="color:#e8a020">inside</span> the container. Requires <span style="color:#e85050">--privileged</span> flag — which disables ALL seccomp, AppArmor, and capability restrictions. Trades socket exposure for full privilege escalation.</div>
+      </div>
+
+      <!-- bad tutorials note -->
+      <div id="p3c3" class="panel" style="background:#120800;border-left:4px solid #e85050;border-top:1px solid #2a1500;border-right:1px solid #2a1500;border-bottom:1px solid #2a1500;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">SEEN IN THE WILD — REAL CI CONFIGS</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Jenkins "Getting Started" docs, GitLab CI examples, and hundreds of Stack Overflow answers <span style="color:#e85050">recommend mounting the socket</span>. Almost none mention the security implications.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">CI needs docker build — so tutorials say "just mount the socket".</div>
+    <div class="ih am">That's giving your CI pipeline a root key to your entire host.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">dind</div><div class="sl">OTHER BAD<br>PATTERN</div></div>
+    <div class="sc"><div class="sv rd">--priv</div><div class="sl">DinD<br>REQUIRES</div></div>
+    <div class="sc"><div class="sv rd">both</div><div class="sl">BOTH<br>DANGEROUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4 — Safe Alternatives ═══ -->
+<div class="scene" id="s4" style="background:#001008">
+  <div class="hdr" style="background:#001008;border-bottom:1px solid #0d3020">
+    <div class="hdr-title" style="color:#4eff9a">SAFE ALTERNATIVES</div>
+    <div class="hdr-sub">KANIKO · BUILDAH · ROOTLESS DinD</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001008">
+    <span class="slabel" style="color:#4eff9a">SOLUTIONS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#001008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- kaniko card -->
+      <div id="p4c1" class="panel" style="background:#001510;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:7.5px;color:#4eff9a">KANIKO</span>
+          <span style="font-size:6px;color:#4eff9a;border:1px solid #4eff9a;padding:2px 5px;border-radius:2px">GOOGLE / K8S</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-bottom:7px">Builds images from a Dockerfile <span style="color:#4eff9a">entirely in userspace</span>. No docker daemon. No socket. Runs as an unprivileged container. Made for Kubernetes.</div>
+        <div style="background:#020c04;border:1px solid #0d2810;border-radius:2px;padding:7px 10px;font-size:6px;line-height:2.1;color:#888">
+          <div id="k1" class="tline">docker run gcr.io/kaniko-project/executor \</div>
+          <div id="k2" class="tline">  <span style="color:#4ec9e1">--context=dir:///workspace</span> \</div>
+          <div id="k3" class="tline">  <span style="color:#4eff9a">--no-push</span>  <span style="color:#555"># no socket needed</span></div>
+        </div>
+      </div>
+
+      <!-- buildah card -->
+      <div id="p4c2" class="panel" style="background:#001510;border-left:4px solid #4ec9e1;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:7.5px;color:#4ec9e1">BUILDAH</span>
+          <span style="font-size:6px;color:#4ec9e1;border:1px solid #4ec9e1;padding:2px 5px;border-radius:2px">REDHAT / OCI</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-bottom:7px">OCI-native image builder. <span style="color:#4ec9e1">Rootless by default</span>. Uses user namespaces. Pairs with Podman. Understands Dockerfiles natively.</div>
+        <div style="background:#020c06;border:1px solid #0d2810;border-radius:2px;padding:7px 10px;font-size:6px;line-height:2.1;color:#888">
+          <div id="b1" class="tline">buildah bud -t myapp:latest .  <span style="color:#4eff9a"># rootless</span></div>
+          <div id="b2" class="tline">buildah push myapp:latest \</div>
+          <div id="b3" class="tline">  docker://registry.io/myapp:latest</div>
+        </div>
+      </div>
+
+      <!-- rootless dind / sysbox card -->
+      <div id="p4c3" class="panel" style="background:#001510;border-left:4px solid #a080ff;border-top:1px solid #1a1030;border-right:1px solid #1a1030;border-bottom:1px solid #1a1030;padding:10px 12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:7.5px;color:#a080ff">SYSBOX / ROOTLESS DinD</span>
+          <span style="font-size:6px;color:#a080ff;border:1px solid #a080ff;padding:2px 5px;border-radius:2px">NESTABLE</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Sysbox runtime allows nested containers <span style="color:#a080ff">without --privileged</span>. Uses user namespaces. Rootless DinD with <span style="color:#a080ff">docker:dind-rootless</span> image works for simple cases.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Kaniko and Buildah build images with zero daemon contact.</div>
+    <div class="ih">No socket mount. No --privileged. No host exposure.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">Kaniko</div><div class="sl">K8S<br>NATIVE</div></div>
+    <div class="sc"><div class="sv gn">Buildah</div><div class="sl">OCI<br>ROOTLESS</div></div>
+    <div class="sc"><div class="sv pu">Sysbox</div><div class="sl">NESTED<br>SAFE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5 — Before/After + If You Must ═══ -->
+<div class="scene" id="s5" style="background:#001008">
+  <div class="hdr" style="background:#001008;border-bottom:1px solid #0d3020">
+    <div class="hdr-title" style="color:#4eff9a">BEFORE / AFTER</div>
+    <div class="hdr-sub">MIGRATION + IF YOU MUST USE THE SOCKET</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001008">
+    <span class="slabel" style="color:#4eff9a">SUMMARY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SAFE</span>
+  </div>
+  <div class="anim" style="background:#001008">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- comparison grid -->
+      <div id="p5c1" class="panel" style="padding:0;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#120000;border:2px solid #e85050;border-radius:2px;overflow:hidden">
+          <div style="background:#1a0000;padding:6px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">✗ SOCKET MOUNT</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div id="sm1" class="tline">host root access</div>
+            <div id="sm2" class="tline">all containers seen</div>
+            <div id="sm3" class="tline">escape in 3 cmds</div>
+            <div id="sm4" class="tline">no audit trail</div>
+            <div id="sm5" class="tline">fails CIS bench</div>
+          </div>
+        </div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;overflow:hidden">
+          <div style="background:#001a08;padding:6px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">✓ KANIKO/BUILDAH</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#aaa;line-height:2.2">
+            <div id="km1" class="tline">no daemon contact</div>
+            <div id="km2" class="tline">user namespace</div>
+            <div id="km3" class="tline">escape = nobody</div>
+            <div id="km4" class="tline">OCI compliant</div>
+            <div id="km5" class="tline">passes CIS bench</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- if you MUST terminal -->
+      <div id="p5c2" class="panel" style="background:#0a0800;border:2px solid #302000;border-radius:3px;overflow:hidden">
+        <div style="background:#120a00;padding:6px 10px;border-bottom:1px solid #302000;text-align:center">
+          <div style="font-size:7px;color:#e8a020;letter-spacing:1px">IF YOU ABSOLUTELY MUST MOUNT THE SOCKET</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="m1" class="tline" style="color:#888"># <span style="color:#e8a020">1. use a socket proxy — never raw socket</span></div>
+          <div id="m2" class="tline" style="color:#888">  <span style="color:#4ec9e1">tecnativa/docker-socket-proxy</span></div>
+          <div id="m3" class="tline" style="color:#888"># <span style="color:#e8a020">2. allowlist only needed API endpoints</span></div>
+          <div id="m4" class="tline" style="color:#888">  <span style="color:#4ec9e1">ALLOW_START=0  POST=1  BUILD=1</span></div>
+          <div id="m5" class="tline" style="color:#888"># <span style="color:#e8a020">3. read-only mount at minimum</span></div>
+          <div id="m6" class="tline" style="color:#888">  <span style="color:#4ec9e1">- /var/run/docker.sock:/var/run/docker.sock:ro</span></div>
+          <div id="m7" class="tline" style="color:#e8a020">  # still dangerous — prefer Kaniko</div>
+        </div>
+      </div>
+
+      <!-- migration card -->
+      <div id="p5c3" class="panel" style="background:#001510;border-left:4px solid #4ec9e1;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">MIGRATION DECISION TREE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <span style="color:#4eff9a">Kubernetes CI?</span> → Use Kaniko as a job pod<br>
+          <span style="color:#4eff9a">Bare-metal / VM CI?</span> → Install Buildah, rootless<br>
+          <span style="color:#4eff9a">Must use Docker API?</span> → Socket proxy + allowlist<br>
+          <span style="color:#e85050">Raw socket mount?</span> → Treat as critical vuln, fix now
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Kaniko/Buildah: no socket, no daemon, no host exposure.</div>
+    <div class="ih">If you must use the socket — proxy it. Never mount raw.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">0</div><div class="sl">VALID<br>RAW MOUNTS</div></div>
+    <div class="sc"><div class="sv gn">proxy</div><div class="sl">IF NEEDED<br>USE THIS</div></div>
+    <div class="sc"><div class="sv gn">Kaniko</div><div class="sl">BEST<br>PRACTICE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" style="border-color:#e85050;color:#e85050" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('p1c1');hide('p1c2');
+    ['s1host','s1hl','s1dd','s1ddt','s1dds','s1sk','s1skt','s1dsa',
+     's1cli','s1clit','s1ca','s1dc','s1dct','s1dcs','s1dcu','s1sa','s1sat',
+     's1bl','s1bl1','s1bl2'].forEach(svgHide);
+    ['w1','w2','w3','w4','w5','w6','w7'].forEach(hideEl);
+  } else if(n===2){
+    hide('p2c1');hide('p2c2');hide('p2c3');
+    ['e1','e2','e3','e4','e5','e6',
+     'x1','x2','x3','x4','x5','x6','x7','x8'].forEach(hideEl);
+  } else if(n===3){
+    hide('p3c1');hide('p3c2');hide('p3c3');
+    ['c3ci','c3cit','c3ci1','c3ci2','c3nd','c3ndt','c3nd1','c3nd2',
+     'c3da','c3dat','c3da1','c3da2','c3a1','c3a2',
+     'c3lf','c3lft','c3lf1','c3lf2'].forEach(svgHide);
+  } else if(n===4){
+    hide('p4c1');hide('p4c2');hide('p4c3');
+    ['k1','k2','k3','b1','b2','b3'].forEach(hideEl);
+  } else if(n===5){
+    hide('p5c1');hide('p5c2');hide('p5c3');
+    ['sm1','sm2','sm3','sm4','sm5',
+     'km1','km2','km3','km4','km5',
+     'm1','m2','m3','m4','m5','m6','m7'].forEach(hideEl);
+  }
+}
+
+function play(n){
+  clr();
+  if(n===1){
+    show('p1c1',200);
+    svgShow('s1host',350); svgShow('s1hl',400);
+    svgShow('s1dd',600); svgShow('s1ddt',680); svgShow('s1dds',730);
+    svgShow('s1dsa',950);
+    svgShow('s1sk',1100); svgShow('s1skt',1180);
+    svgShow('s1cli',1400); svgShow('s1clit',1480);
+    svgShow('s1ca',1650);
+    svgShow('s1sa',1900); svgShow('s1sat',1960);
+    svgShow('s1dc',2100); svgShow('s1dct',2180); svgShow('s1dcs',2230); svgShow('s1dcu',2280);
+    svgShow('s1bl',2700); svgShow('s1bl1',2800); svgShow('s1bl2',3000);
+    show('p1c2',3400);
+    showEl('w1',3600); showEl('w2',3900); showEl('w3',4200); showEl('w4',4400);
+    showEl('w5',4700); showEl('w6',5000); showEl('w7',5200);
+  } else if(n===2){
+    show('p2c1',200);
+    showEl('e1',400); showEl('e2',600); showEl('e3',800); showEl('e4',1000);
+    showEl('e5',1300); showEl('e6',1600);
+    show('p2c2',2000);
+    showEl('x1',2200); showEl('x2',2500); showEl('x3',2700);
+    showEl('x4',2900); showEl('x5',3200); showEl('x6',3600);
+    showEl('x7',4000); showEl('x8',4400);
+    show('p2c3',4900);
+  } else if(n===3){
+    show('p3c1',200);
+    svgShow('c3ci',400); svgShow('c3cit',480); svgShow('c3ci1',530); svgShow('c3ci2',580);
+    svgShow('c3a1',800);
+    svgShow('c3nd',1000); svgShow('c3ndt',1080); svgShow('c3nd1',1130); svgShow('c3nd2',1180);
+    svgShow('c3a2',1400);
+    svgShow('c3da',1600); svgShow('c3dat',1680); svgShow('c3da1',1730); svgShow('c3da2',1780);
+    svgShow('c3lf',2200); svgShow('c3lft',2300); svgShow('c3lf1',2500); svgShow('c3lf2',2700);
+    show('p3c2',3200);
+    show('p3c3',4000);
+  } else if(n===4){
+    show('p4c1',200);
+    showEl('k1',500); showEl('k2',750); showEl('k3',1000);
+    show('p4c2',1500);
+    showEl('b1',1800); showEl('b2',2050); showEl('b3',2300);
+    show('p4c3',2900);
+  } else if(n===5){
+    show('p5c1',200);
+    showEl('sm1',400); showEl('sm2',600); showEl('sm3',800); showEl('sm4',1000); showEl('sm5',1200);
+    showEl('km1',500); showEl('km2',700); showEl('km3',900); showEl('km4',1100); showEl('km5',1300);
+    show('p5c2',1800);
+    showEl('m1',2000); showEl('m2',2250); showEl('m3',2500); showEl('m4',2750);
+    showEl('m5',3000); showEl('m6',3250); showEl('m7',3500);
+    show('p5c3',4000);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

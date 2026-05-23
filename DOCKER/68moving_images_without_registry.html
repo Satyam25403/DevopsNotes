@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Docker Save Load Export Import</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ══════════════════════════ SCENE 1 — OVERVIEW ══════════════════════ -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2040">
+    <div class="hdr-title" style="color:#4ec9e1">📦 OFFLINE TRANSFER</div>
+    <div class="hdr-sub">SAVE · LOAD · EXPORT · IMPORT</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">OVERVIEW</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">4 COMMANDS</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Two paths diagram -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000f1a;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4ec9e1">TWO PATHS — IMAGE vs CONTAINER</span>
+        </div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gl"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- PATH A: save/load -->
+          <!-- Image box left -->
+          <rect x="10" y="14" width="80" height="36" rx="2" fill="#000810" stroke="#0d2030" stroke-width="1.5"/>
+          <text x="50" y="28" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">IMAGE</text>
+          <text x="50" y="41" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">myapp:v1</text>
+
+          <!-- save arrow -->
+          <line id="s1sa" x1="92" y1="32" x2="148" y2="32" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1sah" points="152,32 144,28 144,36" fill="#4eff9a" opacity="0"/>
+          <text id="s1savt" x="120" y="26" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">save</text>
+
+          <!-- TAR box center top -->
+          <rect id="s1tar1" x="154" y="14" width="58" height="36" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+          <text x="183" y="28" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s1tt1">.tar</text>
+          <text x="183" y="42" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s1tt2">layers+meta</text>
+
+          <!-- load arrow -->
+          <line id="s1la" x1="214" y1="32" x2="268" y2="32" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1lah" points="272,32 264,28 264,36" fill="#4eff9a" opacity="0"/>
+          <text id="s1loadt" x="241" y="26" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">load</text>
+
+          <!-- Image box right -->
+          <rect id="s1ir" x="274" y="14" width="80" height="36" rx="2" fill="#000810" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text x="314" y="28" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s1irt1">IMAGE</text>
+          <text x="314" y="41" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s1irt2">restored ✓</text>
+
+          <!-- divider -->
+          <line x1="10" y1="72" x2="356" y2="72" stroke="#0d2030" stroke-width="1" stroke-dasharray="2,4"/>
+
+          <!-- PATH B: export/import -->
+          <!-- Container box left -->
+          <rect x="10" y="86" width="80" height="36" rx="2" fill="#000810" stroke="#0d2030" stroke-width="1.5"/>
+          <text x="50" y="100" text-anchor="middle" font-size="5" fill="#a080ff" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <text x="50" y="113" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">running/stopped</text>
+
+          <!-- export arrow -->
+          <line id="s1ea" x1="92" y1="104" x2="148" y2="104" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1eah" points="152,104 144,100 144,108" fill="#e8a020" opacity="0"/>
+          <text id="s1expt" x="120" y="98" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">export</text>
+
+          <!-- TAR box center bottom -->
+          <rect id="s1tar2" x="154" y="86" width="58" height="36" rx="2" fill="#1a0d00" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text x="183" y="100" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s1tt3">.tar</text>
+          <text x="183" y="114" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s1tt4">flat fs only</text>
+
+          <!-- import arrow -->
+          <line id="s1ia" x1="214" y1="104" x2="268" y2="104" stroke="#e8a020" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1iah" points="272,104 264,100 264,108" fill="#e8a020" opacity="0"/>
+          <text id="s1impt" x="241" y="98" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">import</text>
+
+          <!-- Flat image box right -->
+          <rect id="s1fr" x="274" y="86" width="80" height="36" rx="2" fill="#0f0800" stroke="#e8a020" stroke-width="1.5" opacity="0"/>
+          <text x="314" y="100" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s1frt1">FLAT IMG</text>
+          <text x="314" y="113" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s1frt2">no history</text>
+
+          <!-- path labels -->
+          <text x="10" y="82" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace">PATH A — FULL FIDELITY</text>
+          <text x="10" y="145" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace">PATH B — FLAT FILESYSTEM</text>
+
+          <!-- packets -->
+          <circle id="s1pk1" cx="92" cy="32" r="4" fill="#4eff9a" opacity="0" filter="url(#gl)"/>
+          <circle id="s1pk2" cx="214" cy="32" r="4" fill="#4eff9a" opacity="0" filter="url(#gl)"/>
+          <circle id="s1pk3" cx="92" cy="104" r="4" fill="#e8a020" opacity="0" filter="url(#gl)"/>
+          <circle id="s1pk4" cx="214" cy="104" r="4" fill="#e8a020" opacity="0" filter="url(#gl)"/>
+        </svg>
+      </div>
+
+      <!-- Quick rule card -->
+      <div id="s1rule" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🧠</span>
+          <span style="font-size:7.5px;color:#4ec9e1">RULE OF THUMB</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div><span style="color:#4eff9a">save/load</span> → move an <span style="color:#4eff9a">IMAGE</span> between hosts</div>
+          <div><span style="color:#e8a020">export/import</span> → snapshot a <span style="color:#e8a020">CONTAINER'S</span> filesystem</div>
+          <div style="margin-top:4px;color:#555">both produce .tar — very different contents</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">No registry? No problem. Docker can move images as plain tar files.</div>
+    <div class="ih">save/load preserves everything. export/import gives a flat snapshot.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">save</div><div class="sl">IMAGE<br>→ TAR</div></div>
+    <div class="sc"><div class="sv gn">load</div><div class="sl">TAR →<br>IMAGE</div></div>
+    <div class="sc"><div class="sv am">exp/imp</div><div class="sl">FS<br>SNAP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SCENE 2 — docker save & load ══════════════════════ -->
+<div class="scene" id="s2" style="background:#001208">
+  <div class="hdr" style="background:#001208;border-bottom:1px solid #003820">
+    <div class="hdr-title" style="color:#4eff9a">💾 SAVE & LOAD</div>
+    <div class="hdr-sub">FULL IMAGE WITH LAYERS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001208">
+    <span class="slabel" style="color:#4eff9a">SAVE / LOAD</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FULL FIDELITY</span>
+  </div>
+
+  <div class="anim" style="background:#001208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Layer anatomy diagram -->
+      <div style="background:#000d06;border:2px solid #1a4030;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4eff9a">WHAT'S INSIDE THE .tar</span>
+        </div>
+        <svg width="100%" height="128" viewBox="0 0 366 128" xmlns="http://www.w3.org/2000/svg">
+          <!-- TAR file outline -->
+          <rect x="10" y="10" width="162" height="108" rx="3" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="91" y="24" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">myapp.tar</text>
+
+          <!-- layers inside -->
+          <rect id="s2l4" x="20" y="32" width="142" height="16" rx="2" fill="#003018" stroke="#1a4030" stroke-width="1" opacity="0"/>
+          <text x="91" y="43" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s2l4t">APP LAYER  sha256:a1b2…</text>
+          <rect id="s2l3" x="20" y="52" width="142" height="16" rx="2" fill="#002814" stroke="#1a4030" stroke-width="1" opacity="0"/>
+          <text x="91" y="63" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s2l3t">DEPS LAYER  sha256:c3d4…</text>
+          <rect id="s2l2" x="20" y="72" width="142" height="16" rx="2" fill="#001e0c" stroke="#1a4030" stroke-width="1" opacity="0"/>
+          <text x="91" y="83" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s2l2t">BASE LAYER  sha256:e5f6…</text>
+          <rect id="s2l1" x="20" y="92" width="142" height="16" rx="2" fill="#001508" stroke="#1a4030" stroke-width="1" opacity="0"/>
+          <text x="91" y="103" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s2l1t">manifest.json  config.json</text>
+
+          <!-- arrow -->
+          <line id="s2arr" x1="174" y1="64" x2="210" y2="64" stroke="#4eff9a" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s2arh" points="214,64 206,60 206,68" fill="#4eff9a" opacity="0"/>
+          <text id="s2arrt" x="192" y="58" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">load</text>
+
+          <!-- Restored image right -->
+          <rect id="s2ri" x="216" y="10" width="140" height="108" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="2" opacity="0"/>
+          <text x="286" y="24" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s2rit">IMAGE RESTORED</text>
+          <text x="286" y="42" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s2ri1">✓ all layers</text>
+          <text x="286" y="58" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s2ri2">✓ history</text>
+          <text x="286" y="74" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s2ri3">✓ tags</text>
+          <text x="286" y="90" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s2ri4">✓ metadata</text>
+        </svg>
+      </div>
+
+      <!-- CLI commands -->
+      <div id="s2cli" class="panel" style="background:#000d06;border:2px solid #1a4030;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">save &amp; load commands</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555"># save single image</div>
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker save</span> myapp:v1 \</div>
+          <div style="color:#4eff9a;padding-left:12px">-o myapp.tar</div>
+          <div style="color:#555;margin-top:4px"># save multiple images into one tar</div>
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker save</span> myapp:v1 myapp:v2 \</div>
+          <div style="color:#4eff9a;padding-left:12px">-o myapp-both.tar</div>
+          <div style="color:#555;margin-top:4px"># load on destination host</div>
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker load</span> -i myapp.tar</div>
+          <div id="s2lo1" class="tline" style="color:#4eff9a">Loaded image: myapp:v1</div>
+        </div>
+      </div>
+
+      <!-- Transfer tip -->
+      <div id="s2tip" class="panel" style="background:#000d06;border-left:4px solid #4eff9a;border-top:1px solid #1a3020;border-right:1px solid #1a3020;border-bottom:1px solid #1a3020;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">📡</span>
+          <span style="font-size:7.5px;color:#4eff9a">PIPE TO SSH — NO DISK NEEDED</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="color:#888">$ docker save myapp:v1 | \</div>
+          <div style="color:#4eff9a;padding-left:8px">ssh user@host "docker load"</div>
+          <div style="margin-top:4px;color:#555">streams tar over SSH directly — zero temp file</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">docker save preserves every layer, tag, history entry and config blob.</div>
+    <div class="ih">docker load restores a pixel-perfect copy — identical image ID on the other side.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">ALL</div><div class="sl">LAYERS<br>KEPT</div></div>
+    <div class="sc"><div class="sv gn">✓</div><div class="sl">HISTORY<br>INTACT</div></div>
+    <div class="sc"><div class="sv gn">multi</div><div class="sl">MULTI-IMG<br>ONE TAR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SCENE 3 — docker export & import ══════════════════════ -->
+<div class="scene" id="s3" style="background:#0f0800">
+  <div class="hdr" style="background:#0f0800;border-bottom:1px solid #2a1800">
+    <div class="hdr-title" style="color:#e8a020">📤 EXPORT & IMPORT</div>
+    <div class="hdr-sub">FLAT FILESYSTEM SNAPSHOT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0800">
+    <span class="slabel" style="color:#e8a020">EXPORT / IMPORT</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">LOSES METADATA</span>
+  </div>
+
+  <div class="anim" style="background:#0f0800">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- What export does diagram -->
+      <div style="background:#0a0400;border:2px solid #3a1800;border-radius:3px;overflow:hidden">
+        <div style="background:#150800;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#e8a020">EXPORT MERGES ALL LAYERS → ONE FLAT FS</span>
+        </div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gl2"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- stacked layers left (container) -->
+          <rect x="10" y="14" width="112" height="100" rx="2" fill="#0a0400" stroke="#3a1800" stroke-width="1.5"/>
+          <text x="66" y="27" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace">CONTAINER</text>
+          <rect id="s3la" x="18" y="32" width="96" height="16" rx="2" fill="#2a1000" stroke="#3a1800" stroke-width="1" opacity="0"/>
+          <text x="66" y="43" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s3lat">layer 3</text>
+          <rect id="s3lb" x="18" y="52" width="96" height="16" rx="2" fill="#200c00" stroke="#3a1800" stroke-width="1" opacity="0"/>
+          <text x="66" y="63" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s3lbt">layer 2</text>
+          <rect id="s3lc" x="18" y="72" width="96" height="16" rx="2" fill="#180900" stroke="#3a1800" stroke-width="1" opacity="0"/>
+          <text x="66" y="83" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s3lct">layer 1</text>
+          <rect id="s3ld" x="18" y="92" width="96" height="16" rx="2" fill="#100600" stroke="#3a1800" stroke-width="1" opacity="0"/>
+          <text x="66" y="103" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0" id="s3ldt">base</text>
+
+          <!-- merge arrow -->
+          <text id="s3merge" x="148" y="58" text-anchor="middle" font-size="8" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">▶</text>
+          <text id="s3merget" x="148" y="72" text-anchor="middle" font-size="4.5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0">merge</text>
+
+          <!-- flat output right -->
+          <rect id="s3flat" x="166" y="22" width="88" height="86" rx="2" fill="#1a0900" stroke="#e8a020" stroke-width="2" opacity="0"/>
+          <text x="210" y="38" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s3ft1">container</text>
+          <text x="210" y="52" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s3ft2">.tar</text>
+          <text x="210" y="68" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s3ft3">FLAT FS</text>
+          <text x="210" y="82" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0" id="s3ft4">no layers</text>
+          <text x="210" y="96" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace" opacity="0" id="s3ft5">no history</text>
+
+          <!-- what's lost -->
+          <text id="s3lost" x="278" y="42" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">LOST:</text>
+          <text id="s3losta" x="278" y="58" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">✗ layer cache</text>
+          <text id="s3lostb" x="278" y="72" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">✗ image history</text>
+          <text id="s3lostc" x="278" y="86" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">✗ CMD/ENV</text>
+          <text id="s3lostd" x="278" y="100" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">✗ tags</text>
+        </svg>
+      </div>
+
+      <!-- CLI for export/import -->
+      <div id="s3cli" class="panel" style="background:#0a0400;border:2px solid #3a1800;border-radius:3px;overflow:hidden">
+        <div style="background:#150800;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">export &amp; import commands</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555"># export a container's filesystem</div>
+          <div style="color:#888">$ <span style="color:#e8a020">docker export</span> my_container \</div>
+          <div style="color:#e8a020;padding-left:12px">> container.tar</div>
+          <div style="color:#555;margin-top:4px"># import as a brand new flat image</div>
+          <div style="color:#888">$ <span style="color:#e8a020">docker import</span> container.tar \</div>
+          <div style="color:#e8a020;padding-left:12px">myapp:flat</div>
+          <div style="color:#555;margin-top:4px"># add a CMD back (lost on export)</div>
+          <div style="color:#888">$ docker import container.tar \</div>
+          <div style="color:#e8a020;padding-left:12px">myapp:flat -- /bin/sh</div>
+        </div>
+      </div>
+
+      <!-- when to use -->
+      <div id="s3when" class="panel" style="background:#0a0400;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🔎</span>
+          <span style="font-size:7.5px;color:#e8a020">WHEN IS export USEFUL?</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>▸ forensic snapshot of a running container</div>
+          <div>▸ extract files: <span style="color:#e8a020">tar -xf container.tar etc/</span></div>
+          <div>▸ minimise image size (no layer overhead)</div>
+          <div>▸ <span style="color:#e85050">not</span> a replacement for docker save in CI/CD</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">docker export flattens all layers into one — like a snapshot of the live filesystem.</div>
+    <div class="ih am">CMD, ENV, ENTRYPOINT are lost. You must add them back on docker import.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">flat</div><div class="sl">SINGLE<br>LAYER</div></div>
+    <div class="sc"><div class="sv rd">✗</div><div class="sl">HISTORY<br>LOST</div></div>
+    <div class="sc"><div class="sv rd">✗</div><div class="sl">CMD/ENV<br>LOST</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SCENE 4 — SAVE vs EXPORT COMPARISON ══════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #2a1060">
+    <div class="hdr-title" style="color:#a080ff">⚖️ SAVE vs EXPORT</div>
+    <div class="hdr-sub">SIDE-BY-SIDE COMPARISON</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">COMPARISON</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">KNOW THE DIFF</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Comparison grid header -->
+      <div id="s4hdr" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px">
+        <div></div>
+        <div style="background:#001508;border:2px solid #4eff9a;border-radius:2px;padding:6px;text-align:center">
+          <div style="font-size:6.5px;color:#4eff9a">💾 SAVE</div>
+        </div>
+        <div style="background:#1a0900;border:2px solid #e8a020;border-radius:2px;padding:6px;text-align:center">
+          <div style="font-size:6.5px;color:#e8a020">📤 EXPORT</div>
+        </div>
+      </div>
+
+      <div id="s4r1" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">Source</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#4eff9a;text-align:center">IMAGE</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#e8a020;text-align:center">CONTAINER</div>
+      </div>
+
+      <div id="s4r2" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">Layers</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#4eff9a;text-align:center">ALL KEPT</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#e85050;text-align:center">MERGED→1</div>
+      </div>
+
+      <div id="s4r3" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">History</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#4eff9a;text-align:center">✓ INTACT</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#e85050;text-align:center">✗ LOST</div>
+      </div>
+
+      <div id="s4r4" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">CMD/ENV</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#4eff9a;text-align:center">✓ INTACT</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#e85050;text-align:center">✗ LOST</div>
+      </div>
+
+      <div id="s4r5" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">Restore</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#4eff9a;text-align:center">docker load</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#e8a020;text-align:center">docker import</div>
+      </div>
+
+      <div id="s4r6" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">Size</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:6px;color:#888;text-align:center">larger</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:6px;color:#4eff9a;text-align:center">smaller</div>
+      </div>
+
+      <div id="s4r7" class="panel" style="display:grid;grid-template-columns:90px 1fr 1fr;gap:6px;align-items:stretch">
+        <div style="font-size:6px;color:#555;display:flex;align-items:center;padding:0 4px">Use for</div>
+        <div style="background:#001508;border:1px solid #1a4030;padding:6px;font-size:5.5px;color:#4eff9a;text-align:center;line-height:1.8">air-gap<br>CI/CD</div>
+        <div style="background:#1a0900;border:1px solid #3a1800;padding:6px;font-size:5.5px;color:#e8a020;text-align:center;line-height:1.8">forensics<br>file extract</div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">The tarballs look similar but carry completely different data inside.</div>
+    <div class="ih pu">Wrong choice = broken deploy. Use save/load for 99% of real workflows.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">save</div><div class="sl">PROD<br>WORKFLOW</div></div>
+    <div class="sc"><div class="sv am">export</div><div class="sl">FORENSIC<br>ONLY</div></div>
+    <div class="sc"><div class="sv pu">.tar</div><div class="sl">SAME EXT<br>≠ CONTENT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════ SCENE 5 — AIR-GAPPED WORKFLOW ══════════════════════ -->
+<div class="scene" id="s5" style="background:#00100a">
+  <div class="hdr" style="background:#00100a;border-bottom:1px solid #003820">
+    <div class="hdr-title" style="color:#4eff9a">🏭 AIR-GAP DEPLOY</div>
+    <div class="hdr-sub">OFFLINE ENVIRONMENT WORKFLOW</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00100a">
+    <span class="slabel" style="color:#4eff9a">AIR-GAPPED OPS</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REAL WORLD</span>
+  </div>
+
+  <div class="anim" style="background:#00100a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Air-gap workflow diagram -->
+      <div style="background:#000d06;border:2px solid #1a4030;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4eff9a">BANK / DEFENCE / MANUFACTURING DEPLOY</span>
+        </div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="gl3"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+
+          <!-- INTERNET ZONE left -->
+          <rect x="6" y="10" width="110" height="128" rx="3" fill="#001508" stroke="#1a4030" stroke-width="1"/>
+          <text x="61" y="24" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">INTERNET</text>
+          <rect x="14" y="30" width="94" height="24" rx="2" fill="#002010" stroke="#1a4030" stroke-width="1"/>
+          <text x="61" y="41" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">CI BUILD</text>
+          <text x="61" y="52" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace">docker build</text>
+          <text id="s5step1" x="61" y="76" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">① docker save</text>
+          <text id="s5step2" x="61" y="90" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">-o myapp.tar</text>
+          <text id="s5usb" x="61" y="112" text-anchor="middle" font-size="14" font-family="'Press Start 2P',monospace" opacity="0" id="s5usbico">💾</text>
+          <text id="s5usbla" x="61" y="128" text-anchor="middle" font-size="4.5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">USB / SCP</text>
+
+          <!-- air gap barrier -->
+          <rect id="s5wall" x="122" y="10" width="14" height="128" rx="0" fill="#0a0a0f" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+          <text id="s5wallt" x="129" y="60" text-anchor="middle" font-size="4.5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0" transform="rotate(-90,129,74)">AIR GAP ✗ NET</text>
+
+          <!-- packet crossing gap -->
+          <circle id="s5pkt" cx="116" cy="74" r="5" fill="#e8a020" opacity="0" filter="url(#gl3)"/>
+
+          <!-- SECURE ZONE right -->
+          <rect id="s5zone" x="142" y="10" width="218" height="128" rx="3" fill="#001508" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+          <text id="s5zonet" x="251" y="24" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">SECURE / OFFLINE ZONE</text>
+          <text id="s5step3" x="251" y="48" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">② docker load -i myapp.tar</text>
+          <text id="s5step3b" x="251" y="62" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">Loaded image: myapp:v1</text>
+          <rect id="s5run" x="152" y="76" width="198" height="52" rx="2" fill="#002010" stroke="#1a4030" stroke-width="1" opacity="0"/>
+          <text id="s5runt" x="251" y="92" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">③ docker run myapp:v1</text>
+          <text id="s5runb" x="251" y="106" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0">fully offline ✓ no internet</text>
+          <text id="s5runc" x="251" y="120" text-anchor="middle" font-size="4.5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0">needed at runtime</text>
+        </svg>
+      </div>
+
+      <!-- Script tip -->
+      <div id="s5script" class="panel" style="background:#000d06;border:2px solid #1a4030;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">bundle multiple images</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#555"># pack an entire stack into one tar</div>
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker save</span> \</div>
+          <div style="color:#4eff9a;padding-left:12px">myapp:v1 postgres:15 redis:7 \</div>
+          <div style="color:#4eff9a;padding-left:12px">nginx:alpine \</div>
+          <div style="color:#aaa;padding-left:12px">-o stack-bundle.tar</div>
+          <div style="color:#555;margin-top:4px"># load all at once on target</div>
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker load</span> -i stack-bundle.tar</div>
+          <div id="s5lo" class="tline" style="color:#4eff9a">Loaded 4 images ✓</div>
+        </div>
+      </div>
+
+      <!-- gzip tip -->
+      <div id="s5gzip" class="panel" style="background:#000d06;border-left:4px solid #e8a020;border-top:1px solid #1a3020;border-right:1px solid #1a3020;border-bottom:1px solid #1a3020;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🗜️</span>
+          <span style="font-size:7.5px;color:#e8a020">COMPRESS BEFORE TRANSFER</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="color:#888">$ docker save myapp:v1 | <span style="color:#e8a020">gzip</span> > myapp.tar.gz</div>
+          <div style="color:#888">$ <span style="color:#e8a020">gunzip</span> -c myapp.tar.gz | docker load</div>
+          <div style="margin-top:4px;color:#555">typically 40–60% smaller for USB transfer</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Banks, defence, and manufacturing can't reach Docker Hub. save/load is the answer.</div>
+    <div class="ih">Bundle every image you need into one tar. Carry it in. docker load. Done.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">🏭</div><div class="sl">AIR-GAP<br>READY</div></div>
+    <div class="sc"><div class="sv gn">multi</div><div class="sl">BUNDLE<br>STACK</div></div>
+    <div class="sc"><div class="sv am">gzip</div><div class="sl">60%<br>SMALLER</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity', '1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity', '0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1sa','s1sah','s1savt','s1tar1','s1tt1','s1tt2',
+     's1la','s1lah','s1loadt','s1ir','s1irt1','s1irt2',
+     's1ea','s1eah','s1expt','s1tar2','s1tt3','s1tt4',
+     's1ia','s1iah','s1impt','s1fr','s1frt1','s1frt2',
+     's1pk1','s1pk2','s1pk3','s1pk4'].forEach(svgHide);
+    hide('s1rule');
+  }
+  if (n === 2) {
+    ['s2l4','s2l4t','s2l3','s2l3t','s2l2','s2l2t','s2l1','s2l1t',
+     's2arr','s2arh','s2arrt','s2ri','s2rit','s2ri1','s2ri2','s2ri3','s2ri4'].forEach(svgHide);
+    hide('s2cli'); hideEl('s2lo1'); hide('s2tip');
+  }
+  if (n === 3) {
+    ['s3la','s3lat','s3lb','s3lbt','s3lc','s3lct','s3ld','s3ldt',
+     's3merge','s3merget','s3flat','s3ft1','s3ft2','s3ft3','s3ft4','s3ft5',
+     's3lost','s3losta','s3lostb','s3lostc','s3lostd'].forEach(svgHide);
+    hide('s3cli'); hide('s3when');
+  }
+  if (n === 4) {
+    ['s4hdr','s4r1','s4r2','s4r3','s4r4','s4r5','s4r6','s4r7'].forEach(hide);
+  }
+  if (n === 5) {
+    ['s5step1','s5step2','s5usb','s5usbla','s5wall','s5wallt','s5pkt',
+     's5zone','s5zonet','s5step3','s5step3b','s5run','s5runt','s5runb','s5runc'].forEach(svgHide);
+    hide('s5script'); hideEl('s5lo'); hide('s5gzip');
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // PATH A: save side
+    svgShow('s1sa', 200); svgShow('s1sah', 200); svgShow('s1savt', 200);
+    movePkt('s1pk1', 92, 32, 154, 32, 300, 400);
+    svgShow('s1tar1', 700); svgShow('s1tt1', 800); svgShow('s1tt2', 900);
+    svgShow('s1la', 1100); svgShow('s1lah', 1100); svgShow('s1loadt', 1100);
+    movePkt('s1pk2', 214, 32, 272, 32, 1200, 400);
+    svgShow('s1ir', 1650); svgShow('s1irt1', 1750); svgShow('s1irt2', 1850);
+    // PATH B: export side
+    svgShow('s1ea', 2200); svgShow('s1eah', 2200); svgShow('s1expt', 2200);
+    movePkt('s1pk3', 92, 104, 154, 104, 2300, 400);
+    svgShow('s1tar2', 2750); svgShow('s1tt3', 2850); svgShow('s1tt4', 2950);
+    svgShow('s1ia', 3150); svgShow('s1iah', 3150); svgShow('s1impt', 3150);
+    movePkt('s1pk4', 214, 104, 272, 104, 3250, 400);
+    svgShow('s1fr', 3700); svgShow('s1frt1', 3800); svgShow('s1frt2', 3900);
+    show('s1rule', 4400);
+  }
+  if (n === 2) {
+    svgShow('s2l4', 250); svgShow('s2l4t', 350);
+    svgShow('s2l3', 600); svgShow('s2l3t', 700);
+    svgShow('s2l2', 950); svgShow('s2l2t', 1050);
+    svgShow('s2l1', 1300); svgShow('s2l1t', 1400);
+    svgShow('s2arr', 1700); svgShow('s2arh', 1700); svgShow('s2arrt', 1700);
+    svgShow('s2ri', 2000); svgShow('s2rit', 2100);
+    svgShow('s2ri1', 2250); svgShow('s2ri2', 2450);
+    svgShow('s2ri3', 2650); svgShow('s2ri4', 2850);
+    show('s2cli', 3200);
+    showEl('s2lo1', 3800);
+    show('s2tip', 4200);
+  }
+  if (n === 3) {
+    svgShow('s3la', 200); svgShow('s3lat', 300);
+    svgShow('s3lb', 500); svgShow('s3lbt', 600);
+    svgShow('s3lc', 800); svgShow('s3lct', 900);
+    svgShow('s3ld', 1100); svgShow('s3ldt', 1200);
+    svgShow('s3merge', 1500); svgShow('s3merget', 1600);
+    svgShow('s3flat', 1800); svgShow('s3ft1', 1900); svgShow('s3ft2', 1950);
+    svgShow('s3ft3', 2050); svgShow('s3ft4', 2150); svgShow('s3ft5', 2250);
+    svgShow('s3lost', 2600); svgShow('s3losta', 2800);
+    svgShow('s3lostb', 3000); svgShow('s3lostc', 3200); svgShow('s3lostd', 3400);
+    show('s3cli', 3700);
+    show('s3when', 4400);
+  }
+  if (n === 4) {
+    show('s4hdr', 200);
+    show('s4r1', 500);
+    show('s4r2', 800);
+    show('s4r3', 1100);
+    show('s4r4', 1400);
+    show('s4r5', 1700);
+    show('s4r6', 2000);
+    show('s4r7', 2300);
+  }
+  if (n === 5) {
+    svgShow('s5step1', 300); svgShow('s5step2', 500);
+    svgShow('s5usb', 800); svgShow('s5usbla', 900);
+    svgShow('s5wall', 1100); svgShow('s5wallt', 1200);
+    movePkt('s5pkt', 116, 74, 142, 74, 1400, 600);
+    svgShow('s5zone', 2000); svgShow('s5zonet', 2100);
+    svgShow('s5step3', 2300); svgShow('s5step3b', 2500);
+    svgShow('s5run', 2800); svgShow('s5runt', 2900);
+    svgShow('s5runb', 3100); svgShow('s5runc', 3300);
+    show('s5script', 3700);
+    showEl('s5lo', 4200);
+    show('s5gzip', 4600);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

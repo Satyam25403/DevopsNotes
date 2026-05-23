@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker Swarm — Native Orchestration</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.restart{border-color:#e85050;color:#e85050}.btn.restart:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 1: swarm init — cluster bootstrap -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene active" id="s1" style="background:#000d18">
+
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">DOCKER SWARM</div>
+    <div class="hdr-sub">NATIVE CLUSTERING & ORCHESTRATION</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">STEP 1 — SWARM INIT</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">BOOTSTRAP</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s1-intro" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">ONE COMMAND TO RULE THEM ALL</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Swarm turns a Docker host into a <span style="color:#4ec9e1">manager node</span>. Other machines join as <span style="color:#4eff9a">workers</span>. The manager schedules containers across the cluster. No external orchestrator needed.</div>
+      </div>
+
+      <!-- swarm init terminal -->
+      <div id="s1-term" class="panel" style="background:#00060f;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">manager node</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker swarm init</span> --advertise-addr 10.0.0.1</div>
+          <div id="s1-l1" class="tline" style="color:#4eff9a">Swarm initialized: current node is now a manager.</div>
+          <div id="s1-l2" class="tline" style="color:#aaa">To add a worker to this swarm, run:</div>
+          <div id="s1-l3" class="tline" style="color:#e8a020">  docker swarm join --token SWMTKN-1-...</div>
+          <div id="s1-l4" class="tline" style="color:#e8a020">      10.0.0.1:2377</div>
+        </div>
+      </div>
+
+      <!-- Cluster topology diagram -->
+      <div id="s1-diag" class="panel" style="background:#00060f;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6px;color:#4ec9e1">CLUSTER TOPOLOGY</div>
+        <svg width="100%" height="148" viewBox="0 0 366 148" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrCy1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#4ec9e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Manager node -->
+          <g id="s1-mgr" opacity="0" style="transition:opacity 0.4s">
+            <rect x="118" y="10" width="130" height="44" rx="4" fill="#000d18" stroke="#4ec9e1" stroke-width="2"/>
+            <text x="183" y="27" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="6" fill="#4ec9e1">MANAGER NODE</text>
+            <text x="183" y="41" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">10.0.0.1 — schedules tasks</text>
+          </g>
+
+          <!-- Join arrows -->
+          <g id="s1-arrows" opacity="0" style="transition:opacity 0.4s">
+            <line x1="118" y1="48" x2="74" y2="84" stroke="#4ec9e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+            <line x1="183" y1="54" x2="183" y2="84" stroke="#4ec9e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+            <line x1="248" y1="48" x2="292" y2="84" stroke="#4ec9e1" stroke-width="1.2" stroke-dasharray="4,3"/>
+          </g>
+
+          <!-- Worker nodes -->
+          <g id="s1-w1" opacity="0" style="transition:opacity 0.4s">
+            <rect x="14" y="86" width="110" height="44" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="69" y="103" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">WORKER 1</text>
+            <text x="69" y="117" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">10.0.0.2</text>
+          </g>
+          <g id="s1-w2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="128" y="86" width="110" height="44" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="183" y="103" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">WORKER 2</text>
+            <text x="183" y="117" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">10.0.0.3</text>
+          </g>
+          <g id="s1-w3" opacity="0" style="transition:opacity 0.4s">
+            <rect x="242" y="86" width="110" height="44" rx="4" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="297" y="103" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#4eff9a">WORKER 3</text>
+            <text x="297" y="117" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">10.0.0.4</text>
+          </g>
+
+          <text id="s1-cap" x="183" y="142" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#555" opacity="0">join with: docker swarm join --token SWMTKN-1-...</text>
+        </svg>
+      </div>
+
+      <!-- node ls terminal -->
+      <div id="s1-nls" class="panel" style="background:#00060f;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">cluster status</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker node ls</span></div>
+          <div id="s1-n1" class="tline" style="color:#555">ID          HOSTNAME   STATUS  AVAILABILITY  ROLE</div>
+          <div id="s1-n2" class="tline" style="color:#4ec9e1">xq1i *      node-1     Ready   Active        <span style="color:#e8a020">Leader</span></div>
+          <div id="s1-n3" class="tline" style="color:#4eff9a">ab2k        node-2     Ready   Active        Worker</div>
+          <div id="s1-n4" class="tline" style="color:#4eff9a">cd3m        node-3     Ready   Active        Worker</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="il">Manager holds cluster state via Raft consensus. Workers run tasks.</div>
+    <div class="ih">One command bootstraps the cluster — no external etcd or consul needed.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sv" style="display:none"></div>
+    <div class="sc"><div class="sv">1</div><div class="sl">MANAGER</div></div>
+    <div class="sc"><div class="sv gn">N</div><div class="sl">WORKERS</div></div>
+    <div class="sc"><div class="sv">2377</div><div class="sl">SWARM PORT</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 2: docker service create + replicas -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s2" style="background:#000810">
+
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#a080ff">SERVICES & REPLICAS</div>
+    <div class="hdr-sub">THE UNIT OF WORK IN SWARM</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#a080ff">STEP 2 — DOCKER SERVICE</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">REPLICAS</span>
+  </div>
+
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s2-intro" class="panel" style="background:#07000f;border-left:4px solid #a080ff;border-top:1px solid #1a0d30;border-right:1px solid #1a0d30;border-bottom:1px solid #1a0d30;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">SERVICE = DESIRED STATE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">You declare: <span style="color:#a080ff">run 5 replicas of nginx</span>. Swarm makes it happen — scheduling tasks across workers, restarting failures, maintaining desired count.</div>
+      </div>
+
+      <!-- service create terminal -->
+      <div id="s2-term" class="panel" style="background:#05000e;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">manager</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker service create</span> \</div>
+          <div id="s2-l1" class="tline" style="color:#aaa;padding-left:16px">--name web \</div>
+          <div id="s2-l2" class="tline" style="color:#a080ff;padding-left:16px">--replicas 5 \</div>
+          <div id="s2-l3" class="tline" style="color:#aaa;padding-left:16px">--publish published=80,target=80 \</div>
+          <div id="s2-l4" class="tline" style="color:#aaa;padding-left:16px">nginx:alpine</div>
+          <div id="s2-l5" class="tline" style="color:#4eff9a">web  ← service ID created</div>
+        </div>
+      </div>
+
+      <!-- Replica distribution diagram -->
+      <div id="s2-diag" class="panel" style="background:#05000e;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;text-align:center;font-size:6px;color:#a080ff">TASK DISTRIBUTION ACROSS NODES</div>
+        <svg width="100%" height="130" viewBox="0 0 366 130" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrPu2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Scheduler -->
+          <g id="s2-sched" opacity="0" style="transition:opacity 0.4s">
+            <rect x="118" y="8" width="130" height="32" rx="4" fill="#0a0018" stroke="#a080ff" stroke-width="1.5"/>
+            <text x="183" y="22" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#a080ff">SWARM SCHEDULER</text>
+            <text x="183" y="34" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">spreads tasks automatically</text>
+          </g>
+
+          <!-- Distribution arrows -->
+          <g id="s2-arr" opacity="0" style="transition:opacity 0.4s">
+            <line x1="138" y1="40" x2="60" y2="62" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrPu2)"/>
+            <line x1="165" y1="40" x2="145" y2="62" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrPu2)"/>
+            <line x1="183" y1="40" x2="230" y2="62" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrPu2)"/>
+            <line x1="210" y1="40" x2="310" y2="62" stroke="#a080ff" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrPu2)"/>
+          </g>
+
+          <!-- Task boxes -->
+          <g id="s2-t1" opacity="0" style="transition:opacity 0.4s">
+            <rect x="14" y="64" width="78" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="53" y="74" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.1</text>
+            <text x="53" y="86" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">node-1</text>
+          </g>
+          <g id="s2-t2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="100" y="64" width="78" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="139" y="74" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.2</text>
+            <text x="139" y="86" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">node-2</text>
+          </g>
+          <g id="s2-t3" opacity="0" style="transition:opacity 0.4s">
+            <rect x="186" y="64" width="78" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="225" y="74" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.3</text>
+            <text x="225" y="86" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">node-2</text>
+          </g>
+          <g id="s2-t4" opacity="0" style="transition:opacity 0.4s">
+            <rect x="272" y="64" width="78" height="28" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1.5"/>
+            <text x="311" y="74" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.4</text>
+            <text x="311" y="86" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#555">node-3</text>
+          </g>
+
+          <!-- 5th replica + self heal note -->
+          <g id="s2-t5" opacity="0" style="transition:opacity 0.4s">
+            <rect x="100" y="100" width="166" height="24" rx="3" fill="#0a0018" stroke="#a080ff" stroke-width="1.5"/>
+            <text x="183" y="116" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#a080ff">web.5 + self-healing: auto-reschedule on failure</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- service ls / ps -->
+      <div id="s2-ls" class="panel" style="background:#05000e;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0a0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">service status</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker service ls</span></div>
+          <div id="s2-ls1" class="tline" style="color:#555">ID      NAME  MODE        REPLICAS  IMAGE</div>
+          <div id="s2-ls2" class="tline" style="color:#4eff9a">abc123  web   replicated  <span style="color:#a080ff">5/5</span>       nginx:alpine</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">A service is a desired-state declaration: image, replicas, ports.</div>
+    <div class="ih pu">Swarm schedules tasks across nodes and self-heals failed containers.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">5</div><div class="sl">REPLICAS</div></div>
+    <div class="sc"><div class="sv gn">5/5</div><div class="sl">RUNNING</div></div>
+    <div class="sc"><div class="sv">AUTO</div><div class="sl">SELF-HEAL</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 3: Rolling updates + docker stack deploy -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s3" style="background:#001a08">
+
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">ROLLING UPDATES</div>
+    <div class="hdr-sub">ZERO-DOWNTIME DEPLOYS + STACK DEPLOY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">STEP 3 — ROLLING UPDATES</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">ZERO DOWNTIME</span>
+  </div>
+
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- service update terminal -->
+      <div id="s3-upd" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">rolling update</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker service update</span> \</div>
+          <div id="s3-u1" class="tline" style="color:#4eff9a;padding-left:16px">--image nginx:<span style="color:#e8a020">1.25</span> \</div>
+          <div id="s3-u2" class="tline" style="color:#aaa;padding-left:16px">--update-parallelism 2 \</div>
+          <div id="s3-u3" class="tline" style="color:#aaa;padding-left:16px">--update-delay 10s \</div>
+          <div id="s3-u4" class="tline" style="color:#aaa;padding-left:16px">web</div>
+          <div id="s3-u5" class="tline" style="color:#4eff9a">web — updating 2 tasks at a time...</div>
+        </div>
+      </div>
+
+      <!-- Rolling update progress visual -->
+      <div id="s3-prog" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;text-align:center;font-size:6px;color:#4eff9a">UPDATE WAVE — 2 AT A TIME</div>
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <!-- Task rows: old → updating → new -->
+          <!-- Row labels -->
+          <text x="8" y="30" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">WAVE 1</text>
+          <text x="8" y="60" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">WAVE 2</text>
+          <text x="8" y="90" font-family="'Press Start 2P',monospace" font-size="5" fill="#555">STABLE</text>
+
+          <!-- Wave 1: tasks 1+2 updating -->
+          <g id="s3-w1a" opacity="0" style="transition:opacity 0.4s">
+            <rect x="60" y="18" width="56" height="22" rx="3" fill="#0a1800" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="88" y="33" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">web.1 ↻</text>
+          </g>
+          <g id="s3-w1b" opacity="0" style="transition:opacity 0.4s">
+            <rect x="122" y="18" width="56" height="22" rx="3" fill="#0a1800" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="150" y="33" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">web.2 ↻</text>
+          </g>
+          <!-- tasks 3-5 still old -->
+          <g id="s3-old" opacity="0" style="transition:opacity 0.4s">
+            <rect x="184" y="18" width="56" height="22" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="212" y="33" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.3</text>
+            <rect x="246" y="18" width="56" height="22" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="274" y="33" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.4</text>
+            <rect x="308" y="18" width="50" height="22" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="333" y="33" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.5</text>
+          </g>
+
+          <!-- Wave 2: tasks 1+2 done, 3+4 updating -->
+          <g id="s3-w2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="60" y="48" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="88" y="63" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.1 ✓</text>
+            <rect x="122" y="48" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="150" y="63" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.2 ✓</text>
+            <rect x="184" y="48" width="56" height="22" rx="3" fill="#0a1800" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="212" y="63" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">web.3 ↻</text>
+            <rect x="246" y="48" width="56" height="22" rx="3" fill="#0a1800" stroke="#e8a020" stroke-width="1.5"/>
+            <text x="274" y="63" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#e8a020">web.4 ↻</text>
+            <rect x="308" y="48" width="50" height="22" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="333" y="63" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4eff9a">web.5</text>
+          </g>
+
+          <!-- All done -->
+          <g id="s3-done" opacity="0" style="transition:opacity 0.4s">
+            <rect x="60" y="78" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="88" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.1</text>
+            <rect x="122" y="78" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="150" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.2</text>
+            <rect x="184" y="78" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="212" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.3</text>
+            <rect x="246" y="78" width="56" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="274" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.4</text>
+            <rect x="308" y="78" width="50" height="22" rx="3" fill="#001a08" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="333" y="93" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">web.5</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- stack deploy card -->
+      <div id="s3-stack" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">DOCKER STACK DEPLOY</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker stack deploy</span> -c docker-compose.yml myapp</div>
+          <div id="s3-s1" class="tline" style="color:#555"># reads compose YAML — deploys as a Swarm stack</div>
+          <div id="s3-s2" class="tline" style="color:#4eff9a"># deploy.replicas + rolling update config respected</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">--update-parallelism controls batch size. --update-delay adds pause.</div>
+    <div class="ih">stack deploy is compose for Swarm — deploy block is fully respected.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv gn">2</div><div class="sl">PARALLEL</div></div>
+    <div class="sc"><div class="sv gn">10s</div><div class="sl">WAVE DELAY</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">DOWNTIME</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 4: Overlay networks + Secrets -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s4" style="background:#0a0012">
+
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #1a0d30">
+    <div class="hdr-title" style="color:#a080ff">OVERLAY NETS & SECRETS</div>
+    <div class="hdr-sub">MULTI-HOST NETWORKING + SECRET MGMT</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">STEP 4 — NETWORKS & SECRETS</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">ADVANCED</span>
+  </div>
+
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Overlay network card -->
+      <div id="s4-net" class="panel" style="background:#07000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;text-align:center;font-size:6px;color:#a080ff">OVERLAY NETWORK — MULTI-HOST L2</div>
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="arrPu4" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#a080ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </marker>
+          </defs>
+
+          <!-- Overlay envelope -->
+          <g id="s4-ov" opacity="0" style="transition:opacity 0.4s">
+            <rect x="8" y="8" width="350" height="94" rx="6" fill="none" stroke="#a080ff" stroke-width="1" stroke-dasharray="5,4"/>
+            <text x="183" y="22" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5.5" fill="#a080ff">myapp_overlay  10.0.0.0/24  (VXLAN encrypted)</text>
+          </g>
+
+          <!-- Node boxes inside overlay -->
+          <g id="s4-n1" opacity="0" style="transition:opacity 0.4s">
+            <rect x="20" y="32" width="100" height="60" rx="4" fill="#0a0018" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="70" y="48" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">node-1</text>
+            <rect x="28" y="56" width="84" height="26" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="70" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">web.1  10.0.0.11</text>
+            <text x="70" y="78" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">web.2  10.0.0.12</text>
+          </g>
+          <g id="s4-n2" opacity="0" style="transition:opacity 0.4s">
+            <rect x="133" y="32" width="100" height="60" rx="4" fill="#0a0018" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="183" y="48" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">node-2</text>
+            <rect x="141" y="56" width="84" height="26" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="183" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">db.1   10.0.0.21</text>
+            <text x="183" y="78" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">web.3  10.0.0.22</text>
+          </g>
+          <g id="s4-n3" opacity="0" style="transition:opacity 0.4s">
+            <rect x="246" y="32" width="100" height="60" rx="4" fill="#0a0018" stroke="#4ec9e1" stroke-width="1.5"/>
+            <text x="296" y="48" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="5" fill="#4ec9e1">node-3</text>
+            <rect x="254" y="56" width="84" height="26" rx="3" fill="#001a08" stroke="#4eff9a" stroke-width="1"/>
+            <text x="296" y="68" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">web.4  10.0.0.31</text>
+            <text x="296" y="78" text-anchor="middle" font-family="'Press Start 2P',monospace" font-size="4.5" fill="#4eff9a">cache  10.0.0.32</text>
+          </g>
+
+          <!-- Cross-node connection line -->
+          <g id="s4-xn" opacity="0" style="transition:opacity 0.4s">
+            <line x1="120" y1="65" x2="133" y2="65" stroke="#a080ff" stroke-width="1.2" marker-end="url(#arrPu4)"/>
+            <line x1="233" y1="65" x2="246" y2="65" stroke="#a080ff" stroke-width="1.2" marker-end="url(#arrPu4)"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Overlay create terminal -->
+      <div id="s4-ncmd" class="panel" style="background:#07000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">overlay setup</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker network create</span> \</div>
+          <div id="s4-nc1" class="tline" style="color:#a080ff;padding-left:16px">--driver overlay --attachable mynet</div>
+          <div id="s4-nc2" class="tline" style="color:#555"># containers on any node talk via service name DNS</div>
+          <div id="s4-nc3" class="tline" style="color:#4eff9a"># web containers reach 'db' by name — cross-host</div>
+        </div>
+      </div>
+
+      <!-- Secrets card -->
+      <div id="s4-sec" class="panel" style="background:#07000f;border:2px solid #1a0d30;border-radius:3px;overflow:hidden">
+        <div style="background:#0d0018;padding:5px 10px;text-align:center;font-size:6px;color:#e8a020">SWARM SECRETS — ENCRYPTED AT REST</div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="s4-s1" class="tline" style="color:#888">$ echo "s3cr3t" | <span style="color:#4ec9e1">docker secret create</span> db_pass -</div>
+          <div id="s4-s2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker service create</span> --secret db_pass myapp</div>
+          <div id="s4-s3" class="tline" style="color:#555"># mounted at /run/secrets/db_pass in container</div>
+          <div id="s4-s4" class="tline" style="color:#e8a020"># Raft-encrypted — only sent to nodes running the task</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Overlay = VXLAN tunnel across hosts. Services resolve by DNS name.</div>
+    <div class="ih pu">Secrets encrypted in Raft — never on disk, only in-memory in container.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv pu">VXLAN</div><div class="sl">OVERLAY</div></div>
+    <div class="sc"><div class="sv pu">DNS</div><div class="sl">SVC DISCOVERY</div></div>
+    <div class="sc"><div class="sv pu">RAFT</div><div class="sl">SECRET STORE</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 5: Swarm vs Compose — which features belong where -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s5" style="background:#0f0800">
+
+  <div class="hdr" style="background:#0f0800;border-bottom:1px solid #2a1800">
+    <div class="hdr-title" style="color:#e8a020">SWARM vs COMPOSE</div>
+    <div class="hdr-sub">WHICH FEATURES BELONG WHERE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0800">
+    <span class="slabel" style="color:#e8a020">STEP 5 — SWARM vs COMPOSE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">KEY DIFF</span>
+  </div>
+
+  <div class="anim" style="background:#0f0800">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s5-intro" class="panel" style="background:#0d0800;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">THE CONFUSION ZONE</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">The <span style="color:#e8a020">deploy:</span> block in docker-compose.yml is <span style="color:#e85050">silently ignored</span> by plain <span style="color:#4ec9e1">docker compose</span>. It only works with <span style="color:#4eff9a">docker stack deploy</span> on a Swarm cluster.</div>
+      </div>
+
+      <!-- Feature matrix -->
+      <div id="s5-matrix" class="panel" style="background:#0d0800;border:2px solid #2a1800;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0800;padding:5px 10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;text-align:center">
+          <div style="font-size:5.5px;color:#555">FEATURE</div>
+          <div style="font-size:5.5px;color:#4ec9e1">docker compose</div>
+          <div style="font-size:5.5px;color:#4eff9a">docker stack</div>
+        </div>
+        <div id="s5-r1" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">deploy.replicas</div>
+          <div style="font-size:5.5px;color:#e85050;text-align:center">✗ ignored</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+        </div>
+        <div id="s5-r2" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">secrets:</div>
+          <div style="font-size:5.5px;color:#e85050;text-align:center">✗ ignored</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+        </div>
+        <div id="s5-r3" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">configs:</div>
+          <div style="font-size:5.5px;color:#e85050;text-align:center">✗ ignored</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+        </div>
+        <div id="s5-r4" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">overlay net</div>
+          <div style="font-size:5.5px;color:#e85050;text-align:center">✗ no</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ auto</div>
+        </div>
+        <div id="s5-r5" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">volumes:</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+        </div>
+        <div id="s5-r6" class="tline" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;padding:5px 10px;border-top:1px solid #2a1800">
+          <div style="font-size:5.5px;color:#aaa">build:</div>
+          <div style="font-size:5.5px;color:#4eff9a;text-align:center">✓ works</div>
+          <div style="font-size:5.5px;color:#e85050;text-align:center">✗ ignored</div>
+        </div>
+      </div>
+
+      <!-- Swarm vs K8s card -->
+      <div id="s5-vsk8s" class="panel" style="background:#0d0800;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:6px">SWARM vs KUBERNETES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <div><span style="color:#4eff9a">✓ Swarm:</span> simpler, built-in, less ops burden</div>
+          <div><span style="color:#4eff9a">✓ Swarm:</span> native Docker — no extra tooling</div>
+          <div><span style="color:#e85050">✗ Swarm:</span> fewer features than K8s</div>
+          <div><span style="color:#e85050">✗ Swarm:</span> smaller ecosystem, fewer integrations</div>
+          <div style="color:#4ec9e1;margin-top:4px">→ Swarm for small/mid orgs. K8s for scale.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">build: works in compose. deploy: works in Swarm. Never both.</div>
+    <div class="ih am">stack deploy requires swarm mode — it won't work on standalone Docker.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3</div><div class="sl">IGNORED<br>IN COMPOSE</div></div>
+    <div class="sc"><div class="sv gn">5</div><div class="sl">SWARM<br>FEATURES</div></div>
+    <div class="sc"><div class="sv am">1</div><div class="sl">CMD DIFF</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn" onclick="go(6)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCENE 6: Cheat Sheet -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="scene" id="s6" style="background:#000d18">
+
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">THE CHEAT SHEET</div>
+    <div class="hdr-sub">DOCKER SWARM COMMAND REFERENCE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4eff9a">STEP 6 — REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">SUMMARY</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Cluster commands -->
+      <div id="s6-c1" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6px;color:#4ec9e1">CLUSTER LIFECYCLE</div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div><span style="color:#4ec9e1">docker swarm init</span>       <span style="color:#555">— bootstrap manager</span></div>
+          <div><span style="color:#4ec9e1">docker swarm join</span>       <span style="color:#555">— add a worker node</span></div>
+          <div><span style="color:#4ec9e1">docker swarm join-token</span> <span style="color:#555">— get join token</span></div>
+          <div><span style="color:#4ec9e1">docker node ls</span>          <span style="color:#555">— list all nodes</span></div>
+          <div><span style="color:#4ec9e1">docker node update</span>      <span style="color:#555">— drain / promote</span></div>
+        </div>
+      </div>
+
+      <!-- Service commands -->
+      <div id="s6-c2" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6px;color:#a080ff">SERVICE MANAGEMENT</div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div><span style="color:#a080ff">docker service create</span>  <span style="color:#555">— deploy a service</span></div>
+          <div><span style="color:#a080ff">docker service ls</span>      <span style="color:#555">— list services</span></div>
+          <div><span style="color:#a080ff">docker service ps</span>      <span style="color:#555">— list tasks/replicas</span></div>
+          <div><span style="color:#a080ff">docker service update</span>  <span style="color:#555">— rolling update</span></div>
+          <div><span style="color:#a080ff">docker service scale</span>   <span style="color:#555">— change replica count</span></div>
+          <div><span style="color:#a080ff">docker service rm</span>      <span style="color:#555">— remove service</span></div>
+        </div>
+      </div>
+
+      <!-- Stack commands -->
+      <div id="s6-c3" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000d18;padding:5px 10px;text-align:center;font-size:6px;color:#4eff9a">STACK & SECRETS</div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.4">
+          <div><span style="color:#4eff9a">docker stack deploy</span>    <span style="color:#555">— deploy from YAML</span></div>
+          <div><span style="color:#4eff9a">docker stack ls</span>        <span style="color:#555">— list stacks</span></div>
+          <div><span style="color:#4eff9a">docker stack rm</span>        <span style="color:#555">— tear down stack</span></div>
+          <div><span style="color:#e8a020">docker secret create</span>   <span style="color:#555">— store a secret</span></div>
+          <div><span style="color:#e8a020">docker config create</span>   <span style="color:#555">— store a config</span></div>
+        </div>
+      </div>
+
+      <!-- Quick rule card -->
+      <div id="s6-c4" class="panel" style="background:#001208;border-left:4px solid #4eff9a;border-top:1px solid #0d2810;border-right:1px solid #0d2810;border-bottom:1px solid #0d2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">MENTAL MODEL</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.1">
+          <div><span style="color:#4ec9e1">Compose</span> = dev + local multi-container</div>
+          <div><span style="color:#4eff9a">Stack</span>   = Compose YAML on a Swarm cluster</div>
+          <div><span style="color:#a080ff">Service</span> = one image, N replicas, managed</div>
+          <div><span style="color:#e8a020">Task</span>    = one running container instance</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Swarm = built-in, zero deps. K8s = more power, more complexity.</div>
+    <div class="ih">For small teams: swarm init + stack deploy + overlay nets is enough.</div>
+  </div>
+
+  <div class="srow">
+    <div class="sc"><div class="sv">swarm</div><div class="sl">CLUSTER</div></div>
+    <div class="sc"><div class="sv pu">service</div><div class="sl">WORKLOAD</div></div>
+    <div class="sc"><div class="sv gn">stack</div><div class="sl">COMPOSE→PROD</div></div>
+  </div>
+
+  <div class="ctrl">
+    <button class="btn" onclick="go(5)">◀ PREV</button>
+    <button class="btn play" onclick="play(6)">▶ PLAY</button>
+    <button class="btn restart" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- end #app -->
+
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function hideEl(id){const e=document.getElementById(id);if(e)e.style.opacity='0';}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  if(n===1){
+    hide('s1-intro');hide('s1-term');hide('s1-diag');hide('s1-nls');
+    hideEl('s1-l1');hideEl('s1-l2');hideEl('s1-l3');hideEl('s1-l4');
+    svgHide('s1-mgr');svgHide('s1-arrows');svgHide('s1-w1');svgHide('s1-w2');svgHide('s1-w3');
+    const c=document.getElementById('s1-cap');if(c)c.setAttribute('opacity','0');
+    hideEl('s1-n1');hideEl('s1-n2');hideEl('s1-n3');hideEl('s1-n4');
+  }
+  if(n===2){
+    hide('s2-intro');hide('s2-term');hide('s2-diag');hide('s2-ls');
+    hideEl('s2-l1');hideEl('s2-l2');hideEl('s2-l3');hideEl('s2-l4');hideEl('s2-l5');
+    svgHide('s2-sched');svgHide('s2-arr');
+    svgHide('s2-t1');svgHide('s2-t2');svgHide('s2-t3');svgHide('s2-t4');svgHide('s2-t5');
+    hideEl('s2-ls1');hideEl('s2-ls2');
+  }
+  if(n===3){
+    hide('s3-upd');hide('s3-prog');hide('s3-stack');
+    hideEl('s3-u1');hideEl('s3-u2');hideEl('s3-u3');hideEl('s3-u4');hideEl('s3-u5');
+    svgHide('s3-w1a');svgHide('s3-w1b');svgHide('s3-old');
+    svgHide('s3-w2');svgHide('s3-done');
+    hideEl('s3-s1');hideEl('s3-s2');
+  }
+  if(n===4){
+    hide('s4-net');hide('s4-ncmd');hide('s4-sec');
+    svgHide('s4-ov');svgHide('s4-n1');svgHide('s4-n2');svgHide('s4-n3');svgHide('s4-xn');
+    hideEl('s4-nc1');hideEl('s4-nc2');hideEl('s4-nc3');
+    hideEl('s4-s1');hideEl('s4-s2');hideEl('s4-s3');hideEl('s4-s4');
+  }
+  if(n===5){
+    hide('s5-intro');hide('s5-matrix');hide('s5-vsk8s');
+    hideEl('s5-r1');hideEl('s5-r2');hideEl('s5-r3');hideEl('s5-r4');hideEl('s5-r5');hideEl('s5-r6');
+  }
+  if(n===6){
+    hide('s6-c1');hide('s6-c2');hide('s6-c3');hide('s6-c4');
+  }
+}
+
+function play(n){
+  clr();
+  if(n===1){
+    show('s1-intro',200);
+    show('s1-term',700);
+    showEl('s1-l1',1100);showEl('s1-l2',1500);showEl('s1-l3',1900);showEl('s1-l4',2200);
+    show('s1-diag',2600);
+    svgShow('s1-mgr',2800);
+    svgShow('s1-arrows',3200);
+    svgShow('s1-w1',3500);svgShow('s1-w2',3900);svgShow('s1-w3',4300);
+    af(4600,()=>{const c=document.getElementById('s1-cap');if(c)c.setAttribute('opacity','1');});
+    show('s1-nls',5000);
+    showEl('s1-n1',5300);showEl('s1-n2',5600);showEl('s1-n3',5900);showEl('s1-n4',6200);
+  }
+  if(n===2){
+    show('s2-intro',200);
+    show('s2-term',700);
+    showEl('s2-l1',1100);showEl('s2-l2',1400);showEl('s2-l3',1800);showEl('s2-l4',2100);showEl('s2-l5',2400);
+    show('s2-diag',2800);
+    svgShow('s2-sched',3000);
+    svgShow('s2-arr',3400);
+    svgShow('s2-t1',3700);svgShow('s2-t2',4000);svgShow('s2-t3',4300);svgShow('s2-t4',4600);
+    svgShow('s2-t5',5000);
+    show('s2-ls',5400);
+    showEl('s2-ls1',5700);showEl('s2-ls2',6000);
+  }
+  if(n===3){
+    show('s3-upd',200);
+    showEl('s3-u1',600);showEl('s3-u2',900);showEl('s3-u3',1200);showEl('s3-u4',1500);showEl('s3-u5',1800);
+    show('s3-prog',2200);
+    svgShow('s3-old',2400);
+    svgShow('s3-w1a',2700);svgShow('s3-w1b',2700);
+    svgShow('s3-w2',3600);
+    svgShow('s3-done',4800);
+    show('s3-stack',5200);
+    showEl('s3-s1',5600);showEl('s3-s2',6000);
+  }
+  if(n===4){
+    show('s4-net',200);
+    svgShow('s4-ov',400);
+    svgShow('s4-n1',800);svgShow('s4-n2',1200);svgShow('s4-n3',1600);
+    svgShow('s4-xn',2000);
+    show('s4-ncmd',2400);
+    showEl('s4-nc1',2800);showEl('s4-nc2',3200);showEl('s4-nc3',3600);
+    show('s4-sec',4000);
+    showEl('s4-s1',4400);showEl('s4-s2',4800);showEl('s4-s3',5200);showEl('s4-s4',5600);
+  }
+  if(n===5){
+    show('s5-intro',200);
+    show('s5-matrix',800);
+    showEl('s5-r1',1100);showEl('s5-r2',1400);showEl('s5-r3',1700);
+    showEl('s5-r4',2000);showEl('s5-r5',2300);showEl('s5-r6',2600);
+    show('s5-vsk8s',3100);
+  }
+  if(n===6){
+    show('s6-c1',200);show('s6-c2',700);show('s6-c3',1200);show('s6-c4',1700);
+  }
+}
+
+window.addEventListener('load',()=>{af(150,()=>play(1));});
+</script>
+</body>
+</html>

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Docker Private Registry</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══════════════════════════════════ SCENE 1 — LOCAL REGISTRY ═══ -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2040">
+    <div class="hdr-title" style="color:#4ec9e1">🐳 PRIVATE REGISTRY</div>
+    <div class="hdr-sub">SPIN UP REGISTRY:2 LOCALLY</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">LOCAL REGISTRY</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">REGISTRY:2</span>
+  </div>
+
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Architecture diagram -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000f1a;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4ec9e1">LOCAL REGISTRY ARCHITECTURE</span>
+        </div>
+        <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow1">
+              <feGaussianBlur stdDeviation="2.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- Docker client -->
+          <rect x="12" y="30" width="90" height="50" rx="3" fill="#000810" stroke="#0d2030" stroke-width="1.5"/>
+          <text x="57" y="50" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">DOCKER</text>
+          <text x="57" y="64" text-anchor="middle" font-size="5.5" fill="#888" font-family="'Press Start 2P',monospace">CLIENT</text>
+          <!-- Registry container -->
+          <rect id="s1reg" x="145" y="20" width="108" height="70" rx="3" fill="#000810" stroke="#0d2030" stroke-width="1.5" opacity="0"/>
+          <text x="199" y="42" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0" id="s1rt1">registry:2</text>
+          <text x="199" y="56" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s1rt2">container</text>
+          <text x="199" y="72" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0" id="s1rt3">:5000</text>
+          <!-- Storage -->
+          <rect id="s1stor" x="278" y="30" width="76" height="50" rx="3" fill="#000810" stroke="#0d2030" stroke-width="1.5" opacity="0"/>
+          <text x="316" y="50" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace" opacity="0" id="s1st1">VOLUME</text>
+          <text x="316" y="64" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace" opacity="0" id="s1st2">/data</text>
+          <!-- arrows -->
+          <line id="s1a1" x1="104" y1="55" x2="143" y2="55" stroke="#4ec9e1" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1ah1" points="147,55 139,51 139,59" fill="#4ec9e1" opacity="0"/>
+          <line id="s1a2" x1="255" y1="55" x2="276" y2="55" stroke="#0d2030" stroke-width="1.5" stroke-dasharray="4,3" opacity="0"/>
+          <polygon id="s1ah2" points="280,55 272,51 272,59" fill="#0d2030" opacity="0"/>
+          <!-- packet -->
+          <circle id="s1pkt" cx="104" cy="55" r="4" fill="#4ec9e1" opacity="0" filter="url(#glow1)"/>
+          <text x="125" y="47" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace" opacity="0" id="s1push">push</text>
+        </svg>
+      </div>
+
+      <!-- docker run command -->
+      <div style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000f1a;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">step 1 — start the registry</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d \</div>
+          <div id="s1l1" class="tline" style="color:#aaa;padding-left:12px">-p <span style="color:#e8a020">5000:5000</span> \</div>
+          <div id="s1l2" class="tline" style="color:#aaa;padding-left:12px">--restart=always \</div>
+          <div id="s1l3" class="tline" style="color:#aaa;padding-left:12px">--name registry \</div>
+          <div id="s1l4" class="tline" style="color:#aaa;padding-left:12px">-v /reg-data:/var/lib/registry \</div>
+          <div id="s1l5" class="tline" style="color:#4eff9a;padding-left:12px">registry:2</div>
+        </div>
+      </div>
+
+      <!-- tag + push commands -->
+      <div id="s1push2" class="panel" style="background:#000810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#000f1a;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">step 2 — tag &amp; push</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">docker tag</span> myapp \</div>
+          <div style="color:#4eff9a;padding-left:12px">localhost:5000/myapp</div>
+          <div style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">docker push</span> \</div>
+          <div style="color:#4eff9a;padding-left:12px">localhost:5000/myapp</div>
+          <div id="s1out" class="tline" style="color:#888;margin-top:4px">The push refers to repository</div>
+          <div id="s1out2" class="tline" style="color:#4eff9a">[localhost:5000/myapp]</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info" style="border-color:#4ec9e1">
+    <div class="il">registry:2 is the official Docker image for a self-hosted OCI registry.</div>
+    <div class="ih">One command. Runs on port 5000. Backs images to a named volume.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">:5000</div><div class="sl">DEFAULT<br>PORT</div></div>
+    <div class="sc"><div class="sv gn">OCI</div><div class="sl">SPEC<br>COMPLIANT</div></div>
+    <div class="sc"><div class="sv am">v2</div><div class="sl">API<br>VERSION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 2 — INSECURE REGISTRY ═══ -->
+<div class="scene" id="s2" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #2d0010">
+    <div class="hdr-title" style="color:#e8a020">⚠️ INSECURE REGISTRY</div>
+    <div class="hdr-sub">WHEN TLS ISN'T CONFIGURED</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">DAEMON CONFIG</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">RISK</span>
+  </div>
+
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Problem: push fails -->
+      <div style="background:#050002;border:2px solid #3a0015;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#e85050">push to remote fails ✗</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ docker push <span style="color:#e8a020">192.168.1.50:5000/</span>myapp</div>
+          <div id="s2err1" class="tline" style="color:#e85050">Error response from daemon:</div>
+          <div id="s2err2" class="tline" style="color:#e85050">Get "https://192.168.1.50:5000/</div>
+          <div id="s2err3" class="tline" style="color:#e85050;padding-left:12px">v2/": http: server gave</div>
+          <div id="s2err4" class="tline" style="color:#ff8080;padding-left:12px">HTTP response to HTTPS client</div>
+        </div>
+      </div>
+
+      <!-- daemon.json fix -->
+      <div id="s2fix" class="panel" style="background:#050002;border:2px solid #e8a020;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#e8a020">/etc/docker/daemon.json</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">{</div>
+          <div style="color:#4ec9e1;padding-left:12px">"insecure-registries":</div>
+          <div style="color:#888;padding-left:16px">[</div>
+          <div style="color:#e8a020;padding-left:24px">"192.168.1.50:5000"</div>
+          <div style="color:#888;padding-left:16px">]</div>
+          <div style="color:#888">}</div>
+        </div>
+      </div>
+
+      <!-- reload daemon -->
+      <div id="s2reload" class="panel" style="background:#050002;border:2px solid #3a0015;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">reload daemon</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">systemctl</span> reload docker</div>
+          <div id="s2ok" class="tline" style="color:#4eff9a;margin-top:4px">✓ daemon reloaded</div>
+          <div id="s2ok2" class="tline" style="color:#888">$ docker push 192.168.1.50:5000/myapp</div>
+          <div id="s2ok3" class="tline" style="color:#4eff9a">Pushed ✓</div>
+        </div>
+      </div>
+
+      <!-- Warning card -->
+      <div id="s2warn" class="panel" style="background:#1a0000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">☠️</span>
+          <span style="font-size:7.5px;color:#e85050">DEV ONLY — NEVER PRODUCTION</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>▸ layers transmitted <span style="color:#e85050">unencrypted</span></div>
+          <div>▸ vulnerable to <span style="color:#e85050">MITM image tampering</span></div>
+          <div>▸ use TLS + auth for any shared network</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info am">
+    <div class="il">Docker requires TLS by default for any non-localhost registry.</div>
+    <div class="ih am">insecure-registries bypasses TLS — dev only, never on shared networks.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">⚠️</div><div class="sl">DEV<br>ONLY</div></div>
+    <div class="sc"><div class="sv rd">MITM</div><div class="sl">RISK ON<br>NETWORK</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">reload</div><div class="sl">DAEMON<br>REQUIRED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 3 — HARBOR ═══ -->
+<div class="scene" id="s3" style="background:#00100a">
+  <div class="hdr" style="background:#00100a;border-bottom:1px solid #003820">
+    <div class="hdr-title" style="color:#4eff9a">⚓ HARBOR</div>
+    <div class="hdr-sub">CNCF PRODUCTION REGISTRY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#00100a">
+    <span class="slabel" style="color:#4eff9a">HARBOR</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CNCF</span>
+  </div>
+
+  <div class="anim" style="background:#00100a">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Harbor feature grid -->
+      <div id="s3grid" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#001508;border:2px solid #1a4030;border-radius:2px;padding:8px 7px">
+          <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">🔐 RBAC</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">Role-based access per project. dev / ops / viewer roles.</div>
+        </div>
+        <div style="background:#001508;border:2px solid #1a4030;border-radius:2px;padding:8px 7px">
+          <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">🔍 SCANNING</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">Trivy / Clair CVE scanning on every pushed image.</div>
+        </div>
+        <div style="background:#001508;border:2px solid #1a4030;border-radius:2px;padding:8px 7px">
+          <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">🪞 PROXY</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">Proxy cache for Docker Hub / GCR. Saves bandwidth.</div>
+        </div>
+        <div style="background:#001508;border:2px solid #1a4030;border-radius:2px;padding:8px 7px">
+          <div style="font-size:6.5px;color:#4eff9a;margin-bottom:6px">🔁 REPLICATION</div>
+          <div style="font-size:6px;color:#aaa;line-height:1.9">Sync images between regions or to cloud registries.</div>
+        </div>
+      </div>
+
+      <!-- Harbor install -->
+      <div id="s3install" class="panel" style="background:#000d06;border:2px solid #1a4030;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">harbor install (helm)</div>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div style="color:#888">$ <span style="color:#4ec9e1">helm repo add</span> harbor \</div>
+          <div style="color:#aaa;padding-left:12px">https://helm.goharbor.io</div>
+          <div style="color:#888;margin-top:4px">$ <span style="color:#4ec9e1">helm install</span> harbor \</div>
+          <div style="color:#aaa;padding-left:12px">harbor/harbor \</div>
+          <div style="color:#4eff9a;padding-left:12px">--set externalURL=https://reg.myco.io</div>
+        </div>
+      </div>
+
+      <!-- RBAC diagram -->
+      <div id="s3rbac" class="panel" style="background:#000d06;border:2px solid #0d3020;border-radius:3px;overflow:hidden">
+        <div style="background:#001208;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4eff9a">HARBOR RBAC MODEL</span>
+        </div>
+        <svg width="100%" height="90" viewBox="0 0 366 90" xmlns="http://www.w3.org/2000/svg">
+          <!-- project -->
+          <rect x="130" y="8" width="106" height="28" rx="2" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="183" y="24" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">PROJECT</text>
+          <!-- roles -->
+          <rect x="10" y="58" width="86" height="26" rx="2" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="53" y="73" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace">PROJECT ADMIN</text>
+          <rect x="140" y="58" width="86" height="26" rx="2" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="183" y="73" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">DEVELOPER</text>
+          <rect x="270" y="58" width="86" height="26" rx="2" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="313" y="73" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">GUEST</text>
+          <!-- connectors -->
+          <line x1="183" y1="36" x2="53" y2="58" stroke="#1a4030" stroke-width="1" stroke-dasharray="3,2"/>
+          <line x1="183" y1="36" x2="183" y2="58" stroke="#1a4030" stroke-width="1" stroke-dasharray="3,2"/>
+          <line x1="183" y1="36" x2="313" y2="58" stroke="#1a4030" stroke-width="1" stroke-dasharray="3,2"/>
+        </svg>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Harbor is the CNCF graduated answer to production self-hosted registries.</div>
+    <div class="ih">RBAC + CVE scanning + proxy cache = zero reason to use plain registry:2 in prod.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">CNCF</div><div class="sl">GRADUATED<br>PROJECT</div></div>
+    <div class="sc"><div class="sv gn">🔍</div><div class="sl">CVE<br>SCANNING</div></div>
+    <div class="sc"><div class="sv gn">RBAC</div><div class="sl">PER-<br>PROJECT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 4 — CLOUD REGISTRIES ═══ -->
+<div class="scene" id="s4" style="background:#0a0020">
+  <div class="hdr" style="background:#0a0020;border-bottom:1px solid #2a1060">
+    <div class="hdr-title" style="color:#a080ff">☁️ CLOUD REGISTRIES</div>
+    <div class="hdr-sub">ECR · GCR · GHCR</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#0a0020">
+    <span class="slabel" style="color:#a080ff">MANAGED REGISTRIES</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">CLOUD</span>
+  </div>
+
+  <div class="anim" style="background:#0a0020">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Three cloud registries -->
+      <div id="s4cards" class="panel" style="display:flex;flex-direction:column;gap:8px">
+
+        <!-- ECR -->
+        <div style="background:#06001a;border:2px solid #e8a020;border-radius:2px;overflow:hidden">
+          <div style="background:#0f0030;padding:5px 10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px">🟠</span>
+            <span style="font-size:6.5px;color:#e8a020">AWS ECR</span>
+            <span style="font-size:5.5px;color:#555;margin-left:auto">Elastic Container Registry</span>
+          </div>
+          <div style="padding:7px 10px;font-size:6.5px;line-height:2.0">
+            <div style="color:#888">$ <span style="color:#4ec9e1">aws ecr get-login-password</span> | \</div>
+            <div style="color:#aaa;padding-left:8px">docker login --username AWS \</div>
+            <div style="color:#e8a020;padding-left:8px">--password-stdin 123.dkr.ecr.us-east-1.amazonaws.com</div>
+            <div style="margin-top:4px;color:#555">▸ IAM auth · lifecycle policies · immutable tags</div>
+          </div>
+        </div>
+
+        <!-- GHCR -->
+        <div style="background:#06001a;border:2px solid #a080ff;border-radius:2px;overflow:hidden">
+          <div style="background:#0f0030;padding:5px 10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px">🐙</span>
+            <span style="font-size:6.5px;color:#a080ff">GHCR</span>
+            <span style="font-size:5.5px;color:#555;margin-left:auto">GitHub Container Registry</span>
+          </div>
+          <div style="padding:7px 10px;font-size:6.5px;line-height:2.0">
+            <div style="color:#888">$ <span style="color:#4ec9e1">echo</span> $PAT | docker login \</div>
+            <div style="color:#a080ff;padding-left:8px">ghcr.io -u USERNAME --password-stdin</div>
+            <div style="margin-top:4px;color:#555">▸ free for public · Actions native · package perms</div>
+          </div>
+        </div>
+
+        <!-- GCR / GAR -->
+        <div style="background:#06001a;border:2px solid #4ec9e1;border-radius:2px;overflow:hidden">
+          <div style="background:#0f0030;padding:5px 10px;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px">🔵</span>
+            <span style="font-size:6.5px;color:#4ec9e1">GCR / GAR</span>
+            <span style="font-size:5.5px;color:#555;margin-left:auto">Google Artifact Registry</span>
+          </div>
+          <div style="padding:7px 10px;font-size:6.5px;line-height:2.0">
+            <div style="color:#888">$ <span style="color:#4ec9e1">gcloud auth configure-docker</span> \</div>
+            <div style="color:#4ec9e1;padding-left:8px">us-central1-docker.pkg.dev</div>
+            <div style="margin-top:4px;color:#555">▸ Workload Identity · regional repos · VPC-SC</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Comparison table -->
+      <div id="s4table" class="panel" style="background:#06001a;border:2px solid #2a1060;border-radius:3px;overflow:hidden">
+        <div style="background:#0f0030;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#a080ff">QUICK COMPARISON</span>
+        </div>
+        <div style="padding:8px 10px;font-size:6px;line-height:2.2">
+          <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:2px;color:#555;margin-bottom:2px">
+            <div></div><div style="color:#e8a020">ECR</div><div style="color:#a080ff">GHCR</div><div style="color:#4ec9e1">GAR</div>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:2px;color:#aaa">
+            <div style="color:#555">Auth</div><div>IAM</div><div>PAT/OIDC</div><div>gcloud</div>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:2px;color:#aaa">
+            <div style="color:#555">Scanning</div><div>ECR scan</div><div>3rd party</div><div>On-Demand</div>
+          </div>
+          <div style="display:grid;grid-template-columns:80px 1fr 1fr 1fr;gap:2px;color:#aaa">
+            <div style="color:#555">Free tier</div><div style="color:#4eff9a">500MB</div><div style="color:#4eff9a">public free</div><div style="color:#4eff9a">0.5GB</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info pu">
+    <div class="il">Managed cloud registries handle TLS, auth, and storage automatically.</div>
+    <div class="ih pu">Use GHCR for OSS, ECR/GAR for cloud-native production workloads.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv am">ECR</div><div class="sl">IAM<br>AUTH</div></div>
+    <div class="sc"><div class="sv pu">GHCR</div><div class="sl">GH<br>ACTIONS</div></div>
+    <div class="sc"><div class="sv" style="color:#4ec9e1">GAR</div><div class="sl">GCP<br>NATIVE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════ SCENE 5 — DECISION GUIDE ═══ -->
+<div class="scene" id="s5" style="background:#001208">
+  <div class="hdr" style="background:#001208;border-bottom:1px solid #003820">
+    <div class="hdr-title" style="color:#4eff9a">🗺️ PICK YOUR REGISTRY</div>
+    <div class="hdr-sub">DECISION GUIDE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+
+  <div class="slr" style="background:#001208">
+    <span class="slabel" style="color:#4eff9a">DECISION TREE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">GUIDE</span>
+  </div>
+
+  <div class="anim" style="background:#001208">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Decision flowchart SVG -->
+      <div id="s5flow" class="panel" style="background:#000d06;border:2px solid #1a3020;border-radius:3px;overflow:hidden">
+        <div style="background:#001508;padding:5px 10px;text-align:center">
+          <span style="font-size:6.5px;color:#4eff9a">WHICH REGISTRY SHOULD I USE?</span>
+        </div>
+        <svg width="100%" height="210" viewBox="0 0 366 210" xmlns="http://www.w3.org/2000/svg">
+          <!-- Root question -->
+          <rect x="103" y="8" width="160" height="28" rx="3" fill="#001508" stroke="#1a4030" stroke-width="1.5"/>
+          <text x="183" y="26" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">Need production?</text>
+          <!-- NO branch left -->
+          <line x1="103" y1="22" x2="65" y2="22" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <line x1="65" y1="22" x2="65" y2="68" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <polygon points="65,72 61,64 69,64" fill="#1a3020"/>
+          <text x="84" y="19" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">NO</text>
+          <rect x="10" y="72" width="110" height="26" rx="2" fill="#001508" stroke="#1a3020" stroke-width="1.5"/>
+          <text x="65" y="87" text-anchor="middle" font-size="5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">registry:2 locally</text>
+          <!-- YES branch right -->
+          <line x1="263" y1="22" x2="300" y2="22" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <line x1="300" y1="22" x2="300" y2="48" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <polygon points="300,52 296,44 304,44" fill="#1a3020"/>
+          <text x="282" y="19" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">YES</text>
+          <rect x="240" y="52" width="116" height="26" rx="2" fill="#001508" stroke="#1a3020" stroke-width="1.5"/>
+          <text x="298" y="67" text-anchor="middle" font-size="5" fill="#4eff9a" font-family="'Press Start 2P',monospace">Self-hosted or cloud?</text>
+          <!-- Self-hosted -->
+          <line x1="298" y1="78" x2="298" y2="100" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <polygon points="298,104 294,96 302,96" fill="#1a3020"/>
+          <text x="276" y="97" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">SELF</text>
+          <rect x="240" y="104" width="116" height="26" rx="2" fill="#001508" stroke="#4eff9a" stroke-width="2"/>
+          <text x="298" y="119" text-anchor="middle" font-size="5.5" fill="#4eff9a" font-family="'Press Start 2P',monospace">⚓ Harbor</text>
+          <!-- Cloud AWS -->
+          <line x1="240" y1="65" x2="183" y2="65" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <line x1="183" y1="65" x2="183" y2="100" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <polygon points="183,104 179,96 187,96" fill="#1a3020"/>
+          <text x="210" y="62" text-anchor="middle" font-size="5" fill="#888" font-family="'Press Start 2P',monospace">CLOUD</text>
+          <rect x="130" y="104" width="106" height="26" rx="2" fill="#001508" stroke="#1a3020" stroke-width="1.5"/>
+          <text x="183" y="119" text-anchor="middle" font-size="5" fill="#aaa" font-family="'Press Start 2P',monospace">Which cloud?</text>
+          <!-- AWS -->
+          <line x1="183" y1="130" x2="65" y2="150" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <rect x="10" y="150" width="110" height="26" rx="2" fill="#001508" stroke="#e8a020" stroke-width="1.5"/>
+          <text x="65" y="165" text-anchor="middle" font-size="5.5" fill="#e8a020" font-family="'Press Start 2P',monospace">🟠 AWS ECR</text>
+          <!-- GitHub -->
+          <line x1="183" y1="130" x2="183" y2="150" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <rect x="130" y="150" width="106" height="26" rx="2" fill="#001508" stroke="#a080ff" stroke-width="1.5"/>
+          <text x="183" y="165" text-anchor="middle" font-size="5.5" fill="#a080ff" font-family="'Press Start 2P',monospace">🐙 GHCR</text>
+          <!-- GCP -->
+          <line x1="183" y1="130" x2="298" y2="150" stroke="#1a3020" stroke-width="1" stroke-dasharray="3,2"/>
+          <rect x="246" y="150" width="110" height="26" rx="2" fill="#001508" stroke="#4ec9e1" stroke-width="1.5"/>
+          <text x="301" y="165" text-anchor="middle" font-size="5.5" fill="#4ec9e1" font-family="'Press Start 2P',monospace">🔵 GAR</text>
+          <!-- Air-gapped label under registry:2 -->
+          <text x="65" y="108" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">or air-gapped → Harbor</text>
+        </svg>
+      </div>
+
+      <!-- Air-gapped note -->
+      <div id="s5airgap" class="panel" style="background:#000d06;border-left:4px solid #e8a020;border-top:1px solid #2a1800;border-right:1px solid #2a1800;border-bottom:1px solid #2a1800;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🏭</span>
+          <span style="font-size:7.5px;color:#e8a020">AIR-GAPPED ENVIRONMENTS</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>Harbor is the <span style="color:#4eff9a">CNCF standard</span> for offline registries.</div>
+          <div>registry:2 works too but lacks RBAC and scanning.</div>
+          <div>Both run fully <span style="color:#4eff9a">without internet access</span>.</div>
+        </div>
+      </div>
+
+      <!-- TLS reminder -->
+      <div id="s5tls" class="panel" style="background:#000d06;border-left:4px solid #4eff9a;border-top:1px solid #1a3020;border-right:1px solid #1a3020;border-bottom:1px solid #1a3020;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">🔒</span>
+          <span style="font-size:7.5px;color:#4eff9a">ALWAYS USE TLS IN PRODUCTION</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:2.0">
+          <div>Let's Encrypt + Caddy or nginx termination.</div>
+          <div>Harbor includes TLS out of the box.</div>
+          <div><span style="color:#e85050">Never</span> use --insecure-registry on shared networks.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="info gn">
+    <div class="il">Local dev → registry:2. Team / prod self-hosted → Harbor. Cloud-native → ECR/GAR/GHCR.</div>
+    <div class="ih">The right registry depends on your threat model, not your familiarity with Docker Hub.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv" style="color:#4ec9e1">dev</div><div class="sl">REGISTRY<br>:2</div></div>
+    <div class="sc"><div class="sv gn">prod</div><div class="sl">HARBOR<br>CNCF</div></div>
+    <div class="sc"><div class="sv pu">cloud</div><div class="sl">ECR/<br>GAR/GHCR</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+function svgShow(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '1'); }); }
+function svgHide(id) { const e = document.getElementById(id); if (e) e.setAttribute('opacity', '0'); }
+
+function movePkt(id, x1, y1, x2, y2, startMs, durMs) {
+  af(startMs, () => {
+    const d = document.getElementById(id); if (!d) return;
+    d.setAttribute('cx', x1); d.setAttribute('cy', y1); d.setAttribute('opacity', '1');
+    const frames = Math.max(1, Math.round(durMs / 16)); let f = 0;
+    function step() {
+      f++; const p = Math.min(f / frames, 1);
+      d.setAttribute('cx', x1 + (x2 - x1) * p);
+      d.setAttribute('cy', y1 + (y2 - y1) * p);
+      if (f < frames) af(16, step); else d.setAttribute('opacity', '0');
+    }
+    af(16, step);
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    svgHide('s1reg'); svgHide('s1rt1'); svgHide('s1rt2'); svgHide('s1rt3');
+    svgHide('s1stor'); svgHide('s1st1'); svgHide('s1st2');
+    svgHide('s1a1'); svgHide('s1ah1'); svgHide('s1a2'); svgHide('s1ah2');
+    svgHide('s1pkt'); svgHide('s1push');
+    hideEl('s1l1'); hideEl('s1l2'); hideEl('s1l3'); hideEl('s1l4'); hideEl('s1l5');
+    hide('s1push2'); hideEl('s1out'); hideEl('s1out2');
+  }
+  if (n === 2) {
+    hideEl('s2err1'); hideEl('s2err2'); hideEl('s2err3'); hideEl('s2err4');
+    hide('s2fix'); hide('s2reload');
+    hideEl('s2ok'); hideEl('s2ok2'); hideEl('s2ok3');
+    hide('s2warn');
+  }
+  if (n === 3) {
+    hide('s3grid'); hide('s3install'); hide('s3rbac');
+  }
+  if (n === 4) {
+    hide('s4cards'); hide('s4table');
+  }
+  if (n === 5) {
+    hide('s5flow'); hide('s5airgap'); hide('s5tls');
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // Registry container appears
+    svgShow('s1reg', 250); svgShow('s1rt1', 350); svgShow('s1rt2', 450); svgShow('s1rt3', 550);
+    // Arrow from client to registry
+    svgShow('s1a1', 800); svgShow('s1ah1', 800); svgShow('s1push', 850);
+    // Packet travels client → registry
+    movePkt('s1pkt', 104, 55, 145, 55, 900, 400);
+    // Storage appears
+    svgShow('s1stor', 1350); svgShow('s1st1', 1450); svgShow('s1st2', 1550);
+    svgShow('s1a2', 1600); svgShow('s1ah2', 1600);
+    // CLI lines
+    showEl('s1l1', 1900); showEl('s1l2', 2150); showEl('s1l3', 2400);
+    showEl('s1l4', 2650); showEl('s1l5', 2900);
+    // Tag + push section
+    show('s1push2', 3300);
+    showEl('s1out', 3700); showEl('s1out2', 4100);
+  }
+  if (n === 2) {
+    showEl('s2err1', 250); showEl('s2err2', 550);
+    showEl('s2err3', 850); showEl('s2err4', 1150);
+    show('s2fix', 1700);
+    show('s2reload', 2500);
+    showEl('s2ok', 2900); showEl('s2ok2', 3200); showEl('s2ok3', 3600);
+    show('s2warn', 4100);
+  }
+  if (n === 3) {
+    show('s3grid', 250);
+    show('s3install', 1100);
+    show('s3rbac', 2100);
+  }
+  if (n === 4) {
+    show('s4cards', 250);
+    show('s4table', 1600);
+  }
+  if (n === 5) {
+    show('s5flow', 250);
+    show('s5airgap', 1200);
+    show('s5tls', 2100);
+  }
+}
+
+window.addEventListener('load', () => { af(150, () => play(1)); });
+</script>
+</body>
+</html>

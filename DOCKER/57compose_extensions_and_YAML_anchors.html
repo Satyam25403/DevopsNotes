@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker Compose — YAML Anchors</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+/* highlight pulse for anchor lines */
+@keyframes anchpulse {
+  0%{background:#1a0a3a}50%{background:#2a1060}100%{background:#1a0a3a}
+}
+.apulse{animation:anchpulse 1.2s ease-in-out infinite}
+@keyframes alipulse {
+  0%{background:#0a1a0a}50%{background:#0a3018}100%{background:#0a1a0a}
+}
+.alipulse{animation:alipulse 1.2s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1: THE PROBLEM — WET YAML ═══ -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #380015">
+    <div class="hdr-title" style="color:#e85050">YAML ANCHORS</div>
+    <div class="hdr-sub">DRY COMPOSE FILES</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">WET</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- WET compose file -->
+      <div id="p0" class="panel" style="background:#120008;border:2px solid #3a1010;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0000;padding:5px 10px;border-bottom:1px solid #3a1010;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#e85050">docker-compose.yml — WET</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.1">
+          <div id="pw1" class="tline" style="color:#4ec9e1">services:</div>
+          <div id="pw2" class="tline" style="color:#888;margin-left:10px">api:</div>
+          <div id="pw3" class="tline" style="color:#e85050;margin-left:20px">logging:</div>
+          <div id="pw4" class="tline" style="color:#e85050;margin-left:30px">driver: json-file</div>
+          <div id="pw5" class="tline" style="color:#e85050;margin-left:30px">options: {max-size: 10m}</div>
+          <div id="pw6" class="tline" style="color:#888;margin-left:10px;margin-top:3px">worker:</div>
+          <div id="pw7" class="tline" style="color:#e85050;margin-left:20px">logging:</div>
+          <div id="pw8" class="tline" style="color:#e85050;margin-left:30px">driver: json-file</div>
+          <div id="pw9" class="tline" style="color:#e85050;margin-left:30px">options: {max-size: 10m}</div>
+          <div id="pwa" class="tline" style="color:#888;margin-left:10px;margin-top:3px">scheduler:</div>
+          <div id="pwb" class="tline" style="color:#e85050;margin-left:20px">logging:</div>
+          <div id="pwc" class="tline" style="color:#e85050;margin-left:30px">driver: json-file</div>
+          <div id="pwd" class="tline" style="color:#e85050;margin-left:30px">options: {max-size: 10m}</div>
+        </div>
+      </div>
+
+      <!-- Pain card -->
+      <div id="p1" class="panel" style="background:#1a0000;border-left:4px solid #e85050;border-top:1px solid #3a1010;border-right:1px solid #3a1010;border-bottom:1px solid #3a1010;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e85050;margin-bottom:6px">X SAME BLOCK — 3 TIMES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Every service repeats the same logging,<br>resource limits, and env vars.<br>Change one = change all of them.</div>
+      </div>
+
+      <!-- DRY arrow -->
+      <div id="p2" class="panel" style="text-align:center;padding:4px">
+        <div style="font-size:8px;color:#4ec9e1;letter-spacing:2px">v YAML ANCHORS FIX THIS v</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">5 services with shared config = 5x the copy-paste surface.</div>
+    <div class="ih rd">One typo in logging config breaks all services differently.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">3x</div><div class="sl">DUPLICATION</div></div>
+    <div class="sc"><div class="sv am">HIGH</div><div class="sl">DRIFT RISK</div></div>
+    <div class="sc"><div class="sv rd">WET</div><div class="sl">YAML</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>PREV</button>
+    <button class="btn play" onclick="play(1)">PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: YAML ANCHOR SYNTAX ═══ -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">ANCHOR SYNTAX</div>
+    <div class="hdr-sub">&amp;anchor — *alias — how it works</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">YAML SPEC</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">SYNTAX</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Two-column explainer -->
+      <div id="ax0" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div id="ax1" class="panel" style="background:#06000d;border:2px solid #3a1060;border-radius:3px;overflow:hidden">
+          <div style="background:#100020;padding:5px 8px;border-bottom:1px solid #3a1060;text-align:center">
+            <span style="font-size:7px;color:#a080ff">&amp;anchor</span>
+          </div>
+          <div style="padding:8px;font-size:6px;color:#aaa;line-height:2.0">
+            <div style="color:#a080ff;font-size:7px;margin-bottom:5px">DEFINE</div>
+            Marks a block as a reusable anchor. Like declaring a variable.<br><br>
+            <span style="color:#4ec9e1">&amp;myanchor</span> before a mapping block saves it.
+          </div>
+        </div>
+        <div id="ax2" class="panel" style="background:#000d04;border:2px solid #1a3a10;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 8px;border-bottom:1px solid #1a3a10;text-align:center">
+            <span style="font-size:7px;color:#4eff9a">*alias</span>
+          </div>
+          <div style="padding:8px;font-size:6px;color:#aaa;line-height:2.0">
+            <div style="color:#4eff9a;font-size:7px;margin-bottom:5px">REFERENCE</div>
+            Inlines the anchor's content wherever used. Like calling a variable.<br><br>
+            <span style="color:#4eff9a">*myanchor</span> expands the full block.
+          </div>
+        </div>
+      </div>
+
+      <!-- Minimal example -->
+      <div id="ax3" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">minimal example</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div id="al1" class="tline" style="color:#555"># define the anchor</div>
+          <div id="al2" class="tline" style="color:#888">logging_cfg: <span style="color:#a080ff">&amp;logging</span></div>
+          <div id="al3" class="tline" style="color:#888;margin-left:10px">driver: json-file</div>
+          <div id="al4" class="tline" style="color:#888;margin-left:10px">options:</div>
+          <div id="al5" class="tline" style="color:#888;margin-left:20px">max-size: 10m</div>
+          <div id="al6" class="tline" style="color:#555;margin-top:5px"># use the alias</div>
+          <div id="al7" class="tline" style="color:#888">services:</div>
+          <div id="al8" class="tline" style="color:#888;margin-left:10px">api:</div>
+          <div id="al9" class="tline" style="color:#888;margin-left:20px">logging: <span style="color:#4eff9a">*logging</span></div>
+          <div id="ala" class="tline" style="color:#888;margin-left:10px">worker:</div>
+          <div id="alb" class="tline" style="color:#888;margin-left:20px">logging: <span style="color:#4eff9a">*logging</span></div>
+          <div id="alc" class="tline" style="color:#888;margin-left:10px">scheduler:</div>
+          <div id="ald" class="tline" style="color:#888;margin-left:20px">logging: <span style="color:#4eff9a">*logging</span></div>
+        </div>
+      </div>
+
+      <!-- Merge key tip -->
+      <div id="ax4" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:6px">MERGE KEY: &lt;&lt;</div>
+        <div style="font-size:6.5px;color:#888;line-height:2.0">api:<br><span style="margin-left:10px;color:#aaa">&lt;&lt;: <span style="color:#4eff9a">*logging</span></span><br><span style="margin-left:10px;color:#aaa">image: myapp</span></div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-top:5px">Merges anchor keys into an existing mapping. Override individual keys after the merge.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">YAML anchors are part of the YAML spec — not Compose-specific.</div>
+    <div class="ih">Define once with &amp; — reference anywhere with *.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">&amp;</div><div class="sl">DEFINE</div></div>
+    <div class="sc"><div class="sv gn">*</div><div class="sl">REFERENCE</div></div>
+    <div class="sc"><div class="sv am">&lt;&lt;</div><div class="sl">MERGE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">PREV</button>
+    <button class="btn play" onclick="play(2)">PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: x- EXTENSION FIELDS ═══ -->
+<div class="scene" id="s3" style="background:#0a0015">
+  <div class="hdr" style="background:#0a0015;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">x- EXTENSIONS</div>
+    <div class="hdr-sub">COMPOSE-NATIVE ANCHOR STORAGE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0015">
+    <span class="slabel" style="color:#a080ff">COMPOSE FEATURE</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">IGNORED BY COMPOSE</span>
+  </div>
+  <div class="anim" style="background:#0a0015">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- x- explainer card -->
+      <div id="xe0" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="background:#100020;padding:5px 10px;border-bottom:1px solid #200838;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:7px;color:#a080ff">x- EXTENSION FIELDS</span>
+          <span style="font-size:6px;color:#e8a020;border:1px solid #e8a020;padding:2px 5px">COMPOSE IGNORES THEM</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.0;color:#aaa">
+          <div id="xf1" class="tline">Any top-level key starting with <span style="color:#a080ff">x-</span> is</div>
+          <div id="xf2" class="tline">silently ignored by <span style="color:#4ec9e1">docker compose</span>.</div>
+          <div id="xf3" class="tline" style="margin-top:5px">This makes them <span style="color:#4eff9a">perfect anchor holders</span></div>
+          <div id="xf4" class="tline">— define reusable blocks at the top</div>
+          <div id="xf5" class="tline">of your file, reference everywhere.</div>
+        </div>
+      </div>
+
+      <!-- x- YAML example -->
+      <div id="xe1" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="background:#100020;padding:5px 10px;border-bottom:1px solid #200838;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">docker-compose.yml</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div id="xl1" class="tline" style="color:#a080ff">x-logging: <span style="color:#e8a020">&amp;logging</span></div>
+          <div id="xl2" class="tline" style="color:#888;margin-left:10px">driver: json-file</div>
+          <div id="xl3" class="tline" style="color:#888;margin-left:10px">options:</div>
+          <div id="xl4" class="tline" style="color:#888;margin-left:20px">max-size: 10m</div>
+          <div id="xl5" class="tline" style="color:#a080ff;margin-top:5px">x-deploy: <span style="color:#e8a020">&amp;deploy</span></div>
+          <div id="xl6" class="tline" style="color:#888;margin-left:10px">resources:</div>
+          <div id="xl7" class="tline" style="color:#888;margin-left:20px">limits: {cpus: '0.5', memory: 512M}</div>
+          <div id="xl8" class="tline" style="color:#4ec9e1;margin-top:5px">services:</div>
+          <div id="xl9" class="tline" style="color:#888;margin-left:10px">api:</div>
+          <div id="xla" class="tline" style="color:#888;margin-left:20px">logging: <span style="color:#4eff9a">*logging</span></div>
+          <div id="xlb" class="tline" style="color:#888;margin-left:20px">deploy: <span style="color:#4eff9a">*deploy</span></div>
+          <div id="xlc" class="tline" style="color:#888;margin-left:10px">worker:</div>
+          <div id="xld" class="tline" style="color:#888;margin-left:20px">logging: <span style="color:#4eff9a">*logging</span></div>
+          <div id="xle" class="tline" style="color:#888;margin-left:20px">deploy: <span style="color:#4eff9a">*deploy</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">x- keys are a Compose convention — not standard YAML.</div>
+    <div class="ih pu">x-logging, x-env, x-deploy: named anchors at the top of your file.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">x-</div><div class="sl">PREFIX</div></div>
+    <div class="sc"><div class="sv am">IGNORED</div><div class="sl">BY COMPOSE</div></div>
+    <div class="sc"><div class="sv gn">REUSED</div><div class="sl">VIA *ALIAS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">PREV</button>
+    <button class="btn play" onclick="play(3)">PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: BEFORE vs AFTER ═══ -->
+<div class="scene" id="s4" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">BEFORE vs AFTER</div>
+    <div class="hdr-sub">WET vs DRY COMPOSE FILE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4ec9e1">COMPARISON</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">DRY WIN</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Side by side comparison -->
+      <div id="ba0" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <!-- BEFORE -->
+        <div id="ba1" class="panel" style="background:#120008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">X WET</div>
+            <div style="font-size:5.5px;color:#555;margin-top:3px">18 lines</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#888;line-height:2.0">
+            <div id="bb1" class="tline">api:</div>
+            <div id="bb2" class="tline" style="color:#e85050;margin-left:8px">logging:</div>
+            <div id="bb3" class="tline" style="color:#e85050;margin-left:12px">driver: json</div>
+            <div id="bb4" class="tline" style="color:#e85050;margin-left:12px">options: ...</div>
+            <div id="bb5" class="tline" style="margin-top:4px">worker:</div>
+            <div id="bb6" class="tline" style="color:#e85050;margin-left:8px">logging:</div>
+            <div id="bb7" class="tline" style="color:#e85050;margin-left:12px">driver: json</div>
+            <div id="bb8" class="tline" style="color:#e85050;margin-left:12px">options: ...</div>
+            <div id="bb9" class="tline" style="margin-top:4px">scheduler:</div>
+            <div id="bba" class="tline" style="color:#e85050;margin-left:8px">logging:</div>
+            <div id="bbb" class="tline" style="color:#e85050;margin-left:12px">driver: json</div>
+            <div id="bbc" class="tline" style="color:#e85050;margin-left:12px">options: ...</div>
+          </div>
+        </div>
+        <!-- AFTER -->
+        <div id="ba2" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">OK DRY</div>
+            <div style="font-size:5.5px;color:#555;margin-top:3px">8 lines</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#888;line-height:2.0">
+            <div id="bc1" class="tline" style="color:#a080ff">x-log: &amp;log</div>
+            <div id="bc2" class="tline" style="margin-left:8px">driver: json</div>
+            <div id="bc3" class="tline" style="margin-left:8px">options: ...</div>
+            <div id="bc4" class="tline" style="margin-top:4px">api:</div>
+            <div id="bc5" class="tline" style="color:#4eff9a;margin-left:8px">log: *log</div>
+            <div id="bc6" class="tline" style="margin-top:4px">worker:</div>
+            <div id="bc7" class="tline" style="color:#4eff9a;margin-left:8px">log: *log</div>
+            <div id="bc8" class="tline" style="margin-top:4px">scheduler:</div>
+            <div id="bc9" class="tline" style="color:#4eff9a;margin-left:8px">log: *log</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Override with merge key -->
+      <div id="ba3" class="panel" style="background:#050d18;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030">
+          <span style="font-size:7px;color:#4ec9e1">OVERRIDING ONE KEY AFTER MERGE</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="bm1" class="tline" style="color:#aaa">worker:</div>
+          <div id="bm2" class="tline" style="color:#aaa;margin-left:10px">&lt;&lt;: <span style="color:#4eff9a">*logging</span>  <span style="color:#555"># merge base</span></div>
+          <div id="bm3" class="tline" style="color:#e8a020;margin-left:10px">options:    <span style="color:#555"># override one key</span></div>
+          <div id="bm4" class="tline" style="color:#e8a020;margin-left:20px">max-size: 50m</div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div id="ba4" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">THE PAYOFF</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Change logging config in ONE place.<br>All services update automatically.<br>DRY principle — Don't Repeat Yourself.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">WET: 18 lines with 3 identical logging blocks.</div>
+    <div class="ih">DRY: 8 lines. One anchor, three aliases. Zero drift.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">18</div><div class="sl">WET LINES</div></div>
+    <div class="sc"><div class="sv gn">8</div><div class="sl">DRY LINES</div></div>
+    <div class="sc"><div class="sv gn">-55%</div><div class="sl">REDUCTION</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">PREV</button>
+    <button class="btn play" onclick="play(4)">PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: CHEATSHEET ═══ -->
+<div class="scene" id="s5" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">ANCHORS CHEATSHEET</div>
+    <div class="hdr-sub">PATTERNS + GOTCHAS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Common patterns grid -->
+      <div id="ch0" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:10px">WHAT TO ANCHOR</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+          <div id="cg1" class="panel" style="background:#002010;border:1px solid #0d3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#a080ff;margin-bottom:5px">x-logging</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">driver<br>options<br>max-size</div>
+          </div>
+          <div id="cg2" class="panel" style="background:#002010;border:1px solid #0d3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#4ec9e1;margin-bottom:5px">x-deploy</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">cpu limits<br>mem limits<br>replicas</div>
+          </div>
+          <div id="cg3" class="panel" style="background:#002010;border:1px solid #0d3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#e8a020;margin-bottom:5px">x-env</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">shared vars<br>DB_URL<br>LOG_LEVEL</div>
+          </div>
+          <div id="cg4" class="panel" style="background:#002010;border:1px solid #0d3018;padding:8px;border-radius:2px">
+            <div style="font-size:7px;color:#4eff9a;margin-bottom:5px">x-healthcheck</div>
+            <div style="font-size:6px;color:#888;line-height:1.9">test cmd<br>interval<br>retries</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gotchas -->
+      <div id="ch1" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#e8a020;margin-bottom:8px">GOTCHAS</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div id="cw1" class="panel" style="display:flex;gap:8px;background:#0a1a0a;border:1px solid #0d3018;padding:7px 9px;border-radius:2px">
+            <span style="color:#e85050;font-size:9px;flex-shrink:0">!</span>
+            <div style="font-size:6px;color:#aaa;line-height:1.9">Anchors must be defined<br><span style="color:#4eff9a">before</span> they are referenced.</div>
+          </div>
+          <div id="cw2" class="panel" style="display:flex;gap:8px;background:#0a1a0a;border:1px solid #0d3018;padding:7px 9px;border-radius:2px">
+            <span style="color:#e85050;font-size:9px;flex-shrink:0">!</span>
+            <div style="font-size:6px;color:#aaa;line-height:1.9">No Docker Compose variable<br>substitution inside anchors<br><span style="color:#e8a020">${VAR}</span> still works in services.</div>
+          </div>
+          <div id="cw3" class="panel" style="display:flex;gap:8px;background:#0a1a0a;border:1px solid #0d3018;padding:7px 9px;border-radius:2px">
+            <span style="color:#e85050;font-size:9px;flex-shrink:0">!</span>
+            <div style="font-size:6px;color:#aaa;line-height:1.9"><span style="color:#4ec9e1">&lt;&lt;:</span> merge replaces entire keys.<br>Nested maps need careful ordering.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pro tip -->
+      <div id="ch2" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:6px">PRO TIP</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Put ALL <span style="color:#a080ff">x-</span> anchors at the very top of your Compose file — before the <span style="color:#4ec9e1">services:</span> block. They read like constants at the top of a config file.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">One Compose file. Zero repeated config blocks.</div>
+    <div class="ih">x- + &amp;anchor + *alias = the DRY trifecta for Compose.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">DRY</div><div class="sl">PRINCIPLE</div></div>
+    <div class="sc"><div class="sv pu">x-</div><div class="sl">CONVENTION</div></div>
+    <div class="sc"><div class="sv am">&lt;&lt;</div><div class="sl">OVERRIDE</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">PREV</button>
+    <button class="btn play" onclick="play(5)">PLAY</button>
+    <button class="btn restart" onclick="go(1)">RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) { af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; }); }
+function hideEl(id) { const e = document.getElementById(id); if (e) e.style.opacity = '0'; }
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['p0','p1','p2'].forEach(hide);
+    ['pw1','pw2','pw3','pw4','pw5','pw6','pw7','pw8','pw9','pwa','pwb','pwc','pwd'].forEach(hideEl);
+  } else if (n === 2) {
+    ['ax0','ax1','ax2','ax3','ax4'].forEach(hide);
+    ['al1','al2','al3','al4','al5','al6','al7','al8','al9','ala','alb','alc','ald'].forEach(hideEl);
+  } else if (n === 3) {
+    ['xe0','xe1'].forEach(hide);
+    ['xf1','xf2','xf3','xf4','xf5'].forEach(hideEl);
+    ['xl1','xl2','xl3','xl4','xl5','xl6','xl7','xl8','xl9','xla','xlb','xlc','xld','xle'].forEach(hideEl);
+  } else if (n === 4) {
+    ['ba0','ba1','ba2','ba3','ba4'].forEach(hide);
+    ['bb1','bb2','bb3','bb4','bb5','bb6','bb7','bb8','bb9','bba','bbb','bbc'].forEach(hideEl);
+    ['bc1','bc2','bc3','bc4','bc5','bc6','bc7','bc8','bc9'].forEach(hideEl);
+    ['bm1','bm2','bm3','bm4'].forEach(hideEl);
+  } else if (n === 5) {
+    ['ch0','ch1','ch2'].forEach(hide);
+    ['cg1','cg2','cg3','cg4','cw1','cw2','cw3'].forEach(hide);
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    show('p0', 200);
+    showEl('pw1', 350);
+    showEl('pw2', 550); showEl('pw3', 700); showEl('pw4', 850); showEl('pw5', 1000);
+    showEl('pw6', 1200); showEl('pw7', 1350); showEl('pw8', 1500); showEl('pw9', 1650);
+    showEl('pwa', 1850); showEl('pwb', 2000); showEl('pwc', 2150); showEl('pwd', 2300);
+    show('p1', 2700);
+    show('p2', 3300);
+  } else if (n === 2) {
+    show('ax0', 200);
+    show('ax1', 350);
+    show('ax2', 600);
+    show('ax3', 1000);
+    showEl('al1', 1200); showEl('al2', 1400); showEl('al3', 1600); showEl('al4', 1750); showEl('al5', 1900);
+    showEl('al6', 2100); showEl('al7', 2250); showEl('al8', 2400); showEl('al9', 2600);
+    showEl('ala', 2750); showEl('alb', 2900); showEl('alc', 3050); showEl('ald', 3200);
+    show('ax4', 3600);
+  } else if (n === 3) {
+    show('xe0', 200);
+    showEl('xf1', 400); showEl('xf2', 600);
+    showEl('xf3', 900); showEl('xf4', 1050); showEl('xf5', 1200);
+    show('xe1', 1600);
+    showEl('xl1', 1800); showEl('xl2', 1950); showEl('xl3', 2100); showEl('xl4', 2250);
+    showEl('xl5', 2500); showEl('xl6', 2650); showEl('xl7', 2800);
+    showEl('xl8', 3050); showEl('xl9', 3200); showEl('xla', 3350); showEl('xlb', 3500);
+    showEl('xlc', 3700); showEl('xld', 3850); showEl('xle', 4000);
+  } else if (n === 4) {
+    show('ba0', 200);
+    show('ba1', 350);
+    showEl('bb1', 500); showEl('bb2', 650); showEl('bb3', 800); showEl('bb4', 950);
+    showEl('bb5', 1100); showEl('bb6', 1250); showEl('bb7', 1400); showEl('bb8', 1550);
+    showEl('bb9', 1700); showEl('bba', 1850); showEl('bbb', 2000); showEl('bbc', 2150);
+    show('ba2', 2300);
+    showEl('bc1', 2450); showEl('bc2', 2600); showEl('bc3', 2750);
+    showEl('bc4', 2950); showEl('bc5', 3100);
+    showEl('bc6', 3250); showEl('bc7', 3400);
+    showEl('bc8', 3550); showEl('bc9', 3700);
+    show('ba3', 4000);
+    showEl('bm1', 4200); showEl('bm2', 4400); showEl('bm3', 4600); showEl('bm4', 4800);
+    show('ba4', 5100);
+  } else if (n === 5) {
+    show('ch0', 200);
+    show('cg1', 400); show('cg2', 600); show('cg3', 800); show('cg4', 1000);
+    show('ch1', 1400);
+    show('cw1', 1600); show('cw2', 1900); show('cw3', 2200);
+    show('ch2', 2700);
+  }
+}
+
+window.addEventListener('load', () => {
+  reset(1);
+  af(150, () => play(1));
+});
+</script>
+</body>
+</html>
