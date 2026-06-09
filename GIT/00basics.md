@@ -65,18 +65,18 @@ git status
 ```
 
 **Visual:**
-```
+```bash
 Working Directory         Staging Area         Repository
 ┌──────────────┐         ┌──────────────┐    ┌──────────────┐
 │              │         │              │    │              │
-│ file1.txt ✓  │   →     │              │    │              │
+│ file1.txt ✓  │   →     │  file1.txt ✓ │    │              │
 │ file2.txt ✗  │         │              │    │              │
 │ file3.txt ?  │         │              │    │              │
 └──────────────┘         └──────────────┘    └──────────────┘
 
 Legend:
-✓ = Modified (tracked)
-✗ = Modified (not staged)
+✓ = staged
+✗ = Modified (but not staged)
 ? = Untracked
 ```
 
