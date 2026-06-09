@@ -81,6 +81,10 @@ docker run app3
 │  └────────────┘  └────────────┘  └────────────┘        │
 └─────────────────────────────────────────────────────────┘
 ```
+**Node vs Pod**
+- A Node is a machine (physical or virtual) in the Kubernetes cluster. Think like Node = Server/VM
+- Container = Running Docker Image; Pod = Kubernetes Wrapper Around Containers. In Kubernetes, you usually don't create containers directly.
+- Most of the time: 1 Pod = 1 Container though a Pod can contain multiple containers.
 
 ### Master Node (Control Plane)
 
