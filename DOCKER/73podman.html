@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Podman — Daemonless & Rootless</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+/* process node blink */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.blink{animation:blink 1.2s ease-in-out infinite}
+/* connection line draw */
+@keyframes drawline{from{stroke-dashoffset:200}to{stroke-dashoffset:0}}
+.drawline{stroke-dasharray:200;stroke-dashoffset:200;animation:drawline .5s ease-out forwards}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1: DOCKER vs PODMAN ARCHITECTURE ═══ -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">PODMAN</div>
+    <div class="hdr-sub">DAEMONLESS CONTAINER ENGINE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">ARCHITECTURE</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">OVERVIEW</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Docker daemon model -->
+      <div id="a1" class="panel" style="background:#120008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0000;padding:6px 10px;border-bottom:1px solid #3a1010;text-align:center">
+          <span style="font-size:7px;color:#e85050">DOCKER — DAEMON MODEL</span>
+        </div>
+        <div style="padding:8px 12px">
+          <svg width="100%" height="110" viewBox="0 0 342 110" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <!-- CLI -->
+            <rect id="da1" x="4" y="8" width="72" height="30" rx="2" fill="#1a0008" stroke="#e85050" stroke-width="1.5" opacity="0"/>
+            <text id="da1t" x="40" y="28" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">docker CLI</text>
+            <!-- arrow to daemon -->
+            <line id="da2" x1="76" y1="23" x2="118" y2="23" stroke="#e85050" stroke-width="1.2" opacity="0"/>
+            <polygon id="da2a" points="120,23 114,20 114,26" fill="#e85050" opacity="0"/>
+            <text id="da2t" x="97" y="17" text-anchor="middle" font-size="5.5" fill="#555" opacity="0">unix socket</text>
+            <!-- daemon -->
+            <rect id="da3" x="122" y="4" width="90" height="38" rx="2" fill="#200008" stroke="#e85050" stroke-width="2" opacity="0"/>
+            <text id="da3t" x="167" y="19" text-anchor="middle" font-size="6" fill="#e85050" opacity="0">dockerd</text>
+            <text id="da3s" x="167" y="34" text-anchor="middle" font-size="5" fill="#888" opacity="0">root daemon</text>
+            <!-- daemon to containers -->
+            <line id="da4" x1="167" y1="42" x2="167" y2="62" stroke="#e85050" stroke-width="1.2" stroke-dasharray="3,2" opacity="0"/>
+            <!-- containers row -->
+            <rect id="dc1" x="30" y="64" width="62" height="26" rx="2" fill="#1a0008" stroke="#888" stroke-width="1" opacity="0"/>
+            <text id="dc1t" x="61" y="81" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">container</text>
+            <rect id="dc2" x="107" y="64" width="62" height="26" rx="2" fill="#1a0008" stroke="#888" stroke-width="1" opacity="0"/>
+            <text id="dc2t" x="138" y="81" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">container</text>
+            <rect id="dc3" x="184" y="64" width="62" height="26" rx="2" fill="#1a0008" stroke="#888" stroke-width="1" opacity="0"/>
+            <text id="dc3t" x="215" y="81" text-anchor="middle" font-size="5.5" fill="#888" opacity="0">container</text>
+            <!-- lines daemon->containers -->
+            <line id="dl1" x1="138" y1="62" x2="61" y2="64" stroke="#555" stroke-width="1" opacity="0"/>
+            <line id="dl2" x1="167" y1="62" x2="138" y2="64" stroke="#555" stroke-width="1" opacity="0"/>
+            <line id="dl3" x1="196" y1="62" x2="215" y2="64" stroke="#555" stroke-width="1" opacity="0"/>
+            <!-- warning -->
+            <text id="dawarn" x="171" y="104" text-anchor="middle" font-size="5.5" fill="#e85050" opacity="0">daemon crash = ALL containers lost</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Podman fork-exec model -->
+      <div id="a2" class="panel" style="background:#001005;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:6px 10px;border-bottom:1px solid #0d3018;text-align:center">
+          <span style="font-size:7px;color:#4eff9a">PODMAN — FORK-EXEC MODEL</span>
+        </div>
+        <div style="padding:8px 12px">
+          <svg width="100%" height="110" viewBox="0 0 342 110" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+            <!-- CLI -->
+            <rect id="pa1" x="4" y="8" width="72" height="30" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="pa1t" x="40" y="28" text-anchor="middle" font-size="6" fill="#4eff9a" opacity="0">podman CLI</text>
+            <!-- direct forks -->
+            <line id="pa2" x1="76" y1="23" x2="118" y2="52" stroke="#4eff9a" stroke-width="1.2" opacity="0"/>
+            <line id="pa3" x1="76" y1="23" x2="174" y2="52" stroke="#4eff9a" stroke-width="1.2" opacity="0"/>
+            <line id="pa4" x1="76" y1="23" x2="230" y2="52" stroke="#4eff9a" stroke-width="1.2" opacity="0"/>
+            <text id="pa2t" x="130" y="38" text-anchor="middle" font-size="5.5" fill="#555" opacity="0">fork-exec</text>
+            <!-- containers as direct children -->
+            <rect id="pc1" x="84" y="54" width="68" height="28" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="pc1t" x="118" y="67" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">container</text>
+            <text id="pc1s" x="118" y="78" text-anchor="middle" font-size="5" fill="#888" opacity="0">own process</text>
+            <rect id="pc2" x="160" y="54" width="68" height="28" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="pc2t" x="194" y="67" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">container</text>
+            <text id="pc2s" x="194" y="78" text-anchor="middle" font-size="5" fill="#888" opacity="0">own process</text>
+            <rect id="pc3" x="236" y="54" width="68" height="28" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1.5" opacity="0"/>
+            <text id="pc3t" x="270" y="67" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">container</text>
+            <text id="pc3s" x="270" y="78" text-anchor="middle" font-size="5" fill="#888" opacity="0">own process</text>
+            <!-- NO DAEMON label -->
+            <rect id="pnd" x="242" y="4" width="90" height="30" rx="2" fill="#001a08" stroke="#4eff9a" stroke-width="1" opacity="0"/>
+            <text id="pndt" x="287" y="15" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">NO DAEMON</text>
+            <text id="pnds" x="287" y="27" text-anchor="middle" font-size="5" fill="#888" opacity="0">no SPOF</text>
+            <!-- OK note -->
+            <text id="paok" x="171" y="104" text-anchor="middle" font-size="5.5" fill="#4eff9a" opacity="0">each container is an independent OS process</text>
+          </svg>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">Docker routes everything through a root daemon — single point of failure.</div>
+    <div class="ih">Podman fork-execs containers directly. No daemon, no SPOF.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">daemon</div><div class="sl">DOCKER ARCH</div></div>
+    <div class="sc"><div class="sv gn">fork-exec</div><div class="sl">PODMAN ARCH</div></div>
+    <div class="sc"><div class="sv gn">0</div><div class="sl">SPOF</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>PREV</button>
+    <button class="btn play" onclick="play(1)">PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: ROOTLESS SECURITY ═══ -->
+<div class="scene" id="s2" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #380015">
+    <div class="hdr-title" style="color:#e85050">ROOTLESS BY DEFAULT</div>
+    <div class="hdr-sub">WHY IT MATTERS FOR SECURITY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">SECURITY</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">ROOTLESS</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Side by side root comparison -->
+      <div id="r0" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div id="r1" class="panel" style="background:#120008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">X DOCKER</div>
+            <div style="font-size:5.5px;color:#555;margin-top:2px">daemon runs as root</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#888;line-height:2.1">
+            <div id="rl1" class="tline">dockerd = root</div>
+            <div id="rl2" class="tline">containers can</div>
+            <div id="rl3" class="tline">escape to root</div>
+            <div id="rl4" class="tline" style="color:#e85050">host privesc risk</div>
+            <div id="rl5" class="tline" style="color:#e85050">docker group =</div>
+            <div id="rl6" class="tline" style="color:#e85050">effectively root</div>
+          </div>
+        </div>
+        <div id="r2" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">OK PODMAN</div>
+            <div style="font-size:5.5px;color:#555;margin-top:2px">rootless by default</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#888;line-height:2.1">
+            <div id="rr1" class="tline">runs as YOUR user</div>
+            <div id="rr2" class="tline">user namespaces</div>
+            <div id="rr3" class="tline">isolate the process</div>
+            <div id="rr4" class="tline" style="color:#4eff9a">container breach</div>
+            <div id="rr5" class="tline" style="color:#4eff9a">= unprivileged</div>
+            <div id="rr6" class="tline" style="color:#4eff9a">host user at worst</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal: whoami -->
+      <div id="r3" class="panel" style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;border-bottom:1px solid #2d0010;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">see who owns the process</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="wh1" class="tline" style="color:#555"># Docker daemon process</div>
+          <div id="wh2" class="tline" style="color:#888">$ ps aux | grep dockerd</div>
+          <div id="wh3" class="tline" style="color:#e85050">root  1234  ... dockerd</div>
+          <div id="wh4" class="tline" style="color:#555;margin-top:5px"># Podman container process</div>
+          <div id="wh5" class="tline" style="color:#888">$ ps aux | grep conmon</div>
+          <div id="wh6" class="tline" style="color:#4eff9a">alice 5678  ... conmon ...</div>
+        </div>
+      </div>
+
+      <!-- Namespace tip -->
+      <div id="r4" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:5px">USER NAMESPACES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Root inside the container maps to an unprivileged UID on the host. Container thinks it's root — host disagrees.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">Docker's daemon runs as root — docker group membership = root access.</div>
+    <div class="ih rd">Podman containers run as you. Breach = unprivileged user on host.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">root</div><div class="sl">DOCKER DAEMON</div></div>
+    <div class="sc"><div class="sv gn">user</div><div class="sl">PODMAN PROC</div></div>
+    <div class="sc"><div class="sv gn">LOW</div><div class="sl">BLAST RADIUS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">PREV</button>
+    <button class="btn play" onclick="play(2)">PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: DROP-IN COMPATIBILITY ═══ -->
+<div class="scene" id="s3" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">DROP-IN REPLACEMENT</div>
+    <div class="hdr-sub">alias docker=podman — IT JUST WORKS</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">COMPATIBILITY</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">API COMPAT</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Alias setup terminal -->
+      <div id="c0" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">~/.bashrc or ~/.zshrc</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="c1" class="tline" style="color:#555"># one-liner migration</div>
+          <div id="c2" class="tline" style="color:#4eff9a">alias docker=podman</div>
+          <div id="c3" class="tline" style="color:#555;margin-top:5px"># now all docker commands just work</div>
+          <div id="c4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker run</span> -d nginx       <span style="color:#4eff9a">OK</span></div>
+          <div id="c5" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker build</span> -t myapp .    <span style="color:#4eff9a">OK</span></div>
+          <div id="c6" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker ps</span>                   <span style="color:#4eff9a">OK</span></div>
+          <div id="c7" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker compose</span> up          <span style="color:#4eff9a">OK</span></div>
+        </div>
+      </div>
+
+      <!-- Compose support card -->
+      <div id="c8" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:8px">COMPOSE SUPPORT</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div id="cmp1" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">🐙</span>
+            <div>
+              <div style="font-size:7px;color:#4eff9a;margin-bottom:3px">podman compose</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">Built-in. Uses docker-compose.yml as-is. Available in Podman 4.4+.</div>
+            </div>
+          </div>
+          <div id="cmp2" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">🐍</span>
+            <div>
+              <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">podman-compose</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">pip install podman-compose. Python reimplementation for older Podman.</div>
+            </div>
+          </div>
+          <div id="cmp3" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">🔌</span>
+            <div>
+              <div style="font-size:7px;color:#a080ff;margin-bottom:3px">Docker socket emulation</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">podman system service — exposes Docker-compatible REST API at /var/run/docker.sock.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Podman implements the same CLI surface as Docker verbatim.</div>
+    <div class="ih">alias docker=podman is all most teams need to migrate.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">100%</div><div class="sl">CLI COMPAT</div></div>
+    <div class="sc"><div class="sv am">OCI</div><div class="sl">IMAGES</div></div>
+    <div class="sc"><div class="sv pu">REST</div><div class="sl">API COMPAT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">PREV</button>
+    <button class="btn play" onclick="play(3)">PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: PODS ═══ -->
+<div class="scene" id="s4" style="background:#0a0015">
+  <div class="hdr" style="background:#0a0015;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">PODS CONCEPT</div>
+    <div class="hdr-sub">K8S PODS — BUILT INTO PODMAN</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0015">
+    <span class="slabel" style="color:#a080ff">PODS</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">K8S COMPAT</span>
+  </div>
+  <div class="anim" style="background:#0a0015">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Pod explainer -->
+      <div id="p0" class="panel" style="background:#06000d;border-left:4px solid #a080ff;border-top:1px solid #200838;border-right:1px solid #200838;border-bottom:1px solid #200838;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:6px">WHAT IS A POD?</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">A group of containers that share the same network namespace, UTS, and optionally IPC. Same concept as a Kubernetes pod — useful for local K8s development.</div>
+      </div>
+
+      <!-- Pod diagram SVG -->
+      <div id="p1" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:8px">POD STRUCTURE</div>
+        <svg width="100%" height="130" viewBox="0 0 342 130" xmlns="http://www.w3.org/2000/svg" font-family="'Press Start 2P',monospace">
+          <!-- Pod border -->
+          <rect id="pod" x="4" y="4" width="334" height="122" rx="4" fill="#06000d" stroke="#a080ff" stroke-width="2" stroke-dasharray="6,3" opacity="0"/>
+          <text id="podt" x="171" y="17" text-anchor="middle" font-size="6" fill="#a080ff" opacity="0">POD — shared network namespace</text>
+          <!-- infra container (pause) -->
+          <rect id="inf" x="130" y="24" width="84" height="28" rx="2" fill="#100020" stroke="#555" stroke-width="1" opacity="0"/>
+          <text id="inft" x="172" y="36" text-anchor="middle" font-size="5.5" fill="#555" opacity="0">infra (pause)</text>
+          <text id="infs" x="172" y="47" text-anchor="middle" font-size="5" fill="#333" opacity="0">holds network</text>
+          <!-- app containers -->
+          <rect id="cn1" x="20" y="70" width="84" height="46" rx="2" fill="#100020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="cn1t" x="62" y="88" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">app</text>
+          <text id="cn1s" x="62" y="101" text-anchor="middle" font-size="5" fill="#888" opacity="0">localhost:3000</text>
+          <text id="cn1i" x="62" y="112" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">shared network</text>
+          <rect id="cn2" x="130" y="70" width="84" height="46" rx="2" fill="#100020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="cn2t" x="172" y="88" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">sidecar</text>
+          <text id="cn2s" x="172" y="101" text-anchor="middle" font-size="5" fill="#888" opacity="0">localhost:9090</text>
+          <text id="cn2i" x="172" y="112" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">shared network</text>
+          <rect id="cn3" x="240" y="70" width="84" height="46" rx="2" fill="#100020" stroke="#a080ff" stroke-width="1.5" opacity="0"/>
+          <text id="cn3t" x="282" y="88" text-anchor="middle" font-size="5.5" fill="#a080ff" opacity="0">proxy</text>
+          <text id="cn3s" x="282" y="101" text-anchor="middle" font-size="5" fill="#888" opacity="0">localhost:8080</text>
+          <text id="cn3i" x="282" y="112" text-anchor="middle" font-size="4.5" fill="#555" opacity="0">shared network</text>
+          <!-- lines from infra -->
+          <line id="il1" x1="130" y1="52" x2="62" y2="70" stroke="#333" stroke-width="1" opacity="0"/>
+          <line id="il2" x1="172" y1="52" x2="172" y2="70" stroke="#333" stroke-width="1" opacity="0"/>
+          <line id="il3" x1="214" y1="52" x2="282" y2="70" stroke="#333" stroke-width="1" opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Pod commands -->
+      <div id="p2" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="background:#100020;padding:5px 10px;border-bottom:1px solid #200838;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">pod commands</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="pc1" class="tline" style="color:#888">$ <span style="color:#a080ff">podman pod create</span> --name mypod -p 8080:80</div>
+          <div id="pc2" class="tline" style="color:#888">$ <span style="color:#a080ff">podman run</span> --pod mypod nginx</div>
+          <div id="pc3" class="tline" style="color:#888">$ <span style="color:#a080ff">podman run</span> --pod mypod myapp</div>
+          <div id="pc4" class="tline" style="color:#555;margin-top:4px"># export pod as K8s YAML!</div>
+          <div id="pc5" class="tline" style="color:#888">$ <span style="color:#4eff9a">podman generate kube</span> mypod</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Containers in a pod share localhost — talk via 127.0.0.1.</div>
+    <div class="ih pu">podman generate kube exports your pod as K8s manifests.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">POD</div><div class="sl">BUILT-IN</div></div>
+    <div class="sc"><div class="sv gn">shared</div><div class="sl">NETWORK NS</div></div>
+    <div class="sc"><div class="sv am">K8s</div><div class="sl">EXPORT</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">PREV</button>
+    <button class="btn play" onclick="play(4)">PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: CHEATSHEET ═══ -->
+<div class="scene" id="s5" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">PODMAN CHEATSHEET</div>
+    <div class="hdr-sub">COMMANDS + KEY DIFFERENCES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4eff9a">REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Docker vs Podman diff table -->
+      <div id="ch0" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030">
+          <span style="font-size:7px;color:#4ec9e1">DOCKER vs PODMAN — KEY DIFFERENCES</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:1.6">
+          <div style="display:grid;grid-template-columns:auto 1fr 1fr;gap:4px 8px;align-items:center">
+            <div style="color:#555"></div>
+            <div id="th1" class="tline" style="color:#e85050;font-size:6px">Docker</div>
+            <div id="th2" class="tline" style="color:#4eff9a;font-size:6px">Podman</div>
+            <div id="tr1a" class="tline" style="color:#777;padding:3px 0;border-top:1px solid #111">Daemon</div>
+            <div id="tr1b" class="tline" style="color:#e85050;padding:3px 0;border-top:1px solid #111">dockerd (root)</div>
+            <div id="tr1c" class="tline" style="color:#4eff9a;padding:3px 0;border-top:1px solid #111">none</div>
+            <div id="tr2a" class="tline" style="color:#777;padding:3px 0;border-top:1px solid #111">Default user</div>
+            <div id="tr2b" class="tline" style="color:#e85050;padding:3px 0;border-top:1px solid #111">root</div>
+            <div id="tr2c" class="tline" style="color:#4eff9a;padding:3px 0;border-top:1px solid #111">current user</div>
+            <div id="tr3a" class="tline" style="color:#777;padding:3px 0;border-top:1px solid #111">Compose</div>
+            <div id="tr3b" class="tline" style="color:#888;padding:3px 0;border-top:1px solid #111">docker compose</div>
+            <div id="tr3c" class="tline" style="color:#4eff9a;padding:3px 0;border-top:1px solid #111">podman compose</div>
+            <div id="tr4a" class="tline" style="color:#777;padding:3px 0;border-top:1px solid #111">Pods</div>
+            <div id="tr4b" class="tline" style="color:#e85050;padding:3px 0;border-top:1px solid #111">no native pods</div>
+            <div id="tr4c" class="tline" style="color:#4eff9a;padding:3px 0;border-top:1px solid #111">built-in</div>
+            <div id="tr5a" class="tline" style="color:#777;padding:3px 0;border-top:1px solid #111">RHEL 8+</div>
+            <div id="tr5b" class="tline" style="color:#e85050;padding:3px 0;border-top:1px solid #111">not included</div>
+            <div id="tr5c" class="tline" style="color:#4eff9a;padding:3px 0;border-top:1px solid #111">default engine</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Install / service -->
+      <div id="ch1" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">install + socket service</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.3">
+          <div id="in1" class="tline" style="color:#555"># RHEL/Fedora</div>
+          <div id="in2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">dnf install podman</span></div>
+          <div id="in3" class="tline" style="color:#555;margin-top:4px"># macOS</div>
+          <div id="in4" class="tline" style="color:#888">$ <span style="color:#4ec9e1">brew install podman</span></div>
+          <div id="in5" class="tline" style="color:#888">$ <span style="color:#4ec9e1">podman machine init && podman machine start</span></div>
+          <div id="in6" class="tline" style="color:#555;margin-top:4px"># expose Docker-compat socket</div>
+          <div id="in7" class="tline" style="color:#888">$ <span style="color:#a080ff">podman system service --time=0</span></div>
+        </div>
+      </div>
+
+      <!-- gotcha -->
+      <div id="ch2" class="panel" style="background:#000d04;border-left:4px solid #e8a020;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#e8a020;margin-bottom:5px">GOTCHA: NO AUTO-RESTART</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Podman has no daemon to restart containers on reboot. Use <span style="color:#4ec9e1">podman generate systemd</span> to create systemd units, or Quadlet (Podman 4.4+) for declarative container services.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Podman: drop-in Docker replacement with better security defaults.</div>
+    <div class="ih">Mandatory on RHEL 8+. Pods, rootless, daemonless — all built in.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">rootless</div><div class="sl">DEFAULT</div></div>
+    <div class="sc"><div class="sv pu">pods</div><div class="sl">BUILT-IN</div></div>
+    <div class="sc"><div class="sv am">0</div><div class="sl">DAEMON</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">PREV</button>
+    <button class="btn play" onclick="play(5)">PLAY</button>
+    <button class="btn restart" onclick="go(1)">RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; });
+}
+function hideEl(id) {
+  const e = document.getElementById(id); if (e) e.style.opacity = '0';
+}
+function svgShow(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.setAttribute('opacity','1'); });
+}
+function svgHide(id) {
+  const e = document.getElementById(id); if (e) e.setAttribute('opacity','0');
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['a1','a2'].forEach(hide);
+    ['da1','da1t','da2','da2a','da2t','da3','da3t','da3s','da4',
+     'dc1','dc1t','dc2','dc2t','dc3','dc3t','dl1','dl2','dl3','dawarn',
+     'pa1','pa1t','pa2','pa3','pa4','pa2t',
+     'pc1','pc1t','pc1s','pc2','pc2t','pc2s','pc3','pc3t','pc3s',
+     'pnd','pndt','pnds','paok'].forEach(svgHide);
+  } else if (n === 2) {
+    ['r0','r1','r2','r3','r4'].forEach(hide);
+    ['rl1','rl2','rl3','rl4','rl5','rl6',
+     'rr1','rr2','rr3','rr4','rr5','rr6',
+     'wh1','wh2','wh3','wh4','wh5','wh6'].forEach(hideEl);
+  } else if (n === 3) {
+    ['c0','c8'].forEach(hide);
+    ['c1','c2','c3','c4','c5','c6','c7'].forEach(hideEl);
+    ['cmp1','cmp2','cmp3'].forEach(hide);
+  } else if (n === 4) {
+    ['p0','p1','p2'].forEach(hide);
+    ['pod','podt','inf','inft','infs',
+     'cn1','cn1t','cn1s','cn1i','cn2','cn2t','cn2s','cn2i','cn3','cn3t','cn3s','cn3i',
+     'il1','il2','il3'].forEach(svgHide);
+    ['pc1','pc2','pc3','pc4','pc5'].forEach(hideEl);
+  } else if (n === 5) {
+    ['ch0','ch1','ch2'].forEach(hide);
+    ['th1','th2',
+     'tr1a','tr1b','tr1c','tr2a','tr2b','tr2c',
+     'tr3a','tr3b','tr3c','tr4a','tr4b','tr4c','tr5a','tr5b','tr5c',
+     'in1','in2','in3','in4','in5','in6','in7'].forEach(hideEl);
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    // Docker side
+    show('a1', 200);
+    svgShow('da1',400); svgShow('da1t',400);
+    svgShow('da2',650); svgShow('da2a',650); svgShow('da2t',650);
+    svgShow('da3',900); svgShow('da3t',900); svgShow('da3s',900);
+    svgShow('da4',1150);
+    svgShow('dc1',1350); svgShow('dc1t',1350);
+    svgShow('dc2',1500); svgShow('dc2t',1500);
+    svgShow('dc3',1650); svgShow('dc3t',1650);
+    svgShow('dl1',1800); svgShow('dl2',1800); svgShow('dl3',1800);
+    svgShow('dawarn',2100);
+    // Podman side
+    show('a2', 2400);
+    svgShow('pa1',2600); svgShow('pa1t',2600);
+    svgShow('pa2',2850); svgShow('pa3',2850); svgShow('pa4',2850); svgShow('pa2t',2850);
+    svgShow('pc1',3100); svgShow('pc1t',3100); svgShow('pc1s',3100);
+    svgShow('pc2',3250); svgShow('pc2t',3250); svgShow('pc2s',3250);
+    svgShow('pc3',3400); svgShow('pc3t',3400); svgShow('pc3s',3400);
+    svgShow('pnd',3650); svgShow('pndt',3650); svgShow('pnds',3650);
+    svgShow('paok',3900);
+  } else if (n === 2) {
+    show('r0', 200);
+    show('r1', 350);
+    showEl('rl1',500); showEl('rl2',650); showEl('rl3',800);
+    showEl('rl4',1000); showEl('rl5',1150); showEl('rl6',1300);
+    show('r2', 550);
+    showEl('rr1',700); showEl('rr2',850); showEl('rr3',1000);
+    showEl('rr4',1200); showEl('rr5',1350); showEl('rr6',1500);
+    show('r3', 1800);
+    showEl('wh1',2000); showEl('wh2',2200); showEl('wh3',2450);
+    showEl('wh4',2700); showEl('wh5',2900); showEl('wh6',3150);
+    show('r4', 3500);
+  } else if (n === 3) {
+    show('c0', 200);
+    showEl('c1',400); showEl('c2',600);
+    showEl('c3',900); showEl('c4',1100); showEl('c5',1350);
+    showEl('c6',1600); showEl('c7',1850);
+    show('c8', 2200);
+    show('cmp1',2400); show('cmp2',2800); show('cmp3',3200);
+  } else if (n === 4) {
+    show('p0', 200);
+    show('p1', 800);
+    svgShow('pod',1000); svgShow('podt',1000);
+    svgShow('inf',1300); svgShow('inft',1300); svgShow('infs',1300);
+    svgShow('il1',1600); svgShow('il2',1600); svgShow('il3',1600);
+    svgShow('cn1',1800); svgShow('cn1t',1800); svgShow('cn1s',1800); svgShow('cn1i',1800);
+    svgShow('cn2',1950); svgShow('cn2t',1950); svgShow('cn2s',1950); svgShow('cn2i',1950);
+    svgShow('cn3',2100); svgShow('cn3t',2100); svgShow('cn3s',2100); svgShow('cn3i',2100);
+    show('p2', 2500);
+    showEl('pc1',2700); showEl('pc2',2950); showEl('pc3',3200);
+    showEl('pc4',3500); showEl('pc5',3700);
+  } else if (n === 5) {
+    show('ch0', 200);
+    showEl('th1',400); showEl('th2',400);
+    showEl('tr1a',600); showEl('tr1b',600); showEl('tr1c',600);
+    showEl('tr2a',800); showEl('tr2b',800); showEl('tr2c',800);
+    showEl('tr3a',1000); showEl('tr3b',1000); showEl('tr3c',1000);
+    showEl('tr4a',1200); showEl('tr4b',1200); showEl('tr4c',1200);
+    showEl('tr5a',1400); showEl('tr5b',1400); showEl('tr5c',1400);
+    show('ch1', 1800);
+    showEl('in1',2000); showEl('in2',2200);
+    showEl('in3',2500); showEl('in4',2700); showEl('in5',2950);
+    showEl('in6',3250); showEl('in7',3450);
+    show('ch2', 3800);
+  }
+}
+
+window.addEventListener('load', () => {
+  reset(1);
+  af(150, () => play(1));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Registry Lifecycle Policies</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0a0a0f;font-family:'Press Start 2P',monospace;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;color:#fff}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{position:absolute;inset:0;width:390px;height:100vh;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .35s cubic-bezier(.4,0,.2,1);pointer-events:none}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}.info.cy{border-color:#4ec9e1}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}.ih.cy{color:#4ec9e1}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:11px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn.danger{border-color:#e85050;color:#e85050}.btn.danger:hover{background:#e8505020}
+.btn:disabled{opacity:.3;cursor:default}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+.tline.vis{opacity:1}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- SCENE 1: The Problem — cost spiral without lifecycle policies -->
+<div class="scene active" id="s1" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #300010">
+    <div class="hdr-title" style="color:#e85050">REGISTRY BLOAT</div>
+    <div class="hdr-sub">WHY YOUR BILL KEEPS GROWING</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e85050">THE PROBLEM</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">$$$ RISK</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- cost spiral chart -->
+      <div id="s1-chart" class="panel">
+        <div style="background:#080000;border:2px solid #3a1010;border-radius:3px;overflow:hidden">
+          <div style="padding:5px 10px;background:#140000;text-align:center;font-size:6.5px;color:#e85050">ECR STORAGE — NO LIFECYCLE POLICY</div>
+          <svg width="100%" height="110" viewBox="0 0 366 110" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <filter id="glow1"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <!-- axes -->
+            <line x1="36" y1="10" x2="36" y2="88" stroke="#3a1010" stroke-width="1"/>
+            <line x1="36" y1="88" x2="356" y2="88" stroke="#3a1010" stroke-width="1"/>
+            <!-- x labels -->
+            <text x="57" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">JAN</text>
+            <text x="110" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">FEB</text>
+            <text x="163" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">MAR</text>
+            <text x="216" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">APR</text>
+            <text x="269" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">MAY</text>
+            <text x="322" y="100" text-anchor="middle" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">JUN</text>
+            <!-- y labels -->
+            <text x="32" y="88" text-anchor="end" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">0</text>
+            <text x="32" y="60" text-anchor="end" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">50</text>
+            <text x="32" y="33" text-anchor="end" font-size="5" fill="#555" font-family="'Press Start 2P',monospace">100</text>
+            <text x="12" y="20" text-anchor="middle" font-size="4.5" fill="#888" font-family="'Press Start 2P',monospace" transform="rotate(-90,12,55)">GB</text>
+            <!-- cost line (drawn progressively) -->
+            <polyline id="s1-line" points="36,88" stroke="#e85050" stroke-width="2" fill="none" filter="url(#glow1)" opacity="0"/>
+            <!-- cost labels -->
+            <text id="s1-cost1" x="57" y="80" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">8GB</text>
+            <text id="s1-cost2" x="110" y="72" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">18GB</text>
+            <text id="s1-cost3" x="163" y="57" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">38GB</text>
+            <text id="s1-cost4" x="216" y="42" text-anchor="middle" font-size="5" fill="#e8a020" font-family="'Press Start 2P',monospace" opacity="0">58GB</text>
+            <text id="s1-cost5" x="269" y="28" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" opacity="0">82GB</text>
+            <text id="s1-cost6" x="322" y="16" text-anchor="middle" font-size="5" fill="#e85050" font-family="'Press Start 2P',monospace" filter="url(#glow1)" opacity="0">110GB!</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- what accumulates -->
+      <div id="s1-acc" class="panel" style="background:#120000;border:2px solid #3a1010;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0000;padding:5px 10px;text-align:center;font-size:6.5px;color:#e85050">WHAT PILES UP</div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="s1-w1" class="tline" style="color:#e85050">❌  Every CI build pushes a new image</div>
+          <div id="s1-w2" class="tline" style="color:#e85050">❌  Old &lt;none&gt;:&lt;none&gt; untagged images</div>
+          <div id="s1-w3" class="tline" style="color:#e85050">❌  sha256:abc... build cache layers</div>
+          <div id="s1-w4" class="tline" style="color:#e85050">❌  PR images nobody ever deleted</div>
+          <div id="s1-w5" class="tline" style="color:#555">→ 10 builds/day × 500MB = 150GB/mo</div>
+        </div>
+      </div>
+
+      <div id="s1-fix" class="panel" style="background:#001a00;border-left:4px solid #4eff9a;border-top:1px solid #0d3010;border-right:1px solid #0d3010;border-bottom:1px solid #0d3010;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">💊</span>
+          <span style="font-size:7.5px;color:#4eff9a">THE CURE: LIFECYCLE POLICIES</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">Automated rules that delete old images on a schedule. Set once, runs forever. ECR, Harbor, GCR all support them — most teams just never configure them.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">CI pipelines push images. Nothing deletes them. Bill grows.</div>
+    <div class="ih rd">10 builds/day × 500MB = $150+/month for nothing.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">110GB</div><div class="sl">6 MONTHS<br>NO POLICY</div></div>
+    <div class="sc"><div class="sv am">$$$</div><div class="sl">STORAGE<br>COST</div></div>
+    <div class="sc"><div class="sv gn">FIX</div><div class="sl">LIFECYCLE<br>POLICY</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>◀ PREV</button>
+    <button class="btn play" onclick="play(1)">▶ PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 2: ECR Lifecycle Policies -->
+<div class="scene" id="s2" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#e8a020">ECR LIFECYCLE</div>
+    <div class="hdr-sub">AWS ELASTIC CONTAINER REGISTRY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#e8a020">ECR POLICY</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">AWS</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- policy JSON -->
+      <div id="s2-json" class="panel" style="background:#020c18;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#050f20;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#e8a020">ECR lifecycle policy JSON</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div id="s2-l1" class="tline" style="color:#a080ff">{</div>
+          <div id="s2-l2" class="tline" style="color:#aaa">  "rules": [</div>
+          <div id="s2-l3" class="tline" style="color:#555">    // Rule 1: nuke untagged after 1 day</div>
+          <div id="s2-l4" class="tline" style="color:#aaa">    { "rulePriority": 1,</div>
+          <div id="s2-l5" class="tline" style="color:#e8a020">      "selection": { "tagStatus": "untagged",</div>
+          <div id="s2-l6" class="tline" style="color:#e8a020">        "countType": "sinceImagePushed",</div>
+          <div id="s2-l7" class="tline" style="color:#4eff9a">        "countNumber": 1, "countUnit": "days" },</div>
+          <div id="s2-l8" class="tline" style="color:#e85050">      "action": { "type": "expire" } },</div>
+          <div id="s2-l9" class="tline" style="color:#555">    // Rule 2: keep only last 10 tagged</div>
+          <div id="s2-la" class="tline" style="color:#aaa">    { "rulePriority": 2,</div>
+          <div id="s2-lb" class="tline" style="color:#e8a020">      "selection": { "tagStatus": "tagged",</div>
+          <div id="s2-lc" class="tline" style="color:#e8a020">        "tagPrefixList": ["v"],</div>
+          <div id="s2-ld" class="tline" style="color:#4eff9a">        "countType": "imageCountMoreThan",</div>
+          <div id="s2-le" class="tline" style="color:#4eff9a">        "countNumber": 10 },</div>
+          <div id="s2-lf" class="tline" style="color:#e85050">      "action": { "type": "expire" } }]}</div>
+        </div>
+      </div>
+
+      <!-- CLI to apply -->
+      <div id="s2-cli" class="panel" style="background:#020c18;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#050f20;padding:5px 10px;text-align:center;font-size:6.5px;color:#4ec9e1">APPLY VIA AWS CLI</div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div id="s2-c1" class="tline" style="color:#888">$ aws ecr put-lifecycle-policy \</div>
+          <div id="s2-c2" class="tline" style="color:#aaa">  --repository-name myapp \</div>
+          <div id="s2-c3" class="tline" style="color:#4eff9a">  --lifecycle-policy-text file://policy.json</div>
+          <div id="s2-c4" class="tline" style="color:#555;margin-top:4px"># preview before applying:</div>
+          <div id="s2-c5" class="tline" style="color:#e8a020">$ aws ecr start-lifecycle-policy-preview \</div>
+          <div id="s2-c6" class="tline" style="color:#aaa">  --repository-name myapp \</div>
+          <div id="s2-c7" class="tline" style="color:#4eff9a">  --lifecycle-policy-text file://policy.json</div>
+        </div>
+      </div>
+
+      <div id="s2-tip" class="panel" style="background:#001020;border-left:4px solid #e8a020;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⚡</span>
+          <span style="font-size:7.5px;color:#e8a020">ECR PRICING MODEL</span>
+        </div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">ECR charges <span style="color:#e85050">$0.10/GB/month</span>. 100GB of stale images = <span style="color:#e85050">$10/month</span>. Untagged images from CI are nearly always safe to delete after 1 day — no running container references them.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info am">
+    <div class="il">Rule 1: untagged → expire after 1 day.</div>
+    <div class="ih am">Rule 2: tagged with "v" prefix → keep last 10 only.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">1 day</div><div class="sl">UNTAGGED<br>EXPIRE</div></div>
+    <div class="sc"><div class="sv gn">10</div><div class="sl">TAGGED<br>MAX KEPT</div></div>
+    <div class="sc"><div class="sv am">$0.10</div><div class="sl">PER GB<br>PER MO</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">◀ PREV</button>
+    <button class="btn play" onclick="play(2)">▶ PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 3: Harbor + GCR retention -->
+<div class="scene" id="s3" style="background:#0a0012">
+  <div class="hdr" style="background:#0a0012;border-bottom:1px solid #1a0a2d">
+    <div class="hdr-title" style="color:#a080ff">HARBOR &amp; GCR</div>
+    <div class="hdr-sub">OTHER REGISTRY POLICIES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0012">
+    <span class="slabel" style="color:#a080ff">HARBOR / GCR</span>
+    <span class="sbadge" style="color:#a080ff;border-color:#a080ff">RETENTION</span>
+  </div>
+  <div class="anim" style="background:#0a0012">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Harbor -->
+      <div id="s3-harbor" class="panel" style="background:#0e0020;border:2px solid #3a1f6d;border-radius:3px;overflow:hidden">
+        <div style="background:#1a0840;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px">⚓</span>
+          <div style="font-size:6.5px;color:#a080ff">HARBOR RETENTION POLICY</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div id="s3-h1" class="tline" style="color:#555"># Harbor UI or API — tag regex rules</div>
+          <div id="s3-h2" class="tline" style="color:#aaa">Rule: retain last 5 images</div>
+          <div id="s3-h3" class="tline" style="color:#a080ff">  where tag matches: <span style="color:#4eff9a">v[0-9]+\.[0-9]+\.[0-9]+</span></div>
+          <div id="s3-h4" class="tline" style="color:#aaa;margin-top:4px">Rule: delete pushed more than 7 days ago</div>
+          <div id="s3-h5" class="tline" style="color:#a080ff">  where tag matches: <span style="color:#e8a020">pr-.*</span> (PR builds)</div>
+          <div id="s3-h6" class="tline" style="color:#aaa;margin-top:4px">Schedule: run daily at 02:00</div>
+        </div>
+      </div>
+
+      <!-- GCR / Artifact Registry -->
+      <div id="s3-gcr" class="panel" style="background:#001020;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#001830;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <span style="font-size:10px">☁️</span>
+          <div style="font-size:6.5px;color:#4ec9e1">GCR / ARTIFACT REGISTRY (GCP)</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.2">
+          <div id="s3-g1" class="tline" style="color:#555"># gcloud CLI — cleanup policy</div>
+          <div id="s3-g2" class="tline" style="color:#888">$ gcloud artifacts repositories \</div>
+          <div id="s3-g3" class="tline" style="color:#888">  set-cleanup-policies myrepo \</div>
+          <div id="s3-g4" class="tline" style="color:#4ec9e1">  --policy=cleanup-policy.json</div>
+          <div id="s3-g5" class="tline" style="color:#555;margin-top:4px"># policy: keep newest 10, delete &gt;30 days</div>
+          <div id="s3-g6" class="tline" style="color:#4eff9a">{ "action": "DELETE",</div>
+          <div id="s3-g7" class="tline" style="color:#4eff9a">  "condition": { "olderThan": "30d",</div>
+          <div id="s3-g8" class="tline" style="color:#4eff9a">  "tagState": "ANY" } }</div>
+        </div>
+      </div>
+
+      <!-- comparison table -->
+      <div id="s3-cmp" class="panel" style="background:#0a0020;border:2px solid #2a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#140828;padding:5px 10px;text-align:center;font-size:6.5px;color:#a080ff">REGISTRY COMPARISON</div>
+        <div style="padding:6px 10px;font-size:5.5px;line-height:2.3">
+          <div id="s3-c1" class="tline" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:4px;color:#555;border-bottom:1px solid #2a1040;padding-bottom:4px">
+            <span></span><span style="color:#888;text-align:center">POLICY TYPE</span><span style="color:#888;text-align:center">TRIGGER</span>
+          </div>
+          <div id="s3-c2" class="tline" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:4px;margin-top:4px">
+            <span style="color:#e8a020">AWS ECR</span><span style="color:#aaa">count / age</span><span style="color:#aaa">daily eval</span>
+          </div>
+          <div id="s3-c3" class="tline" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:4px">
+            <span style="color:#a080ff">Harbor</span><span style="color:#aaa">regex + age</span><span style="color:#aaa">cron sched</span>
+          </div>
+          <div id="s3-c4" class="tline" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:4px">
+            <span style="color:#4ec9e1">GCR/AR</span><span style="color:#aaa">age + state</span><span style="color:#aaa">daily eval</span>
+          </div>
+          <div id="s3-c5" class="tline" style="display:grid;grid-template-columns:80px 1fr 1fr;gap:4px">
+            <span style="color:#4eff9a">GHCR</span><span style="color:#aaa">untagged</span><span style="color:#aaa">manual/API</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Harbor: regex on tag pattern + push date. GCR: age + state.</div>
+    <div class="ih pu">All registries support it — most teams just never set it up.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">regex</div><div class="sl">HARBOR<br>TAGS</div></div>
+    <div class="sc"><div class="sv am">30d</div><div class="sl">GCR<br>AGE LIMIT</div></div>
+    <div class="sc"><div class="sv gn">cron</div><div class="sl">DAILY<br>CLEANUP</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">◀ PREV</button>
+    <button class="btn play" onclick="play(3)">▶ PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 4: Local docker image prune + --filter -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">LOCAL CLEANUP</div>
+    <div class="hdr-sub">docker image prune --filter</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">LOCAL PRUNE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">CLI</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <div id="s4-term" class="panel" style="background:#000d04;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#002008;padding:5px 10px;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <div style="flex:1;text-align:center;font-size:6.5px;color:#555">terminal</div>
+        </div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.3">
+          <div id="s4-l1" class="tline" style="color:#555"># remove dangling images only</div>
+          <div id="s4-l2" class="tline" style="color:#4ec9e1">docker image prune</div>
+          <div id="s4-l3" class="tline" style="color:#555;margin-top:4px"># remove ALL unused images older than 24h</div>
+          <div id="s4-l4" class="tline" style="color:#4eff9a">docker image prune -a \</div>
+          <div id="s4-l5" class="tline" style="color:#4eff9a">  --filter "until=24h"</div>
+          <div id="s4-l6" class="tline" style="color:#555;margin-top:4px"># images with a specific label</div>
+          <div id="s4-l7" class="tline" style="color:#e8a020">docker image prune \</div>
+          <div id="s4-l8" class="tline" style="color:#e8a020">  --filter "label=env=ci"</div>
+          <div id="s4-l9" class="tline" style="color:#555;margin-top:4px"># no prompt, for scripts/cron</div>
+          <div id="s4-la" class="tline" style="color:#a080ff">docker image prune -a -f --filter "until=168h"</div>
+        </div>
+      </div>
+
+      <!-- filter options -->
+      <div id="s4-opts" class="panel" style="background:#001808;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#002010;padding:5px 10px;text-align:center;font-size:6.5px;color:#4eff9a">--filter OPTIONS</div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.3">
+          <div id="s4-o1" class="tline" style="color:#aaa"><span style="color:#4eff9a">until=24h</span>   → older than 24 hours</div>
+          <div id="s4-o2" class="tline" style="color:#aaa"><span style="color:#4eff9a">until=168h</span>  → older than 1 week</div>
+          <div id="s4-o3" class="tline" style="color:#aaa"><span style="color:#4ec9e1">until=2024-01-01T00:00:00</span> → before date</div>
+          <div id="s4-o4" class="tline" style="color:#aaa"><span style="color:#e8a020">label=key</span>   → has this label</div>
+          <div id="s4-o5" class="tline" style="color:#aaa"><span style="color:#e8a020">label=k=v</span>   → label equals value</div>
+        </div>
+      </div>
+
+      <!-- cron suggestion -->
+      <div id="s4-cron" class="panel" style="background:#001808;border-left:4px solid #4eff9a;border-top:1px solid #0d3018;border-right:1px solid #0d3018;border-bottom:1px solid #0d3018;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">⏰</span>
+          <span style="font-size:7.5px;color:#4eff9a">SET IT AND FORGET IT</span>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:2.1">
+          <span style="color:#555"># /etc/cron.weekly/docker-cleanup</span><br>
+          <span style="color:#4eff9a">docker image prune -a -f --filter "until=168h"</span><br>
+          <span style="color:#4eff9a">docker volume prune -f</span><br>
+          <span style="color:#4eff9a">docker builder prune -f --keep-storage 10g</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">docker image prune -a --filter "until=24h" is safe weekly cron.</div>
+    <div class="ih">Label your CI images — makes targeted cleanup easy.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">24h</div><div class="sl">UNTIL<br>FILTER</div></div>
+    <div class="sc"><div class="sv am">label</div><div class="sl">TAG CI<br>IMAGES</div></div>
+    <div class="sc"><div class="sv pu">cron</div><div class="sl">WEEKLY<br>AUTO</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">◀ PREV</button>
+    <button class="btn play" onclick="play(4)">▶ PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT ▶</button>
+  </div>
+</div>
+
+<!-- SCENE 5: Strategy cheat sheet -->
+<div class="scene" id="s5" style="background:#080010">
+  <div class="hdr" style="background:#080010;border-bottom:1px solid #200030">
+    <div class="hdr-title" style="color:#4ec9e1">STRATEGY</div>
+    <div class="hdr-sub">COMPLETE CLEANUP PLAYBOOK</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#080010">
+    <span class="slabel" style="color:#4ec9e1">PLAYBOOK</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">REFERENCE</span>
+  </div>
+  <div class="anim" style="background:#080010">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- tag strategy -->
+      <div id="s5-tags" class="panel" style="background:#0a001a;border:2px solid #2a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#140828;padding:5px 10px;text-align:center;font-size:6.5px;color:#a080ff">TAG STRATEGY THAT ENABLES CLEANUP</div>
+        <div style="padding:8px 12px;font-size:6px;line-height:2.3">
+          <div id="s5-t1" class="tline" style="color:#4eff9a">myapp:v1.2.3           <span style="color:#555">← keep forever</span></div>
+          <div id="s5-t2" class="tline" style="color:#4ec9e1">myapp:main-abc1234     <span style="color:#555">← keep 30 days</span></div>
+          <div id="s5-t3" class="tline" style="color:#e8a020">myapp:pr-456-def5678   <span style="color:#555">← keep 7 days</span></div>
+          <div id="s5-t4" class="tline" style="color:#e85050">myapp:&lt;none&gt;           <span style="color:#555">← delete after 1 day</span></div>
+        </div>
+      </div>
+
+      <!-- 3-layer strategy -->
+      <div id="s5-layers" class="panel" style="background:#0a001a;border:2px solid #2a1040;border-radius:3px;overflow:hidden">
+        <div style="background:#140828;padding:5px 10px;text-align:center;font-size:6.5px;color:#a080ff">3-LAYER CLEANUP STRATEGY</div>
+        <div style="padding:6px 10px">
+          <div id="s5-r1" class="tline" style="font-size:6px;color:#aaa;line-height:1.8;padding:4px 0;border-bottom:1px solid #2a1040">
+            <span style="color:#e85050">Layer 1 — Registry policy</span><br>
+            <span style="color:#555">Untagged: 1 day · PR prefix: 7 days · semver: keep 10</span>
+          </div>
+          <div id="s5-r2" class="tline" style="font-size:6px;color:#aaa;line-height:1.8;padding:4px 0;border-bottom:1px solid #2a1040">
+            <span style="color:#e8a020">Layer 2 — CI pipeline step</span><br>
+            <span style="color:#555">After merge, delete the PR branch images via API</span>
+          </div>
+          <div id="s5-r3" class="tline" style="font-size:6px;color:#aaa;line-height:1.8;padding:4px 0">
+            <span style="color:#4eff9a">Layer 3 — Local weekly cron</span><br>
+            <span style="color:#555">docker image prune -a -f --filter until=168h</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- cost estimate -->
+      <div id="s5-cost" class="panel" style="background:#001020;border-left:4px solid #4ec9e1;border-top:1px solid #1a2030;border-right:1px solid #1a2030;border-bottom:1px solid #1a2030;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:14px">💰</span>
+          <span style="font-size:7.5px;color:#4ec9e1">SAVINGS ESTIMATE</span>
+        </div>
+        <div style="font-size:6px;color:#aaa;line-height:2.1">
+          Before: 150GB/month → <span style="color:#e85050">$15/month ECR</span><br>
+          After policy: ~8GB/month → <span style="color:#4eff9a">$0.80/month</span><br>
+          <span style="color:#4eff9a">Savings: ~$170/year per repo</span><br>
+          <span style="color:#555">Multiply by number of repos...</span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info cy">
+    <div class="il">Tag strategy + registry policy + CI cleanup = zero bloat.</div>
+    <div class="ih cy">$170/year saved per repo just by setting up policies.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">v1.2.3</div><div class="sl">SEMVER<br>FOREVER</div></div>
+    <div class="sc"><div class="sv am">7d</div><div class="sl">PR TAGS<br>EXPIRE</div></div>
+    <div class="sc"><div class="sv gn">$170</div><div class="sl">SAVED<br>PER REPO</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">◀ PREV</button>
+    <button class="btn play" onclick="play(5)">▶ PLAY</button>
+    <button class="btn danger" onclick="go(1)">↩ RESTART</button>
+  </div>
+</div>
+
+</div>
+<script>
+let cur=1,T=[];
+function clr(){T.forEach(t=>clearTimeout(t));T=[];}
+function af(ms,fn){T.push(setTimeout(fn,ms));}
+function show(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e){e.style.opacity='1';e.classList.add('vis');}});}
+function hide(id){const e=document.getElementById(id);if(e){e.style.opacity='0';e.classList.remove('vis');}}
+function showEl(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.style.opacity='1';});}
+function svgShow(id,ms){af(ms,()=>{const e=document.getElementById(id);if(e)e.setAttribute('opacity','1');});}
+function svgHide(id){const e=document.getElementById(id);if(e)e.setAttribute('opacity','0');}
+
+// Animate the cost line growing point by point
+function animLine(points, ms){
+  const pts = points;
+  const totalMs = 2400;
+  const step = totalMs / pts.length;
+  const el = document.getElementById('s1-line');
+  af(ms, ()=>{
+    if(el) el.setAttribute('opacity','1');
+    pts.forEach((pt,i)=>{
+      af(ms + i*step, ()=>{
+        if(!el) return;
+        // rebuild points up to index i
+        const sub = pts.slice(0,i+1).map(p=>p[0]+','+p[1]).join(' ');
+        el.setAttribute('points', sub);
+      });
+    });
+  });
+}
+
+function go(n){
+  clr();
+  const prev=document.getElementById('s'+cur);
+  const next=document.getElementById('s'+n);
+  const fwd=n>cur;
+  next.style.transition='none';
+  next.style.transform=fwd?'translateX(100%)':'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition='transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform=fwd?'translateX(-100%)':'translateX(100%)';
+  next.style.transform='translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur=n;
+  reset(n);
+  af(80,()=>play(n));
+}
+
+function reset(n){
+  const all={
+    1:['s1-chart','s1-acc','s1-fix','s1-w1','s1-w2','s1-w3','s1-w4','s1-w5'],
+    2:['s2-json','s2-cli','s2-tip','s2-l1','s2-l2','s2-l3','s2-l4','s2-l5','s2-l6','s2-l7','s2-l8','s2-l9','s2-la','s2-lb','s2-lc','s2-ld','s2-le','s2-lf','s2-c1','s2-c2','s2-c3','s2-c4','s2-c5','s2-c6','s2-c7'],
+    3:['s3-harbor','s3-gcr','s3-cmp','s3-h1','s3-h2','s3-h3','s3-h4','s3-h5','s3-h6','s3-g1','s3-g2','s3-g3','s3-g4','s3-g5','s3-g6','s3-g7','s3-g8','s3-c1','s3-c2','s3-c3','s3-c4','s3-c5'],
+    4:['s4-term','s4-opts','s4-cron','s4-l1','s4-l2','s4-l3','s4-l4','s4-l5','s4-l6','s4-l7','s4-l8','s4-l9','s4-la','s4-o1','s4-o2','s4-o3','s4-o4','s4-o5'],
+    5:['s5-tags','s5-layers','s5-cost','s5-t1','s5-t2','s5-t3','s5-t4','s5-r1','s5-r2','s5-r3']
+  };
+  (all[n]||[]).forEach(id=>hide(id));
+  if(n===1){
+    svgHide('s1-cost1');svgHide('s1-cost2');svgHide('s1-cost3');svgHide('s1-cost4');svgHide('s1-cost5');svgHide('s1-cost6');
+    const el=document.getElementById('s1-line');
+    if(el){el.setAttribute('points','36,88');el.setAttribute('opacity','0');}
+  }
+}
+
+function play(n){
+  if(n===1){
+    show('s1-chart',200);
+    // line points matching the cost data (x,y in svg coords)
+    const pts=[[36,88],[57,83],[110,75],[163,59],[216,44],[269,29],[322,14]];
+    animLine(pts, 600);
+    svgShow('s1-cost1',1000);svgShow('s1-cost2',1350);svgShow('s1-cost3',1700);
+    svgShow('s1-cost4',2050);svgShow('s1-cost5',2400);svgShow('s1-cost6',2750);
+    show('s1-acc',3200);
+    showEl('s1-w1',3400);showEl('s1-w2',3700);showEl('s1-w3',4000);showEl('s1-w4',4300);showEl('s1-w5',4600);
+    show('s1-fix',5100);
+  }
+  if(n===2){
+    show('s2-json',200);
+    showEl('s2-l1',400);showEl('s2-l2',600);showEl('s2-l3',800);showEl('s2-l4',1000);showEl('s2-l5',1200);showEl('s2-l6',1400);showEl('s2-l7',1600);showEl('s2-l8',1800);
+    showEl('s2-l9',2100);showEl('s2-la',2300);showEl('s2-lb',2500);showEl('s2-lc',2700);showEl('s2-ld',2900);showEl('s2-le',3100);showEl('s2-lf',3300);
+    show('s2-cli',3800);
+    showEl('s2-c1',4000);showEl('s2-c2',4200);showEl('s2-c3',4500);showEl('s2-c4',4800);showEl('s2-c5',5000);showEl('s2-c6',5200);showEl('s2-c7',5400);
+    show('s2-tip',5900);
+  }
+  if(n===3){
+    show('s3-harbor',200);
+    showEl('s3-h1',400);showEl('s3-h2',700);showEl('s3-h3',1000);showEl('s3-h4',1300);showEl('s3-h5',1600);showEl('s3-h6',1900);
+    show('s3-gcr',2400);
+    showEl('s3-g1',2600);showEl('s3-g2',2800);showEl('s3-g3',3000);showEl('s3-g4',3200);showEl('s3-g5',3500);showEl('s3-g6',3800);showEl('s3-g7',4000);showEl('s3-g8',4200);
+    show('s3-cmp',4700);
+    showEl('s3-c1',4900);showEl('s3-c2',5100);showEl('s3-c3',5300);showEl('s3-c4',5500);showEl('s3-c5',5700);
+  }
+  if(n===4){
+    show('s4-term',200);
+    showEl('s4-l1',400);showEl('s4-l2',600);showEl('s4-l3',900);showEl('s4-l4',1200);showEl('s4-l5',1400);
+    showEl('s4-l6',1700);showEl('s4-l7',2000);showEl('s4-l8',2200);showEl('s4-l9',2500);showEl('s4-la',2800);
+    show('s4-opts',3300);
+    showEl('s4-o1',3500);showEl('s4-o2',3800);showEl('s4-o3',4100);showEl('s4-o4',4400);showEl('s4-o5',4700);
+    show('s4-cron',5200);
+  }
+  if(n===5){
+    show('s5-tags',200);
+    showEl('s5-t1',400);showEl('s5-t2',800);showEl('s5-t3',1200);showEl('s5-t4',1600);
+    show('s5-layers',2100);
+    showEl('s5-r1',2300);showEl('s5-r2',3000);showEl('s5-r3',3700);
+    show('s5-cost',4400);
+  }
+}
+
+window.addEventListener('load',()=>{reset(1);af(150,()=>play(1));});
+</script>
+</body>
+</html>

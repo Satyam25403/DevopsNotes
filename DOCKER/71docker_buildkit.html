@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Docker BuildKit</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{
+  background:#0a0a0f;font-family:'Press Start 2P',monospace;
+  width:100%;height:100vh;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;color:#fff;
+}
+#app{width:390px;height:100vh;position:relative;overflow:hidden}
+.scene{
+  position:absolute;inset:0;width:390px;height:100vh;
+  display:flex;flex-direction:column;
+  transform:translateX(100%);
+  transition:transform .35s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.scene.active{transform:translateX(0);pointer-events:auto}
+.hdr{height:90px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 14px;border-bottom:1px solid #2a1f3d}
+.hdr-title{font-size:13px;color:#4ec9e1;text-align:center;letter-spacing:.5px;line-height:1.5}
+.hdr-sub{font-size:9px;color:#666;text-align:center;letter-spacing:1px;line-height:1.5}
+.dots{display:flex;gap:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:#2a1f3d;transition:background .2s}
+.dot.active{background:#4ec9e1}.dot.done{background:#4eff9a}
+.slr{height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 14px}
+.slabel{font-size:9px;letter-spacing:1px}
+.sbadge{font-size:7px;padding:3px 8px;border:1px solid currentColor;border-radius:2px}
+.anim{flex:1;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;-ms-overflow-style:none;min-height:0}
+.anim::-webkit-scrollbar{display:none}
+.info{height:110px;flex-shrink:0;margin:0 12px;border:2px solid #4ec9e1;padding:10px 14px;display:flex;flex-direction:column;justify-content:center;gap:7px;font-size:9px;line-height:1.9}
+.info.am{border-color:#e8a020}.info.rd{border-color:#e85050}.info.gn{border-color:#4eff9a}.info.pu{border-color:#a080ff}
+.il{color:#ccc}.ih{color:#4eff9a}.ih.am{color:#e8a020}.ih.rd{color:#e85050}.ih.pu{color:#a080ff}
+.srow{height:70px;flex-shrink:0;display:flex;gap:8px;padding:8px 12px}
+.sc{flex:1;background:#130d1e;border:1px solid #2a1f3d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.sv{font-size:13px;color:#4ec9e1;text-align:center}
+.sv.am{color:#e8a020}.sv.gn{color:#4eff9a}.sv.rd{color:#e85050}.sv.pu{color:#a080ff}
+.sl{font-size:7px;color:#777;text-align:center;line-height:1.4}
+.ctrl{height:60px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:10px;padding:0 12px}
+.btn{font-family:'Press Start 2P',monospace;font-size:9px;padding:8px 12px;border:2px solid #4ec9e1;background:transparent;color:#4ec9e1;cursor:pointer;transition:all .15s}
+.btn:hover{background:#4ec9e130}.btn:active{transform:scale(.97)}
+.btn.play{border-color:#4eff9a;color:#4eff9a}.btn.play:hover{background:#4eff9a20}
+.btn:disabled{opacity:.3;cursor:default}
+.btn.restart{border-color:#e85050;color:#e85050}
+.panel{opacity:0;transition:opacity .4s;border-radius:2px}
+.panel.vis{opacity:1}
+.tline{opacity:0;transition:opacity .3s}
+/* build stage bar animation */
+@keyframes grow {from{width:0%}to{width:var(--w)}}
+.bar{height:12px;border-radius:1px;animation:none}
+.bar.run{animation:grow .6s cubic-bezier(.4,0,.2,1) forwards}
+/* parallel pulse */
+@keyframes ppulse{0%{opacity:.5}50%{opacity:1}100%{opacity:.5}}
+.ppulse{animation:ppulse 1s ease-in-out infinite}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ═══ SCENE 1: WHAT IS BUILDKIT ═══ -->
+<div class="scene active" id="s1" style="background:#000d18">
+  <div class="hdr" style="background:#000d18;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">DOCKER BUILDKIT</div>
+    <div class="hdr-sub">THE MODERN BUILD ENGINE</div>
+    <div class="dots">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000d18">
+    <span class="slabel" style="color:#4ec9e1">OVERVIEW</span>
+    <span class="sbadge" style="color:#4ec9e1;border-color:#4ec9e1">DOCKER 23+</span>
+  </div>
+  <div class="anim" style="background:#000d18">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Legacy vs BuildKit -->
+      <div id="s1p0" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div id="s1p1" class="panel" style="background:#120008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">LEGACY BUILDER</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#888;line-height:2.1">
+            <div id="ll1" class="tline">Sequential stages</div>
+            <div id="ll2" class="tline">No parallel builds</div>
+            <div id="ll3" class="tline">Secrets in layers</div>
+            <div id="ll4" class="tline" style="color:#e85050">= leaked in history</div>
+            <div id="ll5" class="tline">Basic cache only</div>
+            <div id="ll6" class="tline">No SSH forwarding</div>
+          </div>
+        </div>
+        <div id="s1p2" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">BUILDKIT</div>
+          </div>
+          <div style="padding:8px 7px;font-size:6px;color:#888;line-height:2.1">
+            <div id="rl1" class="tline" style="color:#4eff9a">Parallel stages</div>
+            <div id="rl2" class="tline" style="color:#4eff9a">DAG scheduler</div>
+            <div id="rl3" class="tline" style="color:#4eff9a">Secret mounts</div>
+            <div id="rl4" class="tline" style="color:#4eff9a">= zero layer residue</div>
+            <div id="rl5" class="tline" style="color:#4eff9a">Registry/S3 cache</div>
+            <div id="rl6" class="tline" style="color:#4eff9a">SSH forwarding</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Enable card -->
+      <div id="s1p3" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">how to enable</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="en1" class="tline" style="color:#555"># Docker 23+ — ON by default</div>
+          <div id="en2" class="tline" style="color:#888">$ <span style="color:#4ec9e1">docker buildx build</span> .</div>
+          <div id="en3" class="tline" style="color:#555;margin-top:4px"># older Docker — enable manually</div>
+          <div id="en4" class="tline" style="color:#888">$ <span style="color:#e8a020">DOCKER_BUILDKIT=1</span> docker build .</div>
+          <div id="en5" class="tline" style="color:#555;margin-top:4px"># or set in daemon.json</div>
+          <div id="en6" class="tline" style="color:#888">{ <span style="color:#4eff9a">"features"</span>: {<span style="color:#4eff9a">"buildkit"</span>: true} }</div>
+        </div>
+      </div>
+
+      <!-- Default note -->
+      <div id="s1p4" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:5px">DEFAULT IN DOCKER 23+</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">You're probably already using BuildKit. But most devs don't use its advanced features: parallel stages, secret mounts, registry cache.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info">
+    <div class="il">BuildKit replaces the legacy builder shipped with Docker.</div>
+    <div class="ih">Parallel builds, zero-residue secrets, registry-backed cache.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">23+</div><div class="sl">DEFAULT ON</div></div>
+    <div class="sc"><div class="sv am">DAG</div><div class="sl">SCHEDULER</div></div>
+    <div class="sc"><div class="sv pu">buildx</div><div class="sl">CLI</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" disabled>PREV</button>
+    <button class="btn play" onclick="play(1)">PLAY</button>
+    <button class="btn" onclick="go(2)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 2: PARALLEL STAGE BUILDS ═══ -->
+<div class="scene" id="s2" style="background:#0a0015">
+  <div class="hdr" style="background:#0a0015;border-bottom:1px solid #200838">
+    <div class="hdr-title" style="color:#a080ff">PARALLEL STAGES</div>
+    <div class="hdr-sub">DAG — BUILD WHAT'S NEEDED ONLY</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0a0015">
+    <span class="slabel" style="color:#a080ff">PARALLEL BUILDS</span>
+    <span class="sbadge" style="color:#e8a020;border-color:#e8a020">SPEEDUP</span>
+  </div>
+  <div class="anim" style="background:#0a0015">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Dockerfile example -->
+      <div id="s2df" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;overflow:hidden">
+        <div style="background:#100020;padding:5px 10px;border-bottom:1px solid #200838;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div id="df1" class="tline" style="color:#4ec9e1">FROM node:20 <span style="color:#a080ff">AS deps</span></div>
+          <div id="df2" class="tline" style="color:#888;margin-left:10px">RUN npm ci</div>
+          <div id="df3" class="tline" style="color:#555;margin-top:4px"># independent stage — runs in parallel</div>
+          <div id="df4" class="tline" style="color:#4ec9e1">FROM golang:1.22 <span style="color:#e8a020">AS builder</span></div>
+          <div id="df5" class="tline" style="color:#888;margin-left:10px">RUN go build ./...</div>
+          <div id="df6" class="tline" style="color:#555;margin-top:4px"># final stage — depends on both</div>
+          <div id="df7" class="tline" style="color:#4ec9e1">FROM alpine <span style="color:#4eff9a">AS final</span></div>
+          <div id="df8" class="tline" style="color:#888;margin-left:10px">COPY --from=<span style="color:#a080ff">deps</span> /app/node .</div>
+          <div id="df9" class="tline" style="color:#888;margin-left:10px">COPY --from=<span style="color:#e8a020">builder</span> /app/bin .</div>
+        </div>
+      </div>
+
+      <!-- Build timeline SVG -->
+      <div id="s2tl" class="panel" style="background:#06000d;border:2px solid #200838;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#a080ff;margin-bottom:10px">BUILD TIMELINE</div>
+
+        <!-- Legacy: sequential -->
+        <div style="margin-bottom:10px">
+          <div style="font-size:6px;color:#e85050;margin-bottom:5px">LEGACY — sequential</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">deps</span>
+              <div id="lb1" class="bar" style="--w:50%;background:#a080ff;width:0%"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">builder</span>
+              <div id="lb2" class="bar" style="--w:50%;background:#e8a020;width:0%;margin-left:0%" data-delay="50"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">final</span>
+              <div id="lb3" class="bar" style="--w:20%;background:#4eff9a;width:0%;margin-left:0%" data-delay="100"></div>
+            </div>
+            <div style="font-size:5.5px;color:#e85050;margin-top:2px">total: ~100% time</div>
+          </div>
+        </div>
+
+        <!-- BuildKit: parallel -->
+        <div>
+          <div style="font-size:6px;color:#4eff9a;margin-bottom:5px">BUILDKIT — parallel</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">deps</span>
+              <div id="pb1" class="bar" style="--w:50%;background:#a080ff;width:0%"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">builder</span>
+              <div id="pb2" class="bar" style="--w:50%;background:#e8a020;width:0%"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:5.5px;color:#888;width:46px;flex-shrink:0">final</span>
+              <div id="pb3" class="bar" style="--w:20%;background:#4eff9a;width:0%;margin-left:50%"></div>
+            </div>
+            <div id="s2gn" style="font-size:5.5px;color:#4eff9a;margin-top:2px;opacity:0">total: ~60% time — deps+builder run simultaneously</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Skip unused tip -->
+      <div id="s2tip" class="panel" style="background:#06000d;border-left:4px solid #a080ff;border-top:1px solid #200838;border-right:1px solid #200838;border-bottom:1px solid #200838;padding:10px 12px">
+        <div style="font-size:7.5px;color:#a080ff;margin-bottom:5px">SKIPS UNUSED STAGES</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9">BuildKit only builds stages needed for the target. Build with <span style="color:#4ec9e1">--target deps</span> and the builder + final stages are never executed.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info pu">
+    <div class="il">Legacy builder runs every stage sequentially, no matter what.</div>
+    <div class="ih pu">BuildKit uses a DAG — independent stages run simultaneously.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">DAG</div><div class="sl">SCHEDULER</div></div>
+    <div class="sc"><div class="sv gn">~40%</div><div class="sl">FASTER</div></div>
+    <div class="sc"><div class="sv am">SKIP</div><div class="sl">UNUSED</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(1)">PREV</button>
+    <button class="btn play" onclick="play(2)">PLAY</button>
+    <button class="btn" onclick="go(3)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 3: SECRET MOUNTS ═══ -->
+<div class="scene" id="s3" style="background:#0f0003">
+  <div class="hdr" style="background:#0f0003;border-bottom:1px solid #380015">
+    <div class="hdr-title" style="color:#e85050">SECRET MOUNTS</div>
+    <div class="hdr-sub">--mount=type=secret — ZERO RESIDUE</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#0f0003">
+    <span class="slabel" style="color:#e8a020">SECRET HANDLING</span>
+    <span class="sbadge" style="color:#e85050;border-color:#e85050">SECURITY</span>
+  </div>
+  <div class="anim" style="background:#0f0003">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Bad vs good -->
+      <div id="s3cmp" class="panel" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div id="s3bad" class="panel" style="background:#120008;border:2px solid #e85050;border-radius:3px;overflow:hidden">
+          <div style="background:#1a0000;padding:5px 7px;border-bottom:1px solid #3a1010;text-align:center">
+            <div style="font-size:6.5px;color:#e85050">X DANGEROUS</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#888;line-height:2.1">
+            <div id="bd1" class="tline">ARG NPM_TOKEN</div>
+            <div id="bd2" class="tline">RUN npm install</div>
+            <div id="bd3" class="tline" style="margin-top:4px;color:#e85050">Token baked into</div>
+            <div id="bd4" class="tline" style="color:#e85050">image layer!</div>
+            <div id="bd5" class="tline" style="color:#e85050">docker history</div>
+            <div id="bd6" class="tline" style="color:#e85050">leaks it.</div>
+          </div>
+        </div>
+        <div id="s3good" class="panel" style="background:#000d04;border:2px solid #4eff9a;border-radius:3px;overflow:hidden">
+          <div style="background:#001a08;padding:5px 7px;border-bottom:1px solid #0d3018;text-align:center">
+            <div style="font-size:6.5px;color:#4eff9a">OK SAFE</div>
+          </div>
+          <div style="padding:8px 7px;font-size:5.5px;color:#888;line-height:2.1">
+            <div id="gd1" class="tline">RUN --mount=</div>
+            <div id="gd2" class="tline" style="color:#4eff9a">type=secret,</div>
+            <div id="gd3" class="tline" style="color:#4eff9a">id=npm_token \</div>
+            <div id="gd4" class="tline">npm install</div>
+            <div id="gd5" class="tline" style="margin-top:4px;color:#4eff9a">Secret only exists</div>
+            <div id="gd6" class="tline" style="color:#4eff9a">during RUN step.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full example terminal -->
+      <div id="s3term" class="panel" style="background:#050002;border:2px solid #2d0010;border-radius:3px;overflow:hidden">
+        <div style="background:#120008;padding:5px 10px;border-bottom:1px solid #2d0010;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">Dockerfile + build cmd</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div id="sc1" class="tline" style="color:#555"># syntax=docker/dockerfile:1</div>
+          <div id="sc2" class="tline" style="color:#4ec9e1">FROM node:20</div>
+          <div id="sc3" class="tline" style="color:#888">RUN <span style="color:#e8a020">--mount=type=secret,id=npm</span> \</div>
+          <div id="sc4" class="tline" style="color:#888;margin-left:20px">NPM_TOKEN=$(cat /run/secrets/npm) \</div>
+          <div id="sc5" class="tline" style="color:#888;margin-left:20px">npm ci</div>
+          <div id="sc6" class="tline" style="color:#555;margin-top:5px"># build command</div>
+          <div id="sc7" class="tline" style="color:#888">$ docker buildx build \</div>
+          <div id="sc8" class="tline" style="color:#4eff9a;margin-left:20px">--secret id=npm,src=~/.npmrc \</div>
+          <div id="sc9" class="tline" style="color:#888;margin-left:20px">-t myapp .</div>
+        </div>
+      </div>
+
+      <!-- SSH forwarding tip -->
+      <div id="s3ssh" class="panel" style="background:#000810;border-left:4px solid #4ec9e1;border-top:1px solid #0d2030;border-right:1px solid #0d2030;border-bottom:1px solid #0d2030;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4ec9e1;margin-bottom:5px">BONUS: SSH FORWARDING</div>
+        <div style="font-size:6.5px;color:#888;line-height:2.0">RUN <span style="color:#e8a020">--mount=type=ssh</span> \<br><span style="margin-left:10px;color:#aaa">git clone git@github.com:org/private</span></div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9;margin-top:5px">Forwards your SSH agent into the build. Private repos — no key copying needed.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info rd">
+    <div class="il">ARG secrets bake into layers — visible via docker history.</div>
+    <div class="ih rd">--mount=type=secret injects at runtime, leaves zero residue.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv rd">ARG</div><div class="sl">LEAKS SECRET</div></div>
+    <div class="sc"><div class="sv gn">--mount</div><div class="sl">ZERO RESIDUE</div></div>
+    <div class="sc"><div class="sv am">SSH</div><div class="sl">FORWARDING</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(2)">PREV</button>
+    <button class="btn play" onclick="play(3)">PLAY</button>
+    <button class="btn" onclick="go(4)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 4: CACHE BACKENDS ═══ -->
+<div class="scene" id="s4" style="background:#001a08">
+  <div class="hdr" style="background:#001a08;border-bottom:1px solid #0d3018">
+    <div class="hdr-title" style="color:#4eff9a">CACHE BACKENDS</div>
+    <div class="hdr-sub">--cache-from / --cache-to</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#001a08">
+    <span class="slabel" style="color:#4eff9a">CI CACHE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">FAST CI</span>
+  </div>
+  <div class="anim" style="background:#001a08">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- Cache types -->
+      <div id="s4ct" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4eff9a;margin-bottom:10px">CACHE TYPES</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div id="ct1" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">💾</span>
+            <div>
+              <div style="font-size:7px;color:#4ec9e1;margin-bottom:3px">inline</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">Baked into the image. Simple, works anywhere. Limited metadata.</div>
+            </div>
+          </div>
+          <div id="ct2" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">📦</span>
+            <div>
+              <div style="font-size:7px;color:#a080ff;margin-bottom:3px">registry</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">Separate cache image in your registry. Best for CI — fast and shareable.</div>
+            </div>
+          </div>
+          <div id="ct3" class="panel" style="display:flex;align-items:center;gap:10px;background:#002010;border:1px solid #0d3018;padding:8px 10px;border-radius:2px">
+            <span style="font-size:9px;flex-shrink:0">☁</span>
+            <div>
+              <div style="font-size:7px;color:#e8a020;margin-bottom:3px">s3 / gha / azblob</div>
+              <div style="font-size:6px;color:#888;line-height:1.8">Cloud storage backends. GitHub Actions cache natively supported.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CI example terminal -->
+      <div id="s4term" class="panel" style="background:#001005;border:2px solid #0d3018;border-radius:3px;overflow:hidden">
+        <div style="background:#001a08;padding:5px 10px;border-bottom:1px solid #0d3018;display:flex;align-items:center;gap:6px">
+          <div style="width:7px;height:7px;border-radius:50%;background:#e85050"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#e8a020"></div>
+          <div style="width:7px;height:7px;border-radius:50%;background:#4eff9a"></div>
+          <span style="flex:1;text-align:center;font-size:6.5px;color:#555">CI pipeline — registry cache</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.2">
+          <div id="ci1" class="tline" style="color:#888">$ docker buildx build \</div>
+          <div id="ci2" class="tline" style="color:#4eff9a;margin-left:20px">--cache-from type=registry,ref=myrepo/cache \</div>
+          <div id="ci3" class="tline" style="color:#4eff9a;margin-left:20px">--cache-to type=registry,ref=myrepo/cache,mode=max \</div>
+          <div id="ci4" class="tline" style="color:#888;margin-left:20px">-t myrepo/app:latest .</div>
+          <div id="ci5" class="tline" style="color:#555;margin-top:5px"># GitHub Actions shorthand</div>
+          <div id="ci6" class="tline" style="color:#888">$ docker buildx build \</div>
+          <div id="ci7" class="tline" style="color:#e8a020;margin-left:20px">--cache-from type=gha \</div>
+          <div id="ci8" class="tline" style="color:#e8a020;margin-left:20px">--cache-to type=gha,mode=max \</div>
+          <div id="ci9" class="tline" style="color:#888;margin-left:20px">-t myapp .</div>
+        </div>
+      </div>
+
+      <!-- mode=max tip -->
+      <div id="s4tip" class="panel" style="background:#000d04;border-left:4px solid #4eff9a;border-top:1px solid #1a2810;border-right:1px solid #1a2810;border-bottom:1px solid #1a2810;padding:10px 12px">
+        <div style="font-size:7.5px;color:#4eff9a;margin-bottom:5px">mode=max vs mode=min</div>
+        <div style="font-size:6.5px;color:#aaa;line-height:1.9"><span style="color:#4ec9e1">min</span>: only final stage cached.<br><span style="color:#4eff9a">max</span>: ALL intermediate stages cached.<br>Always use <span style="color:#4eff9a">max</span> for best CI hit rate.</div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">Without registry cache, every CI run builds from scratch.</div>
+    <div class="ih">--cache-from/to with type=registry or gha: near-instant CI.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv gn">3</div><div class="sl">CACHE TYPES</div></div>
+    <div class="sc"><div class="sv am">max</div><div class="sl">MODE</div></div>
+    <div class="sc"><div class="sv gn">FAST</div><div class="sl">CI BUILDS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(3)">PREV</button>
+    <button class="btn play" onclick="play(4)">PLAY</button>
+    <button class="btn" onclick="go(5)">NEXT</button>
+  </div>
+</div>
+
+<!-- ═══ SCENE 5: CHEATSHEET ═══ -->
+<div class="scene" id="s5" style="background:#000810">
+  <div class="hdr" style="background:#000810;border-bottom:1px solid #0d2030">
+    <div class="hdr-title" style="color:#4ec9e1">BUILDKIT CHEATSHEET</div>
+    <div class="hdr-sub">FLAGS + MOUNT TYPES</div>
+    <div class="dots">
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot done"></div>
+      <div class="dot active"></div>
+    </div>
+  </div>
+  <div class="slr" style="background:#000810">
+    <span class="slabel" style="color:#4eff9a">REFERENCE</span>
+    <span class="sbadge" style="color:#4eff9a;border-color:#4eff9a">HARDEN NOW</span>
+  </div>
+  <div class="anim" style="background:#000810">
+    <div style="padding:10px 12px 14px;display:flex;flex-direction:column;gap:9px">
+
+      <!-- RUN --mount types -->
+      <div id="ch0" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030">
+          <span style="font-size:7px;color:#4ec9e1">RUN --mount= TYPES</span>
+        </div>
+        <div style="padding:10px 12px;font-size:6.5px;line-height:2.3">
+          <div id="mt1" class="tline" style="color:#a080ff">type=secret</div>
+          <div id="mt2" class="tline" style="color:#555;margin-left:10px">inject build secrets, zero residue</div>
+          <div id="mt3" class="tline" style="color:#4ec9e1;margin-top:3px">type=ssh</div>
+          <div id="mt4" class="tline" style="color:#555;margin-left:10px">forward SSH agent for private repos</div>
+          <div id="mt5" class="tline" style="color:#4eff9a;margin-top:3px">type=cache</div>
+          <div id="mt6" class="tline" style="color:#555;margin-left:10px">persistent cache dir (pip, apt, go)</div>
+          <div id="mt7" class="tline" style="color:#e8a020;margin-top:3px">type=bind</div>
+          <div id="mt8" class="tline" style="color:#555;margin-left:10px">bind-mount host path read-only</div>
+          <div id="mt9" class="tline" style="color:#888;margin-top:3px">type=tmpfs</div>
+          <div id="mta" class="tline" style="color:#555;margin-left:10px">in-memory scratch space</div>
+        </div>
+      </div>
+
+      <!-- type=cache example -->
+      <div id="ch1" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;overflow:hidden">
+        <div style="background:#080d18;padding:5px 10px;border-bottom:1px solid #0d2030">
+          <span style="font-size:7px;color:#4eff9a">type=cache — PERSIST pip/apt/go</span>
+        </div>
+        <div style="padding:8px 12px;font-size:6.5px;line-height:2.2">
+          <div id="cc1" class="tline" style="color:#888">RUN <span style="color:#4eff9a">--mount=type=cache,target=/root/.cache/pip</span> \</div>
+          <div id="cc2" class="tline" style="color:#888;margin-left:20px">pip install -r requirements.txt</div>
+          <div id="cc3" class="tline" style="color:#555;margin-top:4px"># cache persists between builds on same host</div>
+          <div id="cc4" class="tline" style="color:#555"># dramatically speeds up repeated pip installs</div>
+        </div>
+      </div>
+
+      <!-- Quick flags ref -->
+      <div id="ch2" class="panel" style="background:#050810;border:2px solid #0d2030;border-radius:3px;padding:10px 12px">
+        <div style="font-size:7px;color:#4ec9e1;margin-bottom:8px">buildx build FLAGS</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+          <div id="fg1" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#a080ff;margin-bottom:3px">--secret</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">inject secret at build time</div>
+          </div>
+          <div id="fg2" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#4ec9e1;margin-bottom:3px">--ssh</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">forward SSH socket</div>
+          </div>
+          <div id="fg3" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#4eff9a;margin-bottom:3px">--cache-from</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">pull cache from source</div>
+          </div>
+          <div id="fg4" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#e8a020;margin-bottom:3px">--cache-to</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">push cache to backend</div>
+          </div>
+          <div id="fg5" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#e85050;margin-bottom:3px">--target</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">build specific stage</div>
+          </div>
+          <div id="fg6" class="panel" style="background:#000d18;border:1px solid #0d2030;padding:7px;border-radius:2px">
+            <div style="font-size:6px;color:#888;margin-bottom:3px">--platform</div>
+            <div style="font-size:5.5px;color:#888;line-height:1.8">cross-platform builds</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div class="info gn">
+    <div class="il">BuildKit: parallel stages, zero-residue secrets, registry cache.</div>
+    <div class="ih">--mount=type=cache alone can halve repeated build times.</div>
+  </div>
+  <div class="srow">
+    <div class="sc"><div class="sv pu">5</div><div class="sl">MOUNT TYPES</div></div>
+    <div class="sc"><div class="sv gn">3</div><div class="sl">CACHE BACKENDS</div></div>
+    <div class="sc"><div class="sv am">0</div><div class="sl">SECRET LEAKS</div></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn" onclick="go(4)">PREV</button>
+    <button class="btn play" onclick="play(5)">PLAY</button>
+    <button class="btn restart" onclick="go(1)">RESTART</button>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+let cur = 1, T = [];
+function clr() { T.forEach(t => clearTimeout(t)); T = []; }
+function af(ms, fn) { T.push(setTimeout(fn, ms)); }
+
+function show(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (e) { e.style.opacity = '1'; e.classList.add('vis'); }
+  });
+}
+function hide(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.opacity = '0'; e.classList.remove('vis'); }
+}
+function showEl(id, ms) {
+  af(ms, () => { const e = document.getElementById(id); if (e) e.style.opacity = '1'; });
+}
+function hideEl(id) {
+  const e = document.getElementById(id); if (e) e.style.opacity = '0';
+}
+
+// Animate a CSS bar width using transition
+function animBar(id, ms) {
+  af(ms, () => {
+    const e = document.getElementById(id);
+    if (!e) return;
+    const w = e.style.getPropertyValue('--w');
+    e.style.transition = 'width .6s cubic-bezier(.4,0,.2,1)';
+    e.style.width = w;
+  });
+}
+
+function go(n) {
+  clr();
+  const prev = document.getElementById('s' + cur);
+  const next = document.getElementById('s' + n);
+  const fwd = n > cur;
+  next.style.transition = 'none';
+  next.style.transform = fwd ? 'translateX(100%)' : 'translateX(-100%)';
+  next.offsetHeight;
+  next.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transition = 'transform .35s cubic-bezier(.4,0,.2,1)';
+  prev.style.transform = fwd ? 'translateX(-100%)' : 'translateX(100%)';
+  next.style.transform = 'translateX(0)';
+  prev.classList.remove('active');
+  next.classList.add('active');
+  cur = n;
+  reset(n);
+  af(80, () => play(n));
+}
+
+function resetBar(id) {
+  const e = document.getElementById(id);
+  if (e) { e.style.transition = 'none'; e.style.width = '0%'; }
+}
+
+function reset(n) {
+  if (n === 1) {
+    ['s1p0','s1p1','s1p2','s1p3','s1p4'].forEach(hide);
+    ['ll1','ll2','ll3','ll4','ll5','ll6','rl1','rl2','rl3','rl4','rl5','rl6',
+     'en1','en2','en3','en4','en5','en6'].forEach(hideEl);
+  } else if (n === 2) {
+    ['s2df','s2tl','s2tip'].forEach(hide);
+    ['df1','df2','df3','df4','df5','df6','df7','df8','df9'].forEach(hideEl);
+    ['lb1','lb2','lb3','pb1','pb2','pb3'].forEach(resetBar);
+    hideEl('s2gn');
+  } else if (n === 3) {
+    ['s3cmp','s3bad','s3good','s3term','s3ssh'].forEach(hide);
+    ['bd1','bd2','bd3','bd4','bd5','bd6','gd1','gd2','gd3','gd4','gd5','gd6',
+     'sc1','sc2','sc3','sc4','sc5','sc6','sc7','sc8','sc9'].forEach(hideEl);
+  } else if (n === 4) {
+    ['s4ct','s4term','s4tip'].forEach(hide);
+    ['ct1','ct2','ct3'].forEach(hide);
+    ['ci1','ci2','ci3','ci4','ci5','ci6','ci7','ci8','ci9'].forEach(hideEl);
+  } else if (n === 5) {
+    ['ch0','ch1','ch2'].forEach(hide);
+    ['mt1','mt2','mt3','mt4','mt5','mt6','mt7','mt8','mt9','mta',
+     'cc1','cc2','cc3','cc4'].forEach(hideEl);
+    ['fg1','fg2','fg3','fg4','fg5','fg6'].forEach(hide);
+  }
+}
+
+function play(n) {
+  clr();
+  if (n === 1) {
+    show('s1p0', 200);
+    show('s1p1', 350);
+    showEl('ll1',500);showEl('ll2',680);showEl('ll3',860);showEl('ll4',1000);showEl('ll5',1150);showEl('ll6',1300);
+    show('s1p2', 600);
+    showEl('rl1',750);showEl('rl2',930);showEl('rl3',1110);showEl('rl4',1250);showEl('rl5',1400);showEl('rl6',1550);
+    show('s1p3', 1800);
+    showEl('en1',2000);showEl('en2',2200);showEl('en3',2450);showEl('en4',2650);showEl('en5',2900);showEl('en6',3100);
+    show('s1p4', 3500);
+  } else if (n === 2) {
+    show('s2df', 200);
+    showEl('df1',400);showEl('df2',600);showEl('df3',820);showEl('df4',1000);showEl('df5',1200);
+    showEl('df6',1430);showEl('df7',1600);showEl('df8',1780);showEl('df9',1960);
+    show('s2tl', 2200);
+    // legacy bars sequential
+    animBar('lb1', 2500);
+    af(2500+600, () => animBar('lb2', 0));
+    af(2500+1200, () => animBar('lb3', 0));
+    // buildkit bars parallel
+    animBar('pb1', 3600);
+    animBar('pb2', 3600);
+    af(3600+600, () => animBar('pb3', 0));
+    af(3600+900, () => showEl('s2gn', 0));
+    show('s2tip', 4400);
+  } else if (n === 3) {
+    show('s3cmp', 200);
+    show('s3bad', 350);
+    showEl('bd1',500);showEl('bd2',680);showEl('bd3',900);showEl('bd4',1050);showEl('bd5',1200);showEl('bd6',1350);
+    show('s3good', 600);
+    showEl('gd1',750);showEl('gd2',930);showEl('gd3',1080);showEl('gd4',1230);showEl('gd5',1430);showEl('gd6',1580);
+    show('s3term', 1900);
+    showEl('sc1',2100);showEl('sc2',2300);showEl('sc3',2500);showEl('sc4',2700);showEl('sc5',2850);
+    showEl('sc6',3100);showEl('sc7',3300);showEl('sc8',3500);showEl('sc9',3700);
+    show('s3ssh', 4100);
+  } else if (n === 4) {
+    show('s4ct', 200);
+    show('ct1', 400); show('ct2', 800); show('ct3', 1200);
+    show('s4term', 1700);
+    showEl('ci1',1900);showEl('ci2',2100);showEl('ci3',2300);showEl('ci4',2500);
+    showEl('ci5',2800);showEl('ci6',3000);showEl('ci7',3200);showEl('ci8',3400);showEl('ci9',3600);
+    show('s4tip', 4000);
+  } else if (n === 5) {
+    show('ch0', 200);
+    showEl('mt1',400);showEl('mt2',550);showEl('mt3',750);showEl('mt4',900);
+    showEl('mt5',1100);showEl('mt6',1250);showEl('mt7',1450);showEl('mt8',1600);
+    showEl('mt9',1800);showEl('mta',1950);
+    show('ch1', 2200);
+    showEl('cc1',2400);showEl('cc2',2600);showEl('cc3',2850);showEl('cc4',3000);
+    show('ch2', 3300);
+    show('fg1',3500);show('fg2',3650);show('fg3',3800);show('fg4',3950);show('fg5',4100);show('fg6',4250);
+  }
+}
+
+window.addEventListener('load', () => {
+  reset(1);
+  af(150, () => play(1));
+});
+</script>
+</body>
+</html>
