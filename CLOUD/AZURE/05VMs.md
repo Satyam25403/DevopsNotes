@@ -10,7 +10,7 @@ Azure VMs provide scalable, resizable virtual servers in the cloud. Like EC2, th
 ### Virtual Machine
 A virtualized server running on Azure infrastructure. You choose the OS (Linux/Windows), CPU, memory, storage, and networking. Billed per second (or per minute on some SKUs).
 
-### VM Image (analogous to AMI)
+### VM Image : VMI (analogous to AMI)
 A template used to create VMs. Contains the OS and pre-installed software.
 - **Azure Marketplace images**: Ubuntu, Windows Server, RHEL, CentOS, etc.
 - **Custom images**: Created from an existing VM (captured via Azure Compute Gallery)
@@ -34,6 +34,9 @@ Used for Linux VM authentication. Azure stores the public key; you keep the priv
 ```bash
 # Generate SSH key pair
 ssh-keygen -t rsa -b 4096 -f ~/.ssh/azure_key
+
+# SSH into VM with private key(400 permission)
+ssh -i <path_of_priv_key> username@ip
 ```
 
 ### Network Security Groups (NSGs) (analogous to EC2 Security Groups)
