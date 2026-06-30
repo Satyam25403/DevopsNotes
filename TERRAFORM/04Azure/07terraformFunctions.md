@@ -1,6 +1,6 @@
 # Terraform Built-in Functions
 
-Terraform has a rich standard library of functions that can be called anywhere an expression is valid. They are **pure functions** — no side effects, same input always gives the same output.
+Terraform has a rich standard library of functions that can be called anywhere an expression is valid. They are **pure functions** — no side effects, same input always gives the same output. Terraform does not provides custom functions
 
 ```
 Function categories:
@@ -98,7 +98,7 @@ tolist(toset(["b","a"]))         # → ["a","b"]          — set → list (sort
 merge({a=1}, {b=2}, {a=3})      # → {a=3, b=2}    — later maps override earlier on key conflict
 keys({a=1, b=2})                # → ["a","b"]     — extract keys as list
 values({a=1, b=2})              # → [1, 2]        — extract values as list
-lookup({a=1, b=2}, "a", 0)      # → 1             — safe key access with default fallback
+lookup({a=1, b=2}, "a", 0)      # → 1             — safe key access with default fallback instead of using if-else
 lookup({a=1, b=2}, "c", 0)      # → 0             — key missing, returns default
 
 zipmap(["a","b"], [1, 2])        # → {a=1, b=2}   — create map from keys list + values list
@@ -458,7 +458,7 @@ resource "azurerm_storage_account" "example" {
 }
 
 resource "azurerm_network_security_group" "example" {
-  name                = "${local.formatted_name}-nsg"
+  name                = "${local.formatted_name}-nsg"   #string concatenation
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
 
